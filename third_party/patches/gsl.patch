@@ -1,0 +1,79 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 0000000..5d95ff4
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,51 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
++cc_library(
++    name = "gsl",
++    hdrs = glob(["include/gsl/**"]),
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++)
++
++cc_library(
++    name = "pointers",
++    hdrs = ["include/gsl/pointers"],
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++    deps = [":assert"],
++)
++
++cc_library(
++    name = "span",
++    hdrs = [
++        "include/gsl/span",
++        "include/gsl/span_ext",
++    ],
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++    deps = [
++        ":assert",
++        ":byte",
++        ":util",
++    ],
++)
++
++cc_library(
++    name = "assert",
++    hdrs = ["include/gsl/assert"],
++    includes = ["include"],
++)
++
++cc_library(
++    name = "util",
++    hdrs = ["include/gsl/util"],
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++    deps = [":assert"],
++)
++
++cc_library(
++    name = "byte",
++    hdrs = ["include/gsl/byte"],
++    includes = ["include"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000..25300f5
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,3 @@
++module(name = "gsl")
++
++bazel_dep(name = "rules_cc", version = "0.0.6")
+diff --git include/gsl/pointers include/gsl/pointers
+index e6b2348..59e718c 100644
+--- include/gsl/pointers
++++ include/gsl/pointers
+@@ -245,7 +245,7 @@ public:
+     {}
+ 
+     template <typename = std::enable_if_t<!std::is_same<std::nullptr_t, T>::value>>
+-    constexpr explicit strict_not_null(T u) : not_null<T>(u)
++    constexpr explicit strict_not_null(T u) : not_null<T>(std::move(u))
+     {}
+ 
+     template <typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>

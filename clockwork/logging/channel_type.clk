@@ -1,0 +1,31 @@
+// Channel type
+enum ChannelType {
+  options
+  {
+    underlying_type: UInt8;
+  }
+
+  values
+  {
+    // Regular channel
+    #0 regular default
+    {
+      underlying_value: 0;
+    }
+
+    // Persistent channel
+    #1 persistent
+    {
+      underlying_value: 1;
+    }
+  }
+}
+
+cpp_target channel_type
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  enum ChannelType;
+}

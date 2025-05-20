@@ -1,0 +1,37 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "bridge_latency",
+    srcs = ["bridge_latency.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:log_processor",
+        "//clockwork/logging/readers:types",
+        "//clockwork/pinion:bridge_status",
+        "@fmt",
+        "@tclap",
+        "@wise_enum",
+    ],
+)
+
+cc_binary(
+    name = "bridge_summary",
+    srcs = ["bridge_summary.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:log_processor",
+        "//clockwork/logging/readers:types",
+        "//clockwork/pinion:bridge_status",
+        "@fmt",
+        "@tclap",
+    ],
+)

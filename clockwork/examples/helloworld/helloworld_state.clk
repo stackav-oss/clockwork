@@ -1,0 +1,29 @@
+// State of the Producer cog
+schema ProducerState
+{
+  uuid: 506734ad-d6fe-4204-ae32-1a252d00f956;
+
+  options
+  {
+  constructor:
+    source_code_order;
+  }
+
+  fields
+  {
+    // A scalar field.
+    #0 counter: Int64;
+  }
+}
+
+cpp_target state
+{
+  options
+  {
+        namespace clockwork::helloworld;
+  }
+
+    schema ProducerState;
+    representation Tachyon<ProducerState>;
+    interface Tappy<ProducerState>;
+}

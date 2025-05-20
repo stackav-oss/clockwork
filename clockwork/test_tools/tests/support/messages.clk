@@ -1,0 +1,47 @@
+// Addition Message
+schema AdditionMessage
+{
+    uuid: 70000af3-4959-408b-9f7b-7e1901fcd553;
+    fields
+    {
+        // First addend
+        #1 addend_one: Int64;
+        // Second addend
+        #2 addend_two: Int64;
+    }
+}
+
+// Sum Message
+schema SumMessage
+{
+    uuid: 065e3851-1ac1-4c98-b341-f1ee65987fdc;
+    fields
+    {
+        // The resulting sum
+        #1 sum: Int64;
+    }
+}
+
+cpp_target addition_message
+{
+    options
+    {
+        namespace clockwork::system_runner;
+    }
+    schema AdditionMessage;
+
+    representation Tachyon<AdditionMessage>;
+    interface Tappy<AdditionMessage>;
+}
+
+cpp_target sum_message
+{
+    options
+    {
+        namespace clockwork::system_runner;
+    }
+    schema SumMessage;
+
+    representation Tachyon<SumMessage>;
+    interface Tappy<SumMessage>;
+}

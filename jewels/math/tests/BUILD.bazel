@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "constants_test",
+    srcs = ["constants_test.cc"],
+    deps = [
+        "//jewels/math:constants",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "power_of_two_test",
+    srcs = ["power_of_two_test.cc"],
+    deps = [
+        "//jewels/math:power_of_two",
+        "@catch2//:catch2_main",
+    ],
+)

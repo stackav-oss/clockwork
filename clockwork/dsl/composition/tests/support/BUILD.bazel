@@ -1,0 +1,160 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(default_testonly = True)
+
+merge_simplelaunch_config(
+    name = "cpu1.textproto",
+    srcs = [
+        "simplesys.system1.Cpu1_simplelaunch_config.textproto",
+        "//clockwork/dsl/tests/support:host_a_simplelaunch_config.textproto",
+        "//clockwork/dsl/tests/support:host_b_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.composition.tests.support.simplesys.system1.proc1.tachyon",
+        "simplesys.system1.Cpu1.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan2_config.tachyon",
+        "simplesys.system1.Cpu1_bridge_config.tachyon",
+        "simplesys.system1.Cpu1_channel_allocations.csv",
+        "simplesys.system1.Cpu1_channel_spy_config.tachyon",
+        "simplesys.system1.Cpu1_event_logger_config.tachyon",
+        "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
+        "simplesys.system1.diagnostics_database_config.tachyon",
+        ":exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "cpu2.textproto",
+    srcs = [
+        "simplesys.system1.Cpu2_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.composition.tests.support.simplesys.system1.proc2.tachyon",
+        "simplesys.system1.Cpu2.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan1_config.tachyon",
+        "simplesys.system1.Cpu2_bridge_config.tachyon",
+        "simplesys.system1.Cpu2_channel_allocations.csv",
+        "simplesys.system1.Cpu2_channel_spy_config.tachyon",
+        "simplesys.system1.Cpu2_event_logger_config.tachyon",
+        "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
+        "simplesys.system1.diagnostics_database_config.tachyon",
+        ":exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+cc_binary(
+    name = "exe",
+    srcs = [
+        "exe.cc",
+        "exe.hh",
+        "exe.inl",
+    ],
+    deps = [
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_binary(
+    name = "logsim_exe",
+    srcs = [
+        "logsim_exe.cc",
+        "logsim_exe.hh",
+        "logsim_exe.inl",
+    ],
+    deps = [
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "logsimcpu.textproto",
+    srcs = [
+        "logsimsys.logsim_system1.LogSimCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.composition.tests.support.logsimsys.logsim_system1.proc1.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu.clockwork.clockwork.dsl.composition.tests.support.logsimsys.MultiChan2_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_channel_allocations.csv",
+        "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_log_reader_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
+        "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
+        ":logsim_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "logsimsys_clk",
+    srcs = ["logsimsys.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.composition.tests.support.logsimsys.logsim_system1.proc1.tachyon",
+        "logsim_exe.cc",
+        "logsim_exe.hh",
+        "logsim_exe.inl",
+        "logsimsys.logsim_system1.LogSimCpu.clockwork.clockwork.dsl.composition.tests.support.logsimsys.MultiChan2_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_channel_allocations.csv",
+        "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_log_reader_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_simplelaunch_config.textproto",
+        "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
+        "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/tests/support:hellocog_clk",
+        "//clockwork/dsl/tests/support:hellomsg_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "simplesys_clk",
+    srcs = ["simplesys.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.composition.tests.support.simplesys.system1.proc1.tachyon",
+        "clockwork.clockwork.dsl.composition.tests.support.simplesys.system1.proc2.tachyon",
+        "exe.cc",
+        "exe.hh",
+        "exe.inl",
+        "simplesys.system1.Cpu1.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan2_config.tachyon",
+        "simplesys.system1.Cpu1_bridge_config.tachyon",
+        "simplesys.system1.Cpu1_channel_allocations.csv",
+        "simplesys.system1.Cpu1_channel_spy_config.tachyon",
+        "simplesys.system1.Cpu1_event_logger_config.tachyon",
+        "simplesys.system1.Cpu1_simplelaunch_config.textproto",
+        "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
+        "simplesys.system1.Cpu2.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan1_config.tachyon",
+        "simplesys.system1.Cpu2_bridge_config.tachyon",
+        "simplesys.system1.Cpu2_channel_allocations.csv",
+        "simplesys.system1.Cpu2_channel_spy_config.tachyon",
+        "simplesys.system1.Cpu2_event_logger_config.tachyon",
+        "simplesys.system1.Cpu2_simplelaunch_config.textproto",
+        "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
+        "simplesys.system1.diagnostics_database_config.tachyon",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/tests/support:hellocog_clk",
+        "//clockwork/dsl/tests/support:hellomsg_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)

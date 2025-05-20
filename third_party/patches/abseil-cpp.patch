@@ -1,0 +1,140 @@
+diff --git absl/base/BUILD.bazel absl/base/BUILD.bazel
+index a7827dbf..9363c0f1 100644
+--- absl/base/BUILD.bazel
++++ absl/base/BUILD.bazel
+@@ -141,6 +141,7 @@ cc_library(
+         "policy_checks.h",
+     ],
+     copts = ABSL_DEFAULT_COPTS,
++    includes = ["../.."],
+     linkopts = ABSL_DEFAULT_LINKOPTS,
+ )
+ 
+@@ -209,7 +210,6 @@ cc_library(
+     linkopts = select({
+         "@rules_cc//cc/compiler:msvc-cl": [],
+         "@rules_cc//cc/compiler:clang-cl": [],
+-        "@rules_cc//cc/compiler:emscripten": [],
+         "//conditions:default": ["-pthread"],
+     }) + ABSL_DEFAULT_LINKOPTS,
+     visibility = [
+@@ -278,7 +278,6 @@ cc_library(
+             "-DEFAULTLIB:advapi32.lib",
+             "-ladvapi32",
+         ],
+-        "@rules_cc//cc/compiler:emscripten": [],
+         "//conditions:default": ["-pthread"],
+     }) + ABSL_DEFAULT_LINKOPTS,
+     deps = [
+diff --git absl/base/macros.h absl/base/macros.h
+index ff89944a..4b9d02df 100644
+--- absl/base/macros.h
++++ absl/base/macros.h
+@@ -75,8 +75,11 @@ ABSL_NAMESPACE_END
+ //                       "'c' must have the value of an unsigned char or EOF");
+ //   #endif // ABSL_BAD_CALL_IF
+ #if ABSL_HAVE_ATTRIBUTE(enable_if)
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wgcc-compat"
+ #define ABSL_BAD_CALL_IF(expr, msg) \
+   __attribute__((enable_if(expr, "Bad call trap"), unavailable(msg)))
++#pragma clang diagnostic pop
+ #endif
+ 
+ // ABSL_ASSERT()
+diff --git absl/debugging/BUILD.bazel absl/debugging/BUILD.bazel
+index 6e61bb36..c250d38e 100644
+--- absl/debugging/BUILD.bazel
++++ absl/debugging/BUILD.bazel
+@@ -179,7 +179,6 @@ cc_test(
+     linkopts = select({
+         "@rules_cc//cc/compiler:msvc-cl": [],
+         "@rules_cc//cc/compiler:clang-cl": [],
+-        "@rules_cc//cc/compiler:emscripten": [],
+         "//conditions:default": ["-pthread"],
+     }) + ABSL_DEFAULT_LINKOPTS,
+     deps = [
+diff --git absl/random/internal/BUILD.bazel absl/random/internal/BUILD.bazel
+index 666f4110..3489634b 100644
+--- absl/random/internal/BUILD.bazel
++++ absl/random/internal/BUILD.bazel
+@@ -185,7 +185,6 @@ cc_library(
+     linkopts = select({
+         "@rules_cc//cc/compiler:msvc-cl": [],
+         "@rules_cc//cc/compiler:clang-cl": [],
+-        "@rules_cc//cc/compiler:emscripten": [],
+         "//conditions:default": ["-pthread"],
+     }) + ABSL_DEFAULT_LINKOPTS,
+     deps = [
+diff --git absl/strings/internal/str_format/bind.h absl/strings/internal/str_format/bind.h
+index 120bc355..f8e0fd50 100644
+--- absl/strings/internal/str_format/bind.h
++++ absl/strings/internal/str_format/bind.h
+@@ -125,6 +125,8 @@ class FormatSpecTemplate
+  public:
+ #ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+ 
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wgcc-compat"
+   // Honeypot overload for when the string is not constexpr.
+   // We use the 'unavailable' attribute to give a better compiler error than
+   // just 'method is deleted'.
+@@ -161,6 +163,7 @@ class FormatSpecTemplate
+   FormatSpecTemplate(string_view s)  // NOLINT
+       __attribute__((enable_if(ValidFormatImpl<Args...>(s), "bad format trap")))
+       : Base(s) {}
++#pragma clang diagnostic pop
+ 
+ #else  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+ 
+diff --git absl/strings/internal/str_format/parser.h absl/strings/internal/str_format/parser.h
+index b1d6d5fd..f27e599c 100644
+--- absl/strings/internal/str_format/parser.h
++++ absl/strings/internal/str_format/parser.h
+@@ -221,11 +221,14 @@ class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
+  public:
+   explicit ExtendedParsedFormat(string_view format)
+ #ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wgcc-compat"
+       __attribute__((
+           enable_if(str_format_internal::EnsureConstexpr(format),
+                     "Format string is not constexpr."),
+           enable_if(str_format_internal::ValidFormatImpl<C...>(format),
+                     "Format specified does not match the template arguments.")))
++#pragma clang diagnostic pop
+ #endif  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+       : ExtendedParsedFormat(format, false) {
+   }
+diff --git absl/synchronization/BUILD.bazel absl/synchronization/BUILD.bazel
+index 867e9866..26b5f871 100644
+--- absl/synchronization/BUILD.bazel
++++ absl/synchronization/BUILD.bazel
+@@ -126,7 +126,6 @@ cc_library(
+     linkopts = select({
+         "@rules_cc//cc/compiler:msvc-cl": [],
+         "@rules_cc//cc/compiler:clang-cl": [],
+-        "@rules_cc//cc/compiler:emscripten": [],
+         "//conditions:default": ["-pthread"],
+     }) + ABSL_DEFAULT_LINKOPTS,
+     visibility = ["//visibility:public"],
+diff --git absl/types/compare.h absl/types/compare.h
+index 3cf4a917..74fe0612 100644
+--- absl/types/compare.h
++++ absl/types/compare.h
+@@ -70,12 +70,15 @@ using value_type = int8_t;
+ class OnlyLiteralZero {
+  public:
+ #if ABSL_HAVE_ATTRIBUTE(enable_if)
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wgcc-compat"
+   // On clang, we can avoid triggering modernize-use-nullptr by only enabling
+   // this overload when the value is a compile time integer constant equal to 0.
+   //
+   // In c++20, this could be a static_assert in a consteval function.
+   constexpr OnlyLiteralZero(int n)  // NOLINT
+       __attribute__((enable_if(n == 0, "Only literal `0` is allowed."))) {}
++#pragma clang diagnostic pop
+ #else  // ABSL_HAVE_ATTRIBUTE(enable_if)
+   // Accept only literal zero since it can be implicitly converted to a pointer
+   // to member type. nullptr constants will be caught by the other constructor

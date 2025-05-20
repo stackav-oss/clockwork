@@ -1,0 +1,23 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.logging.offboard.v1;
+
+// Entry in a log union
+message LogUnionEntry {
+  oneof union_path_oneof {
+    // Path to the union entry relative to the union directory
+    string relative_path = 1;
+
+    // Absolute path to the union entry
+    string absolute_path = 2;
+  }
+}
+
+// Log union
+message LogUnion {
+  // Union log entries
+  repeated LogUnionEntry log_union_entry = 1;
+}

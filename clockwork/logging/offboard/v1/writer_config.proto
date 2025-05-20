@@ -1,0 +1,40 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.logging.offboard.v1;
+
+// Compression type
+enum CompressionType {
+  // Unspecified, defaults to zstd
+  COMPRESSION_TYPE_UNSPECIFIED = 0;
+
+  // No compression
+  COMPRESSION_TYPE_NONE = 1;
+
+  // Zstandard compression
+  COMPRESSION_TYPE_ZSTD = 2;
+}
+
+// Writer comfiguration rule
+message ConfigRule {
+  // Channel name regex
+  repeated string regex = 1;
+
+  // Compression type, default is zstd
+  CompressionType compression_type = 2;
+
+  // File name prefix, if empty each channel is written to a separate file
+  string file_name_prefix = 3;
+}
+
+// Writer configuration
+//
+// The rules are tried in order and the first rule that matches a channel name is used.
+// If no match is found the channel is written to other_channels.olog using zstd
+// compression.
+message WriterConfig {
+  // Writer configuration rules
+  repeated ConfigRule rule = 1;
+}

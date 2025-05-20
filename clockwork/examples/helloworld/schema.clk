@@ -1,0 +1,26 @@
+// Helloworld schemas
+
+// A simple multi-purpose schema
+//
+// This is just for the Hello, World! tutorial.
+schema SimpleSchema
+{
+    uuid: 07cf9e12-e3a2-4999-ab2e-774faf6e38db;
+    fields
+    {
+        // A scalar field.
+        #0 a_field: Int64;
+    }
+}
+
+cpp_target schema
+{
+    options
+    {
+        namespace clockwork::helloworld;
+    }
+
+    schema SimpleSchema;
+    representation Tachyon<SimpleSchema>;
+    interface Tappy<SimpleSchema>;
+}

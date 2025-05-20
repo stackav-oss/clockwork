@@ -1,0 +1,44 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "approx_aligner_policies_test",
+    srcs = ["approx_aligner_policies_test.cc"],
+    deps = [
+        "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/dial/tests/support:approx_aligner_fixture",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "approx_aligner_test",
+    srcs = ["approx_aligner_test.cc"],
+    deps = [
+        "//clockwork/dial:alignment_type",
+        "//clockwork/dial:approx_aligner",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:msg_input",
+        "//clockwork/dial/tests/support:approx_aligner_fixture",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "msg_input_test",
+    srcs = ["msg_input_test.cc"],
+    deps = [
+        "//clockwork/dial:msg_input",
+        "//jewels/container:circular_buffer",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)

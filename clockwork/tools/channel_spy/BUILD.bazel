@@ -1,0 +1,215 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//tools/rules:python.bzl", "py_binary", "py_cc_binding", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["channel_spy_config.clk"])
+
+cc_library(
+    name = "channel_spy",
+    srcs = [
+        "channel_spy.cc",
+        "channel_spy.inl",
+    ],
+    hdrs = ["channel_spy.hh"],
+    deps = [
+        ":channel_spy_config",
+        ":channel_spy_subscriber",
+        ":types",
+        "//clockwork:repr_iface",
+        "//jewels/container:compare",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@fmt",
+    ],
+)
+
+py_binary(
+    name = "channel_spy_cli",
+    srcs = ["channel_spy_cli.py"],
+    deps = [
+        ":py_channel_spy",
+        "@clockwork_pip//click",
+    ],
+)
+
+cc_library(
+    name = "channel_spy_config",
+    srcs = [
+        "channel_spy_config.cc",
+        "channel_spy_config.inl",
+    ],
+    hdrs = ["channel_spy_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/common:process_description",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "channel_spy_config_clk",
+    srcs = ["channel_spy_config.clk"],
+    outs = [
+        "channel_spy_config.cc",
+        "channel_spy_config.hh",
+        "channel_spy_config.inl",
+    ],
+    deps = ["//clockwork/common:process_description_clk"],
+)
+
+clk(
+    name = "channel_spy_config_init_clk",
+    srcs = ["channel_spy_config_init.clk"],
+    outs = [
+        "channel_spy_config_init_cog.cc",
+        "channel_spy_config_init_cog.hh",
+        "channel_spy_config_init_cog.inl",
+        "channel_spy_config_init_cog_dial.cc",
+        "channel_spy_config_init_cog_dial.hh",
+        "channel_spy_config_init_cog_dial.inl",
+        "spy_config_init_exe.cc",
+        "spy_config_init_exe.hh",
+        "spy_config_init_exe.inl",
+    ],
+    deps = [":channel_spy_config_clk"],
+)
+
+cc_library(
+    name = "channel_spy_config_init_cog",
+    srcs = [
+        "channel_spy_config_init_cog.cc",
+        "channel_spy_config_init_cog.inl",
+    ],
+    hdrs = ["channel_spy_config_init_cog.hh"],
+    deps = [
+        ":channel_spy_config_init_cog_dial",
+        ":channel_spy_config_init_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "channel_spy_config_init_cog_dial",
+    srcs = [
+        "channel_spy_config_init_cog_dial.cc",
+        "channel_spy_config_init_cog_dial.inl",
+    ],
+    hdrs = ["channel_spy_config_init_cog_dial.hh"],
+    deps = [
+        ":channel_spy_config",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "channel_spy_config_init_cog_impl",
+    srcs = ["channel_spy_config_init_cog_impl.cc"],
+    deps = [
+        ":channel_spy_config",
+        ":channel_spy_config_init_cog_dial",
+        "//jewels/container:compare",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "channel_spy_subscriber",
+    srcs = [
+        "channel_spy_subscriber.cc",
+        "channel_spy_subscriber.inl",
+    ],
+    hdrs = ["channel_spy_subscriber.hh"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":types",
+        "//clockwork:repr_iface",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_subscriber",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+        "@fmt",
+    ],
+)
+
+py_cc_binding(
+    name = "nb_channel_spy",
+    srcs = ["nb_channel_spy.cc"],
+    py_deps = ["//:clockwork"],
+    deps = [
+        ":channel_spy",
+        ":channel_spy_config",
+        ":types",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/memory:pointers",
+        "@nanobind",
+        "@python_3_10//:python_headers",
+    ],
+)
+
+py_library(
+    name = "py_channel_spy",
+    srcs = ["py_channel_spy.py"],
+    deps = [
+        ":nb_channel_spy",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/py:protocol",
+        "//clockwork/serialization/py:tachyon_dyn_from_metadata",
+    ],
+)
+
+cc_binary(
+    name = "spy_config_init_exe",
+    srcs = [
+        "spy_config_init_exe.cc",
+        "spy_config_init_exe.hh",
+        "spy_config_init_exe.inl",
+    ],
+    deps = [
+        ":channel_spy_config",
+        ":channel_spy_config_init_cog",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "types",
+    srcs = ["types.cc"],
+    hdrs = ["types.hh"],
+    deps = [
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/memory:pointers",
+    ],
+)

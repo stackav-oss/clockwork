@@ -1,0 +1,76 @@
+// A constant with an explicit type.
+a_number: UInt64 = 123;
+
+// A constant with an inferred type.
+another_number = 456;
+
+// A string.
+a_string = "very interesting and useful string";
+
+a_bool = false;
+
+a_float: Float32 = 1.234;
+
+// Doc.
+schema ThingHolder
+{
+  uuid: 5e6e923b-cbde-4afa-b25b-db1d4e62be12;
+
+	parameters
+	{
+    // Doc.
+    #1 max_things: UInt64 = a_number;
+  }
+
+  fields
+  {
+    // Doc.
+    #2 things: VarArray<Int32, max_things>;
+  }
+}
+
+// Doc.
+schema FooMessage
+{
+  uuid: 841fb420-6c6a-447d-b4d8-cd1d0fe8ffa6;
+
+  fields
+  {
+    // Doc.
+    #1 holder: ThingHolder<>;
+  }
+}
+
+// Doc.
+schema BarMessage
+{
+  uuid: cfdaec29-2277-458e-86e1-3744a31f1a44;
+
+  fields
+  {
+    // Doc.
+    #1 holder: ThingHolder<another_number>;
+  }
+}
+
+cpp_target dummy
+{
+  options
+  {
+    namespace dummy;
+  }
+
+  constant a_bool;
+  constant a_float;
+  constant a_string;
+  constant another_number;
+  representation Tachyon<ThingHolder<another_number>>;
+}
+
+py_target dummy_py
+{
+  constant a_bool;
+  constant a_float;
+  constant a_string;
+  constant another_number;
+}

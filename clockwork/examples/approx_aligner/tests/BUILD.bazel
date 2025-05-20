@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "approx_aligner_system_test",
+    srcs = ["approx_aligner_system_test.cc"],
+    data = [
+        "//clockwork/examples/approx_aligner/tests/resources:approx_aligner_config.textproto",
+        "//clockwork/examples/approx_aligner/tests/support:clockwork.clockwork.examples.approx_aligner.tests.support.test_system.test_system.proc.tachyon",
+    ],
+    deps = [
+        "//clockwork/examples/approx_aligner/tests/support:test_system_lib",  # keep
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)

@@ -1,0 +1,532 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+cc_test(
+    name = "async_work_queue_test",
+    srcs = ["async_work_queue_test.cc"],
+    deps = [
+        "//clockwork/logging/offboard:async_work_queue",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "channel_message_writer_test",
+    srcs = ["channel_message_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:async_work_queue",
+        "//clockwork/logging/offboard:channel_message_writer",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:message_chunk_reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "chunk_compressor_test",
+    srcs = ["chunk_compressor_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "chunk_reader_writer_factory_test",
+    srcs = ["chunk_reader_writer_factory_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard/v1:writer_config_cc_library",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+cc_test(
+    name = "copy_log_test",
+    srcs = ["copy_log_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:copy_log",
+        "//clockwork/logging/offboard:reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//clockwork/logging/readers:types",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "file_chunk_reader_test",
+    srcs = ["file_chunk_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "file_chunk_writer_test",
+    srcs = ["file_chunk_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "index_chunk_reader_test",
+    srcs = ["index_chunk_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:index_chunk_reader",
+        "//clockwork/logging/offboard:index_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:reader_types",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "index_chunk_writer_test",
+    srcs = ["index_chunk_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:index_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_file_trailer_test",
+    srcs = ["log_file_trailer_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_file_trailer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:reader_types",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_metadata_file_helper_test",
+    srcs = ["log_metadata_file_helper_test.cc"],
+    deps = [
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard:log_metadata_file_helper",
+        "//clockwork/logging/offboard:log_uri",
+        "//clockwork/logging/offboard/v1:log_metadata_cc_library",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+cc_test(
+    name = "log_union_file_helper_test",
+    srcs = ["log_union_file_helper_test.cc"],
+    deps = [
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard:log_union_file_helper",
+        "//clockwork/logging/offboard:log_uri",
+        "//clockwork/logging/offboard/v1:log_metadata_cc_library",
+        "//clockwork/logging/offboard/v1:log_union_cc_library",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+cc_test(
+    name = "log_uri_test",
+    srcs = ["log_uri_test.cc"],
+    deps = [
+        "//clockwork/logging/offboard:log_uri",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "merge_logs_test",
+    srcs = ["merge_logs_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:merge_logs",
+        "//clockwork/logging/offboard:reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/offboard/v1:log_union_cc_library",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//clockwork/logging/readers:types",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "message_chunk_reader_test",
+    srcs = ["message_chunk_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:message_chunk_reader",
+        "//clockwork/logging/offboard:message_chunk_writer",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "message_chunk_writer_test",
+    srcs = ["message_chunk_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging:wrapping_counter",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:message_chunk_writer",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "metadata_chunk_reader_writer_test",
+    srcs = ["metadata_chunk_reader_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:metadata_chunk_reader",
+        "//clockwork/logging/offboard:metadata_chunk_writer",
+        "//clockwork/logging/offboard:reader_types",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "metrics_chunk_reader_writer_test",
+    srcs = ["metrics_chunk_reader_writer_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_compressor",
+        "//clockwork/logging/offboard:file_chunk_reader",
+        "//clockwork/logging/offboard:file_chunk_writer",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:metrics_chunk_reader",
+        "//clockwork/logging/offboard:metrics_chunk_writer",
+        "//clockwork/logging/offboard:reader_types",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "persistent_reader_test",
+    srcs = ["persistent_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "py_log_writer_test",
+    srcs = [
+        "py_log_writer_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_processor",
+        "//clockwork/logging/tests/support:py_test_message",
+        "//clockwork/logging/tests/support:test_message_clk_nb",
+        "//clockwork/serialization/metadata:tachyon",
+    ],
+)
+
+cc_test(
+    name = "reader_test",
+    srcs = ["reader_test.cc"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "s3_read_streambuf_test",
+    srcs = ["s3_read_streambuf_test.cc"],
+    deps = [
+        "//clockwork/logging/offboard:s3_read_streambuf",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "s3_retry_strategy_test",
+    srcs = ["s3_retry_strategy_test.cc"],
+    deps = [
+        "//clockwork/logging/offboard:s3_retry_strategy",
+        "//jewels/memory:memory_resource",
+        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "s3_write_streambuf_test",
+    srcs = ["s3_write_streambuf_test.cc"],
+    deps = [
+        "//clockwork/logging/offboard:s3_write_streambuf",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "writer_config_test",
+    srcs = ["writer_config_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging/offboard:writer_config",
+        "//jewels/memory:memory_resource",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "writer_test",
+    srcs = ["writer_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:reader",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/offboard/v1:log_metadata_cc_library",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//clockwork/logging/tests/support:test_message",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+        "@fmt",
+        "@protobuf",
+    ],
+)

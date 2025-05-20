@@ -1,0 +1,42 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.logging.offboard.v1;
+
+// Log file metadata
+message LogFileMetadata {
+  // File name
+  string log_file_name = 1;
+
+  // Earlist transmit time stored in the file
+  int64 min_transmit_time_ns = 3;
+
+  // Latest transmit time stored in the file
+  int64 max_transmit_time_ns = 4;
+}
+
+// Log writer metadata
+message LogWriterMetadata {
+  // Channels written by the writer (including persistent channels)
+  repeated string channel = 1;
+
+  // Files written by the writer
+  repeated LogFileMetadata log_file_metadata = 2;
+
+  // Persistent channels written by the writer
+  repeated string persistent_channel = 3;
+}
+
+// Log metadata
+message LogMetadata {
+  // Metadata about messages written by each of the log writers
+  repeated LogWriterMetadata log_writer_metadata = 1;
+
+  // Earlist transmit time stored in the log
+  int64 min_transmit_time_ns = 2;
+
+  // Latest transmit time stored in the log
+  int64 max_transmit_time_ns = 3;
+}

@@ -1,0 +1,181 @@
+use clockwork::python::python_state::PythonState;
+use clockwork::python::tests::support::test_config;
+use clockwork::python::tests::support::test_input_message;
+use clockwork::python::tests::support::test_output_message;
+use clockwork::python::tests::support::test_state;
+
+// Python initialization cog
+cog ExampleInit
+{
+  configs
+  {
+    input1_config: Tappy<test_config::TestConfig>;
+    input2_config: Tappy<test_config::TestConfig>;
+  }
+
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    input1_state: Tappy<test_state::TestState>
+    {
+      mutable: true;
+    }
+    input2_state: Tappy<test_state::TestState>
+    {
+      mutable: true;
+    }
+  }
+
+  execution
+  {
+    execute when: init;
+  }
+
+  python
+  {
+    dial: "clockwork.python.example.py_example_cog_dial.ExampleInitDial";
+    impl: "clockwork.python.example.py_example_cog_impl.ExampleInitImpl";
+  }
+}
+
+// Python cog to publish the input1 channel
+cog ExampleInput1
+{
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    state: Tappy<test_state::TestState>;
+  }
+
+  outputs
+  {
+    output: Tappy<test_input_message::TestInputMessage>;
+  }
+
+  execution
+  {
+    condition periodic_1050ms: time_since_last_exec(1050ms);
+    execute when: periodic_1050ms;
+  }
+
+  python
+  {
+    dial: "clockwork.python.example.py_example_cog_dial.ExampleInput1Dial";
+    impl: "clockwork.python.example.py_example_cog_impl.ExampleInput1Impl";
+  }
+}
+
+// Python cog to publish the input2 channel
+cog ExampleInput2
+{
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    state: Tappy<test_state::TestState>;
+  }
+
+  outputs
+  {
+    output: Tappy<test_input_message::TestInputMessage>;
+  }
+
+  execution
+  {
+    condition periodic_950ms: time_since_last_exec(950ms);
+    execute when: periodic_950ms;
+  }
+
+  python
+  {
+    dial: "clockwork.python.example.py_example_cog_dial.ExampleInput2Dial";
+    impl: "clockwork.python.example.py_example_cog_impl.ExampleInput2Impl";
+  }
+}
+
+// Python cog to subscribe to the input channels and publish the output channel
+cog ExampleOutput
+{
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    input1: Tappy<test_input_message::TestInputMessage>;
+    input2: Tappy<test_input_message::TestInputMessage>;
+  }
+
+  outputs
+  {
+    output: Tappy<test_output_message::TestOutputMessage>;
+  }
+
+  execution
+  {
+    condition new_input1: new_message(input1, min=1, max=1);
+    condition new_input2: new_message(input2, min=1, max=1);
+    execute when: new_input1 or new_input2;
+  }
+
+  python
+  {
+    dial: "clockwork.python.example.py_example_cog_dial.ExampleOutputDial";
+    impl: "clockwork.python.example.py_example_cog_impl.ExampleOutputImpl";
+  }
+}
+
+cpp_target example_cog
+{
+  options
+  {
+    namespace clockwork::python::example;
+  }
+
+  python_cog ExampleInit;
+  python_cog ExampleInput1;
+  python_cog ExampleInput2;
+  python_cog ExampleOutput;
+}
+
+py_target py_example_cog_dial
+{
+  python_cog_dial ExampleInit
+  {
+    configs.input1_config: "clockwork.python.tests.support.py_test_config.TestConfig";
+    configs.input2_config: "clockwork.python.tests.support.py_test_config.TestConfig";
+    states.input1_state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
+    states.input2_state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
+  }
+
+  python_cog_dial ExampleInput1
+  {
+    states.state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
+    outputs.output: "clockwork.python.tests.support.py_test_input_message.TestInputMessage";
+  }
+
+  python_cog_dial ExampleInput2
+  {
+    states.state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
+    outputs.output: "clockwork.python.tests.support.py_test_input_message.TestInputMessage";
+  }
+
+  python_cog_dial ExampleOutput
+  {
+    inputs.input1: "clockwork.python.tests.support.py_test_input_message.TestInputMessage";
+    inputs.input2: "clockwork.python.tests.support.py_test_input_message.TestInputMessage";
+    outputs.output: "clockwork.python.tests.support.test_output_message_clk_nb.TestOutputMessage";
+  }
+}

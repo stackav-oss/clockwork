@@ -1,0 +1,127 @@
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::examples::demo_system::imu::imu_channels;
+use clockwork::examples::demo_system::imu::imu_message;
+use clockwork::examples::demo_system::localization::localization_channels;
+use clockwork::examples::demo_system::localization::localization_state;
+use clockwork::examples::demo_system::localization::pose_message;
+use clockwork::examples::demo_system::gps::gps_channels;
+use clockwork::examples::demo_system::gps::gps_message;
+
+// Initialize the localization state
+cog LocalizationInitCog
+{
+  states
+  {
+    state: Tappy<localization_state::LocalizationState>
+    {
+      mutable: true;
+    }
+  }
+
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// Update pose from GPS messages
+cog LocalizationGpsCog
+{
+  states
+  {
+    state: Tappy<localization_state::LocalizationState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    gps: Tappy<gps_message::GpsMessage>
+    {
+      max_msgs: 2;
+    }
+  }
+
+  execution
+  {
+    condition new_gps: new_message(gps, min=1, max=1);
+    execute when: new_gps;
+  }
+}
+
+// Update pose from IMU messages
+cog LocalizationImuCog
+{
+  states
+  {
+    state: Tappy<localization_state::LocalizationState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    imu: Tappy<imu_message::ImuMessage>
+    {
+      max_msgs: 2;
+    }
+  }
+
+  outputs
+  {
+    pose: Tappy<pose_message::PoseMessage>;
+  }
+
+  execution
+  {
+    condition new_imu: new_message(imu, min=1, max=1);
+
+    execute when: new_imu;
+  }
+}
+
+cpp_target localization_cog
+{
+  options
+  {
+    namespace clockwork::demo_system::localization;
+  }
+
+  cog LocalizationInitCog;
+  cog LocalizationImuCog;
+  cog LocalizationGpsCog;
+}
+
+box LocalizationBox
+{
+  new init_cog: LocalizationInitCog;
+  new imu_cog: LocalizationImuCog;
+  new gps_cog: LocalizationGpsCog;
+
+  new state: State(representation=Tachyon<localization_state::LocalizationState>, init=init_cog.state);
+
+  connect state to imu_cog.state;
+  connect imu_channels::ImuChannel to imu_cog.imu;
+  connect imu_cog.pose to localization_channels::PoseChannel;
+
+  connect state to gps_cog.state;
+  connect gps_channels::GpsChannel to gps_cog.gps;
+}
+
+cpp_executable localization_exe
+{
+  casing
+  {
+    box LocalizationBox;
+  }
+}
+
+box LocalizationExe
+{
+  new localization_box: LocalizationBox;
+  new localization_proc: Process(executable=localization_exe);
+  apply HostProcess(process=localization_proc) in localization_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to localization_proc;
+}

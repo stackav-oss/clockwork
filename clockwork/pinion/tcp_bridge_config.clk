@@ -1,0 +1,99 @@
+use clockwork::common::process_description
+use clockwork::common::platform_diagnostics_config
+
+// Describes the configuration of a TCP bridge client.
+schema TcpBridgeClientConfig
+{
+  fields
+  {
+    // The ShmChannel that will serve as the source of messages for
+    // the bridge server.
+    #1 publisher_endpoint: process_description::PublishEndpoint;
+
+    // The IPv4 address of the bridge server to connect to.
+    #2 server_address: VarString<max_size=15>;
+
+    // The TCP port of the bridge server to connect to.
+    #3 server_port: UInt16;
+
+    // Channel name
+    #4 channel_name: VarString<max_size=127>;
+  }
+}
+
+// Describes the configuration of a TCP bridge server.
+schema TcpBridgeServerConfig
+{
+  fields
+  {
+    // The ID of the ShmChannel that will serve as the sink for messages
+    // received by the bridge client.
+    #1 publisher_id: Uuid<process_description::EndpointInstanceId>;
+
+    // Layout of the channel buffer.
+    #2 buffer_layout: process_description::PinionBufferLayout;
+
+    // The IPv4 address to bind the bridge server socket to.
+    #3 listen_address: VarString<max_size=15>;
+
+    // The TCP port to listen for client connections on.
+    #4 listen_port: UInt16;
+
+    // The number of clients expected to connect to the bridge server.
+    #5 num_clients: UInt64;
+
+    // Channel name
+    #6 channel_name: VarString<max_size=127>;
+  }
+}
+
+// Describes the TCP bridge clients and servers that should be running on a node.
+schema TcpBridgeConfig
+{
+  parameters
+  {
+    // The maximum number of bridge clients.
+    #1 max_bridge_clients: UInt64;
+
+    // The maximum number of bridge servers.
+    #2 max_bridge_servers: UInt64;
+  }
+
+  fields
+  {
+    // Connections to remote bridge servers.
+    #3 bridge_clients: VarArray<type=TcpBridgeClientConfig, max_size=max_bridge_clients>;
+
+    // Bridge servers to run locally.
+    #4 bridge_servers: VarArray<type=TcpBridgeServerConfig, max_size=max_bridge_servers>;
+
+    // Diagnostics producer config
+    #5 diagnostics_config: platform_diagnostics_config::PlatformDiagnosticsConfig;
+
+    // Bridge host name
+    #6 host_name: VarString<max_size=31>;
+
+    // Bridge status publisher endpoint
+    #7 status_publish_endpoint: process_description::PublishEndpoint;
+  }
+}
+
+cpp_target tcp_bridge_config
+{
+  options
+  {
+    namespace clockwork::pinion;
+  }
+
+  schema TcpBridgeClientConfig;
+  schema TcpBridgeServerConfig;
+  schema TcpBridgeConfig;
+
+  representation Tachyon<TcpBridgeClientConfig>;
+  representation Tachyon<TcpBridgeServerConfig>;
+  representation Tachyon<TcpBridgeConfig<max_bridge_clients=256, max_bridge_servers=256>>;
+
+  interface TcpBridgeClientConfigTap : Tap<Tachyon<TcpBridgeClientConfig>>;
+  interface TcpBridgeServerConfigTap : Tap<Tachyon<TcpBridgeServerConfig>>;
+  interface TcpBridgeConfigTap : Tap<Tachyon<TcpBridgeConfig<max_bridge_clients=256, max_bridge_servers=256>>>;
+}

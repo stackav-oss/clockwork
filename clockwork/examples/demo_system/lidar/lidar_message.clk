@@ -1,0 +1,132 @@
+use clockwork::examples::demo_system::localization::pose_message;
+
+// Twenty raw lidar packets make up a full 360 degree sweep
+raw_messages_per_sweep: UInt64 = 20;
+
+// Number of vertical returns per raw message
+returns_per_message: UInt64 = 10;
+
+// Maximum number of points in each vertical line of returns
+points_per_return: UInt64 = 40;
+
+// Minimum elevation angle in radians (-20 degrees)
+min_elevation_radians: Float64 = -0.3490658;
+
+// Maximum elevation angle in radians (+30 degrees)
+max_elevation_radians: Float64 = 0.523598;
+
+// Maximum points per lidar sweep (messages_per_sweep * returns_per_message * points_per_return)
+points_per_sweep: UInt64 = 8000;
+
+// Point in a raw lidar return
+schema RawLidarPoint
+{
+  uuid: 3130dadd-5911-497f-b389-fdab1a74c59b;
+
+  fields
+  {
+    // Point elevation in radians
+    #0 elevation_radians: Float32;
+
+    // Point range in meters
+    #1 range_m: Float32;
+  }
+}
+
+// Vertical line of returns from the lidar device
+schema RawLidarReturn
+{
+  uuid: 455b127d-a302-4259-b1dc-135c669c7f3a;
+
+  parameters
+  {
+    // Max points per return
+    #0 max_points: UInt64;
+  }
+
+  fields
+  {
+    // Timestamp for when these points were generated
+    #1 time_of_validity: SyncTime;
+
+    // Azimuth for the points in the slice
+    #2 azimuth_radians: Float32;
+
+    // Points in the return
+    #3 points: VarArray<RawLidarPoint, max_points>;
+  }
+}
+
+// Fake raw lidar message for demo purposes
+schema RawLidarMessage
+{
+  uuid: 9144770a-206e-4c52-ba7c-12b9a20814dc;
+
+  parameters
+  {
+    // Returns per message
+    #0 num_returns: UInt64;
+
+    // Max points per return
+    #1 max_points: UInt64;
+  }
+
+  fields
+  {
+    // Vertical slices of lidar returns
+    #2 returns: FixedArray<RawLidarReturn<max_points>, num_returns>;
+  }
+}
+
+// Motion compensated lidar sweep
+schema LidarSweepMessage
+{
+  uuid: 8c1f9e51-1bd2-44d4-937c-dd59a5128e57;
+
+  parameters
+  {
+    // Max points per sweep
+    #0 max_points: UInt64;
+  }
+
+  fields
+  {
+    // Time of validity
+    #1 time_of_validity: SyncTime;
+
+    // Lidar points
+    #2 points: VarArray<pose_message::R3, max_points>;
+  }
+}
+
+cpp_target lidar_message
+{
+  options
+  {
+    namespace clockwork::demo_system::lidar;
+  }
+
+  constant raw_messages_per_sweep;
+  constant returns_per_message;
+  constant points_per_return;
+  constant min_elevation_radians;
+  constant max_elevation_radians;
+  constant points_per_sweep;
+
+  schema RawLidarPoint;
+  schema RawLidarReturn;
+  schema RawLidarMessage;
+  schema LidarSweepMessage;
+
+  representation Tachyon<RawLidarPoint>;
+  interface Tappy<RawLidarPoint>;
+
+  representation Tachyon<RawLidarReturn<points_per_return>>;
+  interface Tappy<RawLidarReturn<points_per_return>>;
+
+  representation Tachyon<RawLidarMessage<returns_per_message, points_per_return>>;
+  interface Tappy<RawLidarMessage<returns_per_message, points_per_return>>;
+
+  representation Tachyon<LidarSweepMessage<points_per_sweep>>;
+  interface Tappy<LidarSweepMessage<points_per_sweep>>;
+}

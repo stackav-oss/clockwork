@@ -1,0 +1,211 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "degrees",
+    hdrs = ["degrees.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":magnitude",
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "density",
+    hdrs = ["density.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":kilograms",
+        ":magnitude",
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "earth",
+    hdrs = ["earth.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@au"],
+)
+
+cc_library(
+    name = "feet",
+    srcs = ["feet.inl"],
+    hdrs = ["feet.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "gps_time",
+    srcs = ["gps_time.cc"],
+    hdrs = ["gps_time.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":hours",
+        ":magnitude",
+        ":quantity",
+        ":seconds",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "hertz",
+    hdrs = ["hertz.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "hours",
+    srcs = ["hours.inl"],
+    hdrs = ["hours.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "io",
+    hdrs = ["io.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@au//:io"],
+)
+
+cc_library(
+    name = "kilograms",
+    hdrs = ["kilograms.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":magnitude",
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "kinematics",
+    srcs = ["kinematics.inl"],
+    hdrs = ["kinematics.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":degrees",
+        ":hours",
+        ":meters",
+        ":miles",
+        ":quantity",
+        ":seconds",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "magnitude",
+    hdrs = ["magnitude.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@au"],
+)
+
+cc_library(
+    name = "math",
+    hdrs = ["math.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@au"],
+)
+
+cc_library(
+    name = "meters",
+    srcs = ["meters.inl"],
+    hdrs = ["meters.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "miles",
+    srcs = ["miles.inl"],
+    hdrs = ["miles.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "minutes",
+    srcs = ["minutes.inl"],
+    hdrs = ["minutes.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "newtons",
+    hdrs = ["newtons.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "pounds_mass",
+    srcs = ["pounds_mass.inl"],
+    hdrs = ["pounds_mass.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "quantity",
+    hdrs = ["quantity.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@au"],
+)
+
+cc_library(
+    name = "radians",
+    hdrs = ["radians.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":quantity",
+        "@au",
+    ],
+)
+
+cc_library(
+    name = "seconds",
+    srcs = ["seconds.inl"],
+    hdrs = ["seconds.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":magnitude",
+        ":quantity",
+        "@au",
+    ],
+)

@@ -1,0 +1,58 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "distance_test",
+    srcs = ["distance_test.cc"],
+    deps = [
+        "//jewels/units:magnitude",
+        "//jewels/units:meters",
+        "//jewels/units:miles",
+        "//jewels/units:quantity",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "earth_test",
+    srcs = ["earth_test.cc"],
+    deps = [
+        "//jewels/units:earth",
+        "//jewels/units:kinematics",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "kinematics_test",
+    srcs = ["kinematics_test.cc"],
+    deps = [
+        "//jewels/units:kinematics",
+        "//jewels/units:meters",
+        "//jewels/units:quantity",
+        "//jewels/units:seconds",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "time_test",
+    srcs = ["time_test.cc"],
+    deps = [
+        "//jewels/units:gps_time",
+        "//jewels/units:hours",
+        "//jewels/units:io",
+        "//jewels/units:magnitude",
+        "//jewels/units:minutes",
+        "//jewels/units:quantity",
+        "//jewels/units:seconds",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)

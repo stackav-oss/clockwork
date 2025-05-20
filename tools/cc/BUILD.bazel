@@ -1,0 +1,19 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:cc.bzl", "cc_library")
+
+bzl_library(
+    name = "flags_bzl",
+    srcs = ["flags.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "stacktrace",
+    srcs = ["stacktrace.cc"],
+    linkopts = ["-rdynamic"],
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)

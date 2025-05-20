@@ -1,0 +1,119 @@
+use clockwork::dsl::tests::support::{hellocog, hellomsg};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+
+// Channel for HelloMsg messages
+channel Chan1
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// Another channel for HelloMsg messages
+channel Chan2
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 101;
+}
+
+// A multi-publisher channel for HelloMsg messages
+channel MultiChan1
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 11;
+    publishers: multiple;
+}
+
+// Another multi-publisher channel for HelloMsg messages
+channel MultiChan2
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 22;
+    publishers: multiple;
+}
+
+policy ChannelLoggingPolicy for Chan1
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for Chan2
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for MultiChan1
+{
+    log_type = LogType::event;
+}
+
+policy ChannelLoggingPolicy for MultiChan2
+{
+    log_type = LogType::event;
+}
+
+box Box1
+{
+    new cog1: hellocog::HelloCog;
+    connect cog1.out_world to Chan1;
+    connect cog1.out_multi1 to MultiChan1;
+    connect cog1.out_multi2 to MultiChan1;
+    connect Chan2 to cog1.history_of_hellos;
+    connect MultiChan2 to cog1.multi_publisher_hello;
+}
+
+box Box2
+{
+    new cog2: hellocog::HelloCog;
+    connect cog2.out_world to Chan2;
+    connect cog2.out_multi1 to MultiChan2;
+    connect cog2.out_multi2 to MultiChan2;
+    connect Chan1 to cog2.history_of_hellos;
+    connect MultiChan1 to cog2.multi_publisher_hello;
+}
+
+cpu_domain Cpu1
+{
+  simplelaunch_src: "//clockwork/dsl/tests/support:host_a_simplelaunch_config.textproto";
+  simplelaunch_src: "//clockwork/dsl/tests/support:host_b_simplelaunch_config.textproto";
+}
+cpu_domain Cpu2;
+
+ethernet Lan1
+{
+    ipv4_address 1.2.3.4: Cpu1
+    {
+        bridge_ports: 16000 - 17000;
+    }
+    ipv4_address 1.2.3.5: Cpu2
+    {
+        bridge_ports: 17000 - 18000;
+    }
+}
+
+
+box System1
+{
+    new box1: Box1;
+    new box2: Box2;
+
+    new proc1: Process(executable=exe);
+    new proc2: Process(executable=exe);
+
+    apply HostProcess(process=proc1) in box1;
+    apply HostProcess(process=proc2) in box2;
+
+    apply HostCpuDomain(cpu_domain=Cpu1) to proc1;
+    apply HostCpuDomain(cpu_domain=Cpu2) to proc2;
+}
+
+cpp_executable exe
+{
+    casing
+    {
+    }
+}
+
+system_target system1
+{
+    box: System1;
+}

@@ -1,0 +1,35 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "upgrade_lib_test",
+    srcs = [
+        "upgrade_lib_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_reader",
+        "//clockwork/logging/tools/upgrade_log:upgrade_lib",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//pytest",
+    ],
+)

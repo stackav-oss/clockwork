@@ -1,0 +1,9 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_testonly = True)
+
+exports_files([
+    "logger_config.pbtxt",
+    "channel_rates_config.pbtxt",
+])

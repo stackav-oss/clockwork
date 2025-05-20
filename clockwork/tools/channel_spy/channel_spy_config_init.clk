@@ -1,0 +1,39 @@
+use clockwork::tools::channel_spy::channel_spy_config::ChannelSpyConfig
+
+// Cog to copy the channel spy configuration to /dev/shm at startup
+cog SpyConfigInitCog
+{
+  resources
+  {
+    memres: persistent;
+  }
+
+  configs
+  {
+    spy_config : Tappy<ChannelSpyConfig<>>;
+  }
+
+  execution
+  {
+      execute when: init;
+  }
+}
+
+cpp_target channel_spy_config_init_cog
+{
+  options
+  {
+    namespace clockwork::tools;
+  }
+
+  cog SpyConfigInitCog;
+}
+
+cpp_executable spy_config_init_exe
+{
+  casing
+  {
+    interface Tap<Tachyon<ChannelSpyConfig<>>>;
+    cog SpyConfigInitCog;
+  }
+}

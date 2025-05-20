@@ -1,0 +1,108 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "bind_array_eq",
+    srcs = ["bind_array_eq.inl"],
+    hdrs = ["bind_array_eq.hh"],
+    visibility = [":__subpackages__"],
+    deps = [
+        ":cast_maybe_by_reference",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "bind_fixed_array",
+    srcs = ["bind_fixed_array.inl"],
+    hdrs = ["bind_fixed_array.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":bind_array_eq",
+        ":bind_numpy_array",
+        ":bind_str_and_repr",
+        ":cast_maybe_by_reference",
+        ":wrap_index",
+        "@fmt",
+        "@nanobind",
+        "@python_3_10//:python_headers",
+    ],
+)
+
+cc_library(
+    name = "bind_numpy_array",
+    srcs = ["bind_numpy_array.inl"],
+    hdrs = ["bind_numpy_array.hh"],
+    visibility = [":__subpackages__"],
+    deps = [
+        "@au",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "bind_str_and_repr",
+    srcs = ["bind_str_and_repr.inl"],
+    hdrs = ["bind_str_and_repr.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@nanobind"],
+)
+
+cc_library(
+    name = "bind_tachyon_serialize",
+    srcs = ["bind_tachyon_serialize.inl"],
+    hdrs = ["bind_tachyon_serialize.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "@fmt",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "bind_var_array",
+    srcs = ["bind_var_array.inl"],
+    hdrs = ["bind_var_array.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":bind_array_eq",
+        ":bind_numpy_array",
+        ":bind_str_and_repr",
+        ":cast_maybe_by_reference",
+        ":wrap_index",
+        "@nanobind",
+        "@python_3_10//:python_headers",
+    ],
+)
+
+cc_library(
+    name = "cast_maybe_by_reference",
+    hdrs = ["cast_maybe_by_reference.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@nanobind"],
+)
+
+cc_library(
+    name = "get_python_type_name",
+    srcs = [
+        "get_python_type_name.cc",
+        "get_python_type_name.inl",
+    ],
+    hdrs = ["get_python_type_name.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@nanobind"],
+)
+
+cc_library(
+    name = "wrap_index",
+    srcs = ["wrap_index.inl"],
+    hdrs = ["wrap_index.hh"],
+    visibility = [":__subpackages__"],
+    deps = [
+        "@nanobind",
+        "@python_3_10//:python_headers",
+    ],
+)

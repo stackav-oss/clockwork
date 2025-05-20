@@ -1,0 +1,114 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "epoll_snooper",
+    srcs = ["epoll_snooper.cc"],
+    hdrs = ["epoll_snooper.hh"],
+    deps = [
+        "//clockwork/common:abstract_epoll_manager",
+        "//jewels/filesystem:error_code",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "mock_buffer",
+    hdrs = ["mock_buffer.hh"],
+    deps = [
+        ":mock_slot",
+        "//clockwork/pinion:buffer",
+        "//jewels/std:span",
+        "@boost//:atomic",
+    ],
+)
+
+cc_library(
+    name = "mock_slot",
+    hdrs = ["mock_slot.hh"],
+    deps = [
+        "//clockwork/pinion:slot",
+        "@boost//:atomic",
+    ],
+)
+
+cc_library(
+    name = "pub_sub",
+    hdrs = ["pub_sub.hh"],
+    deps = [
+        ":tmp_shm_namespace",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:shm_subscriber",
+        "//clockwork/pinion/detail:mmap_region",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:file",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
+    name = "sockets",
+    srcs = [
+        "sockets.cc",
+        "sockets.inl",
+    ],
+    hdrs = ["sockets.hh"],
+    deps = [
+        ":udp_payloads",
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:pointers",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "tmp_shm_namespace",
+    srcs = ["tmp_shm_namespace.cc"],
+    hdrs = ["tmp_shm_namespace.hh"],
+    deps = [
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//jewels/filesystem:file",
+        "//jewels/memory:memory_resource",
+        "//jewels/testing:tmp_directory_guard",
+    ],
+)
+
+cc_library(
+    name = "udp_payloads",
+    srcs = ["udp_payloads.inl"],
+    hdrs = ["udp_payloads.hh"],
+    deps = [
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//jewels/std:span",
+    ],
+)

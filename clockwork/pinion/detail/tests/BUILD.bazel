@@ -1,0 +1,55 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "mmap_region_test",
+    srcs = ["mmap_region_test.cc"],
+    deps = [
+        "//clockwork/pinion/detail:mmap_region",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "socket_common_test",
+    srcs = ["socket_common_test.cc"],
+    linkopts = ["-lpthread"],
+    deps = [
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:tcp_socket",
+        "//clockwork/pinion/detail:unix_socket",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "tcp_socket_test",
+    srcs = ["tcp_socket_test.cc"],
+    deps = [
+        "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "unix_socket_test",
+    srcs = ["unix_socket_test.cc"],
+    deps = [
+        "//clockwork/pinion/detail:unix_socket",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)

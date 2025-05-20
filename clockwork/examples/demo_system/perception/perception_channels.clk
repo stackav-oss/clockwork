@@ -1,0 +1,18 @@
+use clockwork::dial::approx_aligner_config;
+use clockwork::examples::demo_system::perception::perception_message;
+
+// Perception debug channel
+channel PerceptionDebugChannel
+{
+  name: "/perception/debug";
+  message_type: Tachyon<perception_message::PerceptionDebugMessage>;
+  max_num_messages: 10;
+}
+
+// Perception aligner config channel
+channel PerceptionAlignerConfigChannel
+{
+  name: "/perception/aligner_config";
+  message_type: Tachyon<approx_aligner_config::ApproxAlignerConfig>;
+  max_num_messages: 2;
+}

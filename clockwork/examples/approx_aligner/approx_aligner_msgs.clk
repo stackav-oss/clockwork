@@ -1,0 +1,68 @@
+use clockwork::dial::approx_aligner_config;
+
+// Example message for aligner
+schema AlignerIntMsg
+{
+  uuid: b594acec-5823-4292-8ff2-cbf2105c632a;
+
+  fields
+  {
+    // Time of validity
+    #0 time_of_validity: SyncTime;
+
+    // Value
+    #1 int_value: Int32;
+  }
+}
+
+// Example message for aligner
+schema AlignerFloatMsg
+{
+  uuid: 0b98dfad-62d6-4eca-b51a-95eb88fb6315;
+
+  fields
+  {
+    // Time of validity
+    #0 time_of_validity: SyncTime;
+
+    // Value
+    #1 float_value: Float32;
+  }
+}
+
+// Aligned message data.
+schema AlignedDataMsg
+{
+  uuid: 4b85b858-eb9c-4569-8a54-85594f5b3e92;
+
+  fields
+  {
+    // Time of validity
+    #0 time_of_validity: SyncTime;
+
+    // Int Value
+    #1 int_value: Int32;
+
+    // Float Value
+    #2 float_value: Float32;
+  }
+}
+
+cpp_target approx_aligner_msgs
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  schema AlignerIntMsg;
+  schema AlignerFloatMsg;
+  schema AlignedDataMsg;
+
+  representation Tachyon<AlignerIntMsg>;
+  representation Tachyon<AlignerFloatMsg>;
+  representation Tachyon<AlignedDataMsg>;
+  interface Tap<Tachyon<AlignerIntMsg>>;
+  interface Tap<Tachyon<AlignerFloatMsg>>;
+  interface Tap<Tachyon<AlignedDataMsg>>;
+}

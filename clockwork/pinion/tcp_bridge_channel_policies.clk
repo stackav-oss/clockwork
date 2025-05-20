@@ -1,0 +1,8 @@
+use clockwork::pinion::tcp_bridge_channels;
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+
+
+policy ChannelLoggingPolicy for tcp_bridge_channels::BridgeStatusChannel
+{
+  log_type = LogType::telemetry;
+}

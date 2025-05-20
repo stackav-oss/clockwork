@@ -1,0 +1,42 @@
+use clockwork::common::process_description::CogInstanceId;
+
+// An individual cog-gpu assignment
+schema CogGpuAssignment {
+  fields
+  {
+    // The string UUID of the cog to be assigned to a gpu
+    #1 cog_uuid: Uuid<CogInstanceId>;
+    // The id of the gpu that the cog is assigned to
+    #2 gpu_id: Int16;
+  }
+}
+
+// Configuration for gpu assignments, per cog
+schema CogGpuAssignmentConfig {
+  fields
+  {
+    // The list of cog gpu assignments
+    #1 cog_gpu_assignments: VarArray<type=CogGpuAssignment, max_size=1024>;
+  }
+}
+
+cpp_target cog_gpu_assignment_config_clk_cc
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  schema CogGpuAssignment;
+  schema CogGpuAssignmentConfig;
+  representation Tachyon<CogGpuAssignment>;
+  representation Tachyon<CogGpuAssignmentConfig>;
+  interface Tap<Tachyon<CogGpuAssignment>>;
+  interface CogGpuAssignmentConfigTap: Tap<Tachyon<CogGpuAssignmentConfig>>;
+}
+
+py_target cog_gpu_assignment_config_clk_py
+{
+  interface Tappy<CogGpuAssignment>;
+  interface Tappy<CogGpuAssignmentConfig>;
+}

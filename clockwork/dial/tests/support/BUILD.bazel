@@ -1,0 +1,25 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/dial/tests:__subpackages__"],
+)
+
+cc_library(
+    name = "approx_aligner_fixture",
+    hdrs = ["approx_aligner_fixture.hh"],
+    deps = [
+        "//clockwork/dial:approx_aligner",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/dial:msg_input",
+        "//jewels/container:circular_buffer",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)

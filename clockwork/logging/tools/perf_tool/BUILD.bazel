@@ -1,0 +1,36 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+cc_binary(
+    name = "perf_tool",
+    srcs = ["perf_tool.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/onboard:clockwork_message_handle",
+        "//clockwork/logging/onboard:clockwork_writer_policy",
+        "//clockwork/logging/onboard:null_message_handle",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard:writer",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:buffer_index",
+        "//clockwork/pinion:slot",
+        "//jewels/math:constants",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@fmt",
+        "@tclap",
+        "@wise_enum",
+    ],
+)

@@ -1,0 +1,7 @@
+channel_message_rates { channel_name: "/logger/logger_config", min_msg_rate_hz: 1.0 }
+channel_message_rates { channel_name: "/logger/logger_status", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/logger/channel_rates", min_msg_rate_hz: 0.10 }
+channel_message_rates { channel_name: "/example/input1", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/example/input2", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/example/output", min_msg_rate_hz: 9.0 }
+window_size_sec: 10

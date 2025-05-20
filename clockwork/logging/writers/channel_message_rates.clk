@@ -1,0 +1,50 @@
+use clockwork::logging::writers::rate_status::RateStatus;
+
+// Message rates for a logged channel
+schema ChannelMessageRate
+{
+  uuid: c1643741-8bff-422a-a1d9-1f2ab49e3149;
+
+  fields
+  {
+    // Rate status
+    #1 rate_status: RateStatus;
+
+    // Channel name
+    #2 channel_name: VarString<max_size=127>;
+
+    // Message rate in hz
+    #3 msg_rate_hz: Float64;
+  }
+}
+
+
+// Message rates for logged channels
+schema ChannelMessageRates
+{
+  uuid: 2f036e49-2dc7-4026-bcb7-e26ff622cd63;
+
+  fields
+  {
+    // Transmit time
+    #1 transmit_time: SyncTime;
+
+    // Channel message rates
+    #2 message_rates: VarArray<ChannelMessageRate, max_size=512>;
+  }
+}
+
+cpp_target channel_message_rates
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  schema ChannelMessageRate;
+  schema ChannelMessageRates;
+
+  representation Tachyon<ChannelMessageRate>;
+  representation Tachyon<ChannelMessageRates>;
+  interface ChannelMessageRateTap: Tap<Tachyon<ChannelMessageRate>>;
+  interface ChannelMessageRatesTap: Tap<Tachyon<ChannelMessageRates>>;
+}

@@ -1,0 +1,212 @@
+// Proto Tester message
+schema ProtoTester
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Test stuff
+    #1 seqno: Int64;
+
+    // More of it
+    #2 other_number: Int32;
+  }
+}
+
+// Hello, composition!
+schema BetterThanInheritance
+{
+  uuid: d1cec84c-7fd4-4db6-80c9-c5e2dc5a6c30;
+
+  fields
+  {
+    // Hi
+    #3 hello: VarArray<ProtoTester, 100>;
+
+    // yet another field
+    #4 a_field: Int64;
+
+    // A generic
+    #5 my_generic: GenericMsg<Float32, 32>;
+
+    // An optional
+    #6 my_optional: Optional<Int64>;
+
+    // A UUID
+    #7 my_uuid: Uuid<BetterThanInheritance>;
+
+    // A var string
+    #8 my_string: VarString<100>;
+
+    // A var array bytes
+    #9 my_bytes: VarArray<Byte,100>;
+
+    // Composition in a var array
+    #10 composition_var: VarArray<ProtoTester, 200>;
+
+    // Composition in an optional
+    #11 opt_composition: Optional<ProtoTester>;
+
+    // A duration
+    #12 my_duration: Duration;
+
+    // Array of enums
+    #13 enum_arr: VarArray<HelloEnum, 100>;
+
+    // Array of duration
+    #14 duration_ar: VarArray<Duration,32>;
+
+    // Fixed Array of enums
+    #15 fixed_enum_arr: FixedArray<HelloEnum, 2>;
+
+    // Array of duration
+    #16 fixed_duration_ar: FixedArray<Duration,2>;
+
+    // A fixed array bytes
+    #17 fixed_bytes: FixedArray<Byte,100>;
+
+    // Composition in a fixed array
+    #18 fixed_composition: FixedArray<ProtoTester, 2>;
+
+    // Fixed array of primitives
+    #19 fixed_primitive: FixedArray<Int64, 2>;
+
+    // Another generic
+    #20 another_generic: GenericMsg<UInt64, 16>;
+
+    // A non-native int type
+    #21 funny_number: Int16;
+
+    // Optional of a sync time
+    #22 sync_time: Optional<SyncTime>;
+
+    // Optional of a duration
+    #23 opt_duration: Optional<Duration>;
+
+    // Optional of a UUID
+    #24 opt_uuid: Optional<Uuid<BetterThanInheritance>>;
+  }
+}
+
+// Hello templates
+schema GenericMsg
+{
+  uuid: b1c8dbe4-9c30-4acd-b66f-3f8aec2c6d90;
+
+  parameters
+  {
+    // Type of array elements
+    #1 data_type: Type;
+
+    // Number of elements
+    #2 data_size = 3;
+  }
+
+  fields
+  {
+    // Some data
+    #3 data: VarArray<data_type, max_size=data_size>;
+
+    // An enum
+    #4 my_hello: Optional<HelloEnum>;
+  }
+}
+
+// Enum
+enum HelloEnum
+{
+  uuid: bea931ce-fba6-4abd-941c-16ab44088aec;
+  values
+  {
+    // Normal greeting
+    #1 hi default;
+
+    // A bit more formal
+    #2 hello;
+
+    // Spanish
+    #3 hola;
+
+    // Mandarin
+    #4 ni_hao;
+
+    // Hindi
+    #5 namaste;
+  }
+}
+
+proto_target proto_tester_onboard
+{
+  options
+  {
+    package clockwork.my_proto;
+    go_package github.com/stack-av-llc/av/clockwork;
+  }
+
+  representation proto_tester: Protobuf<ProtoTester>;
+}
+
+cpp_target better_than_inheritance_cpp
+{
+  options
+  {
+    namespace clockwork::demo;
+  }
+
+  schema ProtoTester;
+  schema BetterThanInheritance;
+  schema GenericMsg;
+
+  enum HelloEnum;
+  representation Tachyon<ProtoTester>;
+  interface Tappy<ProtoTester>;
+
+  representation Tachyon<GenericMsg<Float32, 32>>;
+  interface generic_alias: Tappy<GenericMsg<Float32, 32>>;
+
+  representation Tachyon<GenericMsg<UInt64, 16>>;
+  interface Tappy<GenericMsg<UInt64, 16>>;
+
+  representation Tachyon<BetterThanInheritance>;
+  interface bti_alias: Tappy<BetterThanInheritance>;
+}
+
+cpp_target convert_proto_tester
+{
+  options
+  {
+    namespace clockwork::demo;
+  }
+
+  converter ProtobufToTap<Protobuf<GenericMsg<Float32, 32>>, Tappy<GenericMsg<Float32, 32>>>;
+  converter ProtobufToTap<Protobuf<GenericMsg<UInt64, 16>>, Tappy<GenericMsg<UInt64, 16>>>;
+  converter ProtobufToTap<Protobuf<ProtoTester>, Tappy<ProtoTester>>;
+
+  converter TapToProtobuf<Tappy<GenericMsg<Float32, 32>>, Protobuf<GenericMsg<Float32, 32>>>;
+  converter TapToProtobuf<Tappy<GenericMsg<UInt64, 16>>, Protobuf<GenericMsg<UInt64, 16>>>;
+  converter TapToProtobuf<Tappy<ProtoTester>, Protobuf<ProtoTester>>;
+}
+
+cpp_target convert_hello_msg
+{
+  options
+  {
+    namespace clockwork::demo;
+  }
+
+  converter ProtobufToTap<Protobuf<BetterThanInheritance>, Tappy<BetterThanInheritance>>;
+  converter TapToProtobuf<Tappy<BetterThanInheritance>, Protobuf<BetterThanInheritance>>;
+}
+
+proto_target better_than_inheritance
+{
+  options
+  {
+    package clockwork.my_proto;
+    validate_proto true;
+  }
+  enum HelloEnum;
+  representation my_alias: Protobuf<GenericMsg<Float32, 32>>;
+  representation int_alias: Protobuf<GenericMsg<UInt64, 16>>;
+
+  representation Protobuf<BetterThanInheritance>;
+}

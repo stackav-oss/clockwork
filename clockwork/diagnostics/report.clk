@@ -1,0 +1,33 @@
+// Type tag for diagnostic reporter Uuid
+tag ReporterId;
+
+// Report
+schema Report
+{
+  uuid: 648ab6b9-eca6-49e4-9200-3baa620ba805;
+  options
+  {
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // Timestamp of the cycle this report is associated with
+    #3 timestamp: SyncTime;
+
+    // Uuid for this reporter
+    #4 id: Uuid<ReporterId>;
+  }
+}
+
+cpp_target report
+{
+  options
+  {
+    namespace clockwork::diagnostics;
+  }
+
+  tag ReporterId;
+  schema Report;
+  representation Tachyon<Report>;
+  interface ReportTap : Tap<Tachyon<Report>>;
+}

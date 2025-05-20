@@ -1,0 +1,38 @@
+use clockwork::dsl::tests::support::hellomsg
+
+// Schema for TestPolicy
+schema TestPolicySchema
+{
+    fields
+    {
+        // Do a thing?
+        #0 do_thing: Bool = true;
+
+        // Do stuff?
+        #1 do_stuff: Bool;
+
+        // Kind of stuff
+        #2 stuff_type: Type;
+    }
+}
+
+// A test policy
+def policy TestPolicy
+{
+    binds_to: Channel;
+    schema: TestPolicySchema;
+}
+
+// Test channel
+channel TestChan
+{
+    name: "policy_test";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 1;
+}
+
+policy TestPolicy for TestChan
+{
+    do_stuff = false;
+    stuff_type = Bool;
+}

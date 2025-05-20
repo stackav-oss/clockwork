@@ -1,0 +1,73 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:python.bzl", "py_binary")
+
+exports_files([
+    "cc.bzl",
+    "package.bzl",
+    "python.bzl",
+    # The wrapped CC binary is filled in by expanding this template file
+    "py_cc_wrapper.py",
+    # A different py_binary is made for each stub generator. See python.bzl:nanobind_stubgen for details.
+    "stubgen_wrapper.py",
+    # The stubgen type signature override configuration file
+    "stubgen_patterns.txt",
+])
+
+bzl_library(
+    name = "cc_bzl",
+    srcs = ["cc.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@rules_cc//cc:defs.bzl"],
+)
+
+bzl_library(
+    name = "empty_repository_bzl",
+    srcs = ["empty_repository.bzl"],
+    deps = ["@bazel_tools//tools/build_defs/repo:utils.bzl"],
+)
+
+bzl_library(
+    name = "package_bzl",
+    srcs = ["package.bzl"],
+)
+
+# This isn't used directly. A different py_binary is made for each stub generator. See python.bzl for details.
+# However, gazelle wants this here and it seems fine.
+py_binary(
+    name = "py_cc_wrapper",
+    srcs = ["py_cc_wrapper.py"],
+    visibility = ["//visibility:public"],
+)
+
+bzl_library(
+    name = "python_bzl",
+    srcs = ["python.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/rules:cc_bzl",
+        "@aspect_bazel_lib//lib:expand_make_vars",
+        "@aspect_bazel_lib//lib:tar",
+        "@rules_python//python:defs_bzl",
+        "@rules_python//python:packaging_bzl",
+        "@rules_python//python:pip_bzl",
+    ],
+)
+
+# This isn't used directly. A different py_binary is made for each stub generator. See python.bzl:nanobind_stubgen for details.
+# However, gazelle wants this here and it enables us to type-check the this file directly.
+py_binary(
+    name = "stubgen_wrapper",
+    srcs = ["stubgen_wrapper.py"],
+    # Visibility is public so that gazelle can manage dependencies of the generated py_binaries,
+    # by making this target a dependency of the generated ones.
+    visibility = ["//visibility:public"],
+    deps = [
+        "@clockwork_pip//click",
+        "@clockwork_pip//nanobind",
+        # TODO(DX-29): stubgen.py requires the 'typing_extensions' package on Python <3.11
+        "@clockwork_pip//typing_extensions",  # keep
+    ],
+)

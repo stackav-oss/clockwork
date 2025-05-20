@@ -1,0 +1,14 @@
+diff --git go/private/actions/stdlib.bzl go/private/actions/stdlib.bzl
+index 3dc6fe74..a9972a2a 100644
+--- go/private/actions/stdlib.bzl
++++ go/private/actions/stdlib.bzl
+@@ -105,7 +105,8 @@ def _build_env(go):
+     env.update({
+         "CGO_ENABLED": "1",
+         "CC": go.cgo_tools.c_compiler_path,
+-        "CGO_CFLAGS": " ".join(go.cgo_tools.c_compile_options),
++        # Disable all diagnostics
++        "CGO_CFLAGS": "-w " + " ".join(go.cgo_tools.c_compile_options),
+         "CGO_LDFLAGS": " ".join(ldflags),
+     })
+ 

@@ -1,0 +1,338 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 0000000..c350296
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,126 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
++load("@rules_cc//cc:defs.bzl", "cc_test")
++
++cc_library(
++    name = "tl_expected",
++    hdrs = glob(["include/tl/*.hpp"]),
++    includes = ["include"],
++    visibility = ["@clockwork//jewels/std:__subpackages__"],
++)
++
++cc_test(
++    name = "assertions",
++    srcs = ["tests/assertions.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "assignment",
++    srcs = ["tests/assignment.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "bases",
++    srcs = ["tests/bases.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "constructors",
++    srcs = ["tests/constructors.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "emplace",
++    srcs = ["tests/emplace.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "extensions",
++    srcs = ["tests/extensions.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "issues",
++    srcs = ["tests/issues.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "observers",
++    srcs = ["tests/observers.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "relops",
++    srcs = ["tests/relops.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++cc_test(
++    name = "swap",
++    srcs = ["tests/swap.cpp"],
++    deps = [
++        ":tl_expected",
++        "@catch2//:catch2_main",
++    ],
++    timeout = "short",
++)
++
++test_suite(
++    name = "tl_expected_tests",
++    tests = [
++        ":assertions",
++        ":assignment",
++        ":bases",
++        ":constructors",
++        ":emplace",
++        ":extensions",
++        ":issues",
++        ":observers",
++        ":relops",
++        ":swap",
++    ],
++    visibility = ["//visibility:public"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000..0fe36bc
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,7 @@
++module(
++    name = "tl_expected",
++)
++
++bazel_dep(name = "clockwork")
++bazel_dep(name = "rules_cc")
++bazel_dep(name = "catch2", version = "3.3.0")
+diff --git include/tl/expected.hpp include/tl/expected.hpp
+index afee404..36e70a8 100644
+--- include/tl/expected.hpp
++++ include/tl/expected.hpp
+@@ -22,6 +22,7 @@
+ 
+ #include <exception>
+ #include <functional>
++#include <memory_resource>
+ #include <type_traits>
+ #include <utility>
+ 
+@@ -81,7 +82,7 @@
+ #elif (defined(__GNUC__) && __GNUC__ < 8 && !defined(__clang__))
+ #ifndef TL_GCC_LESS_8_TRIVIALLY_COPY_CONSTRUCTIBLE_MUTEX
+ #define TL_GCC_LESS_8_TRIVIALLY_COPY_CONSTRUCTIBLE_MUTEX
+-namespace tl {
++namespace jewels {
+ namespace detail {
+ template <class T>
+ struct is_trivially_copy_constructible
+@@ -91,7 +92,7 @@ template <class T, class A>
+ struct is_trivially_copy_constructible<std::vector<T, A>> : std::false_type {};
+ #endif
+ } // namespace detail
+-} // namespace tl
++} // namespace jewels
+ #endif
+ 
+ #define TL_EXPECTED_IS_TRIVIALLY_COPY_CONSTRUCTIBLE(T)                         \
+@@ -126,7 +127,7 @@ struct is_trivially_copy_constructible<std::vector<T, A>> : std::false_type {};
+ #define TL_EXPECTED_11_CONSTEXPR constexpr
+ #endif
+ 
+-namespace tl {
++namespace jewels {
+ template <class T, class E> class expected;
+ 
+ #ifndef TL_MONOSTATE_INPLACE_MUTEX
+@@ -475,7 +476,7 @@ struct expected_storage_base {
+                                            Args &&...args)
+       : m_unexpect(il, std::forward<Args>(args)...), m_has_val(false) {}
+ 
+-  ~expected_storage_base() {
++  ~expected_storage_base() noexcept(std::is_nothrow_destructible<T>::value && std::is_nothrow_destructible<unexpected<E>>::value) {
+     if (m_has_val) {
+       m_val.~T();
+     } else {
+@@ -563,7 +564,7 @@ template <class T, class E> struct expected_storage_base<T, E, true, false> {
+                                            Args &&...args)
+       : m_unexpect(il, std::forward<Args>(args)...), m_has_val(false) {}
+ 
+-  ~expected_storage_base() {
++  ~expected_storage_base() noexcept(std::is_nothrow_destructible<unexpected<E>>::value) {
+     if (!m_has_val) {
+       m_unexpect.~unexpected<E>();
+     }
+@@ -608,7 +609,7 @@ template <class T, class E> struct expected_storage_base<T, E, false, true> {
+                                            Args &&...args)
+       : m_unexpect(il, std::forward<Args>(args)...), m_has_val(false) {}
+ 
+-  ~expected_storage_base() {
++  ~expected_storage_base() noexcept(std::is_nothrow_destructible<T>::value) {
+     if (m_has_val) {
+       m_val.~T();
+     }
+@@ -678,7 +679,7 @@ template <class E> struct expected_storage_base<void, E, false, false> {
+                                            Args &&...args)
+       : m_unexpect(il, std::forward<Args>(args)...), m_has_val(false) {}
+ 
+-  ~expected_storage_base() {
++  ~expected_storage_base() noexcept(std::is_nothrow_destructible<unexpected<E>>::value) {
+     if (!m_has_val) {
+       m_unexpect.~unexpected<E>();
+     }
+@@ -2439,6 +2440,6 @@ void swap(expected<T, E> &lhs,
+           expected<T, E> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
+   lhs.swap(rhs);
+ }
+-} // namespace tl
++} // namespace jewels
+ 
+ #endif
+diff --git tests/assertions.cpp tests/assertions.cpp
+index f109097..c43cfe3 100644
+--- tests/assertions.cpp
++++ tests/assertions.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <stdexcept>
+ 
+ #define TL_ASSERT(cond) if (!(cond)) { throw std::runtime_error(std::string("assertion failure")); }
+diff --git tests/assignment.cpp tests/assignment.cpp
+index 2d6bf6b..48928cf 100644
+--- tests/assignment.cpp
++++ tests/assignment.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ TEST_CASE("Simple assignment", "[assignment.simple]") {
+diff --git tests/bases.cpp tests/bases.cpp
+index fe8d6aa..59b658c 100644
+--- tests/bases.cpp
++++ tests/bases.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ #include <string>
+diff --git tests/constructors.cpp tests/constructors.cpp
+index df168ba..11556d5 100644
+--- tests/constructors.cpp
++++ tests/constructors.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ #include <type_traits>
+diff --git tests/emplace.cpp tests/emplace.cpp
+index 9449079..fad9253 100644
+--- tests/emplace.cpp
++++ tests/emplace.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ #include <memory>
+ #include <vector>
+diff --git tests/extensions.cpp tests/extensions.cpp
+index 14c180f..7d8b31c 100644
+--- tests/extensions.cpp
++++ tests/extensions.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ #define TOKENPASTE(x, y) x##y
+diff --git tests/issues.cpp tests/issues.cpp
+index c26617f..4b4c4d9 100644
+--- tests/issues.cpp
++++ tests/issues.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ #include <string>
+diff --git tests/observers.cpp tests/observers.cpp
+index 5d8473c..589b7ce 100644
+--- tests/observers.cpp
++++ tests/observers.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ struct move_detector {
+diff --git tests/relops.cpp tests/relops.cpp
+index 99dee5f..62e48f0 100644
+--- tests/relops.cpp
++++ tests/relops.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ TEST_CASE("Relational operators", "[relops]") {
+diff --git tests/swap.cpp tests/swap.cpp
+index a5c92c3..14a2770 100644
+--- tests/swap.cpp
++++ tests/swap.cpp
+@@ -1,4 +1,5 @@
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
++#define tl jewels
+ #include <tl/expected.hpp>
+ 
+ struct no_throw {

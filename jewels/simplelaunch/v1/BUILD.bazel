@@ -1,0 +1,133 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_proto_grpc//buf:defs.bzl", "buf_proto_lint_test")
+
+# gazelle:proto_language go enabled false
+
+exports_files([
+    "config.proto",
+    "service.proto",
+])
+
+proto_cc_library(
+    name = "config_cc_library",
+    srcs = ["config.pb.cc"],
+    hdrs = ["config.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "config_cpp_compile",
+    outputs = [
+        "config.pb.cc",
+        "config.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "config_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "config_proto",
+    srcs = ["config.proto"],
+    visibility = ["//visibility:public"],
+)
+
+buf_proto_lint_test(
+    name = "config_proto_buf_lint",
+    protos = [":config_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_compile(
+    name = "config_py_compile",
+    outputs = [
+        "config_pb2.py",
+        "config_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+    ],
+    proto = "config_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "config_py_library",
+    srcs = ["config_pb2.py"],
+    data = ["config_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+proto_cc_library(
+    name = "service_cc_library",
+    srcs = ["service.pb.cc"],
+    hdrs = ["service.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "service_cpp_compile",
+    outputs = [
+        "service.pb.cc",
+        "service.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "service_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "service_proto",
+    srcs = ["service.proto"],
+    visibility = ["//visibility:public"],
+)
+
+buf_proto_lint_test(
+    name = "service_proto_buf_lint",
+    protos = [":service_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_compile(
+    name = "service_py_compile",
+    outputs = [
+        "service_pb2.py",
+        "service_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+    ],
+    proto = "service_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "service_py_library",
+    srcs = ["service_pb2.py"],
+    data = ["service_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)

@@ -1,0 +1,27 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "enum_flags",
+    hdrs = ["enum_flags.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/std:type_traits",
+        "//jewels/std:utility",
+    ],
+)
+
+cc_library(
+    name = "fix_clockwork_path",
+    srcs = ["fix_clockwork_path.cc"],
+    hdrs = ["fix_clockwork_path.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)

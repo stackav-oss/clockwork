@@ -1,0 +1,30 @@
+# WARNING: The world depends on this.
+#          Changes to this file cause all cc targets to recompile.
+#          Treat this file as a last resort.
+#          Prefer alternatives such as:
+#            `__attribute__((disable_sanitizer_instrumentation))`
+#            `__attribute__((no_sanitize("address")))` or similar for triggered sanitizer
+#            `# if __has_feature(address_sanitizer)` to conditionally compile different code
+
+# https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
+# Compile/Link-time configuration of issues to ignore and their scopes.
+# Only affects code compiled with sanitizer instrumentation. Does not affect uninstrumented code.
+# Uninstrumented code is compiled via cmake or directly imported as a compiled binary.
+# Use `asan_test_suppressions.txt` or the one for your triggered sanitizer for uninstrumented code.
+
+[function]
+# Mismatch between function pointer and function signature
+# https://github.com/aws/s2n-tls/issues/4438
+src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/s2n/tls/s2n_cipher_suites.c
+src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/aws-c-common/source/hash_table.c
+src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/aws-c-common/source/ref_count.c
+src:external/onnxruntime~/onnxruntime/core/session/provider_bridge_ort.cc
+src:external/pytorch_cpuinfo~/src/linux/multiline.c
+# [function] end
+
+[function]
+# Mismatch between function pointer and function signature
+# https://github.com/openssl/openssl/issues/22896
+src:external/openssl~/crypto/sparse_array.c
+src:external/openssl~/crypto/stack/stack.c
+# [function] end

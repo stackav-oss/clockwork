@@ -1,0 +1,5 @@
+log_root_dir: "/log_root"
+pinion_shm_root: "/dev/shm"
+pinion_namespace: ""
+max_write_mib_per_sec: 20
+max_log_file_duration_sec: 900

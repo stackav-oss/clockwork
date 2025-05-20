@@ -1,0 +1,12 @@
+// Another tag.
+tag AnotherTag;
+
+cpp_target taptags
+{
+  options
+  {
+    namespace clockwork::testing::separate_tags;
+  }
+
+  tag AnotherTag;
+}

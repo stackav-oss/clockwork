@@ -1,0 +1,132 @@
+use clockwork::dial::approx_aligner_config;
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::examples::demo_system::camera::video_channels;
+use clockwork::examples::demo_system::camera::video_message;
+use clockwork::examples::demo_system::lidar::lidar_channels;
+use clockwork::examples::demo_system::lidar::lidar_message;
+use clockwork::examples::demo_system::perception::perception_channels;
+use clockwork::examples::demo_system::perception::perception_message;
+use clockwork::examples::demo_system::localization::localization_channels;
+use clockwork::examples::demo_system::localization::pose_message;
+
+// Perception init cog logs the approx aligner config to a persistent channel
+cog PerceptionInitCog
+{
+  configs
+  {
+    aligner_config: Tappy<approx_aligner_config::ApproxAlignerConfig>;
+  }
+
+  outputs
+  {
+    aligner_config_out: Tappy<approx_aligner_config::ApproxAlignerConfig>;
+  }
+
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// Perception cog uses an aligner to collect messages from the same time
+cog PerceptionCog
+{
+  resources
+  {
+    memory: persistent;
+  }
+
+  configs
+  {
+    aligner_config: Tappy<approx_aligner_config::ApproxAlignerConfig>;
+  }
+
+  states
+  {
+    aligner_state: Tappy<approx_aligner_config::ApproxAlignerState>
+    {
+        mutable: true;
+    }
+  }
+
+  inputs
+  {
+    pose: Tappy<pose_message::PoseMessage>
+    {
+      max_msgs: 100;
+      manual_cursor: true;
+    }
+
+    video: Tappy<video_message::Yuv444Image<video_message::image_size_bytes>>
+    {
+      max_msgs: 10;
+      manual_cursor: true;
+    }
+
+    lidar: Tappy<lidar_message::LidarSweepMessage<lidar_message::points_per_sweep>>
+    {
+      max_msgs: 10;
+      manual_cursor: true;
+    }
+  }
+
+  outputs
+  {
+    debug: Tappy<perception_message::PerceptionDebugMessage>;
+  }
+
+  execution
+  {
+    condition new_video: new_message(min=1, input=video);
+    condition new_lidar: new_message(min=1, input=lidar);
+    execute when: new_video or new_lidar;
+  }
+}
+
+cpp_target perception_cog
+{
+  options
+  {
+    namespace clockwork::demo_system::perception;
+  }
+
+  cog PerceptionInitCog;
+  cog PerceptionCog;
+}
+
+box PerceptionBox
+{
+  new init_cog: PerceptionInitCog;
+  new percept_cog: PerceptionCog;
+
+  new memory: HeapMemory(max_size=4'096);
+  new aligner_config: SerializedDataFile(representation=Protobuf<approx_aligner_config::ApproxAlignerConfig>, path="clockwork/examples/demo_system/perception/resources/approx_aligner_config.textproto");
+  new aligner_state: State(representation=Tachyon<approx_aligner_config::ApproxAlignerState>, memory_resource=memory);
+
+  connect aligner_config to init_cog.aligner_config;
+  connect init_cog.aligner_config_out to perception_channels::PerceptionAlignerConfigChannel;
+
+  connect memory to percept_cog.memory;
+  connect aligner_config to percept_cog.aligner_config;
+  connect aligner_state to percept_cog.aligner_state;
+  connect localization_channels::PoseChannel to percept_cog.pose;
+  connect lidar_channels::LidarSweepChannel to percept_cog.lidar;
+  connect video_channels::VideoChannel to percept_cog.video;
+  connect percept_cog.debug to perception_channels::PerceptionDebugChannel;
+}
+
+cpp_executable perception_exe
+{
+  casing
+  {
+    box PerceptionBox;
+  }
+}
+
+box PerceptionExe
+{
+  new perception_box: PerceptionBox;
+  new perception_proc: Process(executable=perception_exe);
+  apply HostProcess(process=perception_proc) in perception_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to perception_proc;
+}

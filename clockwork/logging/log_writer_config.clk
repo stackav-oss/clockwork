@@ -1,0 +1,94 @@
+use clockwork::logging::message_encoding::MessageEncoding;
+use clockwork::logging::schema_encoding::SchemaEncoding;
+use clockwork::logging::channel_type::ChannelType;
+use clockwork::logging::log_uuid_tag::LogUuidTag;
+
+// Logged channel configuration
+schema LoggedChannelConfig {
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 127;
+
+    // Maximum schema name size
+    #1 max_schema_name_size = 511;
+
+    // Maximum schema definition size
+    #2 max_schema_definition_size = 16383;
+  }
+
+  fields
+  {
+    // Channel UUID string
+    #3 uuid: Uuid<LogUuidTag>;
+
+    // Number of slots
+    #4 num_slots: UInt32;
+
+    // Message size in bytes
+    #5 message_size: UInt32;
+
+    // Channel name
+    #6 channel_name: VarString<max_channel_name_size>;
+
+    // Message encoding
+    #7 message_encoding: MessageEncoding;
+
+    // Schema name
+    #8 schema_name: VarString<max_schema_name_size>;
+
+    // Schema encoding
+    #9 schema_encoding: SchemaEncoding;
+
+    // Schema definition
+    #10 schema_definition: VarArray<Byte, max_schema_definition_size>;
+
+    // Channel type
+    #11 channel_type: ChannelType;
+  }
+}
+
+// Log writer configuration
+schema LogWriterConfig {
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 127;
+
+    // Maximum schema name size
+    #1 max_schema_name_size = 511;
+
+    // Maximum schema definition size
+    #2 max_schema_definition_size = 16383;
+
+    // Maximum number of channels
+    #3 max_num_channels = 555;
+  }
+
+  fields
+  {
+    // Logged channels
+    #4 channels: VarArray<
+      LoggedChannelConfig<
+        max_channel_name_size=max_channel_name_size,
+        max_schema_name_size=max_schema_name_size,
+        max_schema_definition_size=max_schema_definition_size>,
+      max_num_channels>;
+  }
+}
+
+cpp_target log_writer_config
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+
+  schema LoggedChannelConfig;
+  representation Tachyon<LoggedChannelConfig<>>;
+  interface LoggedChannelConfigTap: Tap<Tachyon<LoggedChannelConfig<>>>;
+
+  schema LogWriterConfig;
+  representation Tachyon<LogWriterConfig<>>;
+  interface LogWriterConfigTap: Tap<Tachyon<LogWriterConfig<>>>;
+}

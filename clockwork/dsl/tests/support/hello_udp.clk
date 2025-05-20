@@ -1,0 +1,73 @@
+use clockwork::io::var_packet;
+
+// UDP socket.
+udp_socket IncomingUdpSocket
+{
+  address: 127.0.0.1;
+  port: 0;
+  direction: incoming;
+  message_type: Tachyon<var_packet::VarPacket<4>>;
+  options
+  {
+    reuse_address: true;
+    receive_buffer: 4096byte;
+  }
+}
+
+// UDP socket.
+udp_socket OutgoingUdpSocket
+{
+  address: 127.0.0.1;
+  port: 0;
+  direction: outgoing;
+  message_type: Tachyon<var_packet::VarPacket<4>>;
+  options
+  {
+    bind_to_interface: true;
+  }
+}
+
+// UDP socket.
+multicast_udp_socket IncomingMulticast
+{
+  group_address: 239.22.0.2;
+  interface_address: 127.0.0.1;
+  port: 5000;
+  direction: incoming;
+  message_type: Tachyon<var_packet::VarPacket<4>>;
+}
+
+// UDP socket.
+multicast_udp_socket OutgoingMulticast
+{
+  group_address: 239.22.0.2;
+  interface_address: 127.0.0.1;
+  port: 5000;
+  direction: outgoing;
+  message_type: Tachyon<var_packet::VarPacket<4>>;
+}
+
+// UDP socket.
+multicast_udp_socket BidirectionalMulticast
+{
+  group_address: 239.22.0.2;
+  interface_address: 127.0.0.1;
+  port: 5001;
+  remote_port: 5002;
+  direction: bidirectional;
+  message_type: Tachyon<var_packet::VarPacket<4>>;
+}
+
+cpp_target hello_udp
+{
+    options
+    {
+        namespace clockwork::testing;
+    }
+
+    udp_socket IncomingUdpSocket;
+    udp_socket OutgoingUdpSocket;
+    udp_socket IncomingMulticast;
+    udp_socket OutgoingMulticast;
+    udp_socket BidirectionalMulticast;
+}

@@ -1,0 +1,32 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package jewels.simplelaunch.v1;
+
+// The configuration for the task_manager.
+message Config {
+  // A list of application-specific configurations.
+  repeated AppConfig app = 1;
+  // A list of binaries to run synchronously in order before launching any applications.
+  // Note: Right now these are launched _before_ the HTTP status server comes up.
+  // Make sure they do not block for a large amount of time.
+  repeated AppConfig pre_launch = 2;
+}
+
+// The configuration for an individual application.
+message AppConfig {
+  // Descriptive name of application.
+  string name = 1;
+  // Path to the executable.
+  string executable = 2;
+  // Arguments to run the executable with.
+  repeated string args = 3;
+  // The environment variables to set.
+  map<string, string> env = 4;
+  // Run the application as root.
+  // Note: This can only be used for pre_launch apps.
+  bool as_root = 5;
+  repeated int32 cpus = 6;
+}

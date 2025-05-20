@@ -1,0 +1,39 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "uuid",
+    srcs = ["uuid.inl"],
+    hdrs = ["uuid.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/container:at",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "uuid5",
+    srcs = ["uuid5.cc"],
+    hdrs = ["uuid5.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":uuid",
+        "//jewels/hash:sha1",
+    ],
+)
+
+cc_library(
+    name = "uuid_hasher",
+    hdrs = ["uuid_hasher.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":uuid",
+        "@xxhash",
+    ],
+)

@@ -1,0 +1,15 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "tdigest",
+    srcs = ["tdigest.inl"],
+    hdrs = ["tdigest.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)

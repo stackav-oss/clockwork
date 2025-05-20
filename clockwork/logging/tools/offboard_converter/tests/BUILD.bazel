@@ -1,0 +1,37 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "convert_to_offboard_test",
+    srcs = ["convert_to_offboard_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/onboard:clockwork_writer_policy",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard:writer",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:serialization",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/tests/support:test_message",
+        "//clockwork/logging/tools/offboard_converter:convert_to_offboard",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)

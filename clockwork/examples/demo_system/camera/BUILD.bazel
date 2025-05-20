@@ -1,0 +1,145 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "camera_clk",
+    srcs = ["camera.clk"],
+    outs = [
+        "camera_cog.cc",
+        "camera_cog.hh",
+        "camera_cog.inl",
+        "camera_cog_dial.cc",
+        "camera_cog_dial.hh",
+        "camera_cog_dial.inl",
+        "camera_exe.cc",
+        "camera_exe.hh",
+        "camera_exe.inl",
+    ],
+    deps = [
+        ":video_channels_clk",
+        ":video_message_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+    ],
+)
+
+cc_library(
+    name = "camera_cog",
+    srcs = [
+        "camera_cog.cc",
+        "camera_cog.inl",
+    ],
+    hdrs = ["camera_cog.hh"],
+    deps = [
+        ":camera_cog_dial",
+        ":camera_cog_impl",
+        ":camera_state",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "camera_cog_dial",
+    srcs = [
+        "camera_cog_dial.cc",
+        "camera_cog_dial.inl",
+    ],
+    hdrs = ["camera_cog_dial.hh"],
+    deps = [
+        ":camera_state",
+        ":video_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "camera_cog_impl",
+    srcs = ["camera_cog_impl.cc"],
+    deps = [
+        ":camera_cog_dial",
+        ":video_message",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+    ],
+)
+
+cc_binary(
+    name = "camera_exe",
+    srcs = [
+        "camera_exe.cc",
+        "camera_exe.hh",
+        "camera_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":camera_cog",
+        ":camera_state",
+        ":video_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "camera_state",
+    srcs = ["camera_state.cc"],
+    hdrs = ["camera_state.hh"],
+    deps = ["//jewels/memory:memory_resource"],
+)
+
+clk(
+    name = "video_channel_policies_clk",
+    srcs = ["video_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":video_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "video_channels_clk",
+    srcs = ["video_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [":video_message_clk"],
+)
+
+cc_library(
+    name = "video_message",
+    srcs = [
+        "video_message.cc",
+        "video_message.inl",
+    ],
+    hdrs = ["video_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "video_message_clk",
+    srcs = ["video_message.clk"],
+    outs = [
+        "video_message.cc",
+        "video_message.hh",
+        "video_message.inl",
+    ],
+)

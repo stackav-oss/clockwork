@@ -1,0 +1,213 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_multirun//:defs.bzl", "command")
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_visibility = ["//clockwork:__subpackages__"],
+)
+
+cc_library(
+    name = "example_cogs",
+    srcs = [
+        "example_cogs.cc",
+        "example_cogs.inl",
+    ],
+    hdrs = ["example_cogs.hh"],
+    deps = [
+        ":example_cogs_dial",
+        ":example_cogs_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+clk(
+    name = "example_cogs_clk",
+    srcs = ["example_cogs.clk"],
+    outs = [
+        "example_cogs.cc",
+        "example_cogs.hh",
+        "example_cogs.inl",
+        "example_cogs_dial.cc",
+        "example_cogs_dial.hh",
+        "example_cogs_dial.inl",
+    ],
+    deps = [":test_message_clk"],
+)
+
+cc_library(
+    name = "example_cogs_dial",
+    srcs = [
+        "example_cogs_dial.cc",
+        "example_cogs_dial.inl",
+    ],
+    hdrs = ["example_cogs_dial.hh"],
+    deps = [
+        ":test_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "example_cogs_impl",
+    srcs = ["example_cogs_impl.cc"],
+    deps = [
+        ":example_cogs_dial",
+        ":test_message",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container/tap:var_string",
+        "//jewels/log_cerr",
+    ],
+)
+
+cc_binary(
+    name = "log_gen",
+    srcs = ["log_gen.cc"],
+    deps = [
+        ":test_message",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:span",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_binary(
+    name = "log_runner_example_exe",
+    srcs = [
+        "log_runner_example_exe.cc",
+        "log_runner_example_exe.hh",
+        "log_runner_example_exe.inl",
+    ],
+    data = [
+        ":clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
+        ":log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        ":log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        ":example_cogs",
+        ":test_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "log_runner_example_lib",
+    srcs = [
+        "log_runner_example_exe.cc",
+        "log_runner_example_exe.hh",
+        "log_runner_example_exe.inl",
+    ],
+    deps = [
+        ":example_cogs",
+        ":test_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+clk(
+    name = "log_runner_example_system_clk",
+    srcs = ["log_runner_example_system.clk"],
+    outs = [
+        "clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
+        "log_runner_example_exe.cc",
+        "log_runner_example_exe.hh",
+        "log_runner_example_exe.inl",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_allocations.csv",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_simplelaunch_config.textproto",
+        "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        ":example_cogs_clk",
+        ":test_message_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+# Convenience target to avoid passing around the long path to config file every time
+command(
+    name = "run_example_system",
+    arguments = [
+        "--deterministic-runner",
+        "--input-log-uri",
+        "/tmp/test_log/log_runner/publisher/",
+        "--log-publisher-config",
+        "clockwork/examples/log_runner/log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "--output-log-uri",
+        "/tmp/test_log/log_runner/log_writer/",
+        "--log-writer-config",
+        "clockwork/examples/log_runner/log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
+        "clockwork/examples/log_runner/clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
+    ],
+    command = "//clockwork/examples/log_runner:log_runner_example_exe",
+)
+
+merge_simplelaunch_config(
+    name = "simcpu.textproto",
+    srcs = [
+        "log_runner_example_system.log_runner_example_system.SimCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_allocations.csv",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
+        ":log_runner_example_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+cc_library(
+    name = "test_message",
+    srcs = [
+        "test_message.cc",
+        "test_message.inl",
+    ],
+    hdrs = ["test_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "test_message_clk",
+    srcs = ["test_message.clk"],
+    outs = [
+        "test_message.cc",
+        "test_message.hh",
+        "test_message.inl",
+    ],
+    visibility = ["//visibility:public"],
+)

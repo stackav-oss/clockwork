@@ -1,0 +1,167 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+cc_library(
+    name = "cogs",
+    srcs = [
+        "cogs.cc",
+        "cogs.inl",
+    ],
+    hdrs = ["cogs.hh"],
+    deps = [
+        ":cogs_dial",
+        ":cogs_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+clk(
+    name = "cogs_clk",
+    srcs = ["cogs.clk"],
+    outs = [
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
+        "cogs.cc",
+        "cogs.hh",
+        "cogs.inl",
+        "cogs.producer_consumer.DemoCpu_channel_allocations.csv",
+        "cogs.producer_consumer.DemoCpu_channel_spy_config.tachyon",
+        "cogs.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "cogs.producer_consumer.DemoCpu_simplelaunch_config.textproto",
+        "cogs.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
+        "cogs_dial.cc",
+        "cogs_dial.hh",
+        "cogs_dial.inl",
+        "cogs_exe.cc",
+        "cogs_exe.hh",
+        "cogs_exe.inl",
+    ],
+    deps = [
+        ":helloworld_state_clk",
+        ":schema_clk",
+    ],
+)
+
+cc_library(
+    name = "cogs_dial",
+    srcs = [
+        "cogs_dial.cc",
+        "cogs_dial.inl",
+    ],
+    hdrs = ["cogs_dial.hh"],
+    deps = [
+        ":schema",
+        ":state",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_binary(
+    name = "cogs_exe",
+    srcs = [
+        "cogs_exe.cc",
+        "cogs_exe.hh",
+        "cogs_exe.inl",
+    ],
+    data = [
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
+    ],
+    deps = [
+        ":cogs",
+        ":schema",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "cogs_impl",
+    srcs = ["cogs_impl.cc"],
+    deps = [
+        ":cogs_dial",
+        ":schema",
+        ":state",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "//jewels/log_cerr",
+        "@boost//:iterator",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "democpu.textproto",
+    srcs = [
+        "cogs.producer_consumer.DemoCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
+        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
+        "cogs.producer_consumer.DemoCpu_channel_allocations.csv",
+        "cogs.producer_consumer.DemoCpu_channel_spy_config.tachyon",
+        "cogs.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "cogs.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
+        ":cogs_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "helloworld_state_clk",
+    srcs = ["helloworld_state.clk"],
+    outs = [
+        "state.cc",
+        "state.hh",
+        "state.inl",
+    ],
+)
+
+cc_library(
+    name = "schema",
+    srcs = [
+        "schema.cc",
+        "schema.inl",
+    ],
+    hdrs = ["schema.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "schema_clk",
+    srcs = ["schema.clk"],
+    outs = [
+        "schema.cc",
+        "schema.hh",
+        "schema.inl",
+    ],
+)
+
+cc_library(
+    name = "state",
+    srcs = [
+        "state.cc",
+        "state.inl",
+    ],
+    hdrs = ["state.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)

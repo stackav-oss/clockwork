@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+cc_test(
+    name = "deterministic_runner_periodic_test",
+    srcs = ["deterministic_runner_periodic_test.cc"],
+    data = ["//clockwork/tests/support:clockwork.clockwork.tests.support.test_periodic_system.test_periodic_system.proc.tachyon"],
+    deps = [
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:test_periodic_system_lib",  # keep
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "logical_system_interface_test",
+    srcs = [
+        "logical_system_interface_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/tests/support:test_system_description_2_clk",
+        "//clockwork/tests/support:test_system_description_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork:logical_system_interface",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+cc_test(
+    name = "process_test",
+    srcs = ["process_test.cc"],
+    data = ["//clockwork/tests/support:clockwork.clockwork.tests.support.test_system.test_system.proc.tachyon"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_subscriber",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "//clockwork/pinion/tests/support:pub_sub",
+        "//clockwork/scaffolding:main_impl",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/scaffolding/tests/support:runtime_tools",
+        "//clockwork/scaffolding/tests/support:test_cogs_dial",
+        "//clockwork/scaffolding/tests/support:test_msgs",
+        "//clockwork/tests/support:test_system_exe_library",  # keep
+        "//jewels/container:compare",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/utility:fix_clockwork_path",
+        "//jewels/uuid",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)

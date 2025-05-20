@@ -1,0 +1,54 @@
+// Variable sized packet of unstructured bytes.
+schema VarPacket
+{
+  uuid: 9a71f9ed-94cc-409a-a41e-723b1f19b9cf;
+  parameters
+  {
+    // Max size of the packet.
+    #0 max_size_bytes: UInt64;
+  }
+  fields
+  {
+    // Payload
+    #1 bytes: VarArray<type=Byte, max_size=max_size_bytes>;
+  }
+}
+
+cpp_target var_packet
+{
+  options
+  {
+    namespace clockwork::io;
+  }
+
+  schema VarPacket;
+
+  representation Tachyon<VarPacket<max_size_bytes=4>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=4>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=64>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=64>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=288>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=288>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=861>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=861>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=1400>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=1400>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=1412>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=1412>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=512>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=512>>>;
+
+  representation Tachyon<VarPacket<max_size_bytes=35336>>;
+  interface Tap<Tachyon<VarPacket<max_size_bytes=35336>>>;
+}
+
+nanobind_target var_packet_clk_nb
+{
+  binding SomeIPPacket: Tap<Tachyon<VarPacket<max_size_bytes=1412>>>;
+}

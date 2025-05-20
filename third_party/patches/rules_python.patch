@@ -1,0 +1,121 @@
+diff --git python/private/attributes.bzl python/private/attributes.bzl
+index e62abf9f..9e212c10 100644
+--- python/private/attributes.bzl
++++ python/private/attributes.bzl
+@@ -417,6 +417,30 @@ Specifies additional environment variables to set when the target is executed by
+         # The value is required, but varies by rule and/or rule type. Use
+         # create_stamp_attr to create one.
+         "stamp": None,
++        "infer_ld_library_path": attr.bool(
++            default = False,
++            doc = """
++Whether to automatically set the `LD_LIBRARY_PATH` environment variable based on
++shared libraries (`.so` files) found in the target's runfiles. This is useful for
++C++ binaries that link against shared libraries, such as CUDA. If `True`,
++`LD_LIBRARY_PATH` will include the directories containing the relevant shared libraries.
++"""),
++        "shared_object_include_substrings": attr.string_list(
++            doc = """
++A list of substrings. Only shared objects whose paths contain any of these substrings
++will be considered for LD_LIBRARY_PATH inference. If empty, all .so files are included.
++Has an effect only if `infer_ld_library_path` is enabled.
++""",
++            default = [],
++        ),
++        "shared_object_exclude_substrings": attr.string_list(
++            doc = """
++A list of substrings. Shared objects whose paths contain any of these substrings
++will be excluded from LD_LIBRARY_PATH inference. Has an effect only if `infer_ld_library_path`
++is enabled.
++""",
++            default = [],
++        )
+     },
+     allow_none = True,
+ )
+diff --git python/private/py_executable.bzl python/private/py_executable.bzl
+index 8c0487d6..9d7ed6ab 100644
+--- python/private/py_executable.bzl
++++ python/private/py_executable.bzl
+@@ -236,7 +236,7 @@ def py_executable_base_impl(ctx, *, semantics, is_test, inherited_environment =
+             data_runfiles = runfiles_details.data_runfiles.merge(extra_exec_runfiles),
+         )
+     ))
+-
++        
+     return _create_providers(
+         ctx = ctx,
+         executable = executable,
+@@ -863,7 +863,7 @@ def _create_providers(
+             ),
+         ),
+         create_instrumented_files_info(ctx),
+-        _create_run_environment_info(ctx, inherited_environment),
++        _create_run_environment_info(ctx, inherited_environment, runfiles_details),
+         PyExecutableInfo(
+             main = main_py,
+             runfiles_without_exe = runfiles_details.runfiles_without_exe,
+@@ -935,7 +935,7 @@ def _create_providers(
+     providers.extend(extra_providers)
+     return providers
+ 
+-def _create_run_environment_info(ctx, inherited_environment):
++def _create_run_environment_info(ctx, inherited_environment, runfiles_details):
+     expanded_env = {}
+     for key, value in ctx.attr.env.items():
+         expanded_env[key] = _py_builtins.expand_location_and_make_variables(
+@@ -944,6 +944,32 @@ def _create_run_environment_info(ctx, inherited_environment):
+             expression = value,
+             targets = ctx.attr.data,
+         )
++
++    # Infers the `LD_LIBRARY_PATH` environment variable if enabled based on the presence of
++    # shared library files (.so) in the runfiles of the target. The existing `LD_LIBRARY_PATH`
++    # value is preserved if present.
++    if ctx.attr.infer_ld_library_path:
++        ld_library_path = {}
++        for file in runfiles_details.runfiles_without_exe.files.to_list():
++            if ".so" in file.basename:
++                include = (
++                    not ctx.attr.shared_object_include_substrings or
++                    any([s in file.short_path for s in ctx.attr.shared_object_include_substrings])
++                )
++                exclude = (
++                    ctx.attr.shared_object_exclude_substrings and
++                    any([s in file.short_path for s in ctx.attr.shared_object_exclude_substrings])
++                )
++                if include and not exclude:
++                    lib_path = file.short_path.removesuffix(file.basename).rstrip("/")
++                    ld_library_path[lib_path] = True
++
++        if ld_library_path:
++            paths = []
++            paths += expanded_env["LD_LIBRARY_PATH"].split(":") if "LD_LIBRARY_PATH" in expanded_env else []
++            paths += ld_library_path.keys()
++            expanded_env["LD_LIBRARY_PATH"] = ":".join(paths)
++
+     return RunEnvironmentInfo(
+         environment = expanded_env,
+         inherited_environment = inherited_environment,
+diff --git python/private/python_bootstrap_template.txt python/private/python_bootstrap_template.txt
+index 0f9c90b3..6be4db95 100644
+--- python/private/python_bootstrap_template.txt
++++ python/private/python_bootstrap_template.txt
+@@ -406,6 +406,17 @@ def _RunForCoverage(python_program, main_filename, args, env,
+   with open(rcfile_name, "w") as rcfile:
+     rcfile.write('''[run]
+ relative_files = True
++omit = config-3.py
++[report]
++exclude_also =
++    # Exclude empty list checks (e.g., "if []:")
++    if\s+\[\s*\]\s*:
++    # Exclude empty dict checks (e.g., "if {}:")
++    if\s+\{\s*\}\s*:
++    # Exclude main module checks (e.g., "if __name__ == '__main__':")
++    if\s+__name__\s*==\s*.__main__.\s*:
++    # Exclude type checking blocks (e.g., "if TYPE_CHECKING:" or "if typing.TYPE_CHECKING:")
++    if\s+(typing\.)?TYPE_CHECKING\s*:
+ ''')
+   PrintVerboseCoverage('Coverage entrypoint:', coverage_entrypoint)
+   # First run the target Python file via coveragepy to create a .coverage

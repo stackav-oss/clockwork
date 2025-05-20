@@ -1,0 +1,131 @@
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+use clockwork::tests::support::test_system_message::{TestMessage, CogState};
+use clockwork::logging::channel_type::ChannelType;
+
+
+// Cog to forward a message between channels
+cog TestSystemCog
+{
+  states
+  {
+    state: Tappy<CogState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    message_input: Tappy<TestMessage>;
+  }
+
+  outputs
+  {
+    message_output: Tappy<TestMessage>;
+  }
+
+  execution
+  {
+    condition new_msg: new_message(message_input);
+    condition timeout: time_since_last_exec(100ms);
+    execute when: timeout or new_msg;
+  }
+}
+
+cpp_target test_system_cogs
+{
+    options
+    {
+        namespace clockwork::tests;
+    }
+
+    cog TestSystemCog;
+}
+
+// Input channel
+channel Chan1
+{
+    message_type: Tachyon<TestMessage>;
+    max_num_messages: 11;
+}
+
+// In-between channel
+channel Chan2
+{
+    message_type: Tachyon<TestMessage>;
+    max_num_messages: 11;
+}
+
+// Output channel
+channel Chan3
+{
+    message_type: Tachyon<TestMessage>;
+    max_num_messages: 11;
+}
+
+// Persistent output channel
+channel Chan4
+{
+    message_type: Tachyon<TestMessage>;
+    max_num_messages: 11;
+}
+
+
+// Log reader policy
+policy LogReaderPolicy for Chan1
+{
+    source_name = 'test_channel';
+}
+
+// Log writer policy
+policy ChannelLoggingPolicy for Chan3
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for Chan4
+{
+    log_type = LogType::telemetry;
+    channel_type = ChannelType::persistent;
+}
+
+
+box TestSystemCogsBox
+{
+    new state: State(representation=Tachyon<CogState>);
+    new subscriber_cog: TestSystemCog;
+    new publisher_cog: TestSystemCog;
+    new persistent_cog: TestSystemCog;
+    connect state to subscriber_cog.state;
+    connect state to publisher_cog.state;
+    connect state to persistent_cog.state;
+    connect Chan1 to subscriber_cog.message_input;
+    connect subscriber_cog.message_output to Chan2;
+    connect Chan2 to publisher_cog.message_input;
+    connect publisher_cog.message_output to Chan3;
+    connect Chan2 to persistent_cog.message_input;
+    connect persistent_cog.message_output to Chan4;
+}
+
+cpu_domain TestSystemCpu;
+
+box TestSystemBox
+{
+    new test_cogs_box: TestSystemCogsBox;
+    new test_process: Process(executable=test_system_description_exe);
+    apply HostProcess(process=test_process) in test_cogs_box;
+    apply HostCpuDomain(cpu_domain=TestSystemCpu) to test_process;
+}
+
+cpp_executable test_system_description_exe
+{
+    casing
+    {
+        box TestSystemCogsBox;
+    }
+}
+
+system_target test_system
+{
+    box: TestSystemBox;
+}

@@ -1,0 +1,21 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+cc_binary(
+    name = "log_metrics",
+    srcs = ["log_metrics.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//jewels/log_cerr",
+        "//jewels/math:constants",
+        "//jewels/std:expected",
+        "@fmt",
+        "@tclap",
+    ],
+)

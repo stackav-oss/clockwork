@@ -1,0 +1,17 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "filesystem_wrapper_test",
+    size = "small",
+    srcs = ["filesystem_wrapper_test.cc"],
+    deps = [
+        "//jewels/testing:filesystem_wrapper",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)

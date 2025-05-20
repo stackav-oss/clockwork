@@ -1,0 +1,567 @@
+// Id for a cog type
+tag CogClassId;
+// Id for a cog instance, i.e. a particular graph node
+tag CogInstanceId;
+// Id for a connection point (publisher, config, etc) of a cog class
+tag EndpointClassId;
+// Id of a connection point of a cog instance, i.e. half of a graph edge
+tag EndpointInstanceId;
+// Id of a state
+tag StateInstanceId;
+// Id of a config
+tag ConfigInstanceId;
+// Id of a particular casing implementation (unused)
+tag CasingClassId;
+// Id of a process
+tag ProcessInstanceId;
+// Id of a memory resource
+tag MemoryResourceId;
+// Id of an io connection class
+tag IoConnectionClassId;
+// Id of an io connection class instance
+tag IoConnectionInstanceId;
+
+// Type of memory resource
+enum MemoryResourceType
+{
+  values
+  {
+    // Use normal new+delete allocation
+    #1 new_delete default;
+  }
+}
+
+// Describes the clockwork graph for a particular process
+schema ProcessDescription
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+
+    // Max number of cog instances
+    #2 max_cog_instances: UInt64;
+
+    // Max endpoints (pub + sub + config + etc) for a cog
+    #3 max_endpoints_per_cog: UInt64;
+
+    // Maximum number of states in the process
+    #4 max_state_instances: UInt64;
+
+    // Maximum number of state-cog connections in the process
+    #5 max_state_connections: UInt64;
+
+    // Maximum number of configs in the process
+    #6 max_config_instances: UInt64;
+
+    // Maximum number of config-cog connections in the process
+    #7 max_config_connections: UInt64;
+
+    // Maximum size of a path to a file
+    #8 max_file_path_size: UInt64;
+
+    // Maximum number of initialization cogs in the process
+    #9 max_init_cogs: UInt64;
+
+    // Maximum number of publishers referenced by this process (includes both
+    // local publishers and remote publishers that are subscribed to)
+    #10 max_publishers: UInt64;
+
+    // Maximum number of channel connections
+    #11 max_pubsub_connections: UInt64;
+
+    // Maximum number of memory pools
+    #12 max_memory_resources: UInt64;
+
+    // Maximum number of memory pool to cog instance connections
+    #22 max_memory_resource_connections: UInt64;
+
+    // Maximum number of timers
+    #13 max_timers: UInt64;
+
+    // Maximum number of IO connections.
+    #23 max_io_connections: UInt64;
+  }
+
+  fields
+  {
+    // ID of this process
+    #14 process_id: Uuid<ProcessInstanceId>;
+
+    // Every Cog instance, including init Cogs
+    #15 cog_instances:
+      VarArray<CogInstanceDescription<max_instance_path_size=max_instance_path_size, max_endpoints_per_cog=max_endpoints_per_cog>, max_size=max_cog_instances>;
+
+    // State instances and connections
+    #16 state_graph: StateGraph<max_state_instances=max_state_instances, max_instance_path_size=max_instance_path_size, max_state_connections=max_state_connections>;
+
+    // Config instances and connections
+    #17 config_graph: ConfigGraph<max_instance_path_size=max_instance_path_size, max_config_instances=max_config_instances, max_config_connections=max_config_connections, max_file_path_size=max_file_path_size>;
+
+    // Publishers and connections
+    #18 pubsub_graph: PubSubGraph<max_publishers=max_publishers, max_pubsub_connections=max_pubsub_connections>;
+
+    // Memory resources
+    #19 memory_resource_graph: MemoryResourceGraph<max_instance_path_size=max_instance_path_size, max_memory_resources=max_memory_resources, max_memory_resource_connections=max_memory_resource_connections>;
+
+    // Timer instances
+    #20 timers: VarArray<TimerInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_timers>;
+
+    // Topologically sorted by config/state dependencies; execute in order
+    #21 init_cogs: VarArray<Uuid<CogInstanceId>, max_size=max_init_cogs>;
+
+    // IO Connections
+    #24 io_connections: VarArray<IoConnectionInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_io_connections>;
+
+    // Log reader cog
+    #26 log_cog: Uuid<CogInstanceId>;
+  }
+}
+
+// Description of publishers, subscribers, and the connections between them.
+schema PubSubGraph
+{
+  parameters
+  {
+    // Maximum number of publishers referenced by this process
+    #1 max_publishers: UInt64;
+    // Maximum number of channel connections
+    #2 max_pubsub_connections: UInt64;
+  }
+  fields
+  {
+    // Sorted by publisher_id
+    #3 publish_endpoints: VarArray<PublishEndpoint, max_size=max_publishers>;
+    // Sorted by subscriber_id
+    #4 connections: VarArray<PubSubConnection, max_size=max_pubsub_connections>;
+  }
+}
+
+// Describes an instance of a Cog
+schema CogInstanceDescription
+{
+  parameters
+  {
+    // Max endpoints (pub + sub + config + etc) for a cog
+    #1 max_endpoints_per_cog: UInt64;
+    // Max length of human readable id
+    #2 max_instance_path_size: UInt64;
+  }
+
+  fields
+  {
+    // ID of Cog class.  This matches something compiled-in to the casing.
+    // Outside the casing, it's just an opaque ID.
+    #3 cog_class_id: Uuid<CogClassId>;
+
+    // ID of Cog instance.  This is not compiled-in but provided via the API.
+    #4 cog_instance_id: Uuid<CogInstanceId>;
+
+    // Array of endpoint instances
+    #5 endpoints: VarArray<EndpointInstanceDescription, max_size=max_endpoints_per_cog>;
+
+    // Human-readable name for this Cog instance
+    #6 instance_path_name: VarString<max_size=max_instance_path_size>;
+  }
+}
+
+// Represents an endpoint on a Cog instance
+//
+// Each Cog class has a certain set (number and type) of endpoints; these are
+// the endpoint classes.  When a Cog is instantiated, each of the endpoint
+// classes defined for the Cog class also get instantiated, each with its own
+// instance ID.
+schema EndpointInstanceDescription
+{
+  fields
+  {
+    // ID of the endpoint class.  This is compiled-in to the Cog class, behind the Casing API.
+    #1 endpoint_class_id: Uuid<EndpointClassId>;
+
+    // ID of the endpoint instance.  This is provided through the API.
+    #2 endpoint_instance_id: Uuid<EndpointInstanceId>;
+  }
+}
+
+// Additional information about a publish endpoint.
+//
+// We need information about both local and remote publishers.  For local
+// publishers we create the buffer; for remote ones we need to connect to it
+// and validate that it has the expected layout.
+schema PublishEndpoint
+{
+  fields
+  {
+    // Compare this field to the current process_id to know if this is local
+    // or remote.
+    #1 process_id: Uuid<ProcessInstanceId>;
+
+    // The name of the shared memory and UDS are determined by this ID.
+    #2 publisher_id: Uuid<EndpointInstanceId>;
+
+    // Layout of the Pinion buffer; create if publisher, validate if subscriber.
+    #3 buffer_layout: PinionBufferLayout;
+
+    // The number of subscribers; only relevant to the publisher.
+    #4 num_subscribers: UInt16;
+  }
+}
+
+// Describes layout of a Pinion buffer.
+schema PinionBufferLayout
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // Number of slots (messages) in the buffer
+    #1 num_slots: UInt64;
+    // Size of each slot
+    #2 message_size: UInt64;
+  }
+}
+
+// Describes a link between a publisher/subscriber pair.
+// The ends of this link might be local or remote; we need info about remote endpoints also.
+schema PubSubConnection
+{
+  fields
+  {
+    // Compare to current process_id to know if this is local or remote.  Only connect if local.
+    #1 subscriber_process_id: Uuid<ProcessInstanceId>;
+    // ID of subscriber; if local this matches something in a CogInstanceDescription
+    #2 subscriber_id: Uuid<EndpointInstanceId>;
+    // ID of publisher; if local this matches something in a CogInstanceDescription
+    #3 publisher_id: Uuid<EndpointInstanceId>;
+  }
+}
+
+// Describes state instances and how they connect to Cog instances.
+schema StateGraph
+{
+  parameters
+  {
+    // Maximum number of states in the process
+    #1 max_state_instances: UInt64;
+
+    // Max length of human readable id
+    #2 max_instance_path_size: UInt64;
+
+    // Maximum number of state-cog connections in the process
+    #3 max_state_connections: UInt64;
+  }
+
+  fields
+  {
+    // All of the state instances
+    #4 state_instances: VarArray<
+      StateInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_state_instances>;
+
+    // Connections from state to Cogs
+    #5 connections: VarArray<StateConnection, max_size=max_state_connections>;
+  }
+}
+
+
+// Describes a specific instance of persistent state.
+schema StateInstanceDescription
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+  }
+
+  fields
+  {
+    // The representation class for the state.  Inside the casing, this is 1:1
+    // with a concrete type compiled into the casing, but outside it's just an
+    // opaque identifier for the type.
+    #2 representation_id: Uuid<RepresentationTag>;
+
+    // Unique ID for this specific instance.  Not compiled into the casing; this
+    // must be provided to the casing via the API.
+    #3 state_instance_id: Uuid<StateInstanceId>;
+
+    // Human-readable name for this state instance.
+    #4 instance_path_name: VarString<max_size=max_instance_path_size>;
+
+    // Only serializable states are backed by a Pinion buffer.  This flag
+    // indicates if a buffer is needed and if so the layout for the that
+    // buffer.
+    #6 maybe_buffer_layout: Optional<PinionBufferLayout>;
+
+    // If this is non-Tachyon state (hybrid or pure C++) then it needs a memory
+    // resource and this contains information about the associated memory buffer
+    // used for allocating the state and its internal members.
+    #8 maybe_memory_resource: Optional<Uuid<MemoryResourceId>>;
+  }
+}
+
+
+// A connection between a state instance and a state endpoint on a Cog.
+schema StateConnection
+{
+  fields
+  {
+    // State instance ID
+    #1 state_id: Uuid<StateInstanceId>;
+    // Cog endpoint instance ID
+    #2 endpoint_id: Uuid<EndpointInstanceId>;
+  }
+}
+
+
+// Describes Config instances and their connections to Cog instances
+schema ConfigGraph
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+    // Maximum number of configs in the process
+    #2 max_config_instances: UInt64;
+    // Maximum number of config-cog connections in the process
+    #3 max_config_connections: UInt64;
+    // Maximum size of a path to a file
+    #4 max_file_path_size: UInt64;
+  }
+
+  fields
+  {
+    // Instances of config schemas
+    #5 config_instances: VarArray<
+      ConfigInstanceDescription<max_instance_path_size=max_instance_path_size, max_file_path_size=max_file_path_size>,
+      max_size=max_config_instances>;
+    // Connections from Config instances to Cog instances
+    #6 connections: VarArray<ConfigConnection, max_size=max_config_connections>;
+  }
+}
+
+
+// Describes a Config instances
+schema ConfigInstanceDescription
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+    // Maximum size of a path to a file
+    #2 max_file_path_size: UInt64;
+  }
+
+  fields
+  {
+    // Representation class ID.  This matches something compiled into the Casing.
+    #3 representation_id: Uuid<RepresentationTag>;
+
+    // Instance ID for this instance.  This is not compiled-in but created
+    // dynamically via the API.
+    #4 config_instance_id: Uuid<ConfigInstanceId>;
+
+    // Human-readable name for this config instance
+    #5 instance_path_name: VarString<max_size=max_instance_path_size>;
+
+    // Path to the config file to load for this instance.
+    #6 config_file_path: VarString<max_size=max_file_path_size>;
+  }
+}
+
+// Connection between a Config instance and an endpoint on a Cog instance
+schema ConfigConnection
+{
+  fields
+  {
+    // Config instance ID
+    #1 config_id: Uuid<ConfigInstanceId>;
+
+    // Endpoint instance ID.  This will match something in a
+    // CogInstanceDescription
+    #2 endpoint_id: Uuid<EndpointInstanceId>;
+  }
+}
+
+// Represents a distinct memory resource to instantiate
+schema MemoryResource
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+  }
+  fields
+  {
+    // Unique ID; this is used elsewhere to refer to this instance.
+    #2 memory_resource_id: Uuid<MemoryResourceId>;
+
+    // Instance name; only used for diagnostic display
+    #3 instance_path_name: VarString<max_size=max_instance_path_size>;
+
+    // Type of resource to create; for now heap is the only type
+    #4 resource_type: MemoryResourceType;
+
+    // Max size of the resource (ignored for MVP)
+    #5 resource_max_size: UInt64;
+  }
+}
+
+// Connection between a MemoryResource instance and an endpoint on a Cog instance
+schema MemoryResourceConnection
+{
+  fields
+  {
+    // MemoryResource instance ID
+    #1 memory_resource_id: Uuid<MemoryResourceId>;
+
+    // Endpoint instance ID.  This will match something in a CogInstanceDescription
+    #2 endpoint_id: Uuid<EndpointInstanceId>;
+  }
+}
+
+// Describes MemoryResource instances and their connections to Cog instances
+schema MemoryResourceGraph
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+    // Maximum number of configs in the process
+    #2 max_memory_resources: UInt64;
+    // Maximum number of config-cog connections in the process
+    #3 max_memory_resource_connections: UInt64;
+  }
+
+  fields
+  {
+    // Instances of memory resources
+    #4 memory_resources: VarArray<
+      MemoryResource<max_instance_path_size=max_instance_path_size>, max_size=max_memory_resources>;
+    // Connections from memory resource instances to Cog instance endpoints
+    #5 connections: VarArray<MemoryResourceConnection, max_size=max_memory_resource_connections>;
+  }
+}
+
+// An instance of a Cog timer
+schema TimerInstanceDescription
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+  }
+  fields
+  {
+    // Unique ID for timer instance.  This will correspond to something inside a CogInstanceDescription
+    #2 timer_id: Uuid<EndpointInstanceId>;
+
+    // Human-readable instance name
+    #3 instance_path_name: VarString<max_size=max_instance_path_size>;
+  }
+}
+
+// An instance of an IO Connection description.
+schema IoConnectionInstanceDescription
+{
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64;
+  }
+  fields
+  {
+    // Class ID
+    #2 class_id: Uuid<IoConnectionClassId>;
+
+    // Instance ID
+    #6 instance_id: Uuid<IoConnectionInstanceId>;
+
+    // Unique ID
+    #3 endpoints: VarArray<EndpointInstanceDescription, 2>;
+
+    // Human-readable instance name
+    #4 instance_path_name: VarString<max_size=max_instance_path_size>;
+
+    // Diags ID
+    #5 diags_endpoint_id: Optional<Uuid<EndpointInstanceId>>;
+  }
+}
+
+cpp_target process_description
+{
+  options
+  {
+    namespace clockwork::common;
+  }
+
+  tag CogClassId;
+  tag CogInstanceId;
+  tag EndpointClassId;
+  tag EndpointInstanceId;
+  tag StateInstanceId;
+  tag ConfigInstanceId;
+  tag CasingClassId;
+  tag ProcessInstanceId;
+  tag MemoryResourceId;
+  tag IoConnectionClassId;
+  tag IoConnectionInstanceId;
+
+  schema ProcessDescription;
+  schema PubSubGraph;
+  schema CogInstanceDescription;
+  schema EndpointInstanceDescription;
+  schema PublishEndpoint;
+  schema PinionBufferLayout;
+  schema PubSubConnection;
+  schema StateGraph;
+  schema StateInstanceDescription;
+  schema StateConnection;
+  schema ConfigGraph;
+  schema ConfigInstanceDescription;
+  schema ConfigConnection;
+  schema MemoryResource;
+  schema MemoryResourceConnection;
+  schema MemoryResourceGraph;
+  schema TimerInstanceDescription;
+  schema IoConnectionInstanceDescription;
+  enum MemoryResourceType;
+
+  representation Tachyon<EndpointInstanceDescription>;
+  representation Tachyon<PinionBufferLayout>;
+  representation Tachyon<PublishEndpoint>;
+  representation Tachyon<PubSubConnection>;
+  representation Tachyon<PubSubGraph<max_publishers=521, max_pubsub_connections=920>>;
+  representation Tachyon<StateInstanceDescription<max_instance_path_size=512>>;
+  representation Tachyon<StateConnection>;
+  representation Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>;
+  representation Tachyon<ConfigConnection>;
+  representation Tachyon<MemoryResource<max_instance_path_size=512>>;
+  representation Tachyon<MemoryResourceConnection>;
+  representation Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>;
+  representation Tachyon<TimerInstanceDescription<max_instance_path_size=512>>;
+  representation Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>;
+  representation Tachyon<CogInstanceDescription<max_endpoints_per_cog=50,max_instance_path_size=512>>;
+  representation Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=432>>;
+  representation Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>;
+  representation Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=401, max_endpoints_per_cog=50, max_state_instances=267, max_state_connections=432, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=521, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32>>;
+
+  interface EndpointInstanceDescriptionTap : Tap<Tachyon<EndpointInstanceDescription>>;
+  interface PinionBufferLayoutTap : Tap<Tachyon<PinionBufferLayout>>;
+  interface PublishEndpointTap : Tap<Tachyon<PublishEndpoint>>;
+  interface PubSubConnectionTap : Tap<Tachyon<PubSubConnection>>;
+  interface PubSubGraphTap : Tap<Tachyon<PubSubGraph<max_publishers=521, max_pubsub_connections=920>>>;
+  interface StateInstanceDescriptionTap : Tap<Tachyon<StateInstanceDescription<max_instance_path_size=512>>>;
+  interface StateConnectionTap : Tap<Tachyon<StateConnection>>;
+  interface ConfigInstanceDescriptionTap : Tap<Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>>;
+  interface ConfigConnectionTap : Tap<Tachyon<ConfigConnection>>;
+  interface MemoryResourceTap : Tap<Tachyon<MemoryResource<max_instance_path_size=512>>>;
+  interface MemoryResourceConnectionTap : Tap<Tachyon<MemoryResourceConnection>>;
+  interface MemoryResourceGraphTap : Tap<Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>>;
+  interface TimerInstanceDescriptionTap : Tap<Tachyon<TimerInstanceDescription<max_instance_path_size=512>>>;
+  interface IoConnectionInstanceDescriptionTap : Tap<Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>>;
+  interface CogInstanceDescriptionTap : Tap<Tachyon<CogInstanceDescription<max_endpoints_per_cog=50,max_instance_path_size=512>>>;
+  interface StateGraphTap : Tap<Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=432>>>;
+  interface ConfigGraphTap : Tap<Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>>;
+  interface ProcessDescriptionTap : Tap<Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=401, max_endpoints_per_cog=50, max_state_instances=267, max_state_connections=432, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=521, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32>>>;
+}

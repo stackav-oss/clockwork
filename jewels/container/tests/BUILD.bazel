@@ -1,0 +1,39 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "bounded_string_test",
+    srcs = ["bounded_string_test.cc"],
+    deps = [
+        "//jewels/container:bounded_string",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)
+
+cc_test(
+    name = "circular_buffer_test",
+    srcs = ["circular_buffer_test.cc"],
+    deps = [
+        "//jewels/container:circular_buffer",
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:memory_resource",
+        "//jewels/meta:overloaded",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "compare_test",
+    srcs = ["compare_test.cc"],
+    deps = [
+        "//jewels/container:compare",
+        "@catch2//:catch2_main",
+    ],
+)

@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding")
+
+cc_library(
+    name = "nanobind_tappy_convert",
+    srcs = ["nanobind_tappy_convert.inl"],
+    hdrs = ["nanobind_tappy_convert.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/std:span",
+        "@fmt",
+        "@nanobind",
+        "@python_3_10//:python_headers",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "nb_au",
+    srcs = ["nb_au.inl"],
+    hdrs = ["nb_au.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@au",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "nb_byte_array",
+    srcs = ["nb_byte_array.inl"],
+    hdrs = ["nb_byte_array.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/log_cerr",
+        "@nanobind",
+    ],
+)
+
+py_cc_binding(
+    name = "nb_sync_time",
+    srcs = ["nb_sync_time.cc"],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/meta:overloaded",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
+        "@fmt",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "nb_var_string",
+    srcs = ["nb_var_string.inl"],
+    hdrs = ["nb_var_string.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/container/tap:var_string",
+        "@fmt",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "uuid_caster",
+    srcs = ["uuid_caster.inl"],
+    hdrs = ["uuid_caster.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@nanobind",
+    ],
+)

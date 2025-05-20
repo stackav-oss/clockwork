@@ -1,0 +1,17 @@
+use clockwork::examples::demo_system::camera::video_message;
+
+// Raw GPS packet channel
+channel RawVideoChannel
+{
+  name: "/raw_video";
+  message_type: Tachyon<video_message::Yuv411Image<video_message::raw_image_size_bytes>>;
+  max_num_messages: 10;
+}
+
+// Video channel
+channel VideoChannel
+{
+  name: "/video";
+  message_type: Tachyon<video_message::Yuv444Image<video_message::image_size_bytes>>;
+  max_num_messages: 10;
+}

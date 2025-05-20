@@ -1,0 +1,31 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "log_message_fetcher",
+    srcs = ["log_message_fetcher.cc"],
+    hdrs = ["log_message_fetcher.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/runners:channel_publisher",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid_hasher",
+        "@fmt",
+    ],
+)

@@ -1,0 +1,820 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "audio",
+    srcs = ["audio.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":diagnostics",
+        ":expr",
+        ":module_id",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+    ],
+)
+
+py_library(
+    name = "box",
+    srcs = ["box.py"],
+    deps = [
+        ":audio",
+        ":clkbuiltins",
+        ":cog",
+        ":cpp_executable",
+        ":cst_util",
+        ":diagnostics",
+        ":expr",
+        ":extern_type",
+        ":node",
+        ":policy",
+        ":primitive",
+        ":pubsub",
+        ":schema",
+        ":schema_reg",
+        ":statement",
+        ":typesys",
+        ":udp",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "clkbuiltins",
+    srcs = ["clkbuiltins.py"],
+    deps = [
+        ":module_id",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+    ],
+)
+
+py_library(
+    name = "clkenum",
+    srcs = ["clkenum.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "cog",
+    srcs = ["cog.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":diagnostics",
+        ":expr",
+        ":extern_type",
+        ":message_type",
+        ":node",
+        ":primitive",
+        ":schema_reg",
+        ":typesys",
+        ":units",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "compiler",
+    srcs = ["compiler.py"],
+    # This is needed for the py_target generated files, but PLEASE DO NOT USE THIS IN OTHER CODE (outside of Clockwork)
+    visibility = ["//visibility:public"],
+    deps = [
+        ":audio",
+        ":box",
+        ":clkbuiltins",
+        ":clkenum",
+        ":cog",
+        ":conversion_utils",
+        ":converter",
+        ":cpp_executable",
+        ":cpp_target",
+        ":extern_type",
+        ":hardware",
+        ":importer",
+        ":interface",
+        ":module_id",
+        ":nanobind_target",
+        ":node",
+        ":parse",
+        ":path_resolver",
+        ":policy",
+        ":proto_target",
+        ":pubsub",
+        ":py_target",
+        ":representation",
+        ":schema",
+        ":schema_reg",
+        ":statement",
+        ":strongtypes",
+        ":system_target",
+        ":typesys",
+        ":udp",
+        ":uuid_reg",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/bazel:clk_targets",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/proto:proto_typereg",
+        "//clockwork/dsl/serialization:tachyon_layout",
+        "//clockwork/dsl/serialization:tachyon_layout_reg",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "conversion_utils",
+    srcs = ["conversion_utils.py"],
+    deps = [
+        ":clkbuiltins",
+        ":expr",
+        ":node",
+        ":schema",
+        ":schema_reg",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/proto:proto_typereg",
+    ],
+)
+
+py_library(
+    name = "converter",
+    srcs = ["converter.py"],
+    deps = [
+        ":clkbuiltins",
+        ":conversion_utils",
+        ":cst_util",
+        ":expr",
+        ":interface",
+        ":node",
+        ":proto_to_tap",
+        ":representation",
+        ":schema",
+        ":tap_to_proto",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+    ],
+)
+
+py_library(
+    name = "cpp_executable",
+    srcs = ["cpp_executable.py"],
+    deps = [
+        ":audio",
+        ":clkbuiltins",
+        ":cog",
+        ":conversion_utils",
+        ":cst_util",
+        ":diagnostics",
+        ":expr",
+        ":extern_type",
+        ":interface",
+        ":module_id",
+        ":node",
+        ":path_resolver",
+        ":primitive",
+        ":proto_to_tap",
+        ":representation",
+        ":schema_reg",
+        ":typesys",
+        ":udp",
+        ":units",
+        ":uuid_reg",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cog:cpp_python_cog",
+        "//clockwork/dsl/cog:cppcog",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/cpp:values",
+    ],
+)
+
+py_library(
+    name = "cpp_extern",
+    srcs = ["cpp_extern.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":extern_type",
+        ":module_id",
+        ":node",
+        ":primitive",
+        ":strongtypes",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/serialization:tachyon_reg",
+    ],
+)
+
+py_library(
+    name = "cpp_target",
+    srcs = ["cpp_target.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cog",
+        ":converter",
+        ":cpp_executable",
+        ":cpp_extern",
+        ":cst_util",
+        ":expr",
+        ":interface",
+        ":module_id",
+        ":nanobind_type_casters",
+        ":node",
+        ":path_resolver",
+        ":primitive",
+        ":representation",
+        ":schema",
+        ":statement",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cog:clk_cog_metrics",
+        "//clockwork/dsl/cog:cppcog",
+        "//clockwork/dsl/cog:cppdial",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "cst_util",
+    srcs = ["cst_util.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":module_id",
+        "//clockwork/dsl:cst",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "diagnostics",
+    srcs = ["diagnostics.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":message_type",
+        ":module_id",
+        ":node",
+        ":primitive",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+    ],
+)
+
+py_library(
+    name = "expr",
+    srcs = ["expr.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":module_id",
+        ":node",
+        ":parse",
+        ":primitive",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "extern_type",
+    srcs = ["extern_type.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "hardware",
+    srcs = ["hardware.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "importer",
+    srcs = ["importer.py"],
+    # This is needed for the py_target generated files, but PLEASE DO NOT USE THIS IN OTHER CODE (outside of Clockwork)
+    visibility = ["//visibility:public"],
+    deps = [
+        ":module_id",
+        ":node",
+        ":path_resolver",
+    ],
+)
+
+py_library(
+    name = "interface",
+    srcs = ["interface.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":representation",
+        ":schema",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "memres",
+    srcs = ["memres.py"],
+    deps = [":typesys"],
+)
+
+py_library(
+    name = "message_type",
+    srcs = ["message_type.py"],
+    deps = [
+        ":expr",
+        ":interface",
+        ":representation",
+        ":schema_reg",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+    ],
+)
+
+py_library(
+    name = "module_id",
+    srcs = ["module_id.py"],
+    imports = ["../../.."],
+    deps = ["@root_repo//:root_repo_py"],
+)
+
+py_library(
+    name = "nanobind_binding",
+    srcs = ["nanobind_binding.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":clkenum",
+        ":cst_util",
+        ":expr",
+        ":interface",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "nanobind_target",
+    srcs = ["nanobind_target.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":cst_util",
+        ":nanobind_binding",
+        ":nanobind_target_render",
+        ":nanobinding_registry",
+        ":node",
+        ":path_resolver",
+        ":statement",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:nanobind_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cpp:context",
+        "//jewels/nanobind/clk_bindings/common:common_clk_nanobind_libraries",
+    ],
+)
+
+py_library(
+    name = "nanobind_target_render",
+    srcs = ["nanobind_target_render.py"],
+    visibility = [":__subpackages__"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":module_id",
+        ":nanobind_binding",
+        ":nanobinding_registry",
+        ":primitive",
+        ":schema",
+        ":statement",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "nanobind_type_casters",
+    srcs = ["nanobind_type_casters.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":expr",
+        ":interface",
+        ":module_id",
+        ":node",
+        ":py_target",
+        ":schema",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+    ],
+)
+
+py_library(
+    name = "nanobinding_registry",
+    srcs = ["nanobinding_registry.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":clkenum",
+        ":module_id",
+        ":node",
+        ":schema",
+        ":typesys",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "node",
+    srcs = ["node.py"],
+    deps = [
+        ":cst_util",
+        ":module_id",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "parse",
+    srcs = ["parse.py"],
+    deps = [
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl:parser",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "path_resolver",
+    srcs = ["path_resolver.py"],
+    deps = [
+        ":module_id",
+        "@clockwork_pip//bazel_runfiles",
+    ],
+)
+
+py_library(
+    name = "policy",
+    srcs = ["policy.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":schema",
+        ":statement",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "primitive",
+    srcs = ["primitive.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":node",
+        ":typesys",
+        ":units",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "proto_target",
+    srcs = ["proto_target.py"],
+    deps = [
+        ":clkenum",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":path_resolver",
+        ":representation",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:proto_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/serialization:protobuf_clk",
+    ],
+)
+
+py_library(
+    name = "proto_to_tap",
+    srcs = ["proto_to_tap.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":conversion_utils",
+        ":expr",
+        ":interface",
+        ":module_id",
+        ":representation",
+        ":schema",
+        ":schema_reg",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/proto:proto_typereg",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "pubsub",
+    srcs = ["pubsub.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":representation",
+        ":schema_reg",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/serialization:tachyon_reg",
+    ],
+)
+
+py_library(
+    name = "py_target",
+    srcs = ["py_target.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cst_util",
+        ":expr",
+        ":interface",
+        ":node",
+        ":path_resolver",
+        ":primitive",
+        ":python_cog_dial",
+        ":representation",
+        ":schema",
+        ":schema_reg",
+        ":statement",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:clk_targets",
+        "//clockwork/dsl/bazel:py_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/python:py_context",
+    ],
+)
+
+py_library(
+    name = "python_cog_dial",
+    srcs = ["python_cog_dial.py"],
+    deps = [
+        ":cog",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cog:cppcog",
+        "//clockwork/dsl/python:py_context",
+    ],
+)
+
+py_library(
+    name = "representation",
+    srcs = ["representation.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":schema",
+        ":typesys",
+        ":units",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "schema",
+    srcs = ["schema.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cst_util",
+        ":expr",
+        ":extern_type",
+        ":node",
+        ":statement",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "schema_reg",
+    srcs = ["schema_reg.py"],
+    deps = [
+        ":clkbuiltins",
+        ":interface",
+        ":node",
+        ":representation",
+        ":schema",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+    ],
+)
+
+py_library(
+    name = "statement",
+    srcs = ["statement.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "strongtypes",
+    srcs = ["strongtypes.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "system_target",
+    srcs = ["system_target.py"],
+    deps = [
+        ":box",
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "tap_to_proto",
+    srcs = ["tap_to_proto.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":conversion_utils",
+        ":expr",
+        ":interface",
+        ":module_id",
+        ":representation",
+        ":schema",
+        ":schema_reg",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/proto:proto_typereg",
+        "//clockwork/dsl/serialization:tap",
+    ],
+)
+
+py_library(
+    name = "typesys",
+    srcs = ["typesys.py"],
+    deps = [
+        ":node",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "udp",
+    srcs = ["udp.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":typesys",
+        ":uuid_reg",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "units",
+    srcs = ["units.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:cst",
+    ],
+)
+
+py_library(
+    name = "uuid_reg",
+    srcs = ["uuid_reg.py"],
+    deps = [
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:compiler_context",
+    ],
+)

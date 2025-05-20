@@ -1,0 +1,29 @@
+use clockwork::examples::demo_system::localization::pose_message;
+
+// Fake localization state used to produce fake pose messages
+schema LocalizationState
+{
+  fields
+  {
+    // Time of validity
+    #0 maybe_time_of_validity: Optional<SyncTime>;
+
+    // Location relative to the center of the earth.
+    #1 location_m: pose_message::R3;
+
+    // Velocity relative to the center of the earth.
+    #2 velocity_m_per_s: pose_message::R3;
+  }
+}
+
+cpp_target localization_state
+{
+  options
+  {
+    namespace clockwork::demo_system::localization;
+  }
+  schema LocalizationState;
+
+  representation Tachyon<LocalizationState>;
+  interface Tappy<LocalizationState>;
+}

@@ -1,0 +1,40 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "at",
+    hdrs = ["at.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@gsl//:util"],
+)
+
+cc_library(
+    name = "bounded_string",
+    srcs = ["bounded_string.inl"],
+    hdrs = ["bounded_string.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "circular_buffer",
+    srcs = ["circular_buffer.inl"],
+    hdrs = ["circular_buffer.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:memory_resource",
+        "//jewels/meta:call",
+        "//jewels/meta:type_traits",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "compare",
+    srcs = ["compare.inl"],
+    hdrs = ["compare.hh"],
+    visibility = ["//visibility:public"],
+)

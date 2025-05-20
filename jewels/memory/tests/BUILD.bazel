@@ -1,0 +1,108 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "aligned_storage_test",
+    srcs = ["aligned_storage_test.cc"],
+    deps = [
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:bits",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "bits_test",
+    srcs = ["bits_test.cc"],
+    deps = [
+        "//jewels/memory:bits",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "error_test",
+    srcs = ["error_test.cc"],
+    deps = [
+        "//jewels/memory:error",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "fields_test",
+    timeout = "short",
+    srcs = ["fields_test.cc"],
+    deps = [
+        "//jewels/memory:bits",
+        "//jewels/memory:fields",
+        "//jewels/meta:concepts",
+        "//jewels/std:span",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "memory_resource_test",
+    srcs = ["memory_resource_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "monitor_resource_test",
+    srcs = ["monitor_resource_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:monitor_resource",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "pmr_shared_ptr_test",
+    srcs = ["pmr_shared_ptr_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:monitor_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "pmr_unique_ptr_test",
+    srcs = ["pmr_unique_ptr_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:monitor_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "pointers_test",
+    srcs = ["pointers_test.cc"],
+    deps = [
+        "//jewels/memory:error",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "unique_object_test",
+    srcs = ["unique_object_test.cc"],
+    deps = [
+        "//jewels/memory:unique_object",
+        "@catch2//:catch2_main",
+    ],
+)

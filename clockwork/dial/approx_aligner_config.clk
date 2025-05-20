@@ -1,0 +1,115 @@
+// Enumeration of the different find choices for the approximate message aligner.
+enum ApproxAlignerFindType
+{
+  uuid: f35aec3a-486c-486c-9751-29675da3ffd5;
+
+  values
+  {
+    // Return the first alignment found in the inputs.
+    #0 first default;
+
+    // Return the last alignment found in the inputs.
+    #1 last;
+  }
+}
+
+// Enumeration of the aligner state.
+enum ApproxAlignerStateType
+{
+  uuid: 29fb6daa-dd74-4b1c-91bd-de5f610613c9;
+
+  values
+  {
+    // Unspecified.
+    #0 unspecified default;
+
+    // Minimum wait time has not passed, no alignment attempted.
+    #1 idle;
+
+    // Insufficient data to perform alignment.
+    #2 insufficient_data;
+
+    // Input validation failed, no alignment attempted.
+    #3 invalid_inputs;
+
+    // Aligned set found.
+    #4 aligned;
+
+    // Maximum wait time exceeded.
+    #5 timeout;
+  }
+}
+
+
+// Runtime configuration for the approximate message aligner.
+schema ApproxAlignerConfig
+{
+  uuid: 103e5493-2c1b-4fac-978c-347805e89411;
+
+  fields
+  {
+    // Aligner find type.
+    #0 find_type: ApproxAlignerFindType;
+
+    // The objective function score threshold.
+    #1 minimum_score_threshold: Float64;
+
+    // Minimum time to wait between alignments.
+    #2 minimum_wait_time: Duration;
+
+    // Maximum time wait time for inputs. If no valid (i.e. meets all requirements)
+    // alignment then the current best alignment will be returned.
+    #3 maximum_wait_time: Optional<Int64>;
+  }
+}
+
+// Aligner state.
+schema ApproxAlignerState
+{
+  uuid: a795d74d-5c2f-40ed-ac26-a3dd355f7b85;
+
+  fields
+  {
+    // Timestamp of the last alignment commit().
+    #0 last_commit_timestamp: SyncTime;
+  }
+}
+
+cpp_target approx_aligner_config
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  enum ApproxAlignerFindType;
+  enum ApproxAlignerStateType;
+  schema ApproxAlignerConfig;
+  schema ApproxAlignerState;
+
+  representation Tachyon<ApproxAlignerConfig>;
+  interface Tap<Tachyon<ApproxAlignerConfig>>;
+  representation Tachyon<ApproxAlignerState>;
+  interface Tap<Tachyon<ApproxAlignerState>>;
+}
+
+proto_target approx_aligner_config_proto
+{
+    options
+    {
+        package clockwork.proto;
+    }
+
+    enum ApproxAlignerFindType;
+    representation Protobuf<ApproxAlignerConfig>;
+}
+
+cpp_target approx_aligner_config_proto_conv
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  converter ProtobufToTap<Protobuf<ApproxAlignerConfig>, Tap<Tachyon<ApproxAlignerConfig>>>;
+}

@@ -1,0 +1,23 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "exit_condition",
+    hdrs = ["exit_condition.hh"],
+)
+
+cc_library(
+    name = "exit_condition_signal",
+    srcs = ["exit_condition_signal.cc"],
+    hdrs = ["exit_condition_signal.hh"],
+    linkopts = ["-lpthread"],
+    deps = [
+        ":exit_condition",
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+    ],
+)

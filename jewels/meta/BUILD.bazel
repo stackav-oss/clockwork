@@ -1,0 +1,52 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "call",
+    hdrs = ["call.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":call_detail"],
+)
+
+cc_library(
+    name = "call_detail",
+    hdrs = ["call_detail.hh"],
+)
+
+cc_library(
+    name = "concepts",
+    hdrs = ["concepts.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "integer_sequence",
+    hdrs = ["integer_sequence.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":integer_sequence_detail"],
+)
+
+cc_library(
+    name = "integer_sequence_detail",
+    hdrs = ["integer_sequence_detail.hh"],
+)
+
+cc_library(
+    name = "overloaded",
+    hdrs = ["overloaded.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "type_traits",
+    hdrs = ["type_traits.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "types",
+    hdrs = ["types.hh"],
+    visibility = ["//visibility:public"],
+)

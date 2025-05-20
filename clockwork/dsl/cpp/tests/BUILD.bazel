@@ -1,0 +1,95 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "context_test",
+    srcs = [
+        "context_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cpp:context",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "literal_test",
+    srcs = [
+        "literal_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "typereg_test",
+    srcs = [
+        "typereg_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "types_test",
+    srcs = [
+        "types_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+    ],
+)
+
+py_test(
+    name = "values_test",
+    srcs = [
+        "values_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:values",
+        "//clockwork/dsl/ir:clkbuiltins",
+    ],
+)

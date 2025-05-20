@@ -1,0 +1,63 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "compatibility",
+    srcs = ["compatibility.py"],
+    deps = [
+        ":protocol",
+        ":tachyon_dyn",
+        ":tachyon_dyn_from_metadata",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/serialization/metadata:tachyon_model",
+    ],
+)
+
+py_library(
+    name = "protocol",
+    srcs = ["protocol.py"],
+    deps = [
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "//clockwork/serialization/metadata:tachyon_model",
+    ],
+)
+
+py_library(
+    name = "tachyon_dyn",
+    srcs = ["tachyon_dyn.py"],
+    deps = [
+        ":protocol",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_layout",
+        "//clockwork/dsl/serialization:tachyon_layout_reg",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+    ],
+)
+
+py_library(
+    name = "tachyon_dyn_from_metadata",
+    srcs = ["tachyon_dyn_from_metadata.py"],
+    deps = [
+        ":protocol",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+    ],
+)

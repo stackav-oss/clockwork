@@ -1,0 +1,17 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "start_lifetime_as",
+    srcs = ["start_lifetime_as.inl"],
+    hdrs = ["start_lifetime_as.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/memory:pointers",
+        "//jewels/meta:call",
+        "//jewels/meta:concepts",
+        "//jewels/meta:type_traits",
+    ],
+)

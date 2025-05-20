@@ -1,0 +1,119 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "clk_cog_metrics_test",
+    srcs = [
+        "clk_cog_metrics_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    tags = ["manual"],
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/tests/support:py_test_utils",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "cpp_python_cog_test",
+    srcs = [
+        "cpp_python_cog_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/python:python_state.clk",
+        "//clockwork/python/tests/support:python_cog.clk",
+        "//clockwork/python/tests/support:test_config.clk",
+        "//clockwork/python/tests/support:test_input_message.clk",
+        "//clockwork/python/tests/support:test_output_message.clk",
+        "//clockwork/python/tests/support:test_state.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cog:cpp_python_cog",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_test(
+    name = "cppcog_test",
+    srcs = [
+        "cppcog_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:goodbyecog.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cog:cppcog",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_test(
+    name = "cppdial_test",
+    srcs = [
+        "cppdial_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:goodbyecog.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cog:cppdial",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+cc_test(
+    name = "ten_nanosecond_type_test",
+    srcs = ["ten_nanosecond_type_test.cc"],
+    deps = [
+        "//clockwork/dsl/cog:ten_nanosecond_type",
+        "@catch2//:catch2_main",
+    ],
+)

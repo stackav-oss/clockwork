@@ -1,0 +1,34 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "language",
+    srcs = ["language.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/cc_plugin/language",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/gazelle/cc_plugin/common",
+        "//tools/gazelle/cc_plugin/configurer",
+        "//tools/gazelle/cc_plugin/parsers",
+        "//tools/gazelle/cc_plugin/resolver",
+        "@@gazelle~//config",
+        "@@gazelle~//language",
+        "@@gazelle~//rule",
+        "@com_github_bazelbuild_buildtools//build",
+        "@com_github_emirpasic_gods//sets/treeset",
+        "@com_github_emirpasic_gods//utils",
+    ],
+)
+
+go_test(
+    name = "language_test",
+    srcs = ["language_test.go"],
+    embed = [":language"],
+    deps = [
+        "//tools/gazelle/cc_plugin/common",
+        "@@gazelle~//rule",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

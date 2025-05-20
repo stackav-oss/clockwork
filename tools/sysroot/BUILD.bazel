@@ -1,0 +1,21 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+bzl_library(
+    name = "clang_bzl",
+    srcs = ["clang.bzl"],
+    deps = [
+        "//tools/cc:flags_bzl",
+        "//tools/cc/toolchain:cc_toolchain_config_bzl",
+        "//tools/rules:cc_bzl",
+        "@bazel_skylib//rules:native_binary",
+    ],
+)
+
+bzl_library(
+    name = "sysroot_bzl",
+    srcs = ["sysroot.bzl"],
+    deps = [":clang_bzl"],
+)

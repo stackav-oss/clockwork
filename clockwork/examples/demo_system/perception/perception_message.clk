@@ -1,0 +1,36 @@
+// Perception debug message
+schema PerceptionDebugMessage
+{
+  uuid: 4e493ede-8c41-4792-8c78-62d1df0e93b0;
+
+  fields
+  {
+    // Timestamp for when these points were generated
+    #0 time_of_validity: SyncTime;
+
+    // Video image time of validity
+    #1 video_tov: SyncTime;
+
+    // Lidar image time of validity
+    #2 lidar_tov: SyncTime;
+
+    // Pose image time of validity
+    #3 pose_tov: SyncTime;
+
+    // Spread between earliest and latest aligned message
+    #4 tov_spread: Duration;
+  }
+}
+
+cpp_target perception_message
+{
+  options
+  {
+    namespace clockwork::demo_system::perception;
+  }
+
+  schema PerceptionDebugMessage;
+
+  representation Tachyon<PerceptionDebugMessage>;
+  interface Tappy<PerceptionDebugMessage>;
+}

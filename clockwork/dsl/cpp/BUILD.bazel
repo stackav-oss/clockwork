@@ -1,0 +1,67 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "context",
+    srcs = ["context.py"],
+    deps = [
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_library(
+    name = "literal",
+    srcs = ["literal.py"],
+    deps = [
+        ":types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
+    name = "typereg",
+    srcs = ["typereg.py"],
+    deps = [
+        ":context",
+        ":literal",
+        ":types",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "types",
+    srcs = ["types.py"],
+    deps = [
+        ":context",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_library(
+    name = "values",
+    srcs = ["values.py"],
+    deps = [
+        ":typereg",
+        ":types",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)

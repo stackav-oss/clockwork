@@ -1,0 +1,16 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_binary")
+
+py_binary(
+    name = "echo_log",
+    srcs = ["echo_log.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_processor",
+        "//clockwork/tools/channel_spy:channel_spy_cli",
+        "@clockwork_pip//click",
+    ],
+)

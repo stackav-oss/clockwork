@@ -1,0 +1,143 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+py_cc_binding(
+    name = "nb_test_helper",
+    srcs = ["nb_test_helper.cc"],
+    deps = [
+        ":test_helper",
+        ":test_message",
+        ":test_publisher",
+        ":test_support",
+        "//clockwork:repr_iface",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+        "@fmt",
+        "@nanobind",
+    ],
+)
+
+py_library(
+    name = "py_test_message",
+    srcs = ["py_test_message.py"],
+    data = [":test_message_clk"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+cc_library(
+    name = "test_helper",
+    srcs = ["test_helper.inl"],
+    hdrs = ["test_helper.hh"],
+    deps = [
+        ":test_publisher",
+        ":test_support",
+        "//clockwork:repr_iface",
+        "//clockwork/tools/channel_spy:channel_spy_config",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "test_message",
+    srcs = [
+        "test_message.cc",
+        "test_message.inl",
+    ],
+    hdrs = ["test_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "test_message_clk",
+    srcs = ["test_message.clk"],
+    outs = [
+        "py_test_message.py",
+        "test_message.cc",
+        "test_message.hh",
+        "test_message.inl",
+        "test_message_clk_nb.cc",
+        "test_message_clk_nb.hh",
+        "test_message_clk_nb.inl",
+    ],
+)
+
+py_cc_binding(
+    name = "test_message_clk_nb",
+    srcs = [
+        "test_message_clk_nb.cc",
+        "test_message_clk_nb.hh",
+        "test_message_clk_nb.inl",
+    ],
+    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
+    deps = [
+        ":test_message",
+        "//jewels/nanobind/clk_bindings/common:common_cc",
+    ],
+)
+
+cc_library(
+    name = "test_publisher",
+    srcs = ["test_publisher.inl"],
+    hdrs = ["test_publisher.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:slot",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "test_support",
+    srcs = [
+        "test_support.cc",
+        "test_support.inl",
+    ],
+    hdrs = ["test_support.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description",
+        "//clockwork/tools/channel_spy",
+        "//clockwork/tools/channel_spy:channel_spy_config",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:path",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@fmt",
+    ],
+)

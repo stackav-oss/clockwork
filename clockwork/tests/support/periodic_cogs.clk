@@ -1,0 +1,116 @@
+use clockwork::tests::support::exec_time::{ExecTime, ExecState};
+
+// Periodic1HzCog
+cog Periodic1HzCog
+{
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(1000ms);
+    execute when: periodic;
+  }
+}
+
+// Periodic10HzCog
+cog Periodic10HzCog
+{
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    execute when: periodic;
+  }
+}
+
+// Periodic100HzCog
+cog Periodic100HzCog
+{
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
+}
+
+// Periodic1000HzCog
+cog Periodic1000HzCog
+{
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(1ms);
+    execute when: periodic;
+  }
+}
+
+// PeriodicTesterCog
+cog PeriodicTesterCog
+{
+  states
+  {
+    state: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    input_1hz: Tappy<ExecTime>
+    {
+      max_msgs: 2000;
+    }
+
+    input_10hz: Tappy<ExecTime>
+    {
+      max_msgs: 2000;
+    }
+
+    input_100hz: Tappy<ExecTime>
+    {
+      max_msgs: 2000;
+    }
+
+    input_1000hz: Tappy<ExecTime>
+    {
+      max_msgs: 2000;
+    }
+  }
+
+  execution
+  {
+    condition new_1hz: new_message(input_1hz);
+    execute when: new_1hz;
+  }
+}
+
+cpp_target periodic_cogs
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog Periodic1HzCog;
+  cog Periodic10HzCog;
+  cog Periodic100HzCog;
+  cog Periodic1000HzCog;
+  cog PeriodicTesterCog;
+}

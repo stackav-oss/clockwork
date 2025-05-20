@@ -1,0 +1,161 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+cc_test(
+    name = "clk_au_test",
+    srcs = ["clk_au_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/dsl/tests/support:msg_with_au",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "compiler_context_test",
+    srcs = [
+        "compiler_context_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+    ],
+)
+
+py_test(
+    name = "compiler_context_text",
+    srcs = [
+        "compiler_context_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "hello_udp_not_var_packet_test",
+    srcs = ["hello_udp_not_var_packet_test.cc"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/dsl/tests/support:hello_udp_not_var_packet",
+        "//clockwork/pinion:incoming_udp",
+        "//clockwork/pinion:outgoing_udp",
+        "//jewels/filesystem:error_code",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)
+
+cc_test(
+    name = "hello_udp_test",
+    srcs = ["hello_udp_test.cc"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/dsl/tests/support:hello_udp",
+        "//clockwork/io:var_packet",
+        "//clockwork/pinion:bidirectional_udp",
+        "//clockwork/pinion:incoming_udp",
+        "//clockwork/pinion:outgoing_udp",
+        "//jewels/filesystem:error_code",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)
+
+cc_test(
+    name = "hellocog_test",
+    srcs = ["hellocog_test.cc"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/dsl/tests/support:hellocog",
+        "//clockwork/dsl/tests/support:hellocog_impl",  #keep
+        "//clockwork/runners:online_cog_queue",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "hellomsg_test",
+    srcs = ["hellomsg_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:hello_msg_onboard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "nanobinding_function_calls_test",
+    srcs = [
+        "nanobinding_function_calls_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/tests/support:nanobindable_messages_clk_nb",
+        "//clockwork/dsl/tests/support:nb_function_calls",
+    ],
+)
+
+py_test(
+    name = "nanobinding_message_test",
+    srcs = [
+        "nanobinding_message_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/tests/support:nanobindable_messages_clk_nb",
+        "//jewels/nanobind:nb_sync_time",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "tapmsg_test",
+    srcs = ["tapmsg_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:tapmsg",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "taptags_test",
+    srcs = ["taptags_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:taptags",
+        "@catch2//:catch2_main",
+    ],
+)

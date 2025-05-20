@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//tools/rules:python.bzl", "py_library")
+
+# gazelle:proto_language go enabled false
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "tachyon",
+    srcs = ["tachyon.py"],
+    deps = [
+        ":tachyon_model",
+        ":tachyon_model_py_library",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_layout_reg",
+        "//clockwork/dsl/serialization:tachyon_reg",
+    ],
+)
+
+py_library(
+    name = "tachyon_model",
+    srcs = ["tachyon_model.py"],
+)
+
+proto_cc_library(
+    name = "tachyon_model_cc_library",
+    srcs = ["tachyon_model.pb.cc"],
+    hdrs = ["tachyon_model.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "tachyon_model_cpp_compile",
+    outputs = [
+        "tachyon_model.pb.cc",
+        "tachyon_model.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "tachyon_model_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "tachyon_model_proto",
+    srcs = ["tachyon_model.proto"],
+)
+
+proto_compile(
+    name = "tachyon_model_py_compile",
+    outputs = [
+        "tachyon_model_pb2.py",
+        "tachyon_model_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "tachyon_model_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "tachyon_model_py_library",
+    srcs = ["tachyon_model_pb2.py"],
+    data = ["tachyon_model_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)

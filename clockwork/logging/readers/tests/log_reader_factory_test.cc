@@ -1,0 +1,80 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#include "clockwork/logging/log_interval.hh"
+#include "clockwork/logging/readers/abstract_log_reader.hh"
+#include "clockwork/logging/readers/log_reader_factory.hh"
+#include "clockwork/logging/readers/types.hh"
+#include "jewels/testing/tmp_directory_guard.hh"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <optional>
+#include <string>
+
+namespace clockwork_logging
+{
+namespace
+{
+
+TEST_CASE("Log reader factory")
+{
+  SECTION("mcap")
+  {
+    auto reader = make_reader("log.mcap", {}, {});
+    REQUIRE(reader);
+
+    REQUIRE("mcap" == reader->type());
+  }
+
+  SECTION("onboard")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    (void)std::ofstream(log_path / "foo.olog");
+
+    auto reader = make_reader(log_path.string(), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "onboard");
+  }
+
+  SECTION("offboard log")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    (void)std::ofstream(log_path / "stack_log_metadata.pbtxt");
+
+    auto reader = make_reader(log_path.string(), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "offboard");
+  }
+
+  SECTION("offboard log union")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    (void)std::ofstream(log_path / "stack_log_union.pbtxt");
+
+    auto reader = make_reader(log_path.string(), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "offboard");
+  }
+
+  SECTION("unknown")
+  {
+    using Catch::Matchers::StartsWith;
+
+    REQUIRE_THROWS_WITH(make_reader("log.unknown", {}, {}), StartsWith("Unknown/Unsupported log 'log.unknown'"));
+  }
+}
+
+} // namespace
+} // namespace clockwork_logging

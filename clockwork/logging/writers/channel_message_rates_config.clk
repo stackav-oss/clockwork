@@ -1,0 +1,60 @@
+// Configuration for a channel message rate
+schema ChannelMessageRateConfig
+{
+  fields
+  {
+    // Channel name
+    #0 channel_name: VarString<max_size=127>;
+
+    // Minimum message rate in hz
+    #1 min_msg_rate_hz : Float64;
+  }
+}
+
+// Configuration for a channel message rates
+schema ChannelMessageRatesConfig
+{
+  fields
+  {
+    // Channel message rate configurations
+    #0 channel_message_rates: VarArray<ChannelMessageRateConfig, max_size=1024>;
+
+    // Number of seconds to average message rates
+    #1 window_size_sec: UInt64 = 1;
+  }
+}
+
+cpp_target channel_message_rates_config
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+
+  schema ChannelMessageRateConfig;
+  schema ChannelMessageRatesConfig;
+  representation Tachyon<ChannelMessageRateConfig>;
+  representation Tachyon<ChannelMessageRatesConfig>;
+  interface Tap<Tachyon<ChannelMessageRateConfig>>;
+  interface Tap<Tachyon<ChannelMessageRatesConfig>>;
+}
+
+proto_target channel_message_rates_config_proto
+{
+  options
+  {
+    package clockwork.writers.proto;
+  }
+  representation Protobuf<ChannelMessageRateConfig>;
+  representation Protobuf<ChannelMessageRatesConfig>;
+}
+
+cpp_target channel_message_rates_config_proto_conv
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  converter ProtobufToTap<Protobuf<ChannelMessageRateConfig>, Tap<Tachyon<ChannelMessageRateConfig>>>;
+  converter ProtobufToTap<Protobuf<ChannelMessageRatesConfig>, Tap<Tachyon<ChannelMessageRatesConfig>>>;
+}

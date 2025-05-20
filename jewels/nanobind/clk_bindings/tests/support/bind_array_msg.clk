@@ -1,0 +1,131 @@
+// SubMessage docs
+schema SubMessage
+{
+  uuid: 36fec4e4-c802-4845-b4e7-db89abfa9c4a;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // field a doc
+    #0 int_field: Int32;
+  }
+}
+
+// Foo docs
+schema Foo
+{
+  uuid: ed7e861d-0ab3-4d0e-9ec3-f9eb445c0439;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // msg_var_array doc
+    #2 msg_var_array: VarArray<SubMessage, 10>;
+
+    // prim_var_array doc
+    #3 prim_var_array: VarArray<Int32, 10>;
+
+    // msg_array doc
+    #4 msg_array: FixedArray<SubMessage, 10>;
+
+    // prim_array doc
+    #5 prim_array: FixedArray<Int32, 10>;
+  }
+}
+
+// Contains long containers. Used for str/repr truncation tests
+schema LongContainers
+{
+  uuid: 8cf0e3d4-9e5b-4361-aea6-ec5c045954bd;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // long var array
+    #0 long_var_array: VarArray<Int32, 100>;
+
+    // long fixed array
+    #1 long_fixed_array: FixedArray<Int32, 100>;
+  }
+}
+
+// Schema with FixedArrays of Bytes
+schema WithFixedBytes
+{
+  uuid: 7e5c0204-8167-4774-b5f2-ecd4097ba0a3;
+
+  fields
+  {
+    // FixedArray
+    #0 fixed_byte_array: FixedArray<Byte, 3>;
+
+    // NestedFixedArray
+    #1 nested_fixed_byte_array: FixedArray<FixedArray<Byte, 3>, 2>;
+  }
+}
+
+// Schema with VarArrays of Bytes
+schema WithVarBytes
+{
+  uuid: 7e5c0204-8167-4774-b5f2-ecd4097ba0a3;
+
+  fields
+  {
+    // VarArray
+    #0 var_byte_array: VarArray<Byte, 3>;
+
+    // VarArray
+    #1 nested_var_byte_array: VarArray<VarArray<Byte, 3>, 2>;
+  }
+}
+
+cpp_target bind_array_msg_clk_cc
+{
+  options
+  {
+    namespace foo;
+  }
+
+  schema SubMessage;
+  schema Foo;
+  schema LongContainers;
+  schema WithFixedBytes;
+  schema WithVarBytes;
+
+  representation Tachyon<SubMessage>;
+  interface Tappy<SubMessage>;
+
+  representation Tachyon<Foo>;
+  interface Tappy<Foo>;
+
+  representation Tachyon<LongContainers>;
+  interface Tappy<LongContainers>;
+
+  representation Tachyon<WithFixedBytes>;
+  interface Tappy<WithFixedBytes>;
+
+  representation Tachyon<WithVarBytes>;
+  interface Tappy<WithVarBytes>;
+}
+
+
+nanobind_target bind_array_msg_clk_nb
+{
+  binding Tappy<SubMessage>;
+  binding Tappy<Foo>;
+  binding Tappy<LongContainers>;
+  binding Tappy<WithFixedBytes>;
+  binding Tappy<WithVarBytes>;
+}

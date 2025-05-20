@@ -1,0 +1,40 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "au",
+    srcs = [
+        "au.cc",
+        "au.inl",
+    ],
+    hdrs = ["au.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/units:degrees",
+        "//jewels/units:density",
+        "//jewels/units:earth",
+        "//jewels/units:feet",
+        "//jewels/units:hertz",
+        "//jewels/units:kilograms",
+        "//jewels/units:kinematics",
+        "//jewels/units:meters",
+        "//jewels/units:newtons",
+        "//jewels/units:pounds_mass",
+        "//jewels/units:radians",
+        "//jewels/units:seconds",
+    ],
+)
+
+clk(
+    name = "au_clk",
+    srcs = ["au.clk"],
+    outs = [
+        "au.cc",
+        "au.hh",
+        "au.inl",
+    ],
+    visibility = ["//visibility:public"],
+)

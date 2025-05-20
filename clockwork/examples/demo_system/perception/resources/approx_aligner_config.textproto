@@ -1,0 +1,7 @@
+find_type: last
+minimum_score_threshold: 1.5
+minimum_wait_time {
+  seconds: 0
+  nanos: 90000000
+}
+maximum_wait_time: 190000000

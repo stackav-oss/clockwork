@@ -1,0 +1,6 @@
+app {
+  name: "tail"
+  executable: "/usr/bin/tail"
+  args: "-F"
+  args: "/dev/null"
+}

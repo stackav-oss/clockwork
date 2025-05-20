@@ -1,0 +1,28 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "shared_buffer_pool_test",
+    srcs = ["shared_buffer_pool_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "shared_object_pool_test",
+    srcs = ["shared_object_pool_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:shared_object_pool",
+        "@catch2//:catch2_main",
+    ],
+)

@@ -1,0 +1,52 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "ifaddrs",
+    srcs = ["ifaddrs.cc"],
+    hdrs = ["ifaddrs.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "sock_opt",
+    srcs = [
+        "sock_opt.cc",
+        "sock_opt.inl",
+    ],
+    hdrs = ["sock_opt.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/std:expected",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "socket_address",
+    srcs = ["socket_address.cc"],
+    hdrs = ["socket_address.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "socket_endpoint",
+    srcs = [
+        "socket_endpoint.cc",
+        "socket_endpoint.inl",
+    ],
+    hdrs = ["socket_endpoint.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@fmt"],
+)

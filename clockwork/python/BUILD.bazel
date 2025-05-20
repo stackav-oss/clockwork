@@ -1,0 +1,69 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:package.bzl", "package")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "gil_lock_guard",
+    srcs = ["gil_lock_guard.cc"],
+    hdrs = ["gil_lock_guard.hh"],
+    deps = ["@python_3_10//:python_headers"],
+)
+
+cc_library(
+    name = "python_init",
+    srcs = ["python_init.cc"],
+    hdrs = ["python_init.hh"],
+    deps = ["@python_3_10//:python_headers"],
+)
+
+cc_library(
+    name = "python_object",
+    srcs = [
+        "python_object.cc",
+        "python_object.inl",
+    ],
+    hdrs = ["python_object.hh"],
+    deps = [
+        "//jewels/meta:concepts",
+        "@python_3_10//:python_headers",
+    ],
+)
+
+cc_library(
+    name = "python_state",
+    srcs = ["python_state.cc"],
+    hdrs = ["python_state.hh"],
+    deps = [
+        ":gil_lock_guard",
+        ":python_init",
+        ":python_object",
+        "//jewels/memory:memory_resource",
+    ],
+)
+
+clk(
+    name = "python_state_clk",
+    srcs = ["python_state.clk"],
+    outs = [
+        "python_state_extern.cc",
+        "python_state_extern.hh",
+        "python_state_extern.inl",
+    ],
+)
+
+cc_library(
+    name = "python_state_extern",
+    srcs = [
+        "python_state_extern.cc",
+        "python_state_extern.inl",
+    ],
+    hdrs = ["python_state_extern.hh"],
+    deps = [":python_state"],
+)

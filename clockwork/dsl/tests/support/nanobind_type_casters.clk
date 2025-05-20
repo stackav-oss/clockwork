@@ -1,0 +1,67 @@
+// Doc
+schema Message
+{
+  uuid: ce0763a3-e701-4537-afb2-b8ed72657712;
+
+  fields
+  {
+    // Doc
+    #0 value: UInt64;
+  }
+}
+
+// Doc
+schema GenericMessage
+{
+  uuid: 7db5285d-722d-4cf5-a686-8179f91ab596;
+
+  parameters
+  {
+    // Doc
+    #1 type: Type;
+  }
+
+  fields
+  {
+    // Doc
+    #2 value: type;
+  }
+}
+
+// Doc
+enum FooEnum
+{
+  uuid: 00c0b3cd-463a-4e0c-9f3b-3931877cd16c;
+
+  values
+  {
+    // Doc
+    #1 foo default;
+
+    // Doc
+    #2 bar;
+  }
+}
+
+cpp_target foo
+{
+  options
+  {
+    namespace foo;
+  }
+
+  schema Message;
+  schema GenericMessage;
+  enum FooEnum;
+  interface Tappy<Message>;
+  interface GenericMessageFloat32: Tappy<GenericMessage<Float32>>;
+  nanobind_type_caster for Tappy<Message> from foo_py;
+  nanobind_type_caster for GenericMessageFloat32 from foo_py;
+  nanobind_type_caster for FooEnum from foo_py;
+}
+
+py_target foo_py
+{
+  interface Tappy<Message>;
+  interface GenericMessageFloat32: Tappy<GenericMessage<Float32>>;
+}

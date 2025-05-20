@@ -1,0 +1,32 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "uuid5_test",
+    srcs = ["uuid5_test.cc"],
+    deps = [
+        "//jewels/container:compare",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid5",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)
+
+cc_test(
+    name = "uuid_test",
+    srcs = ["uuid_test.cc"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@fmt",
+        "@gsl//:util",
+    ],
+)

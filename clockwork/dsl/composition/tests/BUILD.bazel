@@ -1,0 +1,230 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "gen_channel_spy_config_test",
+    srcs = [
+        "gen_channel_spy_config_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:channel_spy_config",
+        "//clockwork/dsl/composition:channel_spy_config_proto",
+        "//clockwork/dsl/composition:gen_channel_spy_configs",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "gen_logger_config_test",
+    srcs = [
+        "gen_logger_config_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:test_logging_policy_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_logger_configs",
+        "//clockwork/dsl/composition:logger_config",
+        "//clockwork/dsl/composition:logger_config_proto",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:pubsub",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "gen_multi_subscriber_config_test",
+    srcs = [
+        "gen_multi_subscriber_config_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:test_logging_policy_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_multi_subscriber_configs",
+        "//clockwork/dsl/composition:multi_subscriber_config",
+        "//clockwork/dsl/composition:multi_subscriber_config_proto",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "genpd_test",
+    srcs = [
+        "genpd_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomod_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:genpd",
+        "//clockwork/dsl/composition:pdf",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:system_target",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "graphir_test",
+    srcs = [
+        "graphir_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomod_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:graphir",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:udp",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "log_producer_test",
+    srcs = [
+        "log_producer_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:logsimsys_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:simple_launch_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:path_resolver",
+        "//clockwork/dsl/ir:system_target",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "logger_config_test",
+    srcs = [
+        "logger_config_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:logger_config",
+    ],
+)
+
+py_test(
+    name = "pdf_test",
+    srcs = [
+        "pdf_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:pdf",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "system_test",
+    srcs = [
+        "system_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:hellomod_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "systemgen_test",
+    srcs = [
+        "systemgen_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:simple_launch_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:path_resolver",
+        "//clockwork/dsl/ir:system_target",
+        "@clockwork_pip//pytest",
+    ],
+)

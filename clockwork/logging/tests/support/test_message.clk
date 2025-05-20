@@ -1,0 +1,34 @@
+// TestMessage
+schema TestMessage
+{
+  uuid: e1a50fd8-0f78-4421-9e90-762cba5b4fcb;
+
+  fields
+  {
+    // Test message string
+    #1 message_string: VarString<255>;
+  }
+}
+
+cpp_target test_message
+{
+  options
+  {
+    namespace clockwork_logging::tests;
+  }
+
+  schema TestMessage;
+
+  representation Tachyon<TestMessage>;
+  interface Tappy<TestMessage>;
+}
+
+py_target py_test_message
+{
+    interface Tappy<TestMessage>;
+}
+
+nanobind_target test_message_clk_nb
+{
+    binding Tappy<TestMessage>;
+}

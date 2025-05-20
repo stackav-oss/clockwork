@@ -1,0 +1,32 @@
+use clockwork::common::process_description;
+use clockwork::diagnostics::report;
+
+// Configuration for a platform component that produces diagnostics
+schema PlatformDiagnosticsConfig {
+  fields
+  {
+    // Producer ID
+    #1 reporter_id: Uuid<report::ReporterId>;
+
+    // Diagnostics group ID
+    #2 group_id: VarString<max_size=32>;
+
+    // Diagnostics instance ID
+    #3 instance_id: VarString<max_size=32>;
+
+    // Diagnostics publish endpoint
+    #4 publish_endpoint: process_description::PublishEndpoint;
+  }
+}
+
+cpp_target platform_diagnostics_config
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  schema PlatformDiagnosticsConfig;
+  representation Tachyon<PlatformDiagnosticsConfig>;
+  interface Tap<Tachyon<PlatformDiagnosticsConfig>>;
+}

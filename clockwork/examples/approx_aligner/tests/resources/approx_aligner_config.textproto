@@ -1,0 +1,6 @@
+find_type: first
+minimum_score_threshold: 0
+minimum_wait_time {
+  seconds: 0
+  nanos: 0
+}

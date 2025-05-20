@@ -1,0 +1,259 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+cc_test(
+    name = "abstract_log_reader_test",
+    srcs = ["abstract_log_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:types",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_processor_test",
+    srcs = ["log_processor_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_processor",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/readers/tests/support:test_log_reader",
+        "//clockwork/logging/tests/support:test_message",
+        "//clockwork/logging/writers:logger_status",
+        "//jewels/container/tap:var_string",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)
+
+cc_test(
+    name = "log_reader_factory_test",
+    srcs = ["log_reader_factory_test.cc"],
+    deps = [
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_reader_test",
+    srcs = ["log_reader_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader",
+        "//clockwork/logging/readers:serialization",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/readers/tests/support:test_log_reader",
+        "//clockwork/logging/tests/support:test_message",
+        "//jewels/container/tap:var_string",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)
+
+cc_test(
+    name = "mcap_log_reader_test",
+    srcs = ["mcap_log_reader_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/readers:mcap_log_reader",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/tests/support:test_message",
+        "//jewels/container/tap:var_string",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+        "@fmt",
+        "@mcap",
+        "@wise_enum",
+    ],
+)
+
+py_test(
+    name = "nb_log_reader_test",
+    srcs = [
+        "nb_log_reader_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_log_reader",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/tests/support:py_test_message",  # keep
+        "//clockwork/serialization/metadata:tachyon",
+    ],
+)
+
+py_test(
+    name = "nb_types_test",
+    srcs = [
+        "nb_types_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/readers:nb_types",
+    ],
+)
+
+cc_test(
+    name = "offboard_log_reader_test",
+    srcs = ["offboard_log_reader_test.cc"],
+    deps = [
+        "//clockwork/logging:decompress_option",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/readers:offboard_log_reader",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/readers/tests/support:test_offboard_log_writer",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "onboard_log_reader_test",
+    srcs = ["onboard_log_reader_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:decompress_option",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/onboard:null_message_handle",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard:writer",
+        "//clockwork/logging/onboard:writer_policy",
+        "//clockwork/logging/readers:onboard_log_reader",
+        "//clockwork/logging/readers:serialization",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/tests/support:test_message",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)
+
+py_test(
+    name = "py_log_processor_test",
+    srcs = [
+        "py_log_processor_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_processor",
+        "//clockwork/logging/tests/support:py_test_message",
+        "//clockwork/logging/tests/support:test_message_clk_nb",
+        "//clockwork/serialization/metadata:tachyon",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "py_log_reader_test",
+    srcs = [
+        "py_log_reader_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_reader",
+        "//clockwork/logging/tests/support:py_test_message",  # keep
+    ],
+)
+
+py_test(
+    name = "py_processor_test",
+    srcs = [
+        "py_log_processor_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_processor",
+        "//clockwork/logging/tests/support:py_test_message",  # keep
+        "//clockwork/logging/tests/support:test_message_clk_nb",  # keep
+        "//clockwork/serialization/metadata:tachyon",
+    ],
+)
+
+cc_test(
+    name = "serialization_test",
+    srcs = ["serialization_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/readers:serialization",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/tests/support:test_message",
+        "//jewels/container/tap:var_string",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)

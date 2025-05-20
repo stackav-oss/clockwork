@@ -1,0 +1,73 @@
+diff --git MODULE.bazel MODULE.bazel
+index 980a8fb..0366c53 100644
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -3,6 +3,7 @@ module(name = "rules_boost", repo_name = "com_github_nelhage_rules_boost")
+ bazel_dep(name = "bazel_skylib", version = "1.7.1")
+-bazel_dep(name = "boringssl", version = "0.0.0-20240530-2db0eb3")
+-bazel_dep(name = "bzip2", version = "1.0.8")
++bazel_dep(name = "bzip2", version = "1.0.8.bcr.2")
++bazel_dep(name = "openssl")
+ bazel_dep(name = "platforms", version = "0.0.10")
++bazel_dep(name = "rules_cc")
+ bazel_dep(name = "xz", version = "5.4.5.bcr.5")
+ bazel_dep(name = "zlib", version = "1.3.1.bcr.5")
+@@ -13,3 +14,6 @@ use_repo(
+     non_module_boost_repositories,
+     "boost",
+ )
++
++
++
+diff --git boost.BUILD boost.BUILD
+index 0e98704..62ac9c3 100644
+--- boost.BUILD
++++ boost.BUILD
+@@ -450,7 +450,7 @@ cc_library(
+     visibility = ["//visibility:public"],
+     deps = [
+         ":asio",
+-        "@boringssl//:ssl",
++        "@openssl//:ssl",
+     ],
+ )
+ 
+diff --git boost/boost.bzl boost/boost.bzl
+index ac40ca1..f722cf3 100644
+--- boost/boost.bzl
++++ boost/boost.bzl
+@@ -1,5 +1,6 @@
+ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
++load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_import", "cc_library")
+ 
+ # Building boost results in many warnings. Downstream users won't be interested, so just disable them.
+ default_copts = select({
+@@ -37,7 +38,7 @@ def boost_library(
+     if boost_name == None:
+         boost_name = name
+ 
+-    return native.cc_library(
++    return cc_library(
+         name = name,
+         visibility = visibility,
+         defines = default_defines + defines,
+@@ -70,8 +71,7 @@ def boost_so_library(
+         **kwargs):
+     if boost_name == None:
+         boost_name = name
+-
+-    native.cc_binary(
++    cc_binary(
+         name = "lib_internal_%s" % name,
+         defines = default_defines + defines,
+         includes = ["libs/%s/include" % boost_name] + includes,
+@@ -88,7 +88,7 @@ def boost_so_library(
+         output_group = "interface_library",
+         visibility = ["//visibility:private"],
+     )
+-    native.cc_import(
++    cc_import(
+         name = "_imported_%s" % name,
+         shared_library = ":lib_internal_%s" % name,
+         interface_library = ":%s_dll_interface_file" % name,

@@ -1,0 +1,50 @@
+// R3
+schema R3
+{
+  uuid: 15ba63d0-6f52-4cdd-8230-993e1eeb0305;
+
+  fields
+  {
+    // X component
+    #0 x: Float64;
+
+    // Y component
+    #1 y: Float64;
+
+    // Z component
+    #2 z: Float64;
+  }
+}
+
+// Fake pose message, real pose messages have a lot more in them
+schema PoseMessage
+{
+  uuid: bfb18a72-8a7e-4520-baed-d8e9cacb5d84;
+  fields
+  {
+    // Timestamp for when this message was generated.
+    #0 time_of_validity: SyncTime;
+
+    // Location relative to the center of the earth in meters
+    #1 location_m: R3;
+
+    // Velocity in meters per second
+    #2 velocity_m_per_s: R3;
+  }
+}
+
+cpp_target pose_message
+{
+  options
+  {
+    namespace clockwork::demo_system::localization;
+  }
+  schema R3;
+  schema PoseMessage;
+
+  representation Tachyon<R3>;
+  interface Tappy<R3>;
+
+  representation Tachyon<PoseMessage>;
+  interface Tappy<PoseMessage>;
+}

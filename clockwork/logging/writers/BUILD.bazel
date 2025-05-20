@@ -1,0 +1,522 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "channel_message_rates",
+    srcs = [
+        "channel_message_rates.cc",
+        "channel_message_rates.inl",
+    ],
+    hdrs = ["channel_message_rates.hh"],
+    deps = [
+        ":rate_status",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "channel_message_rates_clk",
+    srcs = ["channel_message_rates.clk"],
+    outs = [
+        "channel_message_rates.cc",
+        "channel_message_rates.hh",
+        "channel_message_rates.inl",
+    ],
+    deps = [":rate_status_clk"],
+)
+
+cc_library(
+    name = "channel_message_rates_config",
+    srcs = [
+        "channel_message_rates_config.cc",
+        "channel_message_rates_config.inl",
+    ],
+    hdrs = ["channel_message_rates_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "channel_message_rates_config_clk",
+    srcs = ["channel_message_rates_config.clk"],
+    outs = [
+        "channel_message_rates_config.cc",
+        "channel_message_rates_config.hh",
+        "channel_message_rates_config.inl",
+        "channel_message_rates_config_proto.proto",
+        "channel_message_rates_config_proto_conv.cc",
+        "channel_message_rates_config_proto_conv.hh",
+        "channel_message_rates_config_proto_conv.inl",
+    ],
+)
+
+proto_library(
+    name = "channel_message_rates_config_proto",
+    srcs = ["channel_message_rates_config_proto.proto"],
+)
+
+proto_cc_library(
+    name = "channel_message_rates_config_proto_cc_library",
+    srcs = ["channel_message_rates_config_proto.pb.cc"],
+    hdrs = ["channel_message_rates_config_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "channel_message_rates_config_proto_compile",
+    outputs = [
+        "channel_message_rates_config_proto.pb.h",
+        "channel_message_rates_config_proto.pb.cc",
+        "channel_message_rates_config_proto_pb2.py",
+        "channel_message_rates_config_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "channel_message_rates_config_proto",
+)
+
+cc_library(
+    name = "channel_message_rates_config_proto_conv",
+    srcs = [
+        "channel_message_rates_config_proto_conv.cc",
+        "channel_message_rates_config_proto_conv.inl",
+    ],
+    hdrs = ["channel_message_rates_config_proto_conv.hh"],
+    deps = [
+        ":channel_message_rates_config",
+        ":channel_message_rates_config_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+        "//jewels/std:span",
+    ],
+)
+
+proto_py_library(
+    name = "channel_message_rates_config_proto_py_library",
+    srcs = ["channel_message_rates_config_proto_pb2.py"],
+    data = ["channel_message_rates_config_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+cc_library(
+    name = "deterministic_log_writer",
+    srcs = ["deterministic_log_writer.cc"],
+    hdrs = ["deterministic_log_writer.hh"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/runners:deterministic_channel_handler",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid_hasher",
+    ],
+)
+
+cc_library(
+    name = "log_writer_base",
+    srcs = ["log_writer_base.inl"],
+    hdrs = ["log_writer_base.hh"],
+    deps = [
+        ":channel_message_rates_config",
+        ":log_writer_state",
+        ":message_rate_counter",
+        ":rate_status",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging/onboard:clockwork_message_handle",
+        "//clockwork/logging/onboard:clockwork_writer_policy",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard:writer",
+        "//clockwork/logging/onboard:writer_state",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:channel_observer",
+        "//clockwork/pinion:channel_observer_client",
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_subscriber",
+        "//clockwork/runners:epoll_manager",
+        "//clockwork/scaffolding:channels",
+        "//jewels/container:compare",
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/math:constants",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "log_writer_state",
+    srcs = [
+        "log_writer_state.cc",
+        "log_writer_state.inl",
+    ],
+    hdrs = ["log_writer_state.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "log_writer_state_clk",
+    srcs = ["log_writer_state.clk"],
+    outs = [
+        "log_writer_state.cc",
+        "log_writer_state.hh",
+        "log_writer_state.inl",
+    ],
+)
+
+cc_library(
+    name = "logger",
+    srcs = ["logger.cc"],
+    hdrs = ["logger.hh"],
+    deps = [
+        ":channel_message_rates",
+        ":channel_message_rates_config",
+        ":log_writer_state",
+        ":logger_config",
+        ":logger_status",
+        ":message_writer",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging/onboard:writer",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+clk(
+    name = "logger_channel_policies_clk",
+    srcs = ["logger_channel_policies.clk"],
+    deps = [
+        ":logger_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "logger_channels_clk",
+    srcs = ["logger_channels.clk"],
+    deps = [
+        ":channel_message_rates_clk",
+        ":logger_config_clk",
+        ":logger_status_clk",
+    ],
+)
+
+clk(
+    name = "logger_clk",
+    srcs = ["logger.clk"],
+    outs = [
+        "logger_cog.cc",
+        "logger_cog.hh",
+        "logger_cog.inl",
+        "logger_cog_dial.cc",
+        "logger_cog_dial.hh",
+        "logger_cog_dial.inl",
+    ],
+    deps = [
+        ":channel_message_rates_clk",
+        ":channel_message_rates_config_clk",
+        ":logger_config_clk",
+        ":logger_status_clk",
+        "//clockwork/logging:log_writer_config_clk",
+    ],
+)
+
+cc_library(
+    name = "logger_cog",
+    srcs = [
+        "logger_cog.cc",
+        "logger_cog.inl",
+    ],
+    hdrs = ["logger_cog.hh"],
+    deps = [
+        ":logger_cog_dial",
+        ":logger_cog_impl",
+        ":logger_cog_state",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "logger_cog_dial",
+    srcs = [
+        "logger_cog_dial.cc",
+        "logger_cog_dial.inl",
+    ],
+    hdrs = ["logger_cog_dial.hh"],
+    deps = [
+        ":channel_message_rates",
+        ":channel_message_rates_config",
+        ":logger_cog_state",
+        ":logger_config",
+        ":logger_status",
+        "//clockwork/dial:include_common",
+        "//clockwork/logging:log_writer_config",
+    ],
+)
+
+cc_library(
+    name = "logger_cog_impl",
+    srcs = ["logger_cog_impl.cc"],
+    deps = [
+        ":logger",
+        ":logger_cog_dial",
+        ":logger_config",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+    ],
+)
+
+cc_library(
+    name = "logger_cog_state",
+    hdrs = ["logger_cog_state.hh"],
+    deps = [
+        ":logger",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+    ],
+)
+
+cc_library(
+    name = "logger_config",
+    srcs = [
+        "logger_config.cc",
+        "logger_config.inl",
+    ],
+    hdrs = ["logger_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "logger_config_clk",
+    srcs = ["logger_config.clk"],
+    outs = [
+        "logger_config.cc",
+        "logger_config.hh",
+        "logger_config.inl",
+        "logger_config_proto.proto",
+        "logger_config_proto_conv.cc",
+        "logger_config_proto_conv.hh",
+        "logger_config_proto_conv.inl",
+    ],
+)
+
+proto_library(
+    name = "logger_config_proto",
+    srcs = ["logger_config_proto.proto"],
+)
+
+proto_cc_library(
+    name = "logger_config_proto_cc_library",
+    srcs = ["logger_config_proto.pb.cc"],
+    hdrs = ["logger_config_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "logger_config_proto_compile",
+    outputs = [
+        "logger_config_proto.pb.h",
+        "logger_config_proto.pb.cc",
+        "logger_config_proto_pb2.py",
+        "logger_config_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "logger_config_proto",
+)
+
+cc_library(
+    name = "logger_config_proto_conv",
+    srcs = [
+        "logger_config_proto_conv.cc",
+        "logger_config_proto_conv.inl",
+    ],
+    hdrs = ["logger_config_proto_conv.hh"],
+    deps = [
+        ":logger_config",
+        ":logger_config_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+    ],
+)
+
+proto_py_library(
+    name = "logger_config_proto_py_library",
+    srcs = ["logger_config_proto_pb2.py"],
+    data = ["logger_config_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+cc_library(
+    name = "logger_status",
+    srcs = [
+        "logger_status.cc",
+        "logger_status.inl",
+    ],
+    hdrs = ["logger_status.hh"],
+    deps = [
+        ":log_writer_state",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "logger_status_clk",
+    srcs = ["logger_status.clk"],
+    outs = [
+        "logger_status.cc",
+        "logger_status.hh",
+        "logger_status.inl",
+    ],
+    deps = [
+        ":log_writer_state_clk",
+        "//clockwork/logging:log_uuid_tag_clk",
+    ],
+)
+
+cc_library(
+    name = "message_rate_counter",
+    srcs = ["message_rate_counter.cc"],
+    hdrs = ["message_rate_counter.hh"],
+    deps = [
+        ":channel_message_rates_config",
+        ":rate_filter",
+        "//clockwork:repr_iface",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "message_writer",
+    srcs = ["message_writer.cc"],
+    hdrs = ["message_writer.hh"],
+    deps = [
+        ":channel_message_rates_config",
+        ":log_writer_base",
+        ":log_writer_state",
+        ":logger_config",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging/onboard:clockwork_message_handle",
+        "//clockwork/logging/onboard:writer",
+        "//jewels/container:compare",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "rate_filter",
+    srcs = ["rate_filter.cc"],
+    hdrs = ["rate_filter.hh"],
+    deps = [
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "rate_status",
+    srcs = [
+        "rate_status.cc",
+        "rate_status.inl",
+    ],
+    hdrs = ["rate_status.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "rate_status_clk",
+    srcs = ["rate_status.clk"],
+    outs = [
+        "rate_status.cc",
+        "rate_status.hh",
+        "rate_status.inl",
+    ],
+)

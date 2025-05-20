@@ -1,0 +1,70 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "filesystem",
+    srcs = [
+        "filesystem.cc",
+        "filesystem.inl",
+    ],
+    hdrs = ["filesystem.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error_code",
+        ":file_descriptor",
+        ":path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "error_code",
+    srcs = ["error_code.cc"],
+    hdrs = ["error_code.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@fmt"],
+)
+
+cc_library(
+    name = "file",
+    srcs = [
+        "file.cc",
+        "file.inl",
+    ],
+    hdrs = ["file.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error_code",
+        ":file_descriptor",
+        "//jewels/container:bounded_string",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "file_descriptor",
+    srcs = ["file_descriptor.cc"],
+    hdrs = ["file_descriptor.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error_code",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "path",
+    srcs = ["path.cc"],
+    hdrs = ["path.hh"],
+    tags = ["always-iwyu"],
+    visibility = ["//visibility:public"],
+    deps = ["//jewels/memory:memory_resource"],
+)

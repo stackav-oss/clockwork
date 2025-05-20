@@ -1,0 +1,15 @@
+channel_message_rates { channel_name: "/logger/config", min_msg_rate_hz: 1.0 }
+channel_message_rates { channel_name: "/logger/status", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/logger/message_rates", min_msg_rate_hz: 0.18 }
+channel_message_rates { channel_name: "/raw_gps", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/gps", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/raw_imu", min_msg_rate_hz: 90.0 }
+channel_message_rates { channel_name: "/imu", min_msg_rate_hz: 90.0 }
+channel_message_rates { channel_name: "/pose", min_msg_rate_hz: 90.0 }
+channel_message_rates { channel_name: "/lidar/raw", min_msg_rate_hz: 90.0 }
+channel_message_rates { channel_name: "/lidar/sweep", min_msg_rate_hz: 4.5 }
+channel_message_rates { channel_name: "/raw_video", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/video", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/perception/aligner_config", min_msg_rate_hz: 1.0 }
+channel_message_rates { channel_name: "/perception/debug", min_msg_rate_hz: 4.5 }
+window_size_sec: 10

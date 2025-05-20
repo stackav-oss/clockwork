@@ -1,0 +1,40 @@
+// Test message
+schema TestMessage
+{
+  uuid: f16264f6-bdcd-4b24-a8aa-793c5f86e6a3;
+
+  fields
+  {
+    // A test string
+    #1 message_string: VarString<127>;
+
+    // A test integer
+    #2 message_int64: Int64;
+
+    // A test double
+    #3 message_float64: Float64;
+  }
+}
+
+cpp_target test_message
+{
+  options
+  {
+    namespace clockwork::tools::tests::support;
+  }
+
+  schema TestMessage;
+
+  representation Tachyon<TestMessage>;
+  interface Tappy<TestMessage>;
+}
+
+py_target py_test_message
+{
+    interface Tappy<TestMessage>;
+}
+
+nanobind_target test_message_clk_nb
+{
+    binding Tappy<TestMessage>;
+}

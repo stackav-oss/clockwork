@@ -1,0 +1,17 @@
+use clockwork::examples::demo_system::imu::imu_message;
+
+// Raw IMU packet channel
+channel RawImuChannel
+{
+  name: "/raw_imu";
+  message_type: Tachyon<imu_message::ImuMessage>;
+  max_num_messages: 10;
+}
+
+// IMU channel
+channel ImuChannel
+{
+  name: "/imu";
+  message_type: Tachyon<imu_message::ImuMessage>;
+  max_num_messages: 10;
+}

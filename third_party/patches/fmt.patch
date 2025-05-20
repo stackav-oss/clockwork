@@ -1,0 +1,23 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 00000000..c864196b
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,10 @@
++cc_library(
++    name = "fmt",
++    srcs = [
++        "src/format.cc",
++        "src/os.cc",
++    ],
++    hdrs = glob(["include/**"]),
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 00000000..5d37ff7b
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1 @@
++module(name = "fmt")

@@ -1,0 +1,82 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.serialization.metadata;
+
+message TachyonMetadata {
+  int32 outer_type_id = 1;
+  repeated TypeDesc types = 2;
+  int32 version = 3;
+}
+
+message TypeDesc {
+  oneof type_desc {
+    BuiltInType built_in = 1;
+    SchemaType schema = 2;
+    ClkEnumType clk_enum = 3;
+    TagType tag = 4;
+    StrongType strong_type = 5;
+  }
+}
+
+message BuiltInType {
+  string fqn = 1;
+  bytes uuid = 6;
+  int32 size = 2;
+  int32 alignment = 3;
+  repeated Argument arguments = 4;
+  bytes hash = 5;
+}
+
+message Argument {
+  oneof arg {
+    int32 type_id = 1;
+    string value = 2;
+  }
+}
+
+message SchemaType {
+  string fqn = 1;
+  int32 size = 2;
+  int32 alignment = 3;
+  bytes schema_uuid = 4;
+  int32 version = 5;
+  repeated SchemaField fields = 6;
+  bytes hash = 7;
+}
+
+message SchemaField {
+  int32 offset = 1;
+  int32 num = 2;
+  string name = 3;
+  int32 type_id = 4;
+}
+
+message ClkEnumType {
+  string fqn = 1;
+  int32 options = 7;
+  int32 underlying_type_id = 2;
+  bytes enum_uuid = 3;
+  int32 version = 4;
+  repeated EnumValue values = 5;
+  bytes hash = 6;
+}
+
+message EnumValue {
+  int32 num = 1;
+  int64 value = 2;
+  string name = 3;
+}
+
+message TagType {
+  string fqn = 1;
+  bytes hash = 2;
+}
+
+message StrongType {
+  string fqn = 1;
+  int32 underlying_type_id = 2;
+  bytes hash = 3;
+}

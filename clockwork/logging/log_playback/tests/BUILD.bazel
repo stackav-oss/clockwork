@@ -1,0 +1,31 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "log_message_fetcher_test",
+    srcs = ["log_message_fetcher_test.cc"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/log_playback:log_message_fetcher",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//clockwork/logging/writers/tests/support:test_log_writer_config",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)

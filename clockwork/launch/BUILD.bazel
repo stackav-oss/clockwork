@@ -1,0 +1,13 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+exports_files([
+    "clockwork_prelaunch.sh",
+])
+
+filegroup(
+    name = "clockwork_prelaunch.textproto",
+    srcs = ["resources/clockwork_prelaunch.textproto"],
+    data = [":clockwork_prelaunch.sh"],
+    visibility = ["//visibility:public"],
+)

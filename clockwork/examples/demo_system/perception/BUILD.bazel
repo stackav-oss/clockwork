@@ -1,0 +1,165 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "perception_channel_policies_clk",
+    srcs = ["perception_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":perception_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "perception_channels_clk",
+    srcs = ["perception_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":perception_message_clk",
+        "//clockwork/dial:approx_aligner_config_clk",
+    ],
+)
+
+clk(
+    name = "perception_clk",
+    srcs = ["perception.clk"],
+    outs = [
+        "perception_cog.cc",
+        "perception_cog.hh",
+        "perception_cog.inl",
+        "perception_cog_dial.cc",
+        "perception_cog_dial.hh",
+        "perception_cog_dial.inl",
+        "perception_exe.cc",
+        "perception_exe.hh",
+        "perception_exe.inl",
+    ],
+    deps = [
+        ":perception_channels_clk",
+        ":perception_message_clk",
+        "//clockwork/dial:approx_aligner_config_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+        "//clockwork/examples/demo_system/camera:video_channels_clk",
+        "//clockwork/examples/demo_system/camera:video_message_clk",
+        "//clockwork/examples/demo_system/lidar:lidar_channels_clk",
+        "//clockwork/examples/demo_system/lidar:lidar_message_clk",
+        "//clockwork/examples/demo_system/localization:localization_channels_clk",
+        "//clockwork/examples/demo_system/localization:pose_message_clk",
+    ],
+)
+
+cc_library(
+    name = "perception_cog",
+    srcs = [
+        "perception_cog.cc",
+        "perception_cog.inl",
+    ],
+    hdrs = ["perception_cog.hh"],
+    deps = [
+        ":perception_cog_dial",
+        ":perception_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "perception_cog_dial",
+    srcs = [
+        "perception_cog_dial.cc",
+        "perception_cog_dial.inl",
+    ],
+    hdrs = ["perception_cog_dial.hh"],
+    deps = [
+        ":perception_message",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:include_common",
+        "//clockwork/examples/demo_system/camera:video_message",
+        "//clockwork/examples/demo_system/lidar:lidar_message",
+        "//clockwork/examples/demo_system/localization:pose_message",
+    ],
+)
+
+cc_library(
+    name = "perception_cog_impl",
+    srcs = ["perception_cog_impl.cc"],
+    data = ["//clockwork/examples/demo_system/perception/resources:approx_aligner_config.textproto"],
+    deps = [
+        ":perception_cog_dial",
+        ":perception_message",
+        "//clockwork/dial:approx_aligner",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/examples/demo_system/camera:video_message",
+        "//clockwork/examples/demo_system/lidar:lidar_message",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "@boost//:iterator",
+    ],
+)
+
+cc_binary(
+    name = "perception_exe",
+    srcs = [
+        "perception_exe.cc",
+        "perception_exe.hh",
+        "perception_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":perception_cog",
+        ":perception_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_config_proto_cc_library",
+        "//clockwork/dial:approx_aligner_config_proto_conv",
+        "//clockwork/examples/demo_system/camera:video_message",
+        "//clockwork/examples/demo_system/lidar:lidar_message",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "perception_message",
+    srcs = [
+        "perception_message.cc",
+        "perception_message.inl",
+    ],
+    hdrs = ["perception_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "perception_message_clk",
+    srcs = ["perception_message.clk"],
+    outs = [
+        "perception_message.cc",
+        "perception_message.hh",
+        "perception_message.inl",
+    ],
+)

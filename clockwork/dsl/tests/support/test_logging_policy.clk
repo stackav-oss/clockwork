@@ -1,0 +1,21 @@
+use clockwork::dsl::tests::support::hellomod;
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+
+policy ChannelLoggingPolicy for hellomod::HelloChan
+{
+    log_type = LogType::event;
+}
+
+policy ChannelLoggingPolicy for hellomod::AnotherChan
+{
+    log_type = LogType::telemetry;
+}
+
+policy LogReaderPolicy for hellomod::HelloChan
+{
+}
+
+policy LogReaderPolicy for hellomod::AnotherChan
+{
+    source_name = '/another/chan';
+}

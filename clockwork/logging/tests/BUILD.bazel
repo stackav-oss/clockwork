@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "compression_type_test",
+    srcs = ["compression_type_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "lite_compressor_test",
+    srcs = ["lite_compressor_test.cc"],
+    deps = [
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_error_test",
+    srcs = ["log_error_test.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_interval_test",
+    srcs = ["log_interval_test.cc"],
+    deps = [
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "log_timestamp_test",
+    srcs = ["log_timestamp_test.cc"],
+    deps = [
+        "//clockwork/logging:log_timestamp",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "wrapping_counter_test",
+    srcs = ["wrapping_counter_test.cc"],
+    deps = [
+        "//clockwork/logging:wrapping_counter",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "xxh3_checksum_test",
+    srcs = ["xxh3_checksum_test.cc"],
+    deps = [
+        "//clockwork/logging:xxh3_checksum",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "zstd_helper_test",
+    srcs = ["zstd_helper_test.cc"],
+    deps = [
+        "//clockwork/logging:zstd_helper",
+        "//jewels/memory:memory_resource",
+        "@catch2//:catch2_main",
+    ],
+)

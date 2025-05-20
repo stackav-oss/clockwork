@@ -1,0 +1,61 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding")
+
+cc_library(
+    name = "filesystem_wrapper",
+    srcs = [
+        "filesystem_wrapper.cc",
+        "filesystem_wrapper.inl",
+    ],
+    hdrs = ["filesystem_wrapper.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "fix_catch2_cerr_nonthreadsafe_redirect",
+    hdrs = ["fix_catch2_cerr_nonthreadsafe_redirect.hh"],
+    visibility = ["//visibility:public"],
+)
+
+py_cc_binding(
+    name = "nb_tmp_directory_guard",
+    srcs = ["nb_tmp_directory_guard.cc"],
+    use_type_stubs = False,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":tmp_directory_guard",
+        "@nanobind",
+    ],
+)
+
+cc_library(
+    name = "tmp_directory_guard",
+    srcs = ["tmp_directory_guard.cc"],
+    hdrs = ["tmp_directory_guard.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@boost//:filesystem"],
+)
+
+cc_library(
+    name = "wise_enum_proto_sync",
+    testonly = True,
+    hdrs = ["wise_enum_proto_sync.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@catch2//:catch2_main",
+        "@wise_enum",
+    ],
+)

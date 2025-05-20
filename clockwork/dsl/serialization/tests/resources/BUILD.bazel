@@ -1,0 +1,17 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_testonly = True)
+
+filegroup(
+    name = "tapmsg_tachyon",
+    srcs = [
+        "generic_primitives.bin",
+        "generic_values_only.bin",
+        "generic_with_au.bin",
+        "generic_with_schema.bin",
+        "tapmsg_default.bin",
+        "tapmsg_full.bin",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,61 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package jewels.simplelaunch.v1;
+
+// The state of a process.
+enum ProcessState {
+  // Required by linter.
+  // This will only be the value if the field is for some reason not set.
+  PROCESS_STATE_UNSPECIFIED = 0;
+  // The process is not running uet.
+  PROCESS_STATE_NOT_RUNNING = 1;
+  // The process is running.
+  PROCESS_STATE_RUNNING = 2;
+  // The process exited.
+  PROCESS_STATE_EXITED = 3;
+  // The process crashed.
+  PROCESS_STATE_CRASHED = 4;
+}
+
+// Information about a particular process.
+message ProcessInfo {
+  // The name of the process.
+  string name = 1;
+  // The PID of the process.
+  sfixed32 pid = 2;
+  // Whether or not the process generated a core dump.
+  bool core_dumped = 3;
+  // The state of the process.
+  ProcessState state = 4;
+}
+
+// Information about a pre-launch tasks.
+message PreLaunchInfo {
+  // The name of the process.
+  string name = 1;
+  // Whether or not the task succeeded.
+  bool succeeded = 4;
+}
+
+message GetProcessListResponse {
+  // Information about managed processes.
+  repeated ProcessInfo process_info = 1;
+  // Information about pre-launch tasks.
+  repeated PreLaunchInfo pre_launch_info = 2;
+}
+
+message SimpleLaunchCommand {
+  oneof command {
+    // The name of the process to stop.
+    string start_process = 1;
+    // The name of the process to start.
+    string stop_process = 2;
+    // Get logs from a process.
+    string get_logs = 3;
+    // Stop all processes.
+    bool stop_all_processes = 4;
+  }
+}

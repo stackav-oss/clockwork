@@ -1,0 +1,123 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+# This gazelle config applies to all downstream packages and is only suitable for global configuration
+# Note: If you'd like to enable grpc-gateway, do that at the package level since a global configuration
+# for grpc-gateway will break builds not using grpc-gateway proto field options.
+plugins:
+  - name: cpp
+    implementation: builtin:cpp
+  - name: protoc-gen-grpc-cpp
+    implementation: grpc:grpc:cpp
+  - name: protoc-gen-go
+    implementation: golang:protobuf:protoc-gen-go
+  - name: protoc-gen-go-grpc
+    implementation: grpc:grpc-go:protoc-gen-go-grpc
+    deps:
+      - "@org_golang_google_grpc//:go_default_library"
+      - "@org_golang_google_grpc//codes"
+      - "@org_golang_google_grpc//status"
+  - name: protoc-gen-grpc-gateway
+    implementation: grpc-ecosystem:grpc-gateway:protoc-gen-grpc-gateway
+    deps:
+      - "@org_golang_google_protobuf//proto"
+      - "@com_github_grpc_ecosystem_grpc_gateway_v2//runtime"
+      - "@com_github_grpc_ecosystem_grpc_gateway_v2//utilities"
+      - "@org_golang_google_genproto_googleapis_api//annotations"
+      - "@org_golang_google_grpc//grpclog"
+      - "@org_golang_google_grpc//metadata"
+    options:
+      - generate_unbound_methods=true
+  - name: protoc-gen-grpc-openapiv2
+    implementation: grpc-ecosystem:grpc-gateway:protoc-gen-grpc-openapiv2
+    options:
+      - use_go_templates=true
+  - name: protoc-gen-nolint
+    implementation: tools/gazelle/plugins.star%protoc-gen-nolint
+  - name: python
+    implementation: builtin:python
+  - name: pyi
+    implementation: builtin:pyi
+  - name: protoc-gen-grpc-python
+    implementation: grpc:grpc:protoc-gen-grpc-python
+  - name: ts_proto
+    implementation: stephenh:ts-proto:protoc-gen-ts-proto
+    options:
+      - "useAsyncIterable=true"
+      - "emitImportedFiles=false"
+      - "esModuleInterop=true"
+rules:
+  - name: proto_compile
+    implementation: stackb:rules_proto:proto_compile
+    visibility:
+      - //visibility:public
+  - name: proto_cc_library
+    implementation: stackb:rules_proto:proto_cc_library
+    visibility:
+      - //visibility:public
+    deps:
+      - "@protobuf//:protobuf"
+  - name: grpc_cc_library
+    implementation: stackb:rules_proto:grpc_cc_library
+    visibility:
+      - //visibility:public
+    deps:
+      - "@grpc//:grpc++"
+      - "@grpc//:grpc++_reflection"
+  - name: grpc_py_library
+    implementation: stackb:rules_proto:grpc_py_library
+    visibility:
+      - "//visibility:public"
+    deps:
+      - "@pip//pytest_grpc"
+  - name: proto_go_library
+    implementation: stackb:rules_proto:proto_go_library
+    visibility:
+      - //visibility:public
+    deps:
+      - "@org_golang_google_protobuf//reflect/protoreflect"
+      - "@org_golang_google_protobuf//runtime/protoimpl"
+  - name: proto_py_library
+    implementation: stackb:rules_proto:proto_py_library
+    visibility:
+      - //visibility:public
+    deps:
+      - "@protobuf//:protobuf_python"
+  - name: proto_ts_library
+    implementation: stackb:rules_proto:proto_ts_library
+    visibility:
+      - //visibility:public
+    deps:
+      - "@clockwork//:node_modules/long"
+      - "@clockwork//:node_modules/protobufjs"
+languages:
+  - name: cpp
+    plugins:
+      # protoc-gen-nolint depends on cpp and thus must come after it in this list
+      - cpp
+      - protoc-gen-nolint
+      - protoc-gen-grpc-cpp
+    rules:
+      - proto_compile
+      - proto_cc_library
+  - name: go
+    plugins:
+      - protoc-gen-go
+      - protoc-gen-go-grpc
+    rules:
+      - proto_compile
+      - proto_go_library
+  - name: py
+    plugins:
+      - python
+      - pyi
+    rules:
+      - proto_compile
+      - proto_py_library
+  - name: ts_proto
+    plugins:
+      - ts_proto
+    rules:
+      - proto_compile
+      - proto_ts_library
+    enabled: false

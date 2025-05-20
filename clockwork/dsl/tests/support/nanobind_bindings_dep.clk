@@ -1,0 +1,61 @@
+some_number: Int32 = 22;
+some_array_size: UInt64 = 23;
+
+// Bar docs
+schema Bar
+{
+  uuid: d13379f1-8013-479b-80b9-975899bddbcb;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // some_val doc
+    #0 some_val: Float32;
+  }
+}
+
+// OtherEnum docs
+enum OtherEnum
+{
+  uuid: ae9dd5ec-d333-43a1-be43-91fbd7f4380d;
+
+  values
+  {
+    // Foo doc
+    #1 foo default;
+
+    // Bar doc
+    #2 bar;
+  }
+}
+
+cpp_target nanobind_test_msg_dependency
+{
+  options
+  {
+    namespace foo;
+  }
+
+  enum OtherEnum;
+
+  schema Bar;
+
+  representation Tachyon<Bar>;
+  interface Tappy<Bar>;
+}
+
+
+nanobind_target nanobind_test_msg_dependency1_clk_nb
+{
+  binding OtherEnum;
+  constant some_number;
+}
+
+nanobind_target nanobind_test_msg_dependency2_clk_nb
+{
+  binding Tappy<Bar>;
+}

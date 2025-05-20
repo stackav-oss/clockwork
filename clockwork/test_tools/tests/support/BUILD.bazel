@@ -1,0 +1,329 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "addition_cog",
+    srcs = [
+        "addition_cog.cc",
+        "addition_cog.inl",
+    ],
+    hdrs = ["addition_cog.hh"],
+    deps = [
+        ":addition_cog_dial",
+        ":addition_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "addition_cog_dial",
+    srcs = [
+        "addition_cog_dial.cc",
+        "addition_cog_dial.inl",
+    ],
+    hdrs = ["addition_cog_dial.hh"],
+    deps = [
+        ":addition_message",
+        ":sum_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "addition_cog_impl",
+    srcs = ["addition_cog_impl.cc"],
+    deps = [
+        ":addition_cog_dial",
+        ":addition_message",
+        ":sum_message",
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "@boost//:iterator",
+    ],
+)
+
+clk(
+    name = "addition_cogs_clk",
+    srcs = ["addition_cogs.clk"],
+    outs = [
+        "addition_cog.cc",
+        "addition_cog.hh",
+        "addition_cog.inl",
+        "addition_cog_dial.cc",
+        "addition_cog_dial.hh",
+        "addition_cog_dial.inl",
+    ],
+    deps = [":messages_clk"],
+)
+
+cc_library(
+    name = "addition_message",
+    srcs = [
+        "addition_message.cc",
+        "addition_message.inl",
+    ],
+    hdrs = ["addition_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+cc_binary(
+    name = "addition_system_exe",
+    srcs = [
+        "addition_system_exe.cc",
+        "addition_system_exe.hh",
+        "addition_system_exe.inl",
+    ],
+    deps = [
+        ":addition_cog",
+        ":addition_message",
+        ":addition_tester_cog",
+        ":sum_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "addition_system_lib",
+    srcs = [
+        "addition_system_exe.cc",
+        "addition_system_exe.inl",
+    ],
+    hdrs = ["addition_system_exe.hh"],
+    deps = [
+        ":addition_cog",
+        ":addition_message",
+        ":addition_tester_cog",
+        ":sum_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_binary(
+    name = "addition_system_synthetic_exe",
+    srcs = [
+        "addition_system_synthetic_exe.cc",
+        "addition_system_synthetic_exe.hh",
+        "addition_system_synthetic_exe.inl",
+    ],
+    deps = [
+        ":addition_cog",
+        ":addition_message",
+        ":sum_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "addition_system_synthetic_lib",
+    srcs = [
+        "addition_system_synthetic_exe.cc",
+        "addition_system_synthetic_exe.inl",
+    ],
+    hdrs = ["addition_system_synthetic_exe.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/test_tools/tests/support:addition_cog",
+        "//clockwork/test_tools/tests/support:addition_message",
+        "//clockwork/test_tools/tests/support:sum_message",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+clk(
+    name = "addition_test_system_clk",
+    srcs = ["addition_test_system.clk"],
+    outs = [
+        "addition_system_exe.cc",
+        "addition_system_exe.hh",
+        "addition_system_exe.inl",
+        "addition_test_system.addition_system.SimCpu_channel_allocations.csv",
+        "addition_test_system.addition_system.SimCpu_channel_spy_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_event_logger_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_simplelaunch_config.textproto",
+        "addition_test_system.addition_system.SimCpu_telemetry_logger_config.tachyon",
+        "clockwork.clockwork.test_tools.tests.support.addition_test_system.addition_system.proc.tachyon",
+    ],
+    deps = [
+        ":addition_cogs_clk",
+        ":addition_tester_cog_clk",
+        ":messages_clk",
+    ],
+)
+
+clk(
+    name = "addition_test_system_synthetic_clk",
+    srcs = ["addition_test_system_synthetic.clk"],
+    outs = [
+        "addition_system_synthetic_exe.cc",
+        "addition_system_synthetic_exe.hh",
+        "addition_system_synthetic_exe.inl",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_allocations.csv",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_spy_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_event_logger_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_log_reader_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_simplelaunch_config.textproto",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_telemetry_logger_config.tachyon",
+        "clockwork.clockwork.test_tools.tests.support.addition_test_system_synthetic.addition_system_synthetic.proc.tachyon",
+    ],
+    deps = [
+        ":addition_cogs_clk",
+        ":addition_tester_cog_clk",
+        ":messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+cc_library(
+    name = "addition_tester_cog",
+    srcs = [
+        "addition_tester_cog.cc",
+        "addition_tester_cog.inl",
+    ],
+    hdrs = ["addition_tester_cog.hh"],
+    deps = [
+        ":addition_tester_cog_dial",
+        ":addition_tester_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+clk(
+    name = "addition_tester_cog_clk",
+    srcs = ["addition_tester_cog.clk"],
+    outs = [
+        "addition_tester_cog.cc",
+        "addition_tester_cog.hh",
+        "addition_tester_cog.inl",
+        "addition_tester_cog_dial.cc",
+        "addition_tester_cog_dial.hh",
+        "addition_tester_cog_dial.inl",
+    ],
+    deps = [":messages_clk"],
+)
+
+cc_library(
+    name = "addition_tester_cog_dial",
+    srcs = [
+        "addition_tester_cog_dial.cc",
+        "addition_tester_cog_dial.inl",
+    ],
+    hdrs = ["addition_tester_cog_dial.hh"],
+    deps = [
+        ":addition_message",
+        ":sum_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "addition_tester_cog_impl",
+    srcs = ["addition_tester_cog_impl.cc"],
+    deps = [
+        ":addition_message",
+        ":addition_tester_cog_dial",
+        ":sum_message",
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/dial:cond_time_since_last_exec",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)
+
+clk(
+    name = "messages_clk",
+    srcs = ["messages.clk"],
+    outs = [
+        "addition_message.cc",
+        "addition_message.hh",
+        "addition_message.inl",
+        "sum_message.cc",
+        "sum_message.hh",
+        "sum_message.inl",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "simcpu.textproto",
+    srcs = [
+        "addition_test_system.addition_system.SimCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "addition_test_system.addition_system.SimCpu_channel_allocations.csv",
+        "addition_test_system.addition_system.SimCpu_channel_spy_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_event_logger_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_telemetry_logger_config.tachyon",
+        "clockwork.clockwork.test_tools.tests.support.addition_test_system.addition_system.proc.tachyon",
+        ":addition_system_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+cc_library(
+    name = "sum_message",
+    srcs = [
+        "sum_message.cc",
+        "sum_message.inl",
+    ],
+    hdrs = ["sum_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "testcpu.textproto",
+    srcs = [
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_allocations.csv",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_spy_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_event_logger_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_log_reader_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_telemetry_logger_config.tachyon",
+        "clockwork.clockwork.test_tools.tests.support.addition_test_system_synthetic.addition_system_synthetic.proc.tachyon",
+        ":addition_system_synthetic_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)

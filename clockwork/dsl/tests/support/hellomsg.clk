@@ -1,0 +1,178 @@
+// Hello, Msg!
+schema HelloMsg
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Sequence number
+    #1 seqno: Int64;
+
+    // Some data
+    #2 data: FixedArray<Byte, 1'024>;
+
+    // An identifier
+    #3 greeting_id: Uuid<SampleTag>;
+
+    // A self-referential identifier
+    // Instead of using a separate tag type, this uses the schema as a tag
+    #4 msg_id: Uuid<HelloMsg>;
+  }
+}
+
+representation Tachyon<HelloMsg>
+{
+  options
+  {
+    align: 512bit;
+  }
+
+  fields
+  {
+    #2 data
+    {
+      align: 16byte;
+    }
+  }
+}
+
+representation Pachyon: Tachyon<HelloMsg>
+{
+}
+
+// Hello, composition!
+schema BetterThanInheritance
+{
+  uuid: 35ed1940-cb0d-4028-9b52-5864e43076a4;
+
+  fields
+  {
+    // Hi
+    #3 hello: HelloMsg;
+
+    // From the future
+    #4 generic: GenericMsg<Float32, 32>;
+
+    // A string
+    #5 desc: VarString<max_size=64>;
+
+    // An enum value
+    #6 greeting: HelloEnum = HelloEnum::hola;
+  }
+}
+
+// Hello, templates!
+schema GenericMsg
+{
+  uuid: 751af312-b2bd-4f6a-8c1b-c5e1d87e74bc;
+
+  parameters
+  {
+    // Type of array elements
+    #1 data_type: Type;
+
+    // Number of elements
+    #2 data_size = 3;
+  }
+
+  fields
+  {
+    // Some data
+    #3 data: VarArray<data_type, max_size=data_size>;
+  }
+}
+
+// Enum
+enum HelloEnum
+{
+  uuid: bea931ce-fba6-4abd-941c-16ab44088aec;
+  values
+  {
+    // Normal greeting
+    #1 hi default;
+
+    // A bit more formal
+    #2 hello;
+
+    // Spanish
+    #3 hola;
+
+    // Mandarin
+    #4 ni_hao;
+
+    // Hindi
+    #5 namaste;
+  }
+}
+
+// Enum that represents bit flags
+enum HelloFlags
+{
+  uuid: 4af95503-6257-4a78-8da1-efcc7f14d4d2;
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+  values
+  {
+    // No bits set
+    #0 none default { underlying_value: 0; }
+    // LSB
+    #1 flag1 { underlying_value: 1; }
+    // Bit1
+    #2 flag2 { underlying_value: 2; }
+    // Bit2
+    #3 flag3 { underlying_value: 4; }
+    // Bit0 + Bit1
+    #4 flag12 { underlying_value: 3; }
+  }
+}
+
+// An example tag.
+tag SampleTag;
+
+cpp_target hello_msg_onboard
+{
+  options
+  {
+    namespace clockwork::demo;
+  }
+
+  schema HelloMsg;
+  schema BetterThanInheritance;
+  schema GenericMsg;
+  tag SampleTag;
+  enum HelloEnum;
+
+  representation Tachyon<HelloMsg>;
+  interface Tap<Tachyon<HelloMsg>>;
+
+  representation Tachyon<GenericMsg<Float32, 32>>;
+  interface Tappy<GenericMsg<Float32, 32>>;
+  representation Tachyon<BetterThanInheritance>;
+  interface Tap<Tachyon<BetterThanInheritance>>;
+
+  converter ProtobufToTap<Protobuf<HelloMsg>, Tappy<HelloMsg>>;
+}
+
+proto_target hello_msg_proto
+{
+  options
+  {
+    package hello_msg;
+  }
+  representation Protobuf<HelloMsg>;
+}
+
+some_constant: Int32 = 42;
+
+nanobind_target hello_msg_clk_nb
+{
+  constant some_constant;
+
+  binding HelloEnum;
+
+  binding Tappy<HelloMsg>;
+  binding Tappy<BetterThanInheritance>;
+  binding Tappy<GenericMsg<Float32, 32>>;
+}

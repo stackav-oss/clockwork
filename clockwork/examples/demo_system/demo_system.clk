@@ -1,0 +1,32 @@
+use clockwork::logging::writers::logger_channel_policies;
+use clockwork::examples::demo_system::camera::camera;
+use clockwork::examples::demo_system::camera::video_channel_policies;
+use clockwork::examples::demo_system::imu::imu;
+use clockwork::examples::demo_system::imu::imu_channel_policies;
+use clockwork::examples::demo_system::lidar::lidar;
+use clockwork::examples::demo_system::lidar::lidar_channel_policies;
+use clockwork::examples::demo_system::localization::localization;
+use clockwork::examples::demo_system::localization::localization_channel_policies;
+use clockwork::examples::demo_system::logger;
+use clockwork::examples::demo_system::perception::perception;
+use clockwork::examples::demo_system::perception::perception_channel_policies;
+use clockwork::examples::demo_system::gps::gps;
+use clockwork::examples::demo_system::gps::gps_channel_policies;
+use clockwork::examples::demo_system::spy;
+
+box DemoSystem
+{
+  new camera_box: camera::CameraExe;
+  new gps_box: gps::GpsExe;
+  new imu_box: imu::ImuExe;
+  new lidar_box: lidar::LidarExe;
+  new localization_box: localization::LocalizationExe;
+  new logger_box: logger::LoggerExe;
+  new perception_box: perception::PerceptionExe;
+  new spy_box: spy::SpyExe;
+}
+
+system_target demo_system_sys
+{
+  box: DemoSystem;
+}

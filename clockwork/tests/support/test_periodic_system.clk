@@ -1,0 +1,75 @@
+use clockwork::tests::support::exec_time::{ExecTime, ExecState};
+use clockwork::tests::support::periodic_cogs::{Periodic1HzCog, Periodic10HzCog, Periodic100HzCog, Periodic1000HzCog, PeriodicTesterCog};
+
+// Channel for 1Hz cog
+channel Periodic1HzChannel
+{
+  message_type: Tachyon<ExecTime>;
+  max_num_messages: 4000;
+}
+
+// Channel for 10Hz cog
+channel Periodic10HzChannel
+{
+  message_type: Tachyon<ExecTime>;
+  max_num_messages: 4000;
+}
+
+// Channel for 100Hz cog
+channel Periodic100HzChannel
+{
+  message_type: Tachyon<ExecTime>;
+  max_num_messages: 4000;
+}
+
+// Channel for 1000Hz cog
+channel Periodic1000HzChannel
+{
+  message_type: Tachyon<ExecTime>;
+  max_num_messages: 4000;
+}
+
+box TestPeriodicBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+  new state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+  new periodic_1hz: Periodic1HzCog;
+  new periodic_10hz: Periodic10HzCog;
+  new periodic_100hz: Periodic100HzCog;
+  new periodic_1000hz: Periodic1000HzCog;
+  new periodic_tester: PeriodicTesterCog;
+
+  connect periodic_1hz.exec_time to Periodic1HzChannel;
+  connect periodic_10hz.exec_time to Periodic10HzChannel;
+  connect periodic_100hz.exec_time to Periodic100HzChannel;
+  connect periodic_1000hz.exec_time to Periodic1000HzChannel;
+
+  connect state to periodic_tester.state;
+  connect Periodic1HzChannel to periodic_tester.input_1hz;
+  connect Periodic10HzChannel to periodic_tester.input_10hz;
+  connect Periodic100HzChannel to periodic_tester.input_100hz;
+  connect Periodic1000HzChannel to periodic_tester.input_1000hz;
+}
+
+cpp_executable test_periodic_system_exe
+{
+  casing
+  {
+    box TestPeriodicBox;
+  }
+}
+
+cpu_domain PeriodicCpu;
+
+box TestPeriodicSystem
+{
+  new box: TestPeriodicBox;
+  new proc: Process(executable=test_periodic_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=PeriodicCpu) to proc;
+}
+
+system_target test_periodic_system
+{
+  box: TestPeriodicSystem;
+}

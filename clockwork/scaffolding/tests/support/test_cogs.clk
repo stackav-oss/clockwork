@@ -1,0 +1,131 @@
+use clockwork::scaffolding::tests::support::test_msgs;
+use clockwork::diagnostics::report::Report as DiagnosticsReport;
+
+//
+extern_type MyCxxFibState;
+
+//
+cog InitCog1
+{
+    configs
+    {
+        config: Tappy<test_msgs::InitConfig>;
+    }
+
+    states
+    {
+        state: Tappy<test_msgs::State>
+        {
+            mutable: true;
+        }
+        fib: MyCxxFibState
+        {
+            mutable: true;
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+
+//
+cog TestCog1
+{
+    resources
+    {
+        memory1: persistent;
+        memory2: persistent;
+    }
+
+    configs
+    {
+        cfg_a: Tappy<test_msgs::Config>;
+    }
+
+    states
+    {
+        state_a: Tappy<test_msgs::State>
+        {
+            mutable: true;
+        }
+    }
+
+    outputs
+    {
+        out_a: Tappy<test_msgs::Message1>;
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(200ms);
+        execute when: periodic;
+    }
+
+    diagnostics
+    {
+        group_id: "fault_injector_a";
+    }
+}
+
+//
+cog TestCog2
+{
+    resources
+    {
+        memory: persistent;
+    }
+
+    states
+    {
+        state_a: Tappy<test_msgs::State>;
+        fib: MyCxxFibState
+        {
+            mutable: true;
+        }
+    }
+
+    inputs
+    {
+        in_a: Tappy<test_msgs::Message1>;
+    }
+
+    outputs
+    {
+        out_a: Tappy<test_msgs::Message2>;
+    }
+
+    execution
+    {
+        condition new_msg: new_message(min=1, max=2, input=in_a);
+        execute when: new_msg;
+    }
+
+    diagnostics
+    {
+        group_id: "fault_injector_b";
+        instance_id: "a";
+    }
+}
+
+cpp_target test_cogs
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+  extern
+  {
+    header_file: "clockwork/scaffolding/tests/support/cxx_state.hh";
+    namespace: clockwork::testing;
+    type
+    {
+        name: MyCxxFibState;
+    }
+  }
+
+  cog InitCog1;
+  cog TestCog1;
+  cog TestCog2;
+}

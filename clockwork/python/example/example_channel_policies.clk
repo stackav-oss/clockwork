@@ -1,0 +1,17 @@
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+use clockwork::python::example::example_channels;
+
+policy ChannelLoggingPolicy for example_channels::Input1Channel
+{
+  log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for example_channels::Input2Channel
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for example_channels::OutputChannel
+{
+    log_type = LogType::telemetry;
+}

@@ -1,0 +1,69 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "optional_test",
+    srcs = ["optional_test.cc"],
+    deps = [
+        "//jewels/container/tap:optional",
+        "//jewels/std:span",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "protobuf_to_tap_test",
+    srcs = ["protobuf_to_tap_test.cc"],
+    deps = [
+        "//jewels/container/tap:protobuf_to_tap",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "tap_to_protobuf_test",
+    srcs = ["tap_to_protobuf_test.cc"],
+    deps = [
+        "//jewels/container/tap:tap_to_protobuf",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/std:expected",
+        "//jewels/time:conversions",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+        "@protobuf",
+    ],
+)
+
+cc_test(
+    name = "var_array_test",
+    srcs = ["var_array_test.cc"],
+    deps = [
+        "//jewels/container/tap:var_array",
+        "//jewels/memory:aligned_storage",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "var_string_test",
+    srcs = ["var_string_test.cc"],
+    deps = [
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:aligned_storage",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)

@@ -1,0 +1,79 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
+load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
+
+# Gazelle directives
+# ------------------
+# gazelle:prefix github.com/stackav-oss/clockwork
+# gazelle:proto file
+# gazelle:python_generation_mode file
+# gazelle:python_default_visibility NONE
+
+# gazelle:map_kind bzl_library bzl_library @bazel_skylib//:bzl_library.bzl
+
+# gazelle:map_kind cc_binary cc_binary //tools/rules:cc.bzl
+# gazelle:map_kind cc_library cc_library //tools/rules:cc.bzl
+# gazelle:map_kind cc_test cc_test //tools/rules:cc.bzl
+
+# gazelle:map_kind py_binary py_binary //tools/rules:python.bzl
+# gazelle:map_kind py_library py_library //tools/rules:python.bzl
+# gazelle:map_kind py_test py_test //tools/rules:python.bzl
+
+# gazelle:map_kind go_binary go_binary @rules_go//go:def.bzl
+# gazelle:map_kind go_library go_library @rules_go//go:def.bzl
+# gazelle:map_kind go_test go_test @rules_go//go:def.bzl
+
+# gazelle:proto_rule proto_go_library resolve nanopb.proto @com_github_nanopb_nanopb//:nanopb_go_proto
+
+# keep-sorted start
+# gazelle:resolve proto nanopb.proto @com_github_nanopb_nanopb//:nanopb_proto
+# gazelle:resolve proto proto google/api/annotations.proto @googleapis//google/api:annotations_proto
+# gazelle:resolve proto proto google/api/field_behavior.proto @googleapis//google/api:field_behavior_proto
+# gazelle:resolve proto proto google/api/httpbody.proto @googleapis//google/api:httpbody_proto
+# gazelle:resolve py fltk @fltk
+# gazelle:resolve py tckdd @tckdd
+# gazelle:resolve py mcap @mcap//:mcap_py
+# gazelle:resolve py mypy_boto3_s3 @pyright_requirements//mypy_boto3_s3
+# gazelle:resolve py clockwork.dsl.tests.support.pytapmsg //clockwork/dsl/tests/support:pytapmsg
+# gazelle:resolve py root_repo_py @root_repo//:root_repo_py
+# keep-sorted end
+
+gazelle_common_args = [
+    "-proto_configs=tools/gazelle/build_stack_rules_proto.yaml",
+    "-proto_plugin=tools/gazelle/plugins.star%protoc-gen-nolint",
+]
+
+# Top-level library to set module import path
+py_library(
+    name = "clockwork",
+    imports = ["."],
+    visibility = ["//visibility:public"],
+)
+
+gazelle(
+    name = "gazelle",
+    args = gazelle_common_args + ["--third_party_file_map=tools/gazelle/cc_plugin/resources/third_party_mapping.json"],
+    gazelle = ":gazelle-binary",
+)
+
+gazelle_binary(
+    name = "gazelle-binary",
+    languages = [
+        "@gazelle//language/go",
+        "@gazelle//language/proto",
+        "@build_stack_rules_proto//language/protobuf",
+        "@bazel_skylib_gazelle_plugin//bzl",
+        "@rules_python_gazelle_plugin//python",
+        "//tools/gazelle/cc_plugin",
+    ],
+)
+
+gazelle_python_manifest(
+    name = "gazelle_python_manifest",
+    modules_mapping = "//tools/gazelle:modules_map",
+    pip_repository_name = "clockwork_pip",
+    visibility = ["//visibility:public"],
+)

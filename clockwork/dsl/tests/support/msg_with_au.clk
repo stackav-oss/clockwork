@@ -1,0 +1,106 @@
+use jewels::units::clk::au as au
+
+// Message to test Tap.
+schema MsgWithAu
+{
+  uuid: 59fa065d-e4d8-4d98-aa1a-aba77639290e;
+  fields
+  {
+    // Distance type using aurora units.
+    // Specifically uses an init value for testing.
+    #1 distance: au::MetersD = 22.2;
+  }
+}
+
+// Message with two aurora units
+schema MsgWithMultipleAu
+{
+  uuid: 9d9c9766-dde8-455f-ba16-931edb1cdcb5;
+  fields
+  {
+    // Distance type using aurora units.
+    // Specifically uses an init value for testing.
+    #1 distance: au::MetersD = 22.2;
+
+    // Another one
+    #2 distance2: au::MetersD = 30.5;
+
+    // Var Array of au
+    #3 distance_array: VarArray<au::MetersD, 100>;
+  }
+}
+// optional au
+schema MsgWithOptionalAu
+{
+  uuid: 23c90917-d8df-495a-8990-e50a5e1c2c8e;
+  fields
+  {
+    // Distance type using aurora units.
+    // Specifically uses an init value for testing.
+    #1 distance: Optional<au::MetersD>;
+  }
+}
+
+// Message to test AU generics
+schema GenericWithAu
+{
+  uuid: d99beb4a-f04c-4aaf-aec5-2cef7bfa7591;
+
+  parameters
+  {
+    // Some type parameter
+    #1 TypePar: Type;
+  }
+
+  fields
+  {
+    // A field
+    #2 field: TypePar;
+  }
+}
+
+cpp_target msg_with_au
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  schema MsgWithAu;
+  schema MsgWithMultipleAu;
+  schema MsgWithOptionalAu;
+  schema GenericWithAu;
+  representation Tachyon<MsgWithAu>;
+  interface Tap<Tachyon<MsgWithAu>>;
+  representation Tachyon<GenericWithAu<au::MetersF>>;
+  interface Tap<Tachyon<GenericWithAu<au::MetersF>>>;
+
+  representation Tachyon<MsgWithMultipleAu>;
+  interface Tap<Tachyon<MsgWithMultipleAu>>;
+  representation Tachyon<MsgWithOptionalAu>;
+  interface Tap<Tachyon<MsgWithOptionalAu>>;
+  converter ProtobufToTap<Protobuf<MsgWithAu>, Tappy<MsgWithAu>>;
+  converter ProtobufToTap<Protobuf<MsgWithOptionalAu>, Tappy<MsgWithOptionalAu>>;
+  converter TapToProtobuf<Tappy<MsgWithAu>, Protobuf<MsgWithAu>>;
+  converter TapToProtobuf<Tappy<MsgWithOptionalAu>, Protobuf<MsgWithOptionalAu>>;
+  converter TapToProtobuf<Tap<Tachyon<MsgWithMultipleAu>>, Protobuf<MsgWithMultipleAu>>;
+  converter ProtobufToTap<Protobuf<MsgWithMultipleAu>, Tap<Tachyon<MsgWithMultipleAu>>>;
+}
+
+proto_target msg_with_au_proto
+{
+  options
+  {
+    package clockwork.proto_testing;
+  }
+
+  representation Protobuf<MsgWithAu>;
+  representation Protobuf<MsgWithMultipleAu>;
+  representation Protobuf<MsgWithOptionalAu>;
+}
+
+py_target msg_with_au_py
+{
+  representation Tachyon<GenericWithAu<au::MetersF>>;
+  interface GenericWithAuMetersF: Tap<Tachyon<GenericWithAu<au::MetersF>>>;
+}

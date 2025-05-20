@@ -1,0 +1,44 @@
+# GENERATED FILE - DO NOT EDIT!
+#
+# To update this file, run:
+#   bazel run //:gazelle_python_manifest.update
+
+---
+manifest:
+  modules_mapping:
+    _pytest: pytest
+    annotated_types: annotated_types
+    certifi: certifi
+    charset_normalizer: charset_normalizer
+    click: click
+    exceptiongroup: exceptiongroup
+    git: GitPython
+    gitdb: gitdb
+    google._upb._message: protobuf
+    google.protobuf: protobuf
+    humanize: humanize
+    idna: idna
+    iniconfig: iniconfig
+    lz4: lz4
+    markdown_it: markdown_it_py
+    mdurl: mdurl
+    nanobind: nanobind
+    numpy: numpy
+    packaging: packaging
+    pluggy: pluggy
+    py: pytest
+    pydantic: pydantic
+    pydantic_core: pydantic_core
+    pygments: pygments
+    pytest: pytest
+    requests: requests
+    rich: rich
+    runfiles: bazel_runfiles
+    smmap: smmap
+    tomli: tomli
+    typing_extensions: typing_extensions
+    typing_inspection: typing_inspection
+    urllib3: urllib3
+    zstandard: zstandard
+  pip_repository:
+    name: clockwork_pip

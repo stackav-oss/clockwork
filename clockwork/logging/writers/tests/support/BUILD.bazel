@@ -1,0 +1,47 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "test_log_writer_config",
+    srcs = ["test_log_writer_config.cc"],
+    hdrs = ["test_log_writer_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:log_uuid",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/writers:channel_message_rates_config",
+        "//clockwork/logging/writers:logger_config",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "test_publisher",
+    srcs = ["test_publisher.cc"],
+    hdrs = ["test_publisher.hh"],
+    deps = [
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:slot",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)

@@ -1,0 +1,19 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+cc_binary(
+    name = "copy_log",
+    srcs = ["copy_log.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:copy_log",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@tclap",
+    ],
+)

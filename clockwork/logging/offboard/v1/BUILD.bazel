@@ -1,0 +1,120 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_proto_grpc//buf:defs.bzl", "buf_proto_lint_test")
+
+# gazelle:proto_language go enabled false
+# gazelle:proto_language py enabled false
+
+package(default_visibility = ["//visibility:public"])
+
+buf_proto_lint_test(
+    name = "log_metadata_buf_lint",
+    protos = [":log_metadata_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_cc_library(
+    name = "log_metadata_cc_library",
+    srcs = ["log_metadata.pb.cc"],
+    hdrs = ["log_metadata.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "log_metadata_cpp_compile",
+    outputs = [
+        "log_metadata.pb.cc",
+        "log_metadata.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "log_metadata_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "log_metadata_proto",
+    srcs = ["log_metadata.proto"],
+)
+
+buf_proto_lint_test(
+    name = "log_union_buf_lint",
+    protos = [":log_union_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_cc_library(
+    name = "log_union_cc_library",
+    srcs = ["log_union.pb.cc"],
+    hdrs = ["log_union.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "log_union_cpp_compile",
+    outputs = [
+        "log_union.pb.cc",
+        "log_union.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "log_union_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "log_union_proto",
+    srcs = ["log_union.proto"],
+)
+
+buf_proto_lint_test(
+    name = "writer_config_buf_lint",
+    protos = [":writer_config_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_cc_library(
+    name = "writer_config_cc_library",
+    srcs = ["writer_config.pb.cc"],
+    hdrs = ["writer_config.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "writer_config_cpp_compile",
+    outputs = [
+        "writer_config.pb.cc",
+        "writer_config.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "writer_config_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "writer_config_proto",
+    srcs = ["writer_config.proto"],
+)

@@ -1,0 +1,84 @@
+use clockwork::common::process_description;
+
+// Published channel metadata
+schema PublishedChannelMetadata
+{
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 127;
+
+    // Maximum schema name size
+    #1 max_schema_name_size = 511;
+
+    // Maximum schema definition size
+    #2 max_schema_definition_size = 16383;
+  }
+
+  fields
+  {
+    // Publisher UUID string
+    #3 uuid: Uuid<process_description::EndpointInstanceId>;
+
+    // Number of slots
+    #4 num_slots: UInt32;
+
+    // Message size in bytes
+    #5 message_size: UInt32;
+
+    // Channel name
+    #6 channel_name: VarString<max_channel_name_size>;
+
+    // Schema name
+    #7 schema_name: VarString<max_schema_name_size>;
+
+    // Schema definition
+    #8 schema_definition: VarArray<Byte, max_schema_definition_size>;
+  }
+}
+
+// Channel spy configuration
+schema ChannelSpyConfig
+{
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 127;
+
+    // Maximum schema name size
+    #1 max_schema_name_size = 511;
+
+    // Maximum schema definition size
+    #2 max_schema_definition_size = 16383;
+
+    // Maximum number of channels
+    #3 max_num_channels = 512;
+  }
+
+  fields
+  {
+    // Logged channels
+    #4 channels: VarArray<
+      PublishedChannelMetadata<
+        max_channel_name_size=max_channel_name_size,
+        max_schema_name_size=max_schema_name_size,
+        max_schema_definition_size=max_schema_definition_size>,
+      max_num_channels>;
+  }
+}
+
+cpp_target channel_spy_config
+{
+  options
+  {
+    namespace clockwork::tools;
+  }
+
+  schema PublishedChannelMetadata;
+  representation Tachyon<PublishedChannelMetadata<>>;
+  interface PublishedChannelMetadataTap: Tap<Tachyon<PublishedChannelMetadata<>>>;
+
+  schema ChannelSpyConfig;
+  representation Tachyon<ChannelSpyConfig<>>;
+  interface ChannelSpyConfigTap: Tap<Tachyon<ChannelSpyConfig<>>>;
+}

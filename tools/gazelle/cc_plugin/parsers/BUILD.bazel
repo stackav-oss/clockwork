@@ -1,0 +1,25 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "parsers",
+    srcs = ["parsers.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/cc_plugin/parsers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/gazelle/cc_plugin/common",
+        "//tools/gazelle/parser",
+    ],
+)
+
+go_test(
+    name = "parsers_test",
+    srcs = ["parsers_test.go"],
+    embed = [":parsers"],
+    deps = [
+        "//tools/gazelle/cc_plugin/common",
+        "@com_github_stretchr_testify//require",
+    ],
+)

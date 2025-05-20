@@ -1,0 +1,16 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "scope_guard_test",
+    srcs = ["scope_guard_test.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/scope_guard",
+        "@catch2//:catch2_main",
+    ],
+)

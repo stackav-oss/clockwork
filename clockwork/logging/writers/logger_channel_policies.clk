@@ -1,0 +1,19 @@
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+use clockwork::logging::channel_type::ChannelType;
+use clockwork::logging::writers::logger_channels;
+
+policy ChannelLoggingPolicy for logger_channels::LoggerConfigChannel
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerStatusChannel
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerMessageRatesChannel
+{
+    log_type = LogType::telemetry;
+}

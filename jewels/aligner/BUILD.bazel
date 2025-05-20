@@ -1,0 +1,11 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "aligner",
+    srcs = ["aligner.inl"],
+    hdrs = ["aligner.hh"],
+    visibility = ["//visibility:public"],
+)

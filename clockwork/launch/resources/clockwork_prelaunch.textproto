@@ -1,0 +1,4 @@
+pre_launch {
+  name: "clockwork_prelaunch"
+  executable: "clockwork/launch/clockwork_prelaunch.sh"
+}

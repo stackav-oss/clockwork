@@ -1,0 +1,26 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "md5",
+    srcs = [
+        "md5.cc",
+        "md5.inl",
+    ],
+    hdrs = ["md5.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@openssl//:ssl"],
+)
+
+cc_library(
+    name = "sha1",
+    srcs = [
+        "sha1.cc",
+        "sha1.inl",
+    ],
+    hdrs = ["sha1.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@sha1"],
+)

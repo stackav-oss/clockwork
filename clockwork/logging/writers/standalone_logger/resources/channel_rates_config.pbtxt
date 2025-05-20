@@ -1,0 +1,4 @@
+channel_message_rates { channel_name: "/logger/logger_config", min_msg_rate_hz: 1.0 }
+channel_message_rates { channel_name: "/logger/logger_status", min_msg_rate_hz: 9.0 }
+channel_message_rates { channel_name: "/logger/channel_rates", min_msg_rate_hz: 0.10 }
+window_size_sec: 10

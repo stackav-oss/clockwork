@@ -1,0 +1,90 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "cc_targets",
+    srcs = ["cc_targets.py"],
+    deps = [":targets"],
+)
+
+py_library(
+    name = "clk_targets",
+    srcs = ["clk_targets.py"],
+    deps = [
+        ":targets",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_library(
+    name = "extract_targets",
+    srcs = ["extract_targets.py"],
+    deps = [
+        ":targets",
+        "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_executable",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:nanobind_target",
+        "//clockwork/dsl/ir:proto_target",
+        "//clockwork/dsl/ir:py_target",
+        "//clockwork/dsl/ir:system_target",
+    ],
+)
+
+py_library(
+    name = "nanobind_targets",
+    srcs = ["nanobind_targets.py"],
+    visibility = ["//clockwork/dsl:__subpackages__"],
+    deps = [":targets"],
+)
+
+py_library(
+    name = "proto_targets",
+    srcs = ["proto_targets.py"],
+    deps = [
+        ":targets",
+        "//clockwork/dsl/serialization:protobuf_clk",
+    ],
+)
+
+py_library(
+    name = "py_targets",
+    srcs = ["py_targets.py"],
+    deps = [":targets"],
+)
+
+py_library(
+    name = "simple_launch_targets",
+    srcs = ["simple_launch_targets.py"],
+    deps = [":targets"],
+)
+
+py_library(
+    name = "targets",
+    srcs = ["targets.py"],
+    deps = [
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pydantic",
+    ],
+)
+
+py_binary(
+    name = "update_clk_targets",
+    srcs = ["update_clk_targets.py"],
+    visibility = ["//visibility:public"],  # This is needed for bazel target auto-generation across the repo
+    deps = [
+        ":extract_targets",
+        ":targets",
+        "//clockwork/dsl:clk_exception",
+        "//tools:sort_build_file",
+        "@clockwork_pip//click",
+        "@clockwork_pip//gitpython",
+    ],
+)

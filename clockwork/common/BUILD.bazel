@@ -1,0 +1,266 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+exports_files([
+    "process_description.clk",
+    "multi_subscriber_config.clk",
+    "platform_diagnostics_config.clk",
+])
+
+cc_library(
+    name = "abstract_cog",
+    srcs = ["abstract_cog.cc"],
+    hdrs = ["abstract_cog.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":abstract_cog_queue",
+        ":cog_envelope",
+        ":cog_execution_error",
+        ":forward",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "abstract_cog_queue",
+    srcs = ["abstract_cog_queue.cc"],
+    hdrs = ["abstract_cog_queue.hh"],
+    deps = [
+        ":forward",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "abstract_epoll_manager",
+    srcs = ["abstract_epoll_manager.cc"],
+    hdrs = ["abstract_epoll_manager.hh"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "abstract_timer",
+    srcs = ["abstract_timer.cc"],
+    hdrs = ["abstract_timer.hh"],
+    deps = [
+        ":abstract_epoll_manager",
+        "//clockwork/pinion:observer",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "cog_envelope",
+    srcs = ["cog_envelope.cc"],
+    hdrs = ["cog_envelope.hh"],
+    deps = [
+        ":forward",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "cog_execution_error",
+    srcs = [
+        "cog_execution_error.cc",
+        "cog_execution_error.inl",
+    ],
+    hdrs = ["cog_execution_error.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "cog_execution_error_clk",
+    srcs = ["cog_execution_error.clk"],
+    outs = [
+        "cog_execution_error.cc",
+        "cog_execution_error.hh",
+        "cog_execution_error.inl",
+    ],
+)
+
+clk(
+    name = "cog_gpu_assignment_config_clk",
+    srcs = ["cog_gpu_assignment_config.clk"],
+    outs = [
+        "cog_gpu_assignment_config_clk_cc.cc",
+        "cog_gpu_assignment_config_clk_cc.hh",
+        "cog_gpu_assignment_config_clk_cc.inl",
+        "cog_gpu_assignment_config_clk_py.py",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":process_description_clk"],
+)
+
+cc_library(
+    name = "cog_gpu_assignment_config_clk_cc",
+    srcs = [
+        "cog_gpu_assignment_config_clk_cc.cc",
+        "cog_gpu_assignment_config_clk_cc.inl",
+    ],
+    hdrs = ["cog_gpu_assignment_config_clk_cc.hh"],
+    deps = [
+        ":process_description",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+py_library(
+    name = "cog_gpu_assignment_config_clk_py",
+    srcs = ["cog_gpu_assignment_config_clk_py.py"],
+    data = [":cog_gpu_assignment_config_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+cc_library(
+    name = "exec_tools",
+    srcs = [
+        "exec_tools.cc",
+        "exec_tools.inl",
+    ],
+    hdrs = ["exec_tools.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/pinion:shm_channel",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/runners:deterministic_channel_handler",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/meta:concepts",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "@tclap",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "forward",
+    hdrs = ["forward.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "multi_subscriber_config",
+    srcs = [
+        "multi_subscriber_config.cc",
+        "multi_subscriber_config.inl",
+    ],
+    hdrs = ["multi_subscriber_config.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":process_description",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "multi_subscriber_config_clk",
+    srcs = ["multi_subscriber_config.clk"],
+    outs = [
+        "multi_subscriber_config.cc",
+        "multi_subscriber_config.hh",
+        "multi_subscriber_config.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":process_description_clk"],
+)
+
+cc_library(
+    name = "platform_diagnostics_config",
+    srcs = [
+        "platform_diagnostics_config.cc",
+        "platform_diagnostics_config.inl",
+    ],
+    hdrs = ["platform_diagnostics_config.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":process_description",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/diagnostics:report",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "platform_diagnostics_config_clk",
+    srcs = ["platform_diagnostics_config.clk"],
+    outs = [
+        "platform_diagnostics_config.cc",
+        "platform_diagnostics_config.hh",
+        "platform_diagnostics_config.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":process_description_clk",
+        "//clockwork/diagnostics:report_clk",
+    ],
+)
+
+cc_library(
+    name = "process_description",
+    srcs = [
+        "process_description.cc",
+        "process_description.inl",
+    ],
+    hdrs = ["process_description.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "process_description_clk",
+    srcs = ["process_description.clk"],
+    outs = [
+        "process_description.cc",
+        "process_description.hh",
+        "process_description.inl",
+    ],
+    visibility = ["//visibility:public"],
+)

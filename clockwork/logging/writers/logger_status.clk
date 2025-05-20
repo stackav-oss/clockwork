@@ -1,0 +1,49 @@
+use clockwork::logging::log_uuid_tag::LogUuidTag;
+use clockwork::logging::writers::log_writer_state::LogWriterState;
+
+// Logger status message
+schema LoggerStatus
+{
+  uuid: cdefaaa7-84da-4d6a-a662-6f8106ad549c;
+  fields
+  {
+    // Log writer state
+    #0 state: LogWriterState;
+
+    // Number of dropped messages
+    #1 drop_count: UInt64;
+
+    // Maximum write backlog
+    #2 max_backlog: Duration;
+
+    // Human readable status string
+    #3 status_string: VarString<max_size=128>;
+
+    // Transmit time
+    #4 transmit_time: SyncTime;
+
+    // Message rate (msgs/sec)
+    #5 msgs_per_sec: Float64;
+
+    // Data rate (bytes/sec)
+    #6 bytes_per_sec: Float64;
+
+    // Number of channels with a low message rate
+    #7 num_low_rate_channels: UInt64;
+
+    // Name of a channel with a low message rate
+    #8 low_rate_channel_name: VarString<max_size=127>;
+  }
+}
+
+cpp_target logger_status
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  schema LoggerStatus;
+
+  representation Tachyon<LoggerStatus>;
+  interface LoggerStatusTap: Tap<Tachyon<LoggerStatus>>;
+}

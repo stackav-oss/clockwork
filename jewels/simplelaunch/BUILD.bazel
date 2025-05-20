@@ -1,0 +1,192 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+# Export simplelaunch_config_test.sh so it's available for simplelaunch_config_test targets
+exports_files([
+    "simplelaunch_config_test.sh",
+])
+
+cc_binary(
+    name = "simplelaunch",
+    srcs = ["simplelaunch.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":config",
+        ":simplelaunch_impl",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@tclap",
+    ],
+)
+
+cc_library(
+    name = "child_process",
+    srcs = ["child_process.cc"],
+    hdrs = ["child_process.hh"],
+    deps = [
+        ":config",
+        ":cpu_affinity",
+        ":service_definition",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/utility:fix_clockwork_path",
+        "@boost//:asio",
+        "@boost//:date_time",
+        "@boost//:system",
+        "@fmt",
+    ],
+)
+
+py_binary(
+    name = "cli_client",
+    srcs = ["cli_client.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":client",
+        "//jewels/simplelaunch/v1:service_py_library",
+        "@clockwork_pip//click",
+        "@clockwork_pip//rich",
+    ],
+)
+
+py_library(
+    name = "client",
+    srcs = ["client.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//:clockwork",  # keep
+        "//jewels/simplelaunch/v1:service_py_library",
+        "@clockwork_pip//requests",
+    ],
+)
+
+cc_library(
+    name = "config",
+    srcs = ["config.cc"],
+    hdrs = ["config.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/simplelaunch/v1:config_cc_library",
+        "//jewels/std:expected",
+        "@protobuf",
+    ],
+)
+
+cc_binary(
+    name = "config_tool",
+    srcs = ["config_tool.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":config",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@protobuf",
+        "@tclap",
+    ],
+)
+
+cc_library(
+    name = "cpu_affinity",
+    srcs = ["cpu_affinity.cc"],
+    hdrs = ["cpu_affinity.hh"],
+    deps = ["//jewels/log_cerr"],
+)
+
+py_binary(
+    name = "dump_system",
+    srcs = ["dump_system.py"],
+    deps = ["@clockwork_pip//click"],
+)
+
+bzl_library(
+    name = "rules_bzl",
+    srcs = ["rules.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "service",
+    srcs = ["service.cc"],
+    hdrs = ["service.hh"],
+    deps = [
+        ":child_process",
+        ":config",
+        ":service_definition",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@abseil-cpp//absl/status",
+        "@boost//:asio",
+        "@boost//:beast",
+        "@boost//:system",
+        "@fmt",
+        "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "service_definition",
+    hdrs = ["service_definition.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/simplelaunch/v1:service_cc_library",
+        "@wise_enum",
+    ],
+)
+
+sh_binary(
+    name = "simplelaunch_config_test",
+    srcs = ["simplelaunch_config_test.sh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "simplelaunch_impl",
+    srcs = ["simplelaunch_impl.cc"],
+    hdrs = ["simplelaunch_impl.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":config",
+        ":service",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/simplelaunch/v1:config_cc_library",
+        "//jewels/std:expected",
+        "//jewels/utility:fix_clockwork_path",
+        "@boost//:asio",
+        "@boost//:filesystem",
+        "@boost//:process",
+        "@boost//:system",
+        "@fmt",
+        "@protobuf",
+    ],
+)

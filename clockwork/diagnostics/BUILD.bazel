@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "report.clk",
+    "database_config.clk",
+])
+
+clk(
+    name = "channels_clk",
+    srcs = ["channels.clk"],
+    deps = [":report_clk"],
+)
+
+cc_library(
+    name = "database_config",
+    srcs = [
+        "database_config.cc",
+        "database_config.inl",
+    ],
+    hdrs = ["database_config.hh"],
+    deps = [
+        ":report",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "database_config_clk",
+    srcs = ["database_config.clk"],
+    outs = [
+        "database_config.cc",
+        "database_config.hh",
+        "database_config.inl",
+    ],
+    deps = [":report_clk"],
+)
+
+cc_library(
+    name = "report",
+    srcs = [
+        "report.cc",
+        "report.inl",
+    ],
+    hdrs = ["report.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "report_clk",
+    srcs = ["report.clk"],
+    outs = [
+        "report.cc",
+        "report.hh",
+        "report.inl",
+    ],
+)
+
+cc_library(
+    name = "report_definitions",
+    hdrs = ["report_definitions.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "reporter",
+    hdrs = ["reporter.hh"],
+)

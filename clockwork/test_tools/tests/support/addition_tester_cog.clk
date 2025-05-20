@@ -1,0 +1,30 @@
+use clockwork::test_tools::tests::support::messages::{AdditionMessage, SumMessage}
+// Cog that just adds up its inputs
+cog AdditionTesterCog
+{
+    inputs
+    {
+        sum_message: Tappy<SumMessage>;
+    }
+
+    outputs
+    {
+        addition_message: Tappy<AdditionMessage>;
+    }
+
+    execution
+    {
+        condition new_sum_message: new_message(sum_message);
+        condition periodic_10hz: time_since_last_exec(100ms);
+        execute when: new_sum_message or periodic_10hz;
+    }
+}
+
+cpp_target addition_tester_cog
+{
+    options
+    {
+        namespace clockwork::system_runner;
+    }
+    cog AdditionTesterCog;
+}

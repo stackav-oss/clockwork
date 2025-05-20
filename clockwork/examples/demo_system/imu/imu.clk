@@ -1,0 +1,75 @@
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::examples::demo_system::imu::imu_channels;
+use clockwork::examples::demo_system::imu::imu_message;
+
+// Cog to simulate the IMU device sending raw IMU packets over UDP
+cog ImuDeviceCog
+{
+  outputs
+  {
+    raw_imu: Tappy<imu_message::ImuMessage>;
+  }
+
+  execution
+  {
+    condition periodic_10ms: time_since_last_exec(10ms);
+    execute when: periodic_10ms;
+  }
+}
+
+// Cog to simulate a driver that converts raw IMU packets into IMU messages
+cog ImuDriverCog
+{
+  inputs
+  {
+    raw_imu: Tappy<imu_message::ImuMessage>;
+  }
+
+  outputs
+  {
+    imu: Tappy<imu_message::ImuMessage>;
+  }
+
+  execution
+  {
+    condition new_raw_imu: new_message(raw_imu, min=1, max=1);
+    execute when: new_raw_imu;
+  }
+}
+
+cpp_target imu_cog
+{
+  options
+  {
+    namespace clockwork::demo_system::imu;
+  }
+
+  cog ImuDeviceCog;
+  cog ImuDriverCog;
+}
+
+box ImuBox
+{
+  new device_cog: ImuDeviceCog;
+  new driver_cog: ImuDriverCog;
+
+  connect device_cog.raw_imu to imu_channels::RawImuChannel;
+  connect imu_channels::RawImuChannel to driver_cog.raw_imu;
+  connect driver_cog.imu to imu_channels::ImuChannel;
+}
+
+cpp_executable imu_exe
+{
+  casing
+  {
+    box ImuBox;
+  }
+}
+
+box ImuExe
+{
+  new imu_box: ImuBox;
+  new imu_proc: Process(executable=imu_exe);
+  apply HostProcess(process=imu_proc) in imu_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to imu_proc;
+}

@@ -1,0 +1,42 @@
+// Some field
+schema NotVarPacket
+{
+  fields
+  {
+    // Some field
+    #1 value: UInt32;
+  }
+}
+
+// UDP socket.
+udp_socket IncomingUdpSocket
+{
+  address: 127.0.0.1;
+  port: 0;
+  direction: incoming;
+  message_type: Tachyon<NotVarPacket>;
+}
+
+// UDP socket.
+udp_socket OutgoingUdpSocket
+{
+  address: 127.0.0.1;
+  port: 0;
+  direction: outgoing;
+  message_type: Tachyon<NotVarPacket>;
+}
+
+cpp_target hello_udp_not_var_packet
+{
+    options
+    {
+        namespace clockwork::testing;
+    }
+
+    schema NotVarPacket;
+    representation Tachyon<NotVarPacket>;
+    interface Tap<Tachyon<NotVarPacket>>;
+
+    udp_socket IncomingUdpSocket;
+    udp_socket OutgoingUdpSocket;
+}

@@ -1,0 +1,176 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "lidar_channel_policies_clk",
+    srcs = ["lidar_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lidar_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "lidar_channels_clk",
+    srcs = ["lidar_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [":lidar_message_clk"],
+)
+
+clk(
+    name = "lidar_clk",
+    srcs = ["lidar.clk"],
+    outs = [
+        "lidar_cog.cc",
+        "lidar_cog.hh",
+        "lidar_cog.inl",
+        "lidar_cog_dial.cc",
+        "lidar_cog_dial.hh",
+        "lidar_cog_dial.inl",
+        "lidar_exe.cc",
+        "lidar_exe.hh",
+        "lidar_exe.inl",
+    ],
+    deps = [
+        ":lidar_channels_clk",
+        ":lidar_message_clk",
+        ":lidar_state_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+        "//clockwork/examples/demo_system/localization:localization_channels_clk",
+        "//clockwork/examples/demo_system/localization:pose_message_clk",
+    ],
+)
+
+cc_library(
+    name = "lidar_cog",
+    srcs = [
+        "lidar_cog.cc",
+        "lidar_cog.inl",
+    ],
+    hdrs = ["lidar_cog.hh"],
+    deps = [
+        ":lidar_cog_dial",
+        ":lidar_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "lidar_cog_dial",
+    srcs = [
+        "lidar_cog_dial.cc",
+        "lidar_cog_dial.inl",
+    ],
+    hdrs = ["lidar_cog_dial.hh"],
+    deps = [
+        ":lidar_message",
+        ":lidar_state",
+        "//clockwork/dial:include_common",
+        "//clockwork/examples/demo_system/localization:pose_message",
+    ],
+)
+
+cc_library(
+    name = "lidar_cog_impl",
+    srcs = ["lidar_cog_impl.cc"],
+    deps = [
+        ":lidar_cog_dial",
+        ":lidar_message",
+        ":lidar_state",
+        "//clockwork/dial:msg_input",
+        "//clockwork/examples/demo_system/localization:pose_filter",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container/tap:var_array",
+        "//jewels/math:constants",
+        "//jewels/memory:memory_resource",
+        "@boost//:iterator",
+    ],
+)
+
+cc_binary(
+    name = "lidar_exe",
+    srcs = [
+        "lidar_exe.cc",
+        "lidar_exe.hh",
+        "lidar_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lidar_cog",
+        ":lidar_message",
+        ":lidar_state",
+        "//clockwork:repr_iface",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "lidar_message",
+    srcs = [
+        "lidar_message.cc",
+        "lidar_message.inl",
+    ],
+    hdrs = ["lidar_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "lidar_message_clk",
+    srcs = ["lidar_message.clk"],
+    outs = [
+        "lidar_message.cc",
+        "lidar_message.hh",
+        "lidar_message.inl",
+    ],
+    deps = ["//clockwork/examples/demo_system/localization:pose_message_clk"],
+)
+
+cc_library(
+    name = "lidar_state",
+    srcs = [
+        "lidar_state.cc",
+        "lidar_state.inl",
+    ],
+    hdrs = ["lidar_state.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "lidar_state_clk",
+    srcs = ["lidar_state.clk"],
+    outs = [
+        "lidar_state.cc",
+        "lidar_state.hh",
+        "lidar_state.inl",
+    ],
+    deps = [":lidar_message_clk"],
+)

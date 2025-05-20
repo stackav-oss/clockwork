@@ -1,0 +1,11 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/approx_aligner:__subpackages__"],
+)
+
+exports_files([
+    "approx_aligner_config.textproto",
+])

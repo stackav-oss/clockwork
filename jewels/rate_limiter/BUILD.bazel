@@ -1,0 +1,12 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "token_bucket",
+    srcs = ["token_bucket.cc"],
+    hdrs = ["token_bucket.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["//jewels/time:sync_time"],
+)

@@ -1,0 +1,8 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_testonly = True)
+
+exports_files([
+    "runner_test.textproto",
+])

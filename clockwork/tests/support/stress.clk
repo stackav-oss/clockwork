@@ -1,0 +1,322 @@
+use clockwork::tests::support::exec_time::ExecState;
+
+cpu_domain LocalCpu;
+
+// Stress test state
+extern_type StressState;
+
+// Stress test init cog
+cog StressInitCog
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  execution
+  {
+      execute when: init;
+  }
+}
+
+// Stress test reporter cog
+cog StressReporterCog
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  execution
+  {
+    condition every_1s: time_since_last_exec(1000ms);
+    execute when: every_1s;
+  }
+}
+
+// Stress test timer cog 2
+cog StressTimerCog2
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_state: Tappy<ExecState>;
+  }
+
+  execution
+  {
+    condition every_200us: time_since_last_exec(200us);
+    execute when: every_200us;
+  }
+}
+
+// Stress test timer cog 3
+cog StressTimerCog3
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_state: Tappy<ExecState>;
+  }
+
+  execution
+  {
+    condition every_300us: time_since_last_exec(300us);
+    execute when: every_300us;
+  }
+}
+
+// Stress test timer cog 5
+cog StressTimerCog5
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_state: Tappy<ExecState>;
+  }
+
+  execution
+  {
+    condition every_500us: time_since_last_exec(500us);
+    execute when: every_500us;
+  }
+}
+
+// Stress test timer cog 7
+cog StressTimerCog7
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_state: Tappy<ExecState>;
+  }
+
+  execution
+  {
+    condition every_700us: time_since_last_exec(700us);
+    execute when: every_700us;
+  }
+}
+
+// Stress test timer cog 11
+cog StressTimerCog11
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_state: Tappy<ExecState>;
+  }
+
+  execution
+  {
+    condition every_1100us: time_since_last_exec(1100us);
+    execute when: every_1100us;
+  }
+}
+
+// Stress test subscriber cog
+cog StressSubscriberCog
+{
+  states
+  {
+    state: StressState
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    exec_state2: Tappy<ExecState> { max_msgs: 11; }
+    exec_state3: Tappy<ExecState> { max_msgs: 7; }
+    exec_state5: Tappy<ExecState> { max_msgs: 5; }
+    exec_state7: Tappy<ExecState> { max_msgs: 3; }
+    exec_state11: Tappy<ExecState> { max_msgs: 2; }
+  }
+
+  execution
+  {
+    condition new_exec_state2: new_message(exec_state2, min=7, max=11);
+    condition new_exec_state3: new_message(exec_state3, min=5, max=7);
+    condition new_exec_state5: new_message(exec_state5, min=3, max=5);
+    condition new_exec_state7: new_message(exec_state7, min=2, max=3);
+    condition new_exec_state11: new_message(exec_state11, min=1, max=2);
+    execute when: new_exec_state2 or new_exec_state3 or new_exec_state5 or new_exec_state7 or new_exec_state11;
+  }
+}
+
+// Stress channel 2
+channel StressChannel2
+{
+  name: "/stress/channel2";
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 100;
+}
+
+// Stress channel 3
+channel StressChannel3
+{
+  name: "/stress/channel3";
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 100;
+}
+
+// Stress channel 5
+channel StressChannel5
+{
+  name: "/stress/channel5";
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 100;
+}
+
+// Stress channel 7
+channel StressChannel7
+{
+  name: "/stress/channel7";
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 100;
+}
+
+// Stress channel 11
+channel StressChannel11
+{
+  name: "/stress/channel11";
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 100;
+}
+
+box StressBox
+{
+    new stress_init_cog: StressInitCog;
+    new memory: HeapMemory(max_size=10'000'000);
+    new state: State(representation=StressState, memory_resource=memory, init=stress_init_cog.state);
+
+    new stress_reporter_cog: StressReporterCog;
+    connect state to stress_reporter_cog.state;
+
+    new stress_cog2: StressTimerCog2;
+    connect state to stress_cog2.state;
+    connect stress_cog2.exec_state to StressChannel2;
+
+    new stress_cog3: StressTimerCog3;
+    connect state to stress_cog3.state;
+    connect stress_cog3.exec_state to StressChannel3;
+
+    new stress_cog5: StressTimerCog5;
+    connect state to stress_cog5.state;
+    connect stress_cog5.exec_state to StressChannel5;
+
+    new stress_cog7: StressTimerCog7;
+    connect state to stress_cog7.state;
+    connect stress_cog7.exec_state to StressChannel7;
+
+    new stress_cog11: StressTimerCog11;
+    connect state to stress_cog11.state;
+    connect stress_cog11.exec_state to StressChannel11;
+
+    new stress_subscriber_cog: StressSubscriberCog;
+    connect state to stress_subscriber_cog.state;
+    connect StressChannel2 to stress_subscriber_cog.exec_state2;
+    connect StressChannel3 to stress_subscriber_cog.exec_state3;
+    connect StressChannel5 to stress_subscriber_cog.exec_state5;
+    connect StressChannel7 to stress_subscriber_cog.exec_state7;
+    connect StressChannel11 to stress_subscriber_cog.exec_state11;
+}
+
+box StressSystem
+{
+    new stress_box: StressBox;
+    new stress_proc: Process(executable=stress_exe);
+    apply HostProcess(process=stress_proc) in stress_box;
+    apply HostCpuDomain(cpu_domain=LocalCpu) to stress_proc;
+}
+
+cpp_target stress_cog
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  extern
+  {
+    header_file: "clockwork/tests/support/stress_state.hh";
+    namespace: clockwork::tests;
+    type
+    {
+        name: StressState;
+    }
+  }
+
+  cog StressInitCog;
+  cog StressReporterCog;
+  cog StressTimerCog2;
+  cog StressTimerCog3;
+  cog StressTimerCog5;
+  cog StressTimerCog7;
+  cog StressTimerCog11;
+  cog StressSubscriberCog;
+}
+
+cpp_executable stress_exe
+{
+  casing
+  {
+    extern StressState;
+
+    cog StressInitCog;
+    cog StressReporterCog;
+    cog StressTimerCog2;
+    cog StressTimerCog3;
+    cog StressTimerCog5;
+    cog StressTimerCog7;
+    cog StressTimerCog11;
+    cog StressSubscriberCog;
+  }
+}
+
+system_target stress_sys
+{
+    box: StressSystem;
+}

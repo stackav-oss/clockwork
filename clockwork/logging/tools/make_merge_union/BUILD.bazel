@@ -1,0 +1,16 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+cc_binary(
+    name = "make_merge_union",
+    srcs = ["make_merge_union.cc"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging/offboard:merge_logs",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "@tclap",
+    ],
+)

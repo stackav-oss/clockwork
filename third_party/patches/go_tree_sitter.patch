@@ -1,0 +1,25 @@
+diff --git BUILD.bazel BUILD.bazel
+index b1759b2..b731523 100644
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -69,6 +69,7 @@ go_library(
+         "wasm_store.h",
+     ],
+     cgo = True,
++    copts = ["-w"],
+     importpath = "github.com/dougthor42/go-tree-sitter",
+     visibility = ["//visibility:public"],
+ )
+diff --git python/BUILD.bazel python/BUILD.bazel
+index 1bb60e9..f46ba81 100644
+--- python/BUILD.bazel
++++ python/BUILD.bazel
+@@ -10,6 +10,8 @@ go_library(
+         "//:common_libs",
+     ],
+     cgo = True,
++    copts = ["-w"],
++    cxxopts = ["-w"],
+     importpath = "github.com/dougthor42/go-tree-sitter/python",
+     visibility = ["//visibility:public"],
+     deps = ["//:go-tree-sitter"],

@@ -1,0 +1,323 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "cog_conditions",
+    srcs = ["cog_conditions.inl"],
+    hdrs = ["cog_conditions.hh"],
+    deps = [
+        ":input_condition",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_configs",
+    srcs = ["cog_configs.inl"],
+    hdrs = ["cog_configs.hh"],
+    deps = [
+        ":detail",
+        ":interface",
+        "//clockwork/common:process_description",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_diagnostics",
+    srcs = ["cog_diagnostics.inl"],
+    hdrs = ["cog_diagnostics.hh"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/diagnostics:report",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid5",
+    ],
+)
+
+cc_library(
+    name = "cog_inputs",
+    srcs = ["cog_inputs.inl"],
+    hdrs = ["cog_inputs.hh"],
+    deps = [
+        ":cog_passthrough_observer",
+        ":input_view",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_memory_resources",
+    srcs = ["cog_memory_resources.inl"],
+    hdrs = ["cog_memory_resources.hh"],
+    deps = [
+        ":detail",
+        "//clockwork/common:process_description",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_passthrough_observer",
+    srcs = ["cog_passthrough_observer.inl"],
+    hdrs = ["cog_passthrough_observer.hh"],
+    deps = [
+        "//clockwork/pinion:observer",
+        "//jewels/memory:pointers",
+    ],
+)
+
+cc_library(
+    name = "cog_publishers",
+    srcs = ["cog_publishers.inl"],
+    hdrs = ["cog_publishers.hh"],
+    deps = [
+        ":detail",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_state",
+    srcs = ["cog_state.inl"],
+    hdrs = ["cog_state.hh"],
+    deps = [
+        ":interface",
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "cog_states",
+    srcs = ["cog_states.inl"],
+    hdrs = ["cog_states.hh"],
+    deps = [
+        ":cog_passthrough_observer",
+        ":cog_state",
+        ":detail",
+        ":interface",
+        "//clockwork/common:process_description",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_statistics",
+    srcs = [
+        "cog_statistics.cc",
+        "cog_statistics.inl",
+    ],
+    hdrs = ["cog_statistics.hh"],
+    deps = [
+        "//clockwork/dsl/cog:ten_nanosecond_type",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "cog_timers",
+    srcs = ["cog_timers.inl"],
+    hdrs = ["cog_timers.hh"],
+    deps = [
+        ":cog_passthrough_observer",
+        ":detail",
+        ":time_since_last_exec_handler",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:observer",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "detail",
+    srcs = ["detail.inl"],
+    hdrs = ["detail.hh"],
+    deps = ["//jewels/log_cerr"],
+)
+
+cc_library(
+    name = "factory",
+    srcs = ["factory.cc"],
+    hdrs = ["factory.hh"],
+    deps = [
+        ":interface",
+        "//clockwork:tags",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "include_common",
+    hdrs = ["include_common.hh"],
+    deps = [
+        ":cog_conditions",
+        ":cog_configs",
+        ":cog_diagnostics",
+        ":cog_inputs",
+        ":cog_memory_resources",
+        ":cog_publishers",
+        ":cog_states",
+        ":cog_statistics",
+        ":cog_timers",
+        ":factory",
+        ":input_condition",
+        ":input_view",
+        ":simple_cog",
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "input_condition",
+    srcs = ["input_condition.inl"],
+    hdrs = ["input_condition.hh"],
+    deps = [
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "input_view",
+    srcs = ["input_view.inl"],
+    hdrs = ["input_view.hh"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/container:circular_buffer",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "interface",
+    srcs = ["interface.cc"],
+    hdrs = ["interface.hh"],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "simple_cog",
+    srcs = ["simple_cog.inl"],
+    hdrs = ["simple_cog.hh"],
+    deps = [
+        ":cog_statistics",
+        ":interface",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:cog_execution_error",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/scope_guard",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "time_since_last_exec_handler",
+    srcs = ["time_since_last_exec_handler.inl"],
+    hdrs = ["time_since_last_exec_handler.hh"],
+    deps = [
+        "//clockwork/common:abstract_timer",
+        "//clockwork/dial:cond_time_since_last_exec",
+        "//clockwork/pinion:observer",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)

@@ -1,0 +1,38 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//jewels/simplelaunch:rules.bzl", "simplelaunch_runner")
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "redirect_helper_test",
+    srcs = ["redirect_helper_test.cc"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
+        "//jewels/memory:memory_resource",
+        "//jewels/simplelaunch:simplelaunch_impl",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+simplelaunch_runner(
+    name = "runner_test",
+    config = "//jewels/simplelaunch/tests/resources:runner_test.textproto",
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "service_definition_test",
+    srcs = ["service_definition_test.cc"],
+    deps = [
+        "//jewels/simplelaunch:service_definition",
+        "//jewels/testing:wise_enum_proto_sync",
+        "@catch2//:catch2_main",
+    ],
+)

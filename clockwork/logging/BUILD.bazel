@@ -1,0 +1,239 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:package.bzl", "package")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "channel_policy.clk",
+    "log_writer_config.clk",
+])
+
+clk(
+    name = "channel_policy_clk",
+    srcs = ["channel_policy.clk"],
+    deps = [":channel_type_clk"],
+)
+
+cc_library(
+    name = "channel_type",
+    srcs = [
+        "channel_type.cc",
+        "channel_type.inl",
+    ],
+    hdrs = ["channel_type.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "channel_type_clk",
+    srcs = ["channel_type.clk"],
+    outs = [
+        "channel_type.cc",
+        "channel_type.hh",
+        "channel_type.inl",
+    ],
+)
+
+cc_library(
+    name = "compression_type",
+    srcs = ["compression_type.inl"],
+    hdrs = ["compression_type.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "decompress_option",
+    srcs = ["decompress_option.inl"],
+    hdrs = ["decompress_option.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "lite_compressor",
+    srcs = ["lite_compressor.cc"],
+    hdrs = ["lite_compressor.hh"],
+    deps = [
+        ":log_error",
+        ":nolint_helper",
+        "//jewels/aligner",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "log_error",
+    srcs = ["log_error.inl"],
+    hdrs = ["log_error.hh"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/std:expected",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "log_interval",
+    srcs = ["log_interval.inl"],
+    hdrs = ["log_interval.hh"],
+    deps = [
+        ":log_timestamp",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "log_timestamp",
+    srcs = ["log_timestamp.inl"],
+    hdrs = ["log_timestamp.hh"],
+    deps = ["//jewels/time:sync_time"],
+)
+
+cc_library(
+    name = "log_uuid",
+    hdrs = ["log_uuid.hh"],
+    deps = [
+        ":log_uuid_tag",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid_hasher",
+    ],
+)
+
+cc_library(
+    name = "log_uuid_tag",
+    srcs = [
+        "log_uuid_tag.cc",
+        "log_uuid_tag.inl",
+    ],
+    hdrs = ["log_uuid_tag.hh"],
+)
+
+clk(
+    name = "log_uuid_tag_clk",
+    srcs = ["log_uuid_tag.clk"],
+    outs = [
+        "log_uuid_tag.cc",
+        "log_uuid_tag.hh",
+        "log_uuid_tag.inl",
+    ],
+)
+
+cc_library(
+    name = "log_writer_config",
+    srcs = [
+        "log_writer_config.cc",
+        "log_writer_config.inl",
+    ],
+    hdrs = ["log_writer_config.hh"],
+    deps = [
+        ":channel_type",
+        ":log_uuid_tag",
+        ":message_encoding",
+        ":schema_encoding",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "log_writer_config_clk",
+    srcs = ["log_writer_config.clk"],
+    outs = [
+        "log_writer_config.cc",
+        "log_writer_config.hh",
+        "log_writer_config.inl",
+    ],
+    deps = [
+        ":channel_type_clk",
+        ":log_uuid_tag_clk",
+        ":message_encoding_clk",
+        ":schema_encoding_clk",
+    ],
+)
+
+cc_library(
+    name = "message_encoding",
+    srcs = [
+        "message_encoding.cc",
+        "message_encoding.inl",
+    ],
+    hdrs = ["message_encoding.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "message_encoding_clk",
+    srcs = ["message_encoding.clk"],
+    outs = [
+        "message_encoding.cc",
+        "message_encoding.hh",
+        "message_encoding.inl",
+    ],
+)
+
+cc_library(
+    name = "nolint_helper",
+    srcs = ["nolint_helper.inl"],
+    hdrs = ["nolint_helper.hh"],
+    deps = [
+        ":log_error",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "schema_encoding",
+    srcs = [
+        "schema_encoding.cc",
+        "schema_encoding.inl",
+    ],
+    hdrs = ["schema_encoding.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "schema_encoding_clk",
+    srcs = ["schema_encoding.clk"],
+    outs = [
+        "schema_encoding.cc",
+        "schema_encoding.hh",
+        "schema_encoding.inl",
+    ],
+)
+
+cc_library(
+    name = "wrapping_counter",
+    srcs = ["wrapping_counter.inl"],
+    hdrs = ["wrapping_counter.hh"],
+    deps = ["//jewels/meta:concepts"],
+)
+
+cc_library(
+    name = "xxh3_checksum",
+    srcs = ["xxh3_checksum.cc"],
+    hdrs = ["xxh3_checksum.hh"],
+    deps = ["@xxhash"],
+)
+
+cc_library(
+    name = "zstd_helper",
+    srcs = ["zstd_helper.cc"],
+    hdrs = ["zstd_helper.hh"],
+    deps = [
+        ":log_error",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@zstd",
+    ],
+)

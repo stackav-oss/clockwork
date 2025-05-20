@@ -1,0 +1,43 @@
+diff --git py/private/py_library.bzl py/private/py_library.bzl
+index ca570a5..07abf02 100644
+--- py/private/py_library.bzl
++++ py/private/py_library.bzl
+@@ -127,10 +127,13 @@ def _make_import_path(label, workspace, base, imp):
+             ),
+         )
+ 
++    # If this is an external workspace, use that name.
++    # If the workspace name is blank, get it from the passed-in ctx workspace name (this is the root workspace name).
++    workspace_name = label.workspace_name or workspace
+     if imp.startswith(".."):
+-        return paths.normalize(paths.join(workspace, *(base_segments[0:-relative_segments] + path_segments[relative_segments:])))
++        return paths.normalize(paths.join(workspace_name, *(base_segments[0:-relative_segments] + path_segments[relative_segments:])))
+     else:
+-        return paths.normalize(paths.join(workspace, base, imp))
++        return paths.normalize(paths.join(workspace_name, base, imp))
+ 
+ def _make_imports_depset(ctx, imports = [], extra_imports_depsets = []):
+     base = paths.dirname(ctx.build_file_path)
+diff --git py/private/pytest.py.tmpl py/private/pytest.py.tmpl
+index e8a4d6c..2d200f3 100644
+--- py/private/pytest.py.tmpl
++++ py/private/pytest.py.tmpl
+@@ -14,6 +14,7 @@
+ 
+ import sys
+ import os
++from pathlib import Path
+ from typing import List
+ 
+ import pytest
+@@ -52,6 +53,10 @@ if __name__ == "__main__":
+     if len(cli_args) > 0:
+         args.extend(cli_args)
+ 
++    test_binary = os.environ.get("TEST_BINARY")
++    if test_binary is not None and test_binary.startswith(".."):
++        args.append(str(Path(test_binary).parent))
++
+     exit_code = pytest.main(args)
+ 
+     if exit_code != 0:

@@ -1,0 +1,65 @@
+use clockwork::diagnostics::report
+
+// Display information for a reporter
+schema ReporterInfo
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+  parameters
+  {
+    // The maximum name length for a reporter.
+    #1 max_reporter_name: UInt64;
+  }
+  fields
+  {
+    // Uuid for this reporter
+    #2 id: Uuid<report::ReporterId>;
+
+    // Name of this reporter (matches `SignalGroupId`)
+    #3 name: VarString<max_reporter_name>;
+
+    // Name of this instance, may be empty if it's the only one (matches `SignalGroup<>::InstanceType`)
+    #4 instance: VarString<max_reporter_name>;
+  }
+}
+
+//
+schema DatabaseInfo
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+  parameters
+  {
+    // The maximum number reporters (cogs and other system components).
+    #1 max_reporters: UInt64;
+    // The maximum name length for a reporter.
+    #2 max_reporter_name: UInt64;
+  }
+
+  fields
+  {
+    // Connections to remote bridge servers.
+    #3 reporters: VarArray<ReporterInfo<max_reporter_name=max_reporter_name>, max_size=max_reporters>;
+  }
+}
+
+cpp_target database_config
+{
+  options
+  {
+    namespace clockwork::diagnostics;
+  }
+
+  schema ReporterInfo;
+  schema DatabaseInfo;
+
+  representation Tachyon<ReporterInfo<max_reporter_name=256>>;
+  representation Tachyon<DatabaseInfo<max_reporters=400, max_reporter_name=256>>;
+
+  interface ReporterInfoTap : Tap<Tachyon<ReporterInfo<max_reporter_name=256>>>;
+  interface DatabaseInfoTap : Tap<Tachyon<DatabaseInfo<max_reporters=400, max_reporter_name=256>>>;
+}

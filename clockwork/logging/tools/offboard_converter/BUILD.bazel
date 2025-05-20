@@ -1,0 +1,39 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//tools/rules:package.bzl", "package")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "convert_to_offboard",
+    srcs = ["convert_to_offboard.cc"],
+    hdrs = ["convert_to_offboard.hh"],
+    deps = [
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:types",
+        "//clockwork/logging/offboard:writer",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "@fmt",
+    ],
+)
+
+cc_binary(
+    name = "offboard_converter",
+    srcs = ["offboard_converter.cc"],
+    deps = [
+        ":convert_to_offboard",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//jewels/memory:memory_resource",
+        "@tclap",
+        "@wise_enum",
+    ],
+)

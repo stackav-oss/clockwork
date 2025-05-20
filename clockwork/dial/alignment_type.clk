@@ -1,0 +1,30 @@
+// Enumeration of the alignment types.
+enum AlignmentType
+{
+  uuid: dbe1db6e-c628-47ca-be09-75141b4343e6;
+
+  values
+  {
+    // Unspecified.
+    #0 unspecified default;
+
+    // No alignment satisfying the constraints was found and max time limit has not been reached.
+    #1 none;
+
+    // A full aligned set was found.
+    #2 full;
+
+    // Timeout was reached, the current best set is returned and state updated.
+    #3 partial;
+  }
+}
+
+cpp_target alignment_type
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  enum AlignmentType;
+}

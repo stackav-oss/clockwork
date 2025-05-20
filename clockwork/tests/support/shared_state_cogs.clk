@@ -1,0 +1,96 @@
+use clockwork::tests::support::exec_time::{ExecTime, ExecState};
+
+// No sleep cog
+cog NoSleepCog
+{
+  states
+  {
+    state: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(1ms);
+    execute when: periodic;
+  }
+}
+
+// Long sleep cog
+cog LongSleepCog
+{
+  states
+  {
+    state: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    exec_time: Tappy<ExecTime>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(1ms);
+    execute when: periodic;
+  }
+}
+
+// SharedStateTesterCog
+cog SharedStateTesterCog
+{
+  states
+  {
+    state_no_sleep: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+
+    state_long_sleep: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    input_no_sleep: Tappy<ExecTime>
+    {
+      max_msgs: 10;
+    }
+
+    input_long_sleep: Tappy<ExecTime>
+    {
+      max_msgs: 10;
+    }
+  }
+
+  execution
+  {
+    condition new_no_sleep: new_message(input_long_sleep);
+    condition new_long_sleep: new_message(input_long_sleep);
+    execute when: new_no_sleep or new_long_sleep;
+  }
+}
+
+cpp_target shared_state_cogs
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog NoSleepCog;
+  cog LongSleepCog;
+  cog SharedStateTesterCog;
+}

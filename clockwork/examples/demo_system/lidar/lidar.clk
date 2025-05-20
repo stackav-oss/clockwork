@@ -1,0 +1,106 @@
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::examples::demo_system::lidar::lidar_channels;
+use clockwork::examples::demo_system::lidar::lidar_state;
+use clockwork::examples::demo_system::lidar::lidar_message;
+use clockwork::examples::demo_system::localization::pose_message;
+use clockwork::examples::demo_system::localization::localization_channels;
+
+// Cog to simulate the lidar device sending raw lidar packets
+cog LidarDeviceCog
+{
+  states
+  {
+    state: Tappy<lidar_state::LidarState>
+    {
+      mutable: true;
+    }
+  }
+
+  outputs
+  {
+    raw_lidar: Tappy<lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>>;
+  }
+
+  execution
+  {
+    condition periodic_10ms: time_since_last_exec(10ms);
+    execute when: periodic_10ms;
+  }
+}
+
+// Cog to convert raw lidar packets into motion compensated point clouds
+cog LidarDriverCog
+{
+  resources
+  {
+    memory: persistent;
+  }
+
+  inputs
+  {
+    raw_lidar: Tappy<lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>>
+    {
+      max_msgs: 20;
+    }
+    pose: Tappy<pose_message::PoseMessage>
+    {
+      max_msgs: 25;
+    }
+  }
+
+  outputs
+  {
+    lidar_sweep: Tappy<lidar_message::LidarSweepMessage<lidar_message::points_per_sweep>>;
+  }
+
+  execution
+  {
+    condition new_raw_lidar: new_message(raw_lidar, min=20, max=20);
+    condition pose_history: any_message(pose, min=25, max=25);
+    execute when: new_raw_lidar and pose_history;
+  }
+}
+
+cpp_target lidar_cog
+{
+  options
+  {
+    namespace clockwork::demo_system::lidar;
+  }
+
+  cog LidarDeviceCog;
+  cog LidarDriverCog;
+}
+
+box LidarBox
+{
+  new device_cog: LidarDeviceCog;
+  new driver_cog: LidarDriverCog;
+
+  new memory: HeapMemory(max_size=4'096);
+  new state: State(representation=Tachyon<lidar_state::LidarState>);
+
+  connect state to device_cog.state;
+  connect device_cog.raw_lidar to lidar_channels::RawLidarChannel;
+
+  connect memory to driver_cog.memory;
+  connect localization_channels::PoseChannel to driver_cog.pose;
+  connect lidar_channels::RawLidarChannel to driver_cog.raw_lidar;
+  connect driver_cog.lidar_sweep to lidar_channels::LidarSweepChannel;
+}
+
+cpp_executable lidar_exe
+{
+  casing
+  {
+    box LidarBox;
+  }
+}
+
+box LidarExe
+{
+  new lidar_box: LidarBox;
+  new lidar_proc: Process(executable=lidar_exe);
+  apply HostProcess(process=lidar_proc) in lidar_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to lidar_proc;
+}

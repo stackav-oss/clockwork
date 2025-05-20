@@ -1,0 +1,52 @@
+// Log writer state
+enum LogWriterState
+{
+  uuid: 618f5fce-787e-4f9b-81d0-91fa5ebf086a;
+  values
+  {
+    // Unspecified, value not set
+    #0 unspecified default
+    {
+      underlying_value: 0;
+    }
+
+    // Stopped, the log writer is not logging
+    #1 stopped
+    {
+      underlying_value: 1;
+    }
+
+    // Logging, the log writer is logging
+    #2 logging
+    {
+      underlying_value: 2;
+    }
+
+    // Degraded, the log writer is logging but is degraded
+    #3 degraded
+    {
+      underlying_value: 3;
+    }
+
+    // Failed, the log writer is unable to access the log device
+    #4 failed
+    {
+      underlying_value: 4;
+    }
+
+    // Paused, the log writer is paused
+    #5 paused
+    {
+      underlying_value: 5;
+    }
+  }
+}
+
+cpp_target log_writer_state
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  enum LogWriterState;
+}

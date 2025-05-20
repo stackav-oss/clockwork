@@ -1,0 +1,19 @@
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+use clockwork::logging::channel_type::ChannelType;
+use clockwork::examples::demo_system::gps::gps_channels;
+
+// Defining this policy adds the channel to both the telemety log writer configuration and
+// the event log writer configuration. Setting the log type to event would only add the
+// channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
+policy ChannelLoggingPolicy for gps_channels::RawGpsChannel
+{
+  log_type = LogType::telemetry;
+}
+
+// Defining this policy adds the channel to both the telemety log writer configuration and
+// the event log writer configuration. Setting the log type to event would only add the
+// channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
+policy ChannelLoggingPolicy for gps_channels::GpsChannel
+{
+    log_type = LogType::telemetry;
+}

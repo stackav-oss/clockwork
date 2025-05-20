@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "constants",
+    hdrs = ["constants.hh"],
+)
+
+cc_library(
+    name = "optional",
+    srcs = ["optional.inl"],
+    hdrs = ["optional.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":constants",
+        "//jewels/memory:aligned_storage",
+        "//jewels/meta:concepts",
+        "//jewels/std:span",
+    ],
+)
+
+cc_library(
+    name = "protobuf_to_tap",
+    srcs = [
+        "protobuf_to_tap.cc",
+        "protobuf_to_tap.inl",
+    ],
+    hdrs = ["protobuf_to_tap.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":var_array",
+        ":var_string",
+        "//jewels/log_cerr",
+        "//jewels/meta:concepts",
+        "//jewels/std:expected",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@gsl//:util",
+        "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "tap_to_protobuf",
+    srcs = [
+        "tap_to_protobuf.cc",
+        "tap_to_protobuf.inl",
+    ],
+    hdrs = ["tap_to_protobuf.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":var_array",
+        ":var_string",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "var_array",
+    srcs = ["var_array.inl"],
+    hdrs = ["var_array.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":constants",
+        "//jewels/memory:aligned_storage",
+        "//jewels/meta:concepts",
+        "//jewels/std:expected",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "var_string",
+    srcs = ["var_string.inl"],
+    hdrs = ["var_string.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":var_array"],
+)

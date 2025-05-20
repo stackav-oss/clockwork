@@ -1,0 +1,57 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 0000000..d5f48af
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,6 @@
++cc_library(
++    name = "trompeloeil",
++    hdrs = glob(["include/**/*.hpp"]),
++    visibility = ["//visibility:public"],
++    includes = ["include"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000..8098695
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1 @@
++module(name = "trompeloeil")
+diff --git WORKSPACE WORKSPACE
+new file mode 100644
+index 0000000..e69de29
+diff --git include/trompeloeil.hpp include/trompeloeil.hpp
+index 1e7b07b..64af077 100644
+--- include/trompeloeil.hpp
++++ include/trompeloeil.hpp
+@@ -14,7 +14,10 @@
+ #ifndef TROMPELOEIL_HPP_
+ #define TROMPELOEIL_HPP_
+ 
++#if __GLIBCXX__ <= 20230528
++#undef __cpp_impl_coroutine
++#endif
+ 
+ // trompe l'oeil noun    (Concise Encyclopedia)
+ // Style of representation in which a painted object is intended
+ // to deceive the viewer into believing it is the object itself...
+diff --git include/trompeloeil/catch2.hpp include/trompeloeil/catch2.hpp
+new file mode 100644
+index 0000000000..215f849c40
+--- /dev/null
++++ include/trompeloeil/catch2.hpp
+@@ -0,0 +1 @@
++#include <catch2/trompeloeil.hpp>
+diff --git include/trompeloeil/mock.hpp include/trompeloeil/mock.hpp
+index 1e7b07b..64af077 100644
+--- include/trompeloeil/mock.hpp
++++ include/trompeloeil/mock.hpp
+@@ -992,7 +992,7 @@
+   {
+     // g++-4.9 uses C++11 rules for constexpr function, so can't
+     // break this up into smaller bits
+-    using tag = std::integral_constant<bool, is_null_comparable<T>::value
++    using tag = std::integral_constant<bool, std::is_pointer<T>::value
+                                        && !is_matcher<T>::value
+                                        && !std::is_array<T>::value>;
+ 

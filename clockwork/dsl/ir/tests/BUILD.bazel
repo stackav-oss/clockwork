@@ -1,0 +1,709 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "box_test",
+    srcs = [
+        "box_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomod.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/io:var_packet.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:hardware",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:udp",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "clkenum_history_test",
+    srcs = [
+        "clkenum_history_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "clkenum_test",
+    srcs = [
+        "clkenum_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "cog_test",
+    srcs = [
+        "cog_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:parse",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "compiler_test",
+    srcs = [
+        "compiler_test.py",
+        ":__test__",
+    ],
+    data = [],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        ":node_test",
+        "//clockwork/dsl/bazel:clk_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:uuid_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "constants_test",
+    srcs = [
+        "constants_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:constants.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:py_target",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/tests/support:py_test_utils",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "conversion_utils_test",
+    srcs = [
+        "conversion_utils_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:conversion_utils",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:interface",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "cpp_executable_test",
+    srcs = [
+        "cpp_executable_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_executable",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "cpp_extern_test",
+    srcs = [
+        "cpp_extern_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/serialization:tap",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "cpp_target_test",
+    srcs = [
+        "cpp_target_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomod.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/dsl/tests/support:nanobind_type_casters.clk",
+        "//clockwork/dsl/tests/support:protomsg.clk",
+        "//clockwork/io:var_packet.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_executable",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:interface",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:nanobind_type_casters",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:schema_reg",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "diagnostics_test",
+    srcs = [
+        "diagnostics_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:diagnostics",
+    ],
+)
+
+py_test(
+    name = "expr_test",
+    srcs = [
+        "expr_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl:parser",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+        "@fltk",
+    ],
+)
+
+py_test(
+    name = "extern_type_test",
+    srcs = [
+        "extern_type_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_extern",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:extern_type",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_test(
+    name = "hardware_test",
+    srcs = [
+        "hardware_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomod_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:hardware",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "importer_test",
+    srcs = [
+        "importer_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "module_id_test",
+    srcs = [
+        "module_id_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "nanobind_target_test",
+    srcs = [
+        "nanobind_target_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:nanobind_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:nanobind_target",
+        "//clockwork/dsl/ir:nanobind_target_render",
+        "//clockwork/dsl/ir:nanobinding_registry",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "node_test",
+    srcs = [
+        "node_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:parse",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "path_resolver_test",
+    srcs = [
+        "path_resolver_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:path_resolver",
+    ],
+)
+
+py_test(
+    name = "policy_test",
+    srcs = [
+        "policy_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/tests/support:test_logging_policy_clk",
+        "//clockwork/dsl/tests/support:testpolicy.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:logger_config",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:pubsub",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "primitive_test",
+    srcs = [
+        "primitive_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:units",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "proto_target_test",
+    srcs = [
+        "proto_target_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/dsl/tests/support:protomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:proto_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:proto_target",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:schema_reg",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/proto:proto_typereg",
+        "//clockwork/dsl/serialization:protobuf_clk",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "pubsub_test",
+    srcs = [
+        "pubsub_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomod.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/io:var_packet.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:pubsub",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "py_target_test",
+    srcs = [
+        "py_target_test.py",
+        ":__test__",
+    ],
+    data = ["//jewels/units/clk:au_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/bazel:py_targets",
+        "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:py_target",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "representation_test",
+    srcs = [
+        "representation_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:schema_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "schema_test",
+    srcs = [
+        "schema_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:parse",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/tests/support:py_test_utils",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "strongtypes_test",
+    srcs = [
+        "strongtypes_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:strongtypes",
+    ],
+)
+
+py_test(
+    name = "system_test",
+    srcs = [
+        "system_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:system_target",
+        "//clockwork/dsl/ir:uuid_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "typesys_test",
+    srcs = [
+        "typesys_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "udp_test",
+    srcs = [
+        "udp_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/io:var_packet_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:udp",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "uuid_reg_test",
+    srcs = [
+        "uuid_reg_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:uuid_reg",
+        "@clockwork_pip//pytest",
+    ],
+)

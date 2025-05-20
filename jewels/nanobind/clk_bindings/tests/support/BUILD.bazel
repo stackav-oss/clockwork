@@ -1,0 +1,124 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
+
+package(default_testonly = True)
+
+clk(
+    name = "bind_array_msg_clk",
+    srcs = ["bind_array_msg.clk"],
+    outs = [
+        "bind_array_msg_clk_cc.cc",
+        "bind_array_msg_clk_cc.hh",
+        "bind_array_msg_clk_cc.inl",
+        "bind_array_msg_clk_nb.cc",
+        "bind_array_msg_clk_nb.hh",
+        "bind_array_msg_clk_nb.inl",
+    ],
+    visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
+)
+
+cc_library(
+    name = "bind_array_msg_clk_cc",
+    srcs = [
+        "bind_array_msg_clk_cc.cc",
+        "bind_array_msg_clk_cc.inl",
+    ],
+    hdrs = ["bind_array_msg_clk_cc.hh"],
+    visibility = ["//jewels/nanobind/tests:__subpackages__"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+py_cc_binding(
+    name = "bind_array_msg_clk_nb",
+    srcs = [
+        "bind_array_msg_clk_nb.cc",
+        "bind_array_msg_clk_nb.hh",
+        "bind_array_msg_clk_nb.inl",
+    ],
+    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
+    visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
+    deps = [
+        ":bind_array_msg_clk_cc",
+        "//jewels/nanobind:nb_byte_array",
+        "//jewels/nanobind/clk_bindings/common:common_cc",
+    ],
+)
+
+cc_library(
+    name = "foo",
+    srcs = [
+        "foo.cc",
+        "foo.inl",
+    ],
+    hdrs = ["foo.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "foo_clk",
+    srcs = ["foo.clk"],
+    outs = [
+        "foo.cc",
+        "foo.hh",
+        "foo.inl",
+        "foo_clk_nb.cc",
+        "foo_clk_nb.hh",
+        "foo_clk_nb.inl",
+        "foo_clk_py.py",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_cc_binding(
+    name = "foo_clk_nb",
+    srcs = [
+        "foo_clk_nb.cc",
+        "foo_clk_nb.hh",
+        "foo_clk_nb.inl",
+    ],
+    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
+    visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
+    deps = [
+        ":foo",
+        "//jewels/nanobind/clk_bindings/common:common_cc",
+    ],
+)
+
+py_library(
+    name = "foo_clk_py",
+    srcs = ["foo_clk_py.py"],
+    data = [":foo_clk"],
+    visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+py_cc_binding(
+    name = "nb_get_python_type_name_test",
+    srcs = ["nb_get_python_type_name_test.cc"],
+    visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
+    deps = [
+        "//jewels/nanobind/clk_bindings:get_python_type_name",
+        "@nanobind",
+    ],
+)

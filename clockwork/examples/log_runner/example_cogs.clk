@@ -1,0 +1,45 @@
+
+use clockwork::examples::log_runner::test_message::TestMessage;
+
+// Cog to to publish on the channel
+cog ExampleCogPublisher
+{
+
+  outputs
+  {
+    test_message_output: Tappy<TestMessage>;
+  }
+
+  execution
+  {
+    condition periodic_10hz: time_since_last_exec(100ms);
+    execute when: periodic_10hz;
+  }
+}
+
+// Cog to receive on channel
+cog ExampleCogSubscriber
+{
+
+  inputs
+  {
+    test_message_input: Tappy<TestMessage>;
+  }
+
+  execution
+  {
+    condition new_test_message: new_message(test_message_input);
+    execute when: new_test_message;
+  }
+}
+
+cpp_target example_cogs
+{
+    options
+    {
+        namespace clockwork::log_runner;
+    }
+
+    cog ExampleCogPublisher;
+    cog ExampleCogSubscriber;
+}

@@ -1,0 +1,49 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "log_cerr",
+    srcs = [
+        "log_cerr.cc",
+        "log_cerr.inl",
+    ],
+    hdrs = ["log_cerr.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":detect_log_color_mode",
+        ":detect_log_threshold",
+        ":log_level",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "detect_log_color_mode",
+    srcs = ["detect_log_color_mode.cc"],
+    hdrs = ["detect_log_color_mode.hh"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "detect_log_threshold",
+    srcs = ["detect_log_threshold.cc"],
+    hdrs = ["detect_log_threshold.hh"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":log_level",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "log_level",
+    hdrs = ["log_level.hh"],
+    visibility = [
+        "__subpackages__",
+        "//autonomy/localization:__subpackages__",
+    ],
+    deps = ["@wise_enum"],
+)

@@ -1,0 +1,13 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/tests:__subpackages__"],
+)
+
+exports_files([
+    "test_system_init_config.textproto",
+    "test_system_init_config.tachyon",
+    "test_system_config.textproto",
+])

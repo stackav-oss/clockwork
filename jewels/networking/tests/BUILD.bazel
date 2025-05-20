@@ -1,0 +1,48 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "ifaddrs_test",
+    srcs = ["ifaddrs_test.cc"],
+    deps = [
+        "//jewels/networking:ifaddrs",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "sock_opt_test",
+    srcs = ["sock_opt_test.cc"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/networking:sock_opt",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "socket_address_test",
+    srcs = ["socket_address_test.cc"],
+    deps = [
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "socket_endpoint_test",
+    srcs = ["socket_endpoint_test.cc"],
+    deps = [
+        "//jewels/networking:socket_endpoint",
+        "@catch2//:catch2_main",
+        "@fmt",
+    ],
+)

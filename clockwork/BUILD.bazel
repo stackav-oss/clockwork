@@ -1,0 +1,68 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
+
+py_library(
+    name = "logical_system_interface",
+    srcs = ["logical_system_interface.py"],
+    data = [
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/composition:graphir",
+        "//clockwork/dsl/composition:logger_config",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:hardware",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:system_target",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:udp",
+        "//clockwork/dsl/ir:uuid_reg",
+        "//clockwork/logging/offboard:nb_log_writer_impl",
+        "//clockwork/logging/readers:nb_log_reader",
+        "//clockwork/logging/tools/upgrade_log:upgrade_lib",
+    ],
+)
+
+cc_library(
+    name = "repr_iface",
+    hdrs = ["repr_iface.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+    ],
+)
+
+bzl_library(
+    name = "rules_bzl",
+    srcs = ["rules.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@aspect_bazel_lib//lib:write_source_files",
+        "@bazel_skylib//lib:paths",
+        "@bazel_tools//tools/cpp:toolchain_utils.bzl",
+        "@rules_cc//cc/common",
+        "@rules_cc//cc/toolchains:toolchain_rules",
+        "@rules_python//python:defs_bzl",
+        "@rules_python//python:pip_bzl",
+    ],
+)
+
+cc_library(
+    name = "tags",
+    hdrs = ["tags.hh"],
+    visibility = ["//visibility:public"],
+)

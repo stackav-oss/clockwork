@@ -1,0 +1,62 @@
+diff --git src/google/protobuf/BUILD.bazel src/google/protobuf/BUILD.bazel
+index 735610170..73cb65b29 100644
+--- src/google/protobuf/BUILD.bazel
++++ src/google/protobuf/BUILD.bazel
+@@ -339,6 +339,7 @@ cc_library(
+         ":arena_config",
+         ":string_block",
+         "//src/google/protobuf/stubs:lite",
++        "@com_google_absl//absl/container:layout",
+         "@com_google_absl//absl/log:absl_check",
+         "@com_google_absl//absl/log:absl_log",
+         "@com_google_absl//absl/synchronization",
+diff --git src/google/protobuf/arena.cc src/google/protobuf/arena.cc
+index 51afdbdaf..e846a94a0 100644
+--- src/google/protobuf/arena.cc
++++ src/google/protobuf/arena.cc
+@@ -40,6 +40,7 @@
+ #include <vector>
+ 
+ #include "absl/base/attributes.h"
++#include "absl/container/internal/layout.h"
+ #include "absl/synchronization/mutex.h"
+ #include "google/protobuf/arena_allocation_policy.h"
+ #include "google/protobuf/arenaz_sampler.h"
+diff --git src/google/protobuf/extension_set.cc src/google/protobuf/extension_set.cc
+index 674cb5528..eddb4eb19 100644
+--- src/google/protobuf/extension_set.cc
++++ src/google/protobuf/extension_set.cc
+@@ -93,7 +93,7 @@ void Register(const ExtensionInfo& info) {
+   static auto local_static_registry = OnShutdownDelete(new ExtensionRegistry);
+   global_registry = local_static_registry;
+   if (!local_static_registry->insert(info).second) {
+-    ABSL_LOG(FATAL) << "Multiple extension registrations for type \""
++    ABSL_LOG(INFO) << "Multiple extension registrations for type \""
+                     << info.message->GetTypeName() << "\", field number "
+                     << info.number << ".";
+   }
+diff --git src/google/protobuf/io/printer.h src/google/protobuf/io/printer.h
+index 2e59ba05f..ea90f8ead 100644
+--- src/google/protobuf/io/printer.h
++++ src/google/protobuf/io/printer.h
+@@ -50,6 +50,7 @@
+ #include "absl/functional/function_ref.h"
+ #include "absl/log/absl_check.h"
+ #include "absl/meta/type_traits.h"
++#include "absl/strings/str_cat.h"
+ #include "absl/strings/str_format.h"
+ #include "absl/strings/string_view.h"
+ #include "absl/types/optional.h"
+diff --git src/google/protobuf/repeated_ptr_field.h src/google/protobuf/repeated_ptr_field.h
+index 9a7dc60a4..e5281ba7d 100644
+--- src/google/protobuf/repeated_ptr_field.h
++++ src/google/protobuf/repeated_ptr_field.h
+@@ -41,6 +41,8 @@
+ //
+ // This header covers RepeatedPtrField.
+ 
++// IWYU pragma: private, include <google/protobuf/repeated_ptr_field.h>
++
+ #ifndef GOOGLE_PROTOBUF_REPEATED_PTR_FIELD_H__
+ #define GOOGLE_PROTOBUF_REPEATED_PTR_FIELD_H__
+ 

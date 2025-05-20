@@ -1,0 +1,59 @@
+use clockwork::dial::approx_aligner_config::{ApproxAlignerConfig, ApproxAlignerState};
+use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, AlignerFloatMsg, AlignerIntMsg};
+
+// Int msg producer
+cog IntMsgProducer
+{
+  outputs
+  {
+    out_int: Tappy<AlignerIntMsg>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    execute when: periodic;
+  }
+}
+
+// FLoat msg producer
+cog FloatMsgProducer
+{
+  outputs
+  {
+    out_float: Tappy<AlignerFloatMsg>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(150ms);
+    execute when: periodic;
+  }
+}
+
+// Aligned msg consumer
+cog AlignedMsgTester
+{
+  inputs
+  {
+    in_aligned: Tappy<AlignedDataMsg>;
+  }
+
+  execution
+  {
+    condition new_aligned: new_message(in_aligned);
+    execute when: new_aligned;
+  }
+}
+
+cpp_target test_cogs
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  cog IntMsgProducer;
+  cog FloatMsgProducer;
+  cog AlignedMsgTester;
+}

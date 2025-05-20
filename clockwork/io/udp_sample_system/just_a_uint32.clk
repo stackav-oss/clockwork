@@ -1,0 +1,24 @@
+// A test schema for sockets that isn't the special io::VarPacket
+schema JustAUInt32
+{
+  uuid: ab29295d-60ee-478f-88ce-f7beebbe2505;
+  fields
+  {
+    // The UInt32
+    #0 value: UInt32;
+  }
+}
+
+
+cpp_target just_a_uint32
+{
+    options
+    {
+        namespace clockwork::demo;
+    }
+
+    schema JustAUInt32;
+
+    representation Tachyon<JustAUInt32>;
+    interface Tap<Tachyon<JustAUInt32>>;
+}

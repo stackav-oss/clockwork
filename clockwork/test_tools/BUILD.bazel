@@ -1,0 +1,54 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "clockwork_system_runner",
+    srcs = [
+        "clockwork_system_runner.cc",
+        "clockwork_system_runner.inl",
+    ],
+    hdrs = ["clockwork_system_runner.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":synthetic_message_fetcher",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:process_description",
+        "//clockwork/logging:decompress_option",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:offboard_log_reader",
+        "//clockwork/logging/readers:types",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding",
+        "//clockwork/scaffolding:abstract_casing",
+        "//jewels/cli/tests/support:simple_exit_condition",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "synthetic_message_fetcher",
+    srcs = ["synthetic_message_fetcher.cc"],
+    hdrs = ["synthetic_message_fetcher.hh"],
+    deps = [
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/runners:deterministic_channel_handler",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+    ],
+)

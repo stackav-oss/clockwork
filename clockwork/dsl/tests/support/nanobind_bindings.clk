@@ -1,0 +1,249 @@
+use jewels::units::clk::au::MetersD
+use clockwork::dsl::tests::support::nanobind_bindings_dep
+
+some_int_constant: Int32 = 42;
+some_uint_constant: UInt32 = 43;
+some_true_constant: Bool = true;
+some_false_constant: Bool = false;
+some_float32_constant: Float32 = 2.2;
+some_float64_constant: Float64 = 2.2;
+some_str_constant: String = "im a string constant";
+untyped_int_constant = 22;
+untyped_float_constant = 2.2;
+untyped_true_constant = true;
+untyped_false_constant = false;
+untyped_str_constant = "hello";
+
+// SubMessage docs
+schema SubMessage
+{
+  uuid: 65483848-c8db-46f2-8ee2-97edbd8b816f;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // field a doc
+    #0 int_field: Int32;
+  }
+}
+
+// MessageWithOptionals docs
+schema MessageWithOptionals
+{
+  uuid: 4dedc520-9a69-4dcc-8ad0-faa592cd6991;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // field 0 doc
+    #0 int_field: Optional<Int32>;
+
+    // field 1 doc
+    #1 msg_field: Optional<SubMessage>;
+  }
+}
+
+// Foo docs
+schema Foo
+{
+  uuid: f5df9052-68af-431a-b2b2-0b178353e23d;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // msg doc
+    #0 msg: SubMessage;
+
+    // prim doc
+    #1 prim: Int32;
+
+    // msg_var_array doc
+    #2 msg_var_array: VarArray<SubMessage, 10>;
+
+    // prim_var_array doc
+    #3 prim_var_array: VarArray<Int32, 10>;
+
+    // msg_array doc
+    #4 msg_array: FixedArray<SubMessage, 10>;
+
+    // prim_array doc
+    #5 prim_array: FixedArray<Int32, 10>;
+
+    // optional_msg doc
+    #6 optional_msg: Optional<SubMessage>;
+
+    // optional_prim doc
+    #7 optional_prim: Optional<Int32>;
+
+    // optional_enum doc
+    #8 optional_enum: Optional<FooEnum>;
+
+    // var string
+    #9 var_string: VarString<20>;
+
+    // aurora units
+    #10 au_meters: MetersD;
+
+    // aurora units in optional
+    #11 optional_au_meters: Optional<MetersD>;
+
+    // aurora units in var_array
+    #12 au_meters_var_array: VarArray<MetersD, 10>;
+
+    // aurora units in fixed_array
+    #13 au_meters_array: FixedArray<MetersD, 10>;
+
+    // dependency
+    #14 dep_msg: nanobind_bindings_dep::Bar;
+
+    // dependency
+    #15 dep_enum: nanobind_bindings_dep::OtherEnum;
+
+    // VarArray with size defined as constant in another module
+    #16 dep_array_size: FixedArray<Float32, nanobind_bindings_dep::some_array_size>;
+
+    // VarArray of generic message to check that the alias is used for the array binding name
+    #17 array_of_generic_message: FixedArray<GenericMessage<Int32>, 7>;
+
+    // sync time
+    #18 sync_time: SyncTime;
+
+    // duration
+    #19 duration: Duration;
+  }
+}
+
+// GenericMessage docs
+schema GenericMessage
+{
+  uuid: 37ae0fcd-e5c3-4822-af85-1ec043aceaf8;
+
+  parameters
+  {
+    // Doc
+    #1 type: Type;
+  }
+
+  fields
+  {
+    // Doc
+    #2 value: type;
+  }
+}
+
+// With numerical param
+schema NumericalParam
+{
+  uuid: 84a28094-9fa3-4c2d-9942-b9856433b2bf;
+
+  parameters
+  {
+    // Doc
+    #1 value: UInt32;
+  }
+
+  fields
+  {
+    // Doc
+    #2 field: UInt32 = value;
+  }
+}
+
+// FooEnum docs
+enum FooEnum
+{
+  uuid: 4f52b86e-ba65-4ec5-b373-e28072ce5fb4;
+
+  values
+  {
+    // Foo doc
+    #1 foo default;
+
+    // Bar doc
+    #2 bar;
+  }
+}
+
+cpp_target nanobindable_messages
+{
+  options
+  {
+    namespace foo;
+  }
+
+  constant some_int_constant;
+  constant some_uint_constant;
+  constant some_true_constant;
+  constant some_false_constant;
+  constant some_float32_constant;
+  constant some_float64_constant;
+  constant some_str_constant;
+
+  enum FooEnum;
+
+  schema SubMessage;
+  schema MessageWithOptionals;
+  schema Foo;
+  schema GenericMessage;
+  schema NumericalParam;
+
+  representation Tachyon<SubMessage>;
+  interface Tappy<SubMessage>;
+
+  representation Tachyon<MessageWithOptionals>;
+  interface Tappy<MessageWithOptionals>;
+
+  representation Tachyon<GenericMessage<Float32>>;
+  interface Tappy<GenericMessage<Float32>>;
+
+  representation Tachyon<GenericMessage<Float64>>;
+  interface GenericMessageFloat64: Tappy<GenericMessage<Float64>>;
+
+  representation Tachyon<GenericMessage<Int32>>;
+  interface Tappy<GenericMessage<Int32>>;
+
+  representation Tachyon<Foo>;
+  interface Tappy<Foo>;
+
+  representation Tachyon<NumericalParam<some_uint_constant>>;
+  interface Tap<Tachyon<NumericalParam<some_uint_constant>>>;
+}
+
+
+nanobind_target nanobindable_messages_clk_nb
+{
+  constant some_int_constant;
+  constant some_uint_constant;
+  constant some_true_constant;
+  constant some_false_constant;
+  constant some_float32_constant;
+  constant some_float64_constant;
+  constant some_str_constant;
+
+  constant untyped_int_constant;
+  constant untyped_float_constant;
+  constant untyped_true_constant;
+  constant untyped_false_constant;
+  constant untyped_str_constant;
+
+  binding FooEnum;
+  binding Tappy<SubMessage>;
+  binding Tappy<MessageWithOptionals>;
+  binding Tappy<Foo>;
+  binding GenericMessageFloat32: Tappy<GenericMessage<Float32>>;
+  binding DistinctGenericMessageAlias: Tappy<GenericMessage<Int32>>;
+
+  binding NumericalParamUInt: Tappy<NumericalParam<some_uint_constant>>;
+}

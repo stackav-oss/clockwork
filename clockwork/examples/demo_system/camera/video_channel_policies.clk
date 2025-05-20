@@ -1,0 +1,19 @@
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+use clockwork::logging::channel_type::ChannelType;
+use clockwork::examples::demo_system::camera::video_channels;
+
+// Defining this policy adds the channel to both the telemetry log writer configuration and
+// the event log writer configuration. Setting the log type to event would only add the
+// channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
+policy ChannelLoggingPolicy for video_channels::RawVideoChannel
+{
+  log_type = LogType::telemetry;
+}
+
+// Defining this policy adds the channel to both the telemetry log writer configuration and
+// the event log writer configuration. Setting the log type to event would only add the
+// channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
+policy ChannelLoggingPolicy for video_channels::VideoChannel
+{
+    log_type = LogType::telemetry;
+}

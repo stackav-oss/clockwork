@@ -1,0 +1,574 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "tcp_bridge_config.clk",
+    "bridge_status.clk",
+])
+
+cc_library(
+    name = "aligned_pointer",
+    srcs = ["aligned_pointer.inl"],
+    hdrs = ["aligned_pointer.hh"],
+    deps = [
+        "//jewels/math:power_of_two",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+    ],
+)
+
+cc_library(
+    name = "bidirectional_udp",
+    srcs = ["bidirectional_udp.inl"],
+    hdrs = ["bidirectional_udp.hh"],
+    deps = [
+        ":incoming_udp",
+        ":io_connection",
+        ":observer",
+        ":outgoing_udp",
+        ":publisher_handle",
+        ":sock_opt",
+        ":subscriber_handle",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:process_description",
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/networking:socket_endpoint",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "bridge_status",
+    srcs = [
+        "bridge_status.cc",
+        "bridge_status.inl",
+    ],
+    hdrs = ["bridge_status.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "bridge_status_clk",
+    srcs = ["bridge_status.clk"],
+    outs = [
+        "bridge_status.cc",
+        "bridge_status.hh",
+        "bridge_status.inl",
+    ],
+)
+
+cc_library(
+    name = "buffer",
+    srcs = [
+        "buffer.cc",
+        "buffer.inl",
+    ],
+    hdrs = ["buffer.hh"],
+    deps = [
+        ":aligned_pointer",
+        ":buffer_index",
+        ":error",
+        ":slot",
+        "//clockwork/memory:start_lifetime_as",
+        "//jewels/compiler:intrinsics",
+        "//jewels/math:power_of_two",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@boost//:atomic",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "buffer_index",
+    hdrs = ["buffer_index.hh"],
+)
+
+cc_library(
+    name = "channel_observer",
+    srcs = ["channel_observer.cc"],
+    hdrs = ["channel_observer.hh"],
+    deps = [
+        ":buffer",
+        ":channel_observer_client",
+        ":observer",
+        "//clockwork/logging:channel_type",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "channel_observer_client",
+    hdrs = ["channel_observer_client.hh"],
+    deps = [
+        ":buffer",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "error",
+    hdrs = ["error.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "in_memory_channel",
+    srcs = ["in_memory_channel.inl"],
+    hdrs = ["in_memory_channel.hh"],
+    deps = [
+        ":buffer",
+        ":publisher_handle",
+        ":slot",
+        ":subscriber_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "incoming_udp",
+    srcs = ["incoming_udp.inl"],
+    hdrs = ["incoming_udp.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":io_connection",
+        ":publisher_handle",
+        ":slot",
+        ":sock_opt",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:process_description",
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//clockwork/pinion/detail:socket_payload",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/networking:socket_endpoint",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "io_connection",
+    srcs = ["io_connection.cc"],
+    hdrs = ["io_connection.hh"],
+    deps = [
+        ":observer",
+        ":publisher_handle",
+        ":subscriber_handle",
+        "//clockwork/common:process_description",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "observer",
+    srcs = ["observer.cc"],
+    hdrs = ["observer.hh"],
+    deps = [
+        ":buffer_index",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "outgoing_udp",
+    srcs = ["outgoing_udp.inl"],
+    hdrs = ["outgoing_udp.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":io_connection",
+        ":observer",
+        ":slot",
+        ":sock_opt",
+        ":subscriber_handle",
+        "//clockwork/common:process_description",
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//clockwork/pinion/detail:socket_payload",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/networking:socket_endpoint",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "publisher_handle",
+    srcs = [
+        "publisher_handle.cc",
+        "publisher_handle.inl",
+    ],
+    hdrs = ["publisher_handle.hh"],
+    deps = [
+        ":buffer",
+        ":buffer_index",
+        ":error",
+        ":observer",
+        ":slot",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@boost//:iterator",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "shm_channel",
+    srcs = ["shm_channel.cc"],
+    hdrs = ["shm_channel.hh"],
+    deps = [
+        ":buffer",
+        ":observer",
+        ":subscriber_handle",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/pinion/detail:mmap_region",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:unix_socket",
+        "//jewels/container:bounded_string",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@fmt",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "shm_channel_factory",
+    srcs = ["shm_channel_factory.cc"],
+    hdrs = ["shm_channel_factory.hh"],
+    deps = [
+        ":buffer",
+        ":shm_channel",
+        ":shm_publisher",
+        ":shm_subscriber",
+        "//jewels/container:bounded_string",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "shm_publisher",
+    srcs = ["shm_publisher.cc"],
+    hdrs = ["shm_publisher.hh"],
+    deps = [
+        ":buffer",
+        ":observer",
+        ":publisher_handle",
+        ":shm_channel",
+        "//clockwork/pinion/detail:mmap_region",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:unix_socket",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "shm_subscriber",
+    srcs = ["shm_subscriber.cc"],
+    hdrs = ["shm_subscriber.hh"],
+    deps = [
+        ":buffer",
+        ":observer",
+        ":shm_channel",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/pinion/detail:mmap_region",
+        "//clockwork/pinion/detail:unix_socket",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "slot",
+    srcs = [
+        "slot.cc",
+        "slot.inl",
+    ],
+    hdrs = ["slot.hh"],
+    deps = [
+        ":aligned_pointer",
+        "//clockwork/memory:start_lifetime_as",
+        "//jewels/math:power_of_two",
+        "//jewels/memory:pointers",
+        "//jewels/meta:call",
+        "//jewels/meta:type_traits",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "sock_opt",
+    srcs = [
+        "sock_opt.cc",
+        "sock_opt.inl",
+    ],
+    hdrs = ["sock_opt.hh"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/meta:concepts",
+        "//jewels/networking:ifaddrs",
+        "//jewels/networking:sock_opt",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "subscriber_handle",
+    srcs = [
+        "subscriber_handle.cc",
+        "subscriber_handle.inl",
+    ],
+    hdrs = ["subscriber_handle.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":slot",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@boost//:iterator",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_channel_policies_clk",
+    srcs = ["tcp_bridge_channel_policies.clk"],
+    deps = [
+        ":tcp_bridge_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_channels_clk",
+    srcs = ["tcp_bridge_channels.clk"],
+    deps = [":bridge_status_clk"],
+)
+
+cc_library(
+    name = "tcp_bridge_client",
+    srcs = ["tcp_bridge_client.cc"],
+    hdrs = ["tcp_bridge_client.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":publisher_handle",
+        ":slot",
+        ":subscriber_handle",
+        ":tcp_bridge_common",
+        ":tcp_bridge_config",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@boost//:iterator",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "tcp_bridge_common",
+    srcs = ["tcp_bridge_common.cc"],
+    hdrs = ["tcp_bridge_common.hh"],
+    deps = [
+        ":bridge_status",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:var_string",
+    ],
+)
+
+cc_library(
+    name = "tcp_bridge_config",
+    srcs = [
+        "tcp_bridge_config.cc",
+        "tcp_bridge_config.inl",
+    ],
+    hdrs = ["tcp_bridge_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/common:platform_diagnostics_config",
+        "//clockwork/common:process_description",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_config_clk",
+    srcs = ["tcp_bridge_config.clk"],
+    outs = [
+        "tcp_bridge_config.cc",
+        "tcp_bridge_config.hh",
+        "tcp_bridge_config.inl",
+    ],
+    deps = [
+        "//clockwork/common:platform_diagnostics_config_clk",
+        "//clockwork/common:process_description_clk",
+    ],
+)
+
+cc_binary(
+    name = "tcp_bridge_main",
+    srcs = ["tcp_bridge_main.cc"],
+    linkopts = ["-pthread"],
+    deps = [
+        ":bridge_status",
+        ":buffer",
+        ":error",
+        ":publisher_handle",
+        ":shm_channel",
+        ":shm_channel_factory",
+        ":shm_publisher",
+        ":shm_subscriber",
+        ":slot",
+        ":tcp_bridge_client",
+        ":tcp_bridge_common",
+        ":tcp_bridge_config",
+        ":tcp_bridge_server",
+        "//clockwork:repr_iface",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:platform_diagnostics_config",
+        "//clockwork/common:process_description",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/runners:epoll_manager",
+        "//clockwork/scaffolding:channels",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "//jewels/uuid:uuid_hasher",
+        "@tclap",
+        "@wise_enum",
+        "@xxhash",
+    ],
+)
+
+cc_library(
+    name = "tcp_bridge_server",
+    srcs = ["tcp_bridge_server.cc"],
+    hdrs = ["tcp_bridge_server.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":observer",
+        ":slot",
+        ":subscriber_handle",
+        ":tcp_bridge_common",
+        ":tcp_bridge_config",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@boost//:iterator",
+    ],
+)

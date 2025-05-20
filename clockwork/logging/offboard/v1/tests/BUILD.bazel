@@ -1,0 +1,17 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "writer_config_proto_test",
+    srcs = ["writer_config_proto_test.cc"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging/offboard/v1:writer_config_cc_library",
+        "//jewels/testing:wise_enum_proto_sync",
+        "@catch2//:catch2_main",
+    ],
+)

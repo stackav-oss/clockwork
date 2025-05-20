@@ -1,0 +1,10 @@
+use clockwork::diagnostics::report;
+
+// Common diagnostics bus
+channel DiagnosticsChannel
+{
+  name: "/diagnostics";
+  message_type: Tachyon<report::Report>;
+  max_num_messages: 200;
+  publishers: diagnostics;
+}

@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+py_library(
+    name = "upgrade_lib",
+    srcs = ["upgrade_lib.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/logging/offboard:nb_log_writer_impl",
+        "//clockwork/logging/readers:nb_log_reader",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "//clockwork/serialization/py:compatibility",
+        "//clockwork/serialization/py:protocol",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "//clockwork/serialization/py:tachyon_dyn_from_metadata",
+        "@clockwork_pip//numpy",  # keep
+    ],
+)

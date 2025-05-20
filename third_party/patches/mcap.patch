@@ -1,0 +1,129 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 000000000..6e2622408
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,33 @@
++cc_library(
++    name = "mcap",
++    srcs = ["mcap_implementation.cc"],
++    hdrs = glob(["cpp/mcap/include/mcap/**"]),
++    includes = ["cpp/mcap/include"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@lz4//:lz4_frame",
++        "@zstd",
++    ],
++)
++
++cc_test(
++    name = "mcap_test",
++    timeout = "short",
++    srcs = ["cpp/test/unit_tests.cpp"],
++    visibility = ["//visibility:public"],
++    deps = [
++        ":mcap",
++        "@catch2//:catch2_main",
++    ],
++)
++
++py_library(
++    name = "mcap_py",
++    srcs = glob(["python/mcap/mcap/*.py"]),
++    imports = ["python/mcap"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@clockwork_pip//lz4",
++        "@clockwork_pip//zstandard",
++    ],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 000000000..2f930544f
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,11 @@
++module(
++    name = "mcap",
++)
++
++bazel_dep(name = "rules_python")
++pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
++use_repo(pip, "clockwork_pip")
++
++bazel_dep(name = "lz4")
++bazel_dep(name = "zstd")
++bazel_dep(name = "catch2", version = "3.3.0")
+diff --git cpp/mcap/include/mcap/writer.inl cpp/mcap/include/mcap/writer.inl
+index abbdc1da5..1e1e07866 100644
+--- cpp/mcap/include/mcap/writer.inl
++++ cpp/mcap/include/mcap/writer.inl
+@@ -1,6 +1,7 @@
+ #include "crc32.hpp"
+ #include <algorithm>
+ #include <cassert>
++#include <exception>
+ #include <iostream>
+ #include <lz4frame.h>
+ #include <lz4hc.h>
+@@ -52,14 +53,18 @@ Status FileWriter::open(std::string_view filename) {
+ void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
+   assert(file_);
+   const size_t written = std::fwrite(data, 1, size, file_);
+-  (void)written;
+-  assert(written == size);
++  if (written != size) {
++    throw std::runtime_error("MCAP writer failed to write to MCAP file");
++  }
+   size_ += size;
+ }
+ 
+ void FileWriter::end() {
+   if (file_) {
+-    std::fclose(file_);
++    if (std::fclose(file_) != 0)
++    {
++      throw std::runtime_error("MCAP writer Failed to close MCAP file");
++    }
+     file_ = nullptr;
+   }
+   size_ = 0;
+diff --git cpp/test/unit_tests.cpp cpp/test/unit_tests.cpp
+index 3e762428a..da5ae58a6 100644
+--- cpp/test/unit_tests.cpp
++++ cpp/test/unit_tests.cpp
+@@ -1,8 +1,7 @@
+ #define MCAP_IMPLEMENTATION
+ #include <mcap/mcap.hpp>
+ 
+-#define CATCH_CONFIG_MAIN
+-#include <catch2/catch.hpp>
++#include <catch2/catch_all.hpp>
+ 
+ #include <array>
+ #include <numeric>
+diff --git mcap_implementation.cc mcap_implementation.cc
+new file mode 100644
+index 000000000..5820ac148
+--- /dev/null
++++ mcap_implementation.cc
+@@ -0,0 +1,2 @@
++#define MCAP_IMPLEMENTATION
++#include <mcap/mcap.hpp>
+diff --git python/mcap/mcap/writer.py python/mcap/mcap/writer.py
+index 119796119..8d314d2da 100644
+--- python/mcap/mcap/writer.py
++++ python/mcap/mcap/writer.py
+@@ -480,5 +480,12 @@ class Writer:
+         if self.__chunk_builder and self.__chunk_builder.count > self.__chunk_size:
+             self.__finalize_chunk()
+ 
++    def finalize_chunk(self) -> None:
++        """
++        Finalize the chunk if there is data.
++        """
++        if self.__chunk_builder and self.__chunk_builder.count > 0:
++            self.__finalize_chunk()
++
+ 
+ __all__ = ["CompressionType", "IndexType", "Writer"]

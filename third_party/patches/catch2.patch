@@ -1,0 +1,56 @@
+diff --git src/catch2/catch_config.hpp src/catch2/catch_config.hpp
+index 17e983e5..3191a7ec 100644
+--- src/catch2/catch_config.hpp
++++ src/catch2/catch_config.hpp
+@@ -77,7 +77,7 @@ namespace Catch {
+         ShowDurations showDurations = ShowDurations::DefaultForReporter;
+         double minDuration = -1;
+         TestRunOrder runOrder = TestRunOrder::Declared;
+-        ColourMode defaultColourMode = ColourMode::PlatformDefault;
++        ColourMode defaultColourMode = ColourMode::ANSI;
+         WaitForKeypress::When waitForKeypress = WaitForKeypress::Never;
+ 
+         std::string defaultOutputFilename;
+diff --git src/catch2/internal/catch_test_macro_impl.hpp src/catch2/internal/catch_test_macro_impl.hpp
+index ccd5bb35..0f348b39 100644
+--- src/catch2/internal/catch_test_macro_impl.hpp
++++ src/catch2/internal/catch_test_macro_impl.hpp
+@@ -39,6 +39,10 @@
+ #endif
+ 
+ ///////////////////////////////////////////////////////////////////////////////
++#if defined(__clang_analyzer__)
++// If running clang-tidy, make everything into an assert so we can check optional access properly.
++#define INTERNAL_CATCH_TEST( macroName, resultDisposition, ... ) assert(( __VA_ARGS__ ))
++#else
+ #define INTERNAL_CATCH_TEST( macroName, resultDisposition, ... ) \
+     do { /* NOLINT(bugprone-infinite-loop) */ \
+         /* The expression should not be evaluated, but warnings should hopefully be checked */ \
+@@ -53,6 +57,7 @@
+         catchAssertionHandler.complete(); \
+     } while( (void)0, (false) && static_cast<const bool&>( !!(__VA_ARGS__) ) ) // the expression here is never evaluated at runtime but it forces the compiler to give it a look
+     // The double negation silences MSVC's C4800 warning, the static_cast forces short-circuit evaluation if the type has overloaded &&.
++#endif
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+ #define INTERNAL_CATCH_IF( macroName, resultDisposition, ... ) \
+diff --git src/catch2/internal/catch_output_redirect.hpp src/catch2/internal/catch_output_redirect.hpp
+index 51b796ba..e5a133af 100644
+--- src/catch2/internal/catch_output_redirect.hpp
++++ src/catch2/internal/catch_output_redirect.hpp
+@@ -10,13 +10,14 @@
+
+ #include <catch2/internal/catch_unique_ptr.hpp>
+
++#include <atomic>
+ #include <cassert>
+ #include <string>
+
+ namespace Catch {
+
+     class OutputRedirect {
+-        bool m_redirectActive = false;
++        std::atomic<bool> m_redirectActive = false;
+         virtual void activateImpl() = 0;
+         virtual void deactivateImpl() = 0;
+     public:

@@ -1,0 +1,133 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "gps_channel_policies_clk",
+    srcs = ["gps_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gps_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "gps_channels_clk",
+    srcs = ["gps_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [":gps_message_clk"],
+)
+
+clk(
+    name = "gps_clk",
+    srcs = ["gps.clk"],
+    outs = [
+        "gps_cog.cc",
+        "gps_cog.hh",
+        "gps_cog.inl",
+        "gps_cog_dial.cc",
+        "gps_cog_dial.hh",
+        "gps_cog_dial.inl",
+        "gps_exe.cc",
+        "gps_exe.hh",
+        "gps_exe.inl",
+    ],
+    deps = [
+        ":gps_channels_clk",
+        ":gps_message_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+    ],
+)
+
+cc_library(
+    name = "gps_cog",
+    srcs = [
+        "gps_cog.cc",
+        "gps_cog.inl",
+    ],
+    hdrs = ["gps_cog.hh"],
+    deps = [
+        ":gps_cog_dial",
+        ":gps_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "gps_cog_dial",
+    srcs = [
+        "gps_cog_dial.cc",
+        "gps_cog_dial.inl",
+    ],
+    hdrs = ["gps_cog_dial.hh"],
+    deps = [
+        ":gps_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "gps_cog_impl",
+    srcs = ["gps_cog_impl.cc"],
+    deps = [
+        ":gps_cog_dial",
+        ":gps_message",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+    ],
+)
+
+cc_binary(
+    name = "gps_exe",
+    srcs = [
+        "gps_exe.cc",
+        "gps_exe.hh",
+        "gps_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gps_cog",
+        ":gps_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "gps_message",
+    srcs = [
+        "gps_message.cc",
+        "gps_message.inl",
+    ],
+    hdrs = ["gps_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "gps_message_clk",
+    srcs = ["gps_message.clk"],
+    outs = [
+        "gps_message.cc",
+        "gps_message.hh",
+        "gps_message.inl",
+    ],
+)

@@ -1,0 +1,99 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(
+    default_testonly = True,
+)
+
+sh_binary(
+    name = "standalone_logger",
+    srcs = ["standalone_logger.sh"],
+    data = [":standalone_logger_exe"],
+)
+
+merge_simplelaunch_config(
+    name = "localhost.textproto",
+    srcs = [
+        "standalone_logger.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
+        "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        ":standalone_logger_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "standalone_logger_clk",
+    srcs = ["standalone_logger.clk"],
+    outs = [
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
+        "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
+        "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        "standalone_logger_exe.cc",
+        "standalone_logger_exe.hh",
+        "standalone_logger_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/logging:log_writer_config_clk",
+        "//clockwork/logging/writers:channel_message_rates_config_clk",
+        "//clockwork/logging/writers:logger_channel_policies_clk",
+        "//clockwork/logging/writers:logger_channels_clk",
+        "//clockwork/logging/writers:logger_clk",
+        "//clockwork/logging/writers:logger_config_clk",
+        "//clockwork/logging/writers:logger_status_clk",
+        "//clockwork/tools/channel_spy:channel_spy_config_clk",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk",
+    ],
+)
+
+cc_binary(
+    name = "standalone_logger_exe",
+    srcs = [
+        "standalone_logger_exe.cc",
+        "standalone_logger_exe.hh",
+        "standalone_logger_exe.inl",
+    ],
+    data = [
+        ":clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
+        ":standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
+        ":standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        "//clockwork/logging/writers/standalone_logger/resources:channel_rates_config.pbtxt",
+        "//clockwork/logging/writers/standalone_logger/resources:logger_config.pbtxt",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging/writers:channel_message_rates_config",
+        "//clockwork/logging/writers:channel_message_rates_config_proto_cc_library",
+        "//clockwork/logging/writers:channel_message_rates_config_proto_conv",
+        "//clockwork/logging/writers:logger_cog",
+        "//clockwork/logging/writers:logger_cog_state",
+        "//clockwork/logging/writers:logger_config",
+        "//clockwork/logging/writers:logger_config_proto_cc_library",
+        "//clockwork/logging/writers:logger_config_proto_conv",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//clockwork/tools/channel_spy:channel_spy_config",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)

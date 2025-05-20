@@ -1,0 +1,254 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "async_write_request",
+    srcs = ["async_write_request.inl"],
+    hdrs = ["async_write_request.hh"],
+    deps = [
+        "//jewels/aligner",
+        "//jewels/container:at",
+        "//jewels/log_cerr",
+        "//jewels/time:sync_time",
+        "@boost//:container",
+    ],
+)
+
+cc_library(
+    name = "async_writer",
+    srcs = ["async_writer.inl"],
+    hdrs = ["async_writer.hh"],
+    deps = [
+        ":log_format",
+        ":types",
+        ":writer_state",
+        "//clockwork/logging:log_error",
+        "//jewels/container:circular_buffer",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:shared_object_pool",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@fmt",
+        "@liburing",
+    ],
+)
+
+cc_library(
+    name = "buffered_memory_reader",
+    srcs = ["buffered_memory_reader.cc"],
+    hdrs = ["buffered_memory_reader.hh"],
+    deps = [
+        ":types",
+        "//clockwork/logging:log_error",
+        "//jewels/container:at",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "buffered_reader",
+    srcs = ["buffered_reader.inl"],
+    hdrs = ["buffered_reader.hh"],
+    deps = [
+        ":types",
+        "//clockwork/logging:log_error",
+        "//jewels/container:at",
+        "//jewels/container:circular_buffer",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/log_cerr",
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:memory_resource",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "clockwork_message_handle",
+    srcs = ["clockwork_message_handle.cc"],
+    hdrs = ["clockwork_message_handle.hh"],
+    deps = [
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/memory:pointers",
+    ],
+)
+
+cc_library(
+    name = "clockwork_writer_policy",
+    hdrs = ["clockwork_writer_policy.hh"],
+    deps = [
+        ":async_write_request",
+        ":async_writer",
+        ":null_message_handle",
+        "//jewels/math:constants",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "//jewels/shared_pool:shared_object_pool",
+    ],
+)
+
+cc_library(
+    name = "log_format",
+    srcs = ["log_format.inl"],
+    hdrs = ["log_format.hh"],
+    deps = [
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//jewels/math:constants",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "memory_writer",
+    srcs = ["memory_writer.cc"],
+    hdrs = ["memory_writer.hh"],
+    deps = [
+        ":log_format",
+        ":types",
+        ":writer_state",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging:zstd_helper",
+        "//jewels/log_cerr",
+        "//jewels/math:constants",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+    ],
+)
+
+cc_library(
+    name = "null_message_handle",
+    srcs = ["null_message_handle.cc"],
+    hdrs = ["null_message_handle.hh"],
+)
+
+cc_library(
+    name = "reader",
+    srcs = ["reader.inl"],
+    hdrs = ["reader.hh"],
+    deps = [
+        ":log_format",
+        ":types",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:decompress_option",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:log_uuid",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging:zstd_helper",
+        "//jewels/container:at",
+        "//jewels/filesystem",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/uuid",
+        "@fmt",
+        "@xxhash",
+    ],
+)
+
+cc_library(
+    name = "types",
+    srcs = ["types.cc"],
+    hdrs = ["types.hh"],
+    deps = [
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:schema_encoding",
+        "//jewels/container:at",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "writer",
+    srcs = ["writer.inl"],
+    hdrs = ["writer.hh"],
+    deps = [
+        ":clockwork_message_handle",
+        ":log_format",
+        ":null_message_handle",
+        ":types",
+        ":writer_state",
+        "//clockwork/logging:channel_type",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:nolint_helper",
+        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging:zstd_helper",
+        "//clockwork/logging/writers:rate_filter",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:slot",
+        "//jewels/aligner",
+        "//jewels/log_cerr",
+        "//jewels/math:constants",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool:shared_object_pool",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "writer_policy",
+    hdrs = ["writer_policy.hh"],
+    deps = [
+        ":async_write_request",
+        ":async_writer",
+        ":clockwork_message_handle",
+        "//jewels/math:constants",
+        "//jewels/shared_pool:shared_buffer_pool",
+        "//jewels/shared_pool:shared_object_pool",
+    ],
+)
+
+cc_library(
+    name = "writer_state",
+    srcs = ["writer_state.inl"],
+    hdrs = ["writer_state.hh"],
+    deps = ["@wise_enum"],
+)

@@ -1,0 +1,27 @@
+use clockwork::logging::writers::channel_message_rates::ChannelMessageRates;
+use clockwork::logging::writers::logger_config::LoggerConfig;
+use clockwork::logging::writers::logger_status::LoggerStatus;
+
+// Logger config
+channel LoggerConfigChannel
+{
+  name: "/logger/config";
+  message_type: Tachyon<LoggerConfig>;
+  max_num_messages: 1;
+}
+
+// Logger status
+channel LoggerStatusChannel
+{
+  name: "/logger/status";
+  message_type: Tachyon<LoggerStatus>;
+  max_num_messages: 10;
+}
+
+// Logger channel message rates
+channel LoggerMessageRatesChannel
+{
+  name: "/logger/message_rates";
+  message_type: Tachyon<ChannelMessageRates>;
+  max_num_messages: 2;
+}

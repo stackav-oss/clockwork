@@ -1,0 +1,80 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 0000000..69ffb1c
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,31 @@
++load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test", "cc_binary")
++
++cc_library(
++    name = "xxhash",
++    hdrs = glob(["*.h"]),
++    srcs = ["xxhash.c"] + select({
++        "@platforms//cpu:x86_64": ["xxh_x86dispatch.c"],
++        "//conditions:default": [],
++    }),
++    copts = ["-O3"],
++    local_defines = ["NDEBUG"] + select({
++        "@platforms//cpu:x86_64": [
++            "XXHSUM_DISPATCH=1",
++            "XXH_X86DISPATCH_ALLOW_AVX=1",
++        ],
++        "//conditions:default": [],
++    }),
++    includes = ["."],
++    visibility = ["//visibility:public"],
++)
++
++cc_test(
++    name = "sanity_test",
++    srcs = [
++        "tests/sanity_test.c",
++        "tests/sanity_test_vectors.h",
++    ],
++    copts = ["-w"],
++    deps = [":xxhash"],
++    visibility = ["//visibility:public"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000..fd4c632
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,4 @@
++module(name = "xxhash")
++
++bazel_dep(name = "rules_cc")
++bazel_dep(name = "platforms")
+diff --git WORKSPACE WORKSPACE
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ WORKSPACE
+@@ -0,0 +1 @@
++
+diff --git tests/sanity_test.c tests/sanity_test.c
+index 4c59bf3..b9023f4 100644
+--- tests/sanity_test.c
++++ tests/sanity_test.c
+@@ -21,16 +21,14 @@ main()
+ */
+ #define XXH_STATIC_LINKING_ONLY
+ #define XXH_IMPLEMENTATION   /* access definitions */
+-#include "../cli/xsum_arch.h"
+-#include "../cli/xsum_os_specific.h"
+-#include "../cli/xsum_output.h"
+-#include "../cli/xsum_output.c"
+-#define XSUM_NO_MAIN 1
+-#include "../cli/xsum_os_specific.h"
+-#include "../cli/xsum_os_specific.c"
++#define XSUM_U64 uint64_t
++#define XSUM_U32 uint32_t
++#define XSUM_U8 uint8_t
++#define XSUM_log printf
+ #include "../xxhash.h"
+ #include "sanity_test_vectors.h"
+ 
++#include <stdio.h>
+ #include <assert.h> /* assert */
+ 
+ /* use #define to make them constant, required for initialization */

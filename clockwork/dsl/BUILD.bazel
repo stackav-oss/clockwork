@@ -1,0 +1,69 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@fltk//:rules.bzl", "generate_parser")
+load("//tools/rules:package.bzl", "package")
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+package(
+    default_visibility = ["//clockwork:__subpackages__"],
+)
+
+py_library(
+    name = "clk_exception",
+    srcs = ["clk_exception.py"],
+    visibility = [":__subpackages__"],
+)
+
+py_binary(
+    name = "clkc",
+    srcs = ["clkc.py"],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":clk_exception",
+        "//clockwork/dsl/bazel:extract_targets",
+        "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_executable",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:nanobind_target",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:proto_target",
+        "//clockwork/dsl/ir:py_target",
+        "//clockwork/dsl/ir:system_target",
+        "@clockwork_pip//click",
+    ],
+)
+
+py_library(
+    name = "compiler_context",
+    srcs = ["compiler_context.py"],
+    visibility = ["//visibility:public"],
+    deps = ["@clockwork_pip//typing_extensions"],
+)
+
+py_library(
+    name = "cst",
+    srcs = ["cst.py"],
+    deps = ["@fltk"],
+)
+
+generate_parser(
+    name = "generate_parser",
+    src = "clockwork.fltkg",
+    cst_mod_path = "clockwork.dsl.cst",
+    out_cst_py = "cst.py",
+    out_parser_py = "parser.py",
+)
+
+py_library(
+    name = "parser",
+    srcs = ["parser.py"],
+    deps = [
+        ":cst",
+        "@fltk",
+    ],
+)

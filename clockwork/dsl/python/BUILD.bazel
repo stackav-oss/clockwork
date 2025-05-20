@@ -1,0 +1,12 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "py_context",
+    srcs = ["py_context.py"],
+    deps = ["@clockwork_pip//typing_extensions"],
+)

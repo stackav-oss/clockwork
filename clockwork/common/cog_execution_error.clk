@@ -1,0 +1,33 @@
+// Error Enum for Cog execution errors
+enum CogExecutionError
+{
+  values
+  {
+    // Unspecified
+    #0 unspecified default;
+    // Reentry lock contention
+    #1 reentry_lock_contention;
+    // States lock contention
+    #2 states_lock_contention;
+    // Not ready
+    #3 not_ready;
+    // Make inputs failed
+    #4 make_inputs_failed;
+    // Reserve slots failed
+    #5 reserve_slots_failed;
+    // Make publishables failed
+    #6 make_publishables_failed;
+    // Overrun
+    #7 overrun;
+  }
+}
+
+cpp_target cog_execution_error
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  enum CogExecutionError;
+}

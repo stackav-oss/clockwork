@@ -1,0 +1,47 @@
+// Test configuration
+schema TestConfig
+{
+  uuid: 71c8779e-9c74-4812-bb86-c5aa2eb7cd50;
+
+  fields
+  {
+    // Configuration string
+    #1 config_string: VarString<255>;
+  }
+}
+
+cpp_target test_config
+{
+  options
+  {
+    namespace clockwork::python::tests;
+  }
+
+  schema TestConfig;
+
+  representation Tachyon<TestConfig>;
+  interface Tappy<TestConfig>;
+}
+
+py_target py_test_config
+{
+  interface Tappy<TestConfig>;
+}
+
+proto_target test_config_proto
+{
+  options
+  {
+    package clockwork.python.tests.support.proto;
+  }
+  representation Protobuf<TestConfig>;
+}
+
+cpp_target test_config_proto_conv
+{
+  options
+  {
+    namespace clockwork::python::tests;
+  }
+  converter ProtobufToTap<Protobuf<TestConfig>, Tap<Tachyon<TestConfig>>>;
+}

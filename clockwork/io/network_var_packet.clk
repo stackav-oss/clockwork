@@ -1,0 +1,43 @@
+// Variable sized packet of unstructured bytes.
+schema NetworkVarPacket
+{
+  uuid: e646a413-bd44-4977-ac7b-d5004a254fe7;
+  parameters
+  {
+    // Max size of the packet.
+    #0 max_size_bytes: UInt64;
+  }
+  fields
+  {
+    // Payload
+    #1 bytes: VarArray<type=Byte, max_size=max_size_bytes>;
+
+    // Source address
+    #2 src_address: VarString<max_size=16>;
+
+    // Source port
+    #3 src_port: UInt16;
+
+    // Destination address
+    #4 dst_address: VarString<max_size=16>;
+
+    // Destination port
+    #5 dst_port: UInt16;
+  }
+}
+
+cpp_target network_var_packet
+{
+  options
+  {
+    namespace clockwork::io;
+  }
+
+  schema NetworkVarPacket;
+
+  representation Tachyon<NetworkVarPacket<max_size_bytes=4>>;
+  interface Tap<Tachyon<NetworkVarPacket<max_size_bytes=4>>>;
+
+  representation Tachyon<NetworkVarPacket<max_size_bytes=1400>>;
+  interface Tap<Tachyon<NetworkVarPacket<max_size_bytes=1400>>>;
+}

@@ -1,0 +1,133 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "imu_channel_policies_clk",
+    srcs = ["imu_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":imu_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "imu_channels_clk",
+    srcs = ["imu_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [":imu_message_clk"],
+)
+
+clk(
+    name = "imu_clk",
+    srcs = ["imu.clk"],
+    outs = [
+        "imu_cog.cc",
+        "imu_cog.hh",
+        "imu_cog.inl",
+        "imu_cog_dial.cc",
+        "imu_cog_dial.hh",
+        "imu_cog_dial.inl",
+        "imu_exe.cc",
+        "imu_exe.hh",
+        "imu_exe.inl",
+    ],
+    deps = [
+        ":imu_channels_clk",
+        ":imu_message_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+    ],
+)
+
+cc_library(
+    name = "imu_cog",
+    srcs = [
+        "imu_cog.cc",
+        "imu_cog.inl",
+    ],
+    hdrs = ["imu_cog.hh"],
+    deps = [
+        ":imu_cog_dial",
+        ":imu_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "imu_cog_dial",
+    srcs = [
+        "imu_cog_dial.cc",
+        "imu_cog_dial.inl",
+    ],
+    hdrs = ["imu_cog_dial.hh"],
+    deps = [
+        ":imu_message",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "imu_cog_impl",
+    srcs = ["imu_cog_impl.cc"],
+    deps = [
+        ":imu_cog_dial",
+        ":imu_message",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+    ],
+)
+
+cc_binary(
+    name = "imu_exe",
+    srcs = [
+        "imu_exe.cc",
+        "imu_exe.hh",
+        "imu_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":imu_cog",
+        ":imu_message",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "imu_message",
+    srcs = [
+        "imu_message.cc",
+        "imu_message.inl",
+    ],
+    hdrs = ["imu_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "imu_message_clk",
+    srcs = ["imu_message.clk"],
+    outs = [
+        "imu_message.cc",
+        "imu_message.hh",
+        "imu_message.inl",
+    ],
+)

@@ -1,0 +1,94 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "pod",
+    srcs = ["pod.py"],
+    deps = [
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
+    name = "protobuf_clk",
+    srcs = ["protobuf.py"],
+    deps = [
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/proto:proto_typereg",
+    ],
+)
+
+py_library(
+    name = "tachyon_layout",
+    srcs = ["tachyon_layout.py"],
+    deps = [
+        ":tachyon_reg",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:schema",
+    ],
+)
+
+py_library(
+    name = "tachyon_layout_reg",
+    srcs = ["tachyon_layout_reg.py"],
+    visibility = ["//clockwork:__subpackages__"],
+    deps = [
+        ":tachyon_layout",
+        ":tachyon_reg",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
+    name = "tachyon_reg",
+    srcs = ["tachyon_reg.py"],
+    visibility = [
+        "//clockwork:__subpackages__",
+        "//jewels/nanobind/clk_bindings/common:__pkg__",
+        "//jewels/nanobind/clk_bindings/tests:__pkg__",
+    ],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
+    name = "tap",
+    srcs = ["tap.py"],
+    visibility = ["//clockwork:__subpackages__"],
+    deps = [
+        ":tachyon_layout",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/cpp:values",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:uuid_reg",
+        "//clockwork/serialization/metadata:tachyon",
+    ],
+)

@@ -1,0 +1,175 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "channel_publisher_test",
+    srcs = ["channel_publisher_test.cc"],
+    deps = [
+        "//clockwork/common:process_description",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging/writers/tests/support:test_log_writer_config",
+        "//clockwork/logging/writers/tests/support:test_publisher",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:shm_publisher",
+        "//clockwork/runners:channel_publisher",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+        "@xxhash",
+    ],
+)
+
+cc_test(
+    name = "deterministic_cog_queue_test",
+    size = "small",
+    srcs = ["deterministic_cog_queue_test.cc"],
+    deps = [
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:cog_envelope",
+        "//clockwork/common/tests/support:fake_cog",
+        "//clockwork/runners:deterministic_cog_queue",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "deterministic_runner_test",
+    size = "small",
+    srcs = ["deterministic_runner_test.cc"],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:cog_execution_error",
+        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:in_memory_channel",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:subscriber_handle",
+        "//clockwork/runners:deterministic_cog_queue",
+        "//clockwork/runners:deterministic_runner",
+        "//clockwork/runners:deterministic_timer",
+        "//jewels/cli:exit_condition_signal",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@boost//:container",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "deterministic_timer_test",
+    size = "small",
+    srcs = ["deterministic_timer_test.cc"],
+    deps = [
+        "//clockwork/pinion:observer",
+        "//clockwork/runners:deterministic_timer",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "epoll_manager_test",
+    srcs = ["epoll_manager_test.cc"],
+    deps = [
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/runners:epoll_manager",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "online_cog_queue_test",
+    srcs = ["online_cog_queue_test.cc"],
+    linkopts = ["-pthread"],
+    deps = [
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:cog_envelope",
+        "//clockwork/common/tests/support:test_cog",
+        "//clockwork/runners:online_cog_queue",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "online_runner_test",
+    srcs = ["online_runner_test.cc"],
+    tags = [
+        "aubsan-todo",
+        "tsan-todo",
+    ],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common/tests/support:test_cog",
+        "//clockwork/runners:online_cog_queue",
+        "//clockwork/runners:online_runner",
+        "//clockwork/runners:thread_pool",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+        "@boost//:lockfree",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "thread_pool_test",
+    srcs = ["thread_pool_test.cc"],
+    tags = [
+        "aubsan-todo",
+        "tsan-todo",
+    ],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:cog_envelope",
+        "//clockwork/common/tests/support:test_cog",
+        "//clockwork/runners:epoll_manager",
+        "//clockwork/runners:online_cog_queue",
+        "//clockwork/runners:thread_pool",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+        "@boost//:lockfree",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "timerfd_timer_test",
+    srcs = ["timerfd_timer_test.cc"],
+    deps = [
+        "//clockwork/common/tests/support:fake_epoll_mananger",
+        "//clockwork/pinion:observer",
+        "//clockwork/runners:timerfd_timer",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)

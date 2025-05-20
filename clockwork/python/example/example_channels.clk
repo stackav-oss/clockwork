@@ -1,0 +1,26 @@
+use clockwork::python::tests::support::test_input_message::TestInputMessage;
+use clockwork::python::tests::support::test_output_message::TestOutputMessage;
+
+// Example input1 channel
+channel Input1Channel
+{
+  name: "/example/input1";
+  message_type: Tachyon<TestInputMessage>;
+  max_num_messages: 10;
+}
+
+// Example input2 channel
+channel Input2Channel
+{
+  name: "/example/input2";
+  message_type: Tachyon<TestInputMessage>;
+  max_num_messages: 10;
+}
+
+// Example output channel
+channel OutputChannel
+{
+  name: "/example/output";
+  message_type: Tachyon<TestOutputMessage>;
+  max_num_messages: 20;
+}

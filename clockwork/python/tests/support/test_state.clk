@@ -1,0 +1,29 @@
+// Test State
+schema TestState
+{
+  uuid: 806eac3c-fb61-4b0a-bec8-db0a7a8a0435;
+
+  fields
+  {
+    // Test state string
+    #1 state_string: VarString<255>;
+  }
+}
+
+cpp_target test_state
+{
+  options
+  {
+    namespace clockwork::python::tests;
+  }
+
+  schema TestState;
+
+  representation Tachyon<TestState>;
+  interface Tappy<TestState>;
+}
+
+nanobind_target test_state_clk_nb
+{
+    binding Tappy<TestState>;
+}

@@ -1,0 +1,38 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_plugin.bzl", "proto_plugin")
+load("@clockwork_pip//:requirements.bzl", "all_whl_requirements")
+load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
+load("//tools/rules:python.bzl", "py_binary")
+
+exports_files(
+    ["build_stack_rules_proto.yaml"],
+    visibility = ["//visibility:public"],
+)
+
+modules_mapping(
+    name = "modules_map",
+    exclude_patterns = [
+        "^mcap($|\\.)",  # We have our own custom version of this
+        "^examples",  # We have our own examples dir
+    ],
+    visibility = ["//:__pkg__"],
+    wheels = all_whl_requirements,
+)
+
+proto_plugin(
+    name = "protoc-gen-nolint",
+    # Add a pragma at the top of all headers
+    mods = {".pb.h": 'BEGIN {print "#pragma GCC system_header"} {print}'},
+    tool = ":protoc_nolint",
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "protoc_nolint",
+    srcs = ["protoc_nolint.py"],
+    data = [":build_stack_rules_proto.yaml"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@clockwork_pip//protobuf"],
+)

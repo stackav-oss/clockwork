@@ -1,0 +1,62 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//clockwork/pinion:__subpackages__"])
+
+cc_library(
+    name = "mmap_region",
+    srcs = ["mmap_region.cc"],
+    hdrs = ["mmap_region.hh"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "socket_common",
+    srcs = ["socket_common.cc"],
+    hdrs = ["socket_common.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "socket_payload",
+    srcs = ["socket_payload.inl"],
+    hdrs = ["socket_payload.hh"],
+    visibility = [
+        "//clockwork/pinion:__subpackages__",
+        "//clockwork/scaffolding:__subpackages__",
+    ],
+    deps = [
+        "//clockwork/io:network_var_packet",
+        "//clockwork/io:var_packet",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+    ],
+)
+
+cc_library(
+    name = "tcp_socket",
+    srcs = ["tcp_socket.cc"],
+    hdrs = ["tcp_socket.hh"],
+    deps = [
+        ":socket_common",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "unix_socket",
+    srcs = ["unix_socket.cc"],
+    hdrs = ["unix_socket.hh"],
+    deps = [
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/std:expected",
+    ],
+)

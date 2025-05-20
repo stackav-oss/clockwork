@@ -1,0 +1,121 @@
+// Image height in pixels
+image_height_pixels: UInt64 = 240;
+
+// Image width in pixels
+image_width_pixels: UInt64 = 360;
+
+// Raw image size in bytes (width * height * 3 / 2)
+raw_image_size_bytes: UInt64 = 129600;
+
+// Image size in bytes (width * height * 3)
+image_size_bytes: UInt64 = 259200;
+
+// Number of bytes in a chunk from a YUV411 image
+yuv411_chunk_size: UInt64 = 6;
+
+// Offsets into a chunk from a YUV411 image
+yuv411_u_offset: UInt64 = 0;
+yuv411_y1_offset: UInt64 = 1;
+yuv411_y2_offset: UInt64 = 2;
+yuv411_v_offset: UInt64 = 3;
+yuv411_y3_offset: UInt64 = 4;
+yuv411_y4_offset: UInt64 = 5;
+
+// Number of bytes in a chunk from a YUV444 image
+yuv444_chunk_size: UInt64 = 12;
+
+// Offsets into a chunk from a YUV444 image
+yuv444_u1_offset: UInt64 = 0;
+yuv444_y1_offset: UInt64 = 1;
+yuv444_v1_offset: UInt64 = 2;
+yuv444_u2_offset: UInt64 = 3;
+yuv444_y2_offset: UInt64 = 4;
+yuv444_v2_offset: UInt64 = 5;
+yuv444_u3_offset: UInt64 = 6;
+yuv444_y3_offset: UInt64 = 7;
+yuv444_v3_offset: UInt64 = 8;
+yuv444_u4_offset: UInt64 = 9;
+yuv444_y4_offset: UInt64 = 10;
+yuv444_v4_offset: UInt64 = 11;
+
+
+// YUV411 camera image is packed lines of UYYVYYUYYVYY... starting at the top left and ending at the bottom right
+schema Yuv411Image
+{
+  uuid: de5b15a5-578e-4e40-9d46-7cd548935007;
+  parameters
+  {
+    // Image size (width * height * 3 / 2)
+    #0 image_size: UInt64;
+  }
+
+  fields
+  {
+    // Timestamp for when this image was generated.
+    #1 time_of_validity: SyncTime;
+
+    // Image data in packed lines of UYYVYYUYYVYY...
+    #2 data: FixedArray<UInt16, image_size>;
+  }
+}
+
+// YUV444 camera image is packed lines of UYVUYV... starting at the top left and ending at the bottom right
+schema Yuv444Image
+{
+  uuid: 83aa5290-6696-4caa-8228-bdaf44498e2b;
+  parameters
+  {
+    // Image size in bytes
+    #0 image_size: UInt64;
+  }
+  fields
+  {
+    // Timestamp for when this image was generated.
+    #1 time_of_validity: SyncTime;
+
+    // Image data in packed lines of UYVUYV...
+    #2 data: FixedArray<UInt16, image_size>;
+  }
+}
+
+cpp_target video_message
+{
+  options
+  {
+    namespace clockwork::demo_system::camera;
+  }
+
+  constant image_height_pixels;
+  constant image_width_pixels;
+  constant raw_image_size_bytes;
+  constant image_size_bytes;
+  constant yuv411_chunk_size;
+  constant yuv411_u_offset;
+  constant yuv411_y1_offset;
+  constant yuv411_y2_offset;
+  constant yuv411_v_offset;
+  constant yuv411_y3_offset;
+  constant yuv411_y4_offset;
+  constant yuv444_chunk_size;
+  constant yuv444_u1_offset;
+  constant yuv444_y1_offset;
+  constant yuv444_v1_offset;
+  constant yuv444_u2_offset;
+  constant yuv444_y2_offset;
+  constant yuv444_v2_offset;
+  constant yuv444_u3_offset;
+  constant yuv444_y3_offset;
+  constant yuv444_v3_offset;
+  constant yuv444_u4_offset;
+  constant yuv444_y4_offset;
+  constant yuv444_v4_offset;
+
+  schema Yuv411Image;
+  schema Yuv444Image;
+
+  representation Tachyon<Yuv411Image<raw_image_size_bytes>>;
+  interface Tappy<Yuv411Image<raw_image_size_bytes>>;
+
+  representation Tachyon<Yuv444Image<image_size_bytes>>;
+  interface Tappy<Yuv444Image<image_size_bytes>>;
+}

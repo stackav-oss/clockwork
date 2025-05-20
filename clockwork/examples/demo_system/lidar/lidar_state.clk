@@ -1,0 +1,23 @@
+use clockwork::examples::demo_system::lidar::lidar_message;
+
+// Fake lidar state used to produce fake lidar messages
+schema LidarState
+{
+  fields
+  {
+    // Azimuth index of the next packet to send when the cog executes
+    #0 current_sweep_index: UInt32;
+  }
+}
+
+cpp_target lidar_state
+{
+  options
+  {
+    namespace clockwork::demo_system::lidar;
+  }
+  schema LidarState;
+
+  representation Tachyon<LidarState>;
+  interface Tappy<LidarState>;
+}

@@ -1,0 +1,196 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+clk(
+    name = "localization_channel_policies_clk",
+    srcs = ["localization_channel_policies.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":localization_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "localization_channels_clk",
+    srcs = ["localization_channels.clk"],
+    visibility = ["//visibility:public"],
+    deps = [":pose_message_clk"],
+)
+
+clk(
+    name = "localization_clk",
+    srcs = ["localization.clk"],
+    outs = [
+        "localization_cog.cc",
+        "localization_cog.hh",
+        "localization_cog.inl",
+        "localization_cog_dial.cc",
+        "localization_cog_dial.hh",
+        "localization_cog_dial.inl",
+        "localization_exe.cc",
+        "localization_exe.hh",
+        "localization_exe.inl",
+    ],
+    deps = [
+        ":localization_channels_clk",
+        ":localization_state_clk",
+        ":pose_message_clk",
+        "//clockwork/examples/demo_system:cpu_domain_clk",
+        "//clockwork/examples/demo_system/gps:gps_channels_clk",
+        "//clockwork/examples/demo_system/gps:gps_message_clk",
+        "//clockwork/examples/demo_system/imu:imu_channels_clk",
+        "//clockwork/examples/demo_system/imu:imu_message_clk",
+    ],
+)
+
+cc_library(
+    name = "localization_cog",
+    srcs = [
+        "localization_cog.cc",
+        "localization_cog.inl",
+    ],
+    hdrs = ["localization_cog.hh"],
+    deps = [
+        ":localization_cog_dial",
+        ":localization_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+cc_library(
+    name = "localization_cog_dial",
+    srcs = [
+        "localization_cog_dial.cc",
+        "localization_cog_dial.inl",
+    ],
+    hdrs = ["localization_cog_dial.hh"],
+    deps = [
+        ":localization_state",
+        ":pose_message",
+        "//clockwork/dial:include_common",
+        "//clockwork/examples/demo_system/gps:gps_message",
+        "//clockwork/examples/demo_system/imu:imu_message",
+    ],
+)
+
+cc_library(
+    name = "localization_cog_impl",
+    srcs = ["localization_cog_impl.cc"],
+    deps = [
+        ":localization_cog_dial",
+        ":localization_state",
+        ":pose_message",
+        "//clockwork/dial:msg_input",
+        "//clockwork/examples/demo_system/gps:gps_message",
+        "//clockwork/examples/demo_system/imu:imu_message",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "//jewels/math:constants",
+        "@boost//:iterator",
+    ],
+)
+
+cc_binary(
+    name = "localization_exe",
+    srcs = [
+        "localization_exe.cc",
+        "localization_exe.hh",
+        "localization_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":localization_cog",
+        ":localization_state",
+        ":pose_message",
+        "//clockwork:repr_iface",
+        "//clockwork/examples/demo_system/gps:gps_message",
+        "//clockwork/examples/demo_system/imu:imu_message",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_library(
+    name = "localization_state",
+    srcs = [
+        "localization_state.cc",
+        "localization_state.inl",
+    ],
+    hdrs = ["localization_state.hh"],
+    deps = [
+        ":pose_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "localization_state_clk",
+    srcs = ["localization_state.clk"],
+    outs = [
+        "localization_state.cc",
+        "localization_state.hh",
+        "localization_state.inl",
+    ],
+    deps = [":pose_message_clk"],
+)
+
+cc_library(
+    name = "pose_filter",
+    srcs = [
+        "pose_filter.cc",
+        "pose_filter.inl",
+    ],
+    hdrs = ["pose_filter.hh"],
+    deps = [
+        ":pose_message",
+        "//clockwork:repr_iface",
+        "//clockwork/dial:msg_input",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+        "@fmt",
+    ],
+)
+
+cc_library(
+    name = "pose_message",
+    srcs = [
+        "pose_message.cc",
+        "pose_message.inl",
+    ],
+    hdrs = ["pose_message.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "pose_message_clk",
+    srcs = ["pose_message.clk"],
+    outs = [
+        "pose_message.cc",
+        "pose_message.hh",
+        "pose_message.inl",
+    ],
+)

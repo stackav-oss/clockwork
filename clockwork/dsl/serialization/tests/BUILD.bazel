@@ -1,0 +1,241 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+cc_test(
+    name = "clk_to_protobuf_test",
+    srcs = ["clk_to_protobuf_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:better_than_inheritance_cc_library",
+        "//clockwork/dsl/tests/support:proto_tester_onboard_cc_library",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "cpp_tap_test",
+    srcs = ["cpp_tap_test.cc"],
+    data = ["//clockwork/dsl/serialization/tests/resources:tapmsg_tachyon"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/dsl/tests/support:tapmsg",
+        "//clockwork/dsl/tests/support:taptag",
+        "//clockwork/dsl/tests/support:taptags",
+        "//jewels/container:compare",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "//jewels/utility:enum_flags",
+        "//jewels/utility:fix_clockwork_path",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@gsl//:util",
+    ],
+)
+
+py_test(
+    name = "pod_test",
+    srcs = [
+        "pod_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/tests/support:hellomsg.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:cst",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:parse",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/serialization:pod",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "proto_to_tachyon_converter_test",
+    srcs = ["proto_to_tachyon_converter_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:better_than_inheritance_cc_library",
+        "//clockwork/dsl/tests/support:better_than_inheritance_cpp",
+        "//clockwork/dsl/tests/support:convert_hello_msg",
+        "//clockwork/dsl/tests/support:msg_with_au",
+        "//clockwork/dsl/tests/support:msg_with_au_proto_cc_library",
+        "//clockwork/dsl/tests/support:proto_tester_onboard_cc_library",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@au",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+py_test(
+    name = "protobuf_test",
+    srcs = [
+        "protobuf_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/dsl/tests/support:protomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:proto_target",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:protobuf_clk",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "py_tap_test",
+    srcs = [
+        "py_tap_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/serialization/tests/resources:tapmsg_tachyon"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/tests/support:msg_with_au_py",
+        "//clockwork/dsl/tests/support:pytapmsg",
+        "//clockwork/tests/support:py_test_utils",
+    ],
+)
+
+py_test(
+    name = "tachyon_layout_reg_test",
+    srcs = [
+        "tachyon_layout_reg_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_layout",
+        "//clockwork/dsl/serialization:tachyon_layout_reg",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "tachyon_layout_test",
+    srcs = [
+        "tachyon_layout_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/serialization:tachyon_layout",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "tachyon_reg_test",
+    srcs = [
+        "tachyon_reg_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "tap_test",
+    srcs = [
+        "tap_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/tests/support:tapmsg_clk",
+        "//clockwork/dsl/tests/support:taptags_clk",
+        "//jewels/units/clk:au_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:interface",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:strongtypes",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:tachyon_layout",
+        "//clockwork/dsl/serialization:tap",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "tap_to_protobuf_converter_test",
+    srcs = ["tap_to_protobuf_converter_test.cc"],
+    deps = [
+        "//clockwork/dsl/tests/support:better_than_inheritance_cc_library",
+        "//clockwork/dsl/tests/support:better_than_inheritance_cpp",
+        "//clockwork/dsl/tests/support:convert_hello_msg",
+        "//clockwork/dsl/tests/support:msg_with_au",
+        "//clockwork/dsl/tests/support:msg_with_au_proto_cc_library",
+        "//clockwork/dsl/tests/support:proto_tester_onboard_cc_library",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@au",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)

@@ -1,0 +1,396 @@
+use clockwork::dsl::tests::support::taptags;
+
+// Some constant
+constant_four: UInt64 = 4;
+
+// Message with padding.
+schema  PaddedMsg
+{
+  fields
+  {
+    // Integer type
+    #1 large: Int64;
+
+    // Bool type
+    #2 small: Bool;
+  }
+}
+
+// Enum
+enum SomeEnum
+{
+  uuid: 02d1a601-5c69-46dd-9922-06fee33b581e;
+  values
+  {
+    // First value
+    #1 first_value default;
+
+    // Second value
+    #2 second_value;
+  }
+}
+
+
+// Flags enum
+enum SomeFlags
+{
+  uuid: 9d66eef8-1019-48a2-971e-f9bb8b2df06c;
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+  values
+  {
+    // No bits set
+    #0 none default { underlying_value: 0; }
+    // LSB
+    #1 flag1 { underlying_value: 1; }
+    // Bit1
+    #2 flag2 { underlying_value: 2; }
+    // Bit1
+    #3 flag3 { underlying_value: 4; }
+    // Bit0 + Bit1
+    #4 flag12 { underlying_value: 3; }
+  }
+}
+
+// A small msg.
+schema SubMsg
+{
+  uuid: 335dd4d4-7753-4aa6-a5a9-f39f60556aae;
+  fields
+  {
+    // Docs
+    #1 field: Int64;
+  }
+}
+
+// FromConstant
+schema FromConstant
+{
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64;
+  }
+  fields
+  {
+    // Docs
+    #2 as_init: UInt64 = value_par;
+
+    // Docs
+    #3 as_type: VarArray<UInt64, value_par>;
+  }
+}
+
+
+// GenericSubMsg
+schema GenericSubMsg
+{
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64;
+
+    // Some type parameter
+    #2 type_par: Type;
+  }
+  fields
+  {
+    // Docs
+    #3 field: VarArray<type_par, value_par>;
+  }
+}
+
+// GenericMsg
+schema GenericMsg
+{
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64;
+
+    // Some type parameter
+    #2 TypePar: Type;
+  }
+
+  fields
+  {
+    // Some field.
+    #3 field: UInt64 = value_par;
+
+    // Array of parameterized types.
+    #4 array_of_parameterized_type: VarArray<TypePar, value_par>;
+  }
+}
+
+// Param as field
+schema ParamAsField
+{
+  parameters
+  {
+    // A type param.
+    #0 TypePar: Type;
+  }
+  fields
+  {
+    // A field as the type param.
+    #1 value: TypePar;
+  }
+}
+
+// Message to test Tap.
+schema TapMsg
+{
+  uuid: cae6ee0b-ec41-40cf-8b87-fb1583e5985d;
+  fields
+  {
+    // Integer type
+    #1 integer: Int64;
+
+    // Floating point type and primitive with default
+    #2 floating_point: Float32 = 1.234;
+
+    // Bool
+    #3 boolean: Bool;
+
+    // Array of primitives
+    #4 array_of_primitives: VarArray<Int32, max_size=9>;
+
+    // Array of array of primitives
+    #5 array_of_array: VarArray<VarString<max_size=3>, max_size=2>;
+
+    // UUID of schema tag in same namespace
+    #6 uuid: Uuid<SubMsg>;
+
+    // UUID of tag in different namespace
+    #7 uuid_different_namespace: Uuid<taptags::AnotherTag>;
+
+    // Default enum.
+    #8 default_enum: SomeEnum;
+
+    // Enum with init.
+    #9 enum_with_init: SomeEnum = SomeEnum::second_value;
+
+    // Default enum.
+    #20 default_flags: SomeFlags;
+
+    // Enum with init.
+    #21 flags_with_init: SomeFlags = SomeFlags::flag2;
+
+    // Nested schemas.
+    #10 nested_schema: SubMsg;
+
+    // Array of schemas.
+    #11 array_of_schema: VarArray<type=SubMsg, max_size=2>;
+
+    // Duration type
+    #12 duration: Duration;
+
+    // Sync time
+    #13 sync_time: SyncTime;
+
+    // Optional
+    #14 optional: Optional<type=UInt32>;
+
+    // Bool init
+    #15 bool_with_init: Bool = true;
+
+    // Strong type
+    #16 strong_type: MyStrongType;
+
+    // External strong type
+    #17 external_strong_type: ExternalStrongType = 123;
+
+    // Fixed array
+    #18 fixed_array: FixedArray<type=Int32, size=2>;
+
+    // VarString
+    #19 var_string: VarString<max_size=2>;
+  }
+}
+
+// No constructor
+schema NoConstructor
+{
+  fields
+  {
+    // Bool
+    #1 boolean: Bool;
+  }
+}
+
+// Test field ordering
+schema OutOfOrderFields
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // Bool
+    #1 boolean: Bool;
+    // Integer
+    #3 integer: Int64;
+    // Float
+    #0 floating_point: Float32;
+  }
+}
+
+// Test field ordering
+schema ConstructorContainer
+{
+  fields
+  {
+    // The thing
+    #1 thing: OutOfOrderFields;
+  }
+}
+
+// Schema for testing py generics.
+schema GenericValuesOnly
+{
+  parameters
+  {
+    // Docs
+    #0 param: UInt64;
+  }
+
+  fields
+  {
+    // Docs
+    #1 field: FixedArray<type=Int32, size=param>;
+  }
+}
+
+representation Tachyon<TapMsg>
+{
+  options
+  {
+    align: 512bit;
+  }
+
+  fields
+  {
+    #2 floating_point
+    {
+      align: 64byte;
+    }
+  }
+}
+
+// Some strong type.
+strong_type MyStrongType
+{
+  underlying_type: UInt64;
+}
+
+// Some strong type.
+strong_type ExternalStrongType
+{
+  underlying_type: UInt32;
+}
+
+// A tag.
+tag SampleTag;
+
+cpp_target taptag
+{
+  options
+  {
+    namespace clockwork::testing::tags;
+  }
+
+  tag SampleTag;
+}
+
+cpp_target tapmsg
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  extern
+  {
+    header_file: "clockwork/dsl/tests/support/extern_type.hh";
+    namespace: clockwork::external;
+    type
+    {
+      name: ExternalStrongType;
+      factory: make;
+    }
+  }
+
+
+  schema PaddedMsg;
+  schema SubMsg;
+  schema GenericSubMsg;
+  schema GenericMsg;
+  schema TapMsg;
+  schema OutOfOrderFields;
+  schema ConstructorContainer;
+  schema NoConstructor;
+  schema ParamAsField;
+  schema GenericValuesOnly;
+  schema FromConstant;
+  enum SomeEnum;
+  enum SomeFlags;
+
+  representation Tachyon<PaddedMsg>;
+  representation Tachyon<SubMsg>;
+  representation Tachyon<GenericSubMsg<3, Bool>>;
+  representation Tachyon<GenericMsg<3, Bool>>;
+  representation Tachyon<GenericMsg<3, SubMsg>>;
+  representation Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>;
+  representation Tachyon<TapMsg>;
+  representation Tachyon<OutOfOrderFields>;
+  representation Tachyon<ConstructorContainer>;
+  representation Tachyon<NoConstructor>;
+  representation Tachyon<ParamAsField<UInt64>>;
+  representation Tachyon<ParamAsField<SubMsg>>;
+  representation Tachyon<ParamAsField<PaddedMsg>>;
+  interface Tap<Tachyon<PaddedMsg>>;
+  interface Tappy<SubMsg>;
+  interface Tap<Tachyon<GenericSubMsg<3, Bool>>>;
+  interface Tap<Tachyon<GenericMsg<3, Bool>>>;
+  interface Tap<Tachyon<GenericMsg<3, SubMsg>>>;
+  interface Tap<Tachyon<ParamAsField<PaddedMsg>>>;
+  interface GenericTapMsgAlias: Tap<Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>>;
+  interface TapMsgAlias: Tap<Tachyon<TapMsg>>;
+  interface Tappy<OutOfOrderFields>;
+  interface Tappy<ConstructorContainer>;
+  interface Tappy<NoConstructor>;
+  interface Tappy<ParamAsField<UInt64>>;
+  interface Tappy<ParamAsField<SubMsg>>;
+
+  representation Tachyon<GenericValuesOnly<3>>;
+  interface Tap<Tachyon<GenericValuesOnly<3>>>;
+
+  representation Tachyon<FromConstant<constant_four>>;
+  interface FromConstantFour: Tap<Tachyon<FromConstant<constant_four>>>;
+
+  representation Tachyon<GenericSubMsg<3, ExternalStrongType>>;
+  interface Tap<Tachyon<GenericSubMsg<3, ExternalStrongType>>>;
+}
+
+py_target pytapmsg
+{
+  enum SomeEnum;
+  enum SomeFlags;
+
+  interface Tap<Tachyon<SubMsg>>;
+  interface Tap<Tachyon<TapMsg>>;
+  interface Tap<Tachyon<PaddedMsg>>;
+
+  representation Tachyon<GenericSubMsg<3, Bool>>;
+  interface GenericSubMsg3Bool: Tap<Tachyon<GenericSubMsg<3, Bool>>>;
+
+  representation Tachyon<GenericValuesOnly<3>>;
+  interface GenericValuesOnly3: Tap<Tachyon<GenericValuesOnly<3>>>;
+
+  representation Tachyon<ParamAsField<PaddedMsg>>;
+  interface ParamAsFieldPaddedMsg: Tap<Tachyon<ParamAsField<PaddedMsg>>>;
+}

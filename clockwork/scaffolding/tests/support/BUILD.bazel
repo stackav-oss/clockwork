@@ -1,0 +1,225 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "cxx_state",
+    hdrs = ["cxx_state.hh"],
+    deps = ["//jewels/memory:memory_resource"],
+)
+
+cc_library(
+    name = "mock_casing",
+    hdrs = ["mock_casing.hh"],
+    deps = [
+        "//clockwork/scaffolding:abstract_casing",
+        "@trompeloeil",
+    ],
+)
+
+cc_library(
+    name = "runtime_tools",
+    hdrs = ["runtime_tools.hh"],
+    deps = [
+        ":mock_casing",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description",
+        "//clockwork/common/tests/support:fake_cog",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion/tests/support:tmp_shm_namespace",
+        "//clockwork/scaffolding",
+        "//clockwork/scaffolding:abstract_casing",
+        "//jewels/cli/tests/support:simple_exit_condition",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:file",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "test_cogs",
+    srcs = [
+        "test_cogs.cc",
+        "test_cogs.inl",
+    ],
+    hdrs = ["test_cogs.hh"],
+    deps = [
+        ":cxx_state",
+        ":test_cogs_dial",
+        ":test_cogs_impl",
+        "//clockwork/cog:include_common",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+)
+
+clk(
+    name = "test_cogs_clk",
+    srcs = ["test_cogs.clk"],
+    outs = [
+        "test_cogs.cc",
+        "test_cogs.hh",
+        "test_cogs.inl",
+        "test_cogs_dial.cc",
+        "test_cogs_dial.hh",
+        "test_cogs_dial.inl",
+    ],
+    deps = [
+        ":test_msgs_clk",
+        "//clockwork/diagnostics:report_clk",
+    ],
+)
+
+cc_library(
+    name = "test_cogs_dial",
+    srcs = [
+        "test_cogs_dial.cc",
+        "test_cogs_dial.inl",
+    ],
+    hdrs = ["test_cogs_dial.hh"],
+    deps = [
+        ":cxx_state",
+        ":test_msgs",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "test_cogs_impl",
+    srcs = ["test_cogs_impl.cc"],
+    deps = [
+        ":test_cogs_dial",
+        ":test_msgs",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "test_io_connections",
+    srcs = ["test_io_connections.cc"],
+    hdrs = ["test_io_connections.hh"],
+    deps = [
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:io_connection",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:subscriber_handle",
+        "//clockwork/pinion/tests/support:pub_sub",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+        "@gsl//:util",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "test_msgs",
+    srcs = [
+        "test_msgs.cc",
+        "test_msgs.inl",
+    ],
+    hdrs = ["test_msgs.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "test_msgs_clk",
+    srcs = ["test_msgs.clk"],
+    outs = [
+        "test_msgs.cc",
+        "test_msgs.hh",
+        "test_msgs.inl",
+        "test_msgs_proto.proto",
+        "test_msgs_proto_conv.cc",
+        "test_msgs_proto_conv.hh",
+        "test_msgs_proto_conv.inl",
+    ],
+)
+
+proto_library(
+    name = "test_msgs_proto",
+    srcs = ["test_msgs_proto.proto"],
+)
+
+proto_cc_library(
+    name = "test_msgs_proto_cc_library",
+    srcs = ["test_msgs_proto.pb.cc"],
+    hdrs = ["test_msgs_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "test_msgs_proto_compile",
+    outputs = [
+        "test_msgs_proto.pb.h",
+        "test_msgs_proto.pb.cc",
+        "test_msgs_proto_pb2.py",
+        "test_msgs_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "test_msgs_proto",
+)
+
+cc_library(
+    name = "test_msgs_proto_conv",
+    srcs = [
+        "test_msgs_proto_conv.cc",
+        "test_msgs_proto_conv.inl",
+    ],
+    hdrs = ["test_msgs_proto_conv.hh"],
+    deps = [
+        ":test_msgs",
+        ":test_msgs_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+    ],
+)
+
+proto_py_library(
+    name = "test_msgs_proto_py_library",
+    srcs = ["test_msgs_proto_pb2.py"],
+    data = ["test_msgs_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)

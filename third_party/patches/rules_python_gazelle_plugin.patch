@@ -1,0 +1,339 @@
+diff --git gazelle/python/generate.go gazelle/python/generate.go
+index 27930c10..b6e71381 100644
+--- gazelle/python/generate.go
++++ gazelle/python/generate.go
+@@ -85,8 +85,6 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 			if parent != nil && parent.CoarseGrainedGeneration() {
+ 				return language.GenerateResult{}
+ 			}
+-		} else if !hasEntrypointFile(args.Dir) {
+-			return language.GenerateResult{}
+ 		}
+ 	}
+ 
+@@ -254,13 +252,11 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 			sort.Strings(mainFileNames)
+ 			for _, filename := range mainFileNames {
+ 				pyBinaryTargetName := strings.TrimSuffix(filepath.Base(filename), ".py")
+-				if err := ensureNoCollision(args.File, pyBinaryTargetName, actualPyBinaryKind); err != nil {
+-					fqTarget := label.New("", args.Rel, pyBinaryTargetName)
+-					log.Printf("failed to generate target %q of kind %q: %v",
+-						fqTarget.String(), actualPyBinaryKind, err)
+-					continue
++				kind := pyBinaryKind
++				if err, currentKind := ensureNoCollision(args.File, pyBinaryTargetName, actualPyBinaryKind); err != nil {
++					kind = currentKind
+ 				}
+-				pyBinary := newTargetBuilder(pyBinaryKind, pyBinaryTargetName, pythonProjectRoot, args.Rel, pyFileNames).
++				pyBinary := newTargetBuilder(kind, pyBinaryTargetName, pythonProjectRoot, args.Rel, pyFileNames).
+ 					addVisibility(visibility).
+ 					addSrc(filename).
+ 					addModuleDependencies(mainModules[filename]).
+@@ -288,19 +284,12 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 			}
+ 		}
+ 
+-		// Check if a target with the same name we are generating already
+-		// exists, and if it is of a different kind from the one we are
+-		// generating. If so, we have to throw an error since Gazelle won't
+-		// generate it correctly.
+-		if err := ensureNoCollision(args.File, pyLibraryTargetName, actualPyLibraryKind); err != nil {
+-			fqTarget := label.New("", args.Rel, pyLibraryTargetName)
+-			err := fmt.Errorf("failed to generate target %q of kind %q: %w. "+
+-				"Use the '# gazelle:%s' directive to change the naming convention.",
+-				fqTarget.String(), actualPyLibraryKind, err, pythonconfig.LibraryNamingConvention)
+-			collisionErrors.Add(err)
++		kind := actualPyLibraryKind
++		if err, currentKind := ensureNoCollision(args.File, pyLibraryTargetName, actualPyLibraryKind); err != nil {
++			kind = currentKind
+ 		}
+ 
+-		pyLibrary := newTargetBuilder(pyLibraryKind, pyLibraryTargetName, pythonProjectRoot, args.Rel, pyFileNames).
++		pyLibrary := newTargetBuilder(kind, pyLibraryTargetName, pythonProjectRoot, args.Rel, pyFileNames).
+ 			addVisibility(visibility).
+ 			addSrcs(srcs).
+ 			addModuleDependencies(allDeps).
+@@ -344,7 +333,7 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 		// exists, and if it is of a different kind from the one we are
+ 		// generating. If so, we have to throw an error since Gazelle won't
+ 		// generate it correctly.
+-		if err := ensureNoCollision(args.File, pyBinaryTargetName, actualPyBinaryKind); err != nil {
++		if err, _ := ensureNoCollision(args.File, pyBinaryTargetName, actualPyBinaryKind); err != nil {
+ 			fqTarget := label.New("", args.Rel, pyBinaryTargetName)
+ 			err := fmt.Errorf("failed to generate target %q of kind %q: %w. "+
+ 				"Use the '# gazelle:%s' directive to change the naming convention.",
+@@ -377,7 +366,7 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 		// exists, and if it is of a different kind from the one we are
+ 		// generating. If so, we have to throw an error since Gazelle won't
+ 		// generate it correctly.
+-		if err := ensureNoCollision(args.File, conftestTargetname, actualPyLibraryKind); err != nil {
++		if err, _ := ensureNoCollision(args.File, conftestTargetname, actualPyLibraryKind); err != nil {
+ 			fqTarget := label.New("", args.Rel, conftestTargetname)
+ 			err := fmt.Errorf("failed to generate target %q of kind %q: %w. ",
+ 				fqTarget.String(), actualPyLibraryKind, err)
+@@ -389,7 +378,6 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 			addModuleDependencies(deps).
+ 			addResolvedDependencies(annotations.includeDeps).
+ 			addVisibility(visibility).
+-			setTestonly().
+ 			generateImportsAttribute()
+ 
+ 		conftest = conftestTarget.build()
+@@ -404,18 +392,11 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 		if err != nil {
+ 			log.Fatalf("ERROR: %v\n", err)
+ 		}
+-		// Check if a target with the same name we are generating already
+-		// exists, and if it is of a different kind from the one we are
+-		// generating. If so, we have to throw an error since Gazelle won't
+-		// generate it correctly.
+-		if err := ensureNoCollision(args.File, pyTestTargetName, actualPyTestKind); err != nil {
+-			fqTarget := label.New("", args.Rel, pyTestTargetName)
+-			err := fmt.Errorf("failed to generate target %q of kind %q: %w. "+
+-				"Use the '# gazelle:%s' directive to change the naming convention.",
+-				fqTarget.String(), actualPyTestKind, err, pythonconfig.TestNamingConvention)
+-			collisionErrors.Add(err)
++		kind := actualPyTestKind
++		if err, currentKind := ensureNoCollision(args.File, pyTestTargetName, actualPyTestKind); err != nil {
++			kind = currentKind
+ 		}
+-		return newTargetBuilder(pyTestKind, pyTestTargetName, pythonProjectRoot, args.Rel, pyFileNames).
++		return newTargetBuilder(kind, pyTestTargetName, pythonProjectRoot, args.Rel, pyFileNames).
+ 			addSrcs(srcs).
+ 			addModuleDependencies(deps).
+ 			addResolvedDependencies(annotations.includeDeps).
+@@ -454,7 +435,7 @@ func (py *Python) GenerateRules(args language.GenerateArgs) language.GenerateRes
+ 			pyTestTargetName := strings.TrimSuffix(filepath.Base(testFile.(string)), ".py")
+ 			pyTestTarget := newPyTestTargetBuilder(srcs, pyTestTargetName)
+ 
+-			if hasPyTestEntryPointTarget {
++			if hasPyTestEntryPointTarget && pyTestTarget.kind == pyTestKind {
+ 				entrypointTarget := fmt.Sprintf(":%s", pyTestEntrypointTargetname)
+ 				main := fmt.Sprintf(":%s", pyTestEntrypointFilename)
+ 				pyTestTarget.
+@@ -545,14 +526,14 @@ func isEntrypointFile(path string) bool {
+ 	}
+ }
+ 
+-func ensureNoCollision(file *rule.File, targetName, kind string) error {
++func ensureNoCollision(file *rule.File, targetName, kind string) (error, string) {
+ 	if file == nil {
+-		return nil
++		return nil, ""
+ 	}
+ 	for _, t := range file.Rules {
+ 		if t.Name() == targetName && t.Kind() != kind {
+-			return fmt.Errorf("a target of kind %q with the same name already exists", t.Kind())
++			return fmt.Errorf("a target of kind %q with the same name already exists", t.Kind()), t.Kind()
+ 		}
+ 	}
+-	return nil
++	return nil, ""
+ }
+diff --git gazelle/python/kinds.go gazelle/python/kinds.go
+index 7a0639ab..bdd72cc0 100644
+--- gazelle/python/kinds.go
++++ gazelle/python/kinds.go
+@@ -19,9 +19,18 @@ import (
+ )
+ 
+ const (
+-	pyBinaryKind  = "py_binary"
+-	pyLibraryKind = "py_library"
+-	pyTestKind    = "py_test"
++	pyBinaryKind               = "py_binary"
++	pyLibraryKind              = "py_library"
++	pyTestKind                 = "py_test"
++	avtDutModuleKind           = "avt_dut_module"
++	avtPyTestKind              = "avt_py_test"
++	avtTestSuiteKind           = "avt_test_suite"
++	clkPyLibrary               = "clk_py_library"
++	clkRosInterface            = "clk_ros_interface"
++	grpcPyLibraryKind          = "grpc_py_library"
++	protoPyLibraryKind         = "proto_py_library"
++	pyRos2InterfaceLibraryKind = "py_ros2_interface_library"
++	ros2PyBinaryKind           = "ros2_py_binary"
+ )
+ 
+ // Kinds returns a map that maps rule names (kinds) and information on how to
+@@ -30,40 +39,36 @@ func (*Python) Kinds() map[string]rule.KindInfo {
+ 	return pyKinds
+ }
+ 
++var libraryKind = rule.KindInfo{
++	MatchAny:   false,
++	MatchAttrs: []string{"srcs"},
++	NonEmptyAttrs: map[string]bool{
++		"deps":    true,
++		"srcs":    true,
++		"imports": true,
++	},
++	SubstituteAttrs: map[string]bool{},
++	ResolveAttrs: map[string]bool{
++		"deps": true,
++	},
++}
++
+ var pyKinds = map[string]rule.KindInfo{
+ 	pyBinaryKind: {
+-		MatchAny: false,
+-		MatchAttrs: []string{"srcs"},
+-		NonEmptyAttrs: map[string]bool{
+-			"deps":    true,
+-			"main":    true,
+-			"srcs":    true,
+-			"imports": true,
+-		},
+-		SubstituteAttrs: map[string]bool{},
+-		MergeableAttrs: map[string]bool{
+-			"srcs": true,
+-		},
+-		ResolveAttrs: map[string]bool{
+-			"deps": true,
+-		},
+-	},
+-	pyLibraryKind: {
+ 		MatchAny:   false,
+ 		MatchAttrs: []string{"srcs"},
+ 		NonEmptyAttrs: map[string]bool{
+ 			"deps":    true,
++			"main":    true,
+ 			"srcs":    true,
+ 			"imports": true,
+ 		},
+ 		SubstituteAttrs: map[string]bool{},
+-		MergeableAttrs: map[string]bool{
+-			"srcs": true,
+-		},
+ 		ResolveAttrs: map[string]bool{
+ 			"deps": true,
+ 		},
+ 	},
++	pyLibraryKind: libraryKind,
+ 	pyTestKind: {
+ 		MatchAny: false,
+ 		NonEmptyAttrs: map[string]bool{
+@@ -73,9 +78,28 @@ var pyKinds = map[string]rule.KindInfo{
+ 			"imports": true,
+ 		},
+ 		SubstituteAttrs: map[string]bool{},
+-		MergeableAttrs: map[string]bool{
+-			"srcs": true,
++		ResolveAttrs: map[string]bool{
++			"deps": true,
+ 		},
++	},
++	avtDutModuleKind:           libraryKind,
++	avtPyTestKind:              libraryKind,
++	avtTestSuiteKind:           libraryKind,
++	clkPyLibrary:               {},
++	clkRosInterface:            {},
++	grpcPyLibraryKind:          {},
++	protoPyLibraryKind:         {},
++	pyRos2InterfaceLibraryKind: {},
++	ros2PyBinaryKind: {
++		MatchAny: false,
++		NonEmptyAttrs: map[string]bool{
++			"deps":       true,
++			"main":       true,
++			"srcs":       true,
++			"imports":    true,
++			"visibility": true,
++		},
++		SubstituteAttrs: map[string]bool{},
+ 		ResolveAttrs: map[string]bool{
+ 			"deps": true,
+ 		},
+@@ -98,4 +122,8 @@ var pyLoads = []rule.LoadInfo{
+ 			pyTestKind,
+ 		},
+ 	},
++	{
++		Name:    "@com_github_mvukov_rules_ros2//ros2:py_defs.bzl",
++		Symbols: []string{"ros2_py_binary"},
++	},
+ }
+diff --git gazelle/python/resolve.go gazelle/python/resolve.go
+index 7a2ec3d6..34d377a6 100644
+--- gazelle/python/resolve.go
++++ gazelle/python/resolve.go
+@@ -41,6 +41,8 @@ const (
+ 	resolvedDepsKey = "_gazelle_python_resolved_deps"
+ )
+ 
++var clkRosInterfaceTargets = treeset.NewWith(labelComparator)
++
+ // Resolver satisfies the resolve.Resolver interface. It resolves dependencies
+ // in rules generated by this extension.
+ type Resolver struct{}
+@@ -49,6 +51,11 @@ type Resolver struct{}
+ // rules generated. E.g. py_library and py_binary.
+ func (*Resolver) Name() string { return languageName }
+ 
++// labelComparator compares labels by name.
++func labelComparator(a, b interface{}) int {
++	return godsutils.StringComparator(a.(label.Label).Name, b.(label.Label).Name)
++}
++
+ // Imports returns a list of ImportSpecs that can be used to import the rule
+ // r. This is used to populate RuleIndex.
+ //
+@@ -57,6 +64,25 @@ func (*Resolver) Name() string { return languageName }
+ func (py *Resolver) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
+ 	cfgs := c.Exts[languageName].(pythonconfig.Configs)
+ 	cfg := cfgs[f.Pkg]
++	pythonProjectRoot := cfg.PythonProjectRoot()
++
++	if r.Kind() == pyRos2InterfaceLibraryKind {
++		// The actual Python import is named after the ros2_interface_library dependency with ".msg" added.
++		depName := r.AttrStrings("deps")[0]
++		libName := strings.ReplaceAll(depName, ":", "") + ".msg"
++		spec := importSpecFromSrc(pythonProjectRoot, f.Pkg, libName)
++		return []resolve.ImportSpec{spec}
++	} else if r.Kind() == clkRosInterface {
++		// The actual Python import is named after the clk_ros_interface dependency with ".msg" added.
++		libName := strings.ReplaceAll(r.Name(), ":", "") + ".msg"
++		// The lib to import is named after the clk_ros_interface dependency with "py_" prefixed.
++		// Once we hit Resolve we no longer know the kind, so the only thing I can think of is a
++		// global structure to keep track of all the clk_ros_interface libs.
++		clkRosInterfaceTargets.Add(label.New(c.RepoName, f.Pkg, r.Name()))
++		spec := importSpecFromSrc(pythonProjectRoot, f.Pkg, libName)
++		return []resolve.ImportSpec{spec}
++	}
++
+ 	srcs := r.AttrStrings("srcs")
+ 	provides := make([]resolve.ImportSpec, 0, len(srcs)+1)
+ 	for _, src := range srcs {
+@@ -137,6 +163,20 @@ func (py *Resolver) Resolve(
+ 	modulesRaw interface{},
+ 	from label.Label,
+ ) {
++	if r.Kind() == clkPyLibrary || r.Kind() == clkRosInterface || r.Kind() == grpcPyLibraryKind || r.Kind() == protoPyLibraryKind || r.Kind() == pyRos2InterfaceLibraryKind {
++		// We just look at these libs to find their source filenames. We don't actually modify them.
++		return
++	}
++
++	switch modulesRaw.(type) {
++	case nil:
++	case *treeset.Set:
++		break
++	default:
++		fmt.Fprintf(os.Stderr, "gazelle: Error: The name of Python target %s conflicts with the name of another target Gazelle is trying to modify.\n", from)
++		return
++	}
++
+ 	// TODO(f0rmiga): may need to be defensive here once this Gazelle extension
+ 	// join with the main Gazelle binary with other rules. It may conflict with
+ 	// other generators that generate py_* targets.
+@@ -259,6 +299,11 @@ func (py *Resolver) Resolve(
+ 						}
+ 						matchLabel := filteredMatches[0].Label.Rel(from.Repo, from.Pkg)
+ 						dep := matchLabel.String()
++						if clkRosInterfaceTargets.Contains(matchLabel) {
++							newLabel := matchLabel
++							newLabel.Name = "py_" + newLabel.Name
++							dep = newLabel.String()
++						}
+ 						deps.Add(dep)
+ 						if explainDependency == dep {
+ 							log.Printf("Explaining dependency (%s): "+

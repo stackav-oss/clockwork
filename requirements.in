@@ -1,0 +1,16 @@
+# keep-sorted start
+GitPython>=3.1.44
+bazel-runfiles>=1.4.1
+click>=8.1.8
+humanize>=4.12.3
+lz4>=4.4.4
+nanobind>=2.2.0
+numpy>=1.26.4
+protobuf>=4.25.7
+pydantic>=2.9.2
+pytest>=8.3.5
+requests>=2.32.3
+rich>=13.9.4
+typing-extensions>=4.13.2
+zstandard>=0.23.0
+# keep-sorted end

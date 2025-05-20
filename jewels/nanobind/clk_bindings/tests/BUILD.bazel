@@ -1,0 +1,74 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "get_python_type_name_test",
+    srcs = [
+        "get_python_type_name_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//jewels/nanobind/clk_bindings/tests/support:nb_get_python_type_name_test",
+    ],
+)
+
+py_test(
+    name = "nanobind_serialize_tachyon_test",
+    srcs = [
+        "nanobind_serialize_tachyon_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "//clockwork/serialization/py:protocol",
+        "//jewels/nanobind/clk_bindings/tests/support:foo_clk_nb",
+        "//jewels/nanobind/clk_bindings/tests/support:foo_clk_py",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "nanobinding_fixed_array_test",
+    srcs = [
+        "nanobinding_fixed_array_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//jewels/nanobind/clk_bindings/tests/support:bind_array_msg_clk_nb",
+        "@clockwork_pip//numpy",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "nanobinding_var_array_test",
+    srcs = [
+        "nanobinding_var_array_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//jewels/nanobind/clk_bindings/tests/support:bind_array_msg_clk_nb",
+        "@clockwork_pip//numpy",
+        "@clockwork_pip//pytest",
+    ],
+)

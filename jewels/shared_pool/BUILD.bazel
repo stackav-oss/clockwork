@@ -1,0 +1,44 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "ref_counted_pool",
+    srcs = ["ref_counted_pool.inl"],
+    hdrs = ["ref_counted_pool.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/shared_pool/detail:lock_provider",
+        "//jewels/shared_pool/detail:reference_counter",
+    ],
+)
+
+cc_library(
+    name = "shared_buffer_pool",
+    srcs = ["shared_buffer_pool.inl"],
+    hdrs = ["shared_buffer_pool.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ref_counted_pool",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "shared_object_pool",
+    srcs = ["shared_object_pool.inl"],
+    hdrs = ["shared_object_pool.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ref_counted_pool",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
+)

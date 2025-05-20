@@ -1,0 +1,37 @@
+// Execution time msg
+schema ExecTime
+{
+  uuid: 021407c1-058d-4ced-8cab-a72b61e1c51b;
+  fields
+  {
+    // Exec time
+    #0 exec_time: SyncTime;
+  }
+}
+
+// Periodic Execution State
+schema ExecState
+{
+  uuid: dbe6e217-530e-445a-b4f9-995b6ca80007;
+  fields
+  {
+    // The count of executions
+    #0 exec_count: Int32;
+  }
+}
+
+cpp_target exec_time
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  schema ExecTime;
+  representation Tachyon<ExecTime>;
+  interface Tap<Tachyon<ExecTime>>;
+
+  schema ExecState;
+  representation Tachyon<ExecState>;
+  interface Tap<Tachyon<ExecState>>;
+}

@@ -1,0 +1,30 @@
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::tools::channel_spy::channel_spy_config;
+use clockwork::tools::channel_spy::channel_spy_config_init;
+
+box SpyBox
+{
+  new init_cog: channel_spy_config_init::SpyConfigInitCog;
+
+  new memory: HeapMemory(max_size=10'000'000);
+  new config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/examples/demo_system/demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon");
+
+  connect memory to init_cog.memres;
+  connect config to init_cog.spy_config;
+}
+
+cpp_executable spy_exe
+{
+  casing
+  {
+    box SpyBox;
+  }
+}
+
+box SpyExe
+{
+  new spy_box: SpyBox;
+  new spy_proc: Process(executable=spy_exe);
+  apply HostProcess(process=spy_proc) in spy_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to spy_proc;
+}

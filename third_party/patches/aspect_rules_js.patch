@@ -1,0 +1,13 @@
+diff --git npm/private/pnpm_repository.bzl npm/private/pnpm_repository.bzl
+index bb028820..b59060bf 100644
+--- npm/private/pnpm_repository.bzl
++++ npm/private/pnpm_repository.bzl
+@@ -41,7 +41,7 @@ def pnpm_repository(name, pnpm_version = DEFAULT_PNPM_VERSION):
+             version = pnpm_version,
+             extra_build_content = "\n".join([
+                 """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
+-                """js_binary(name = "pnpm", data = glob(["package/**"]), entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
++                """js_binary(name = "pnpm", data = glob(["package/**"]), entry_point = "package/dist/pnpm.cjs", include_npm = True, visibility = ["//visibility:public"])""",
+             ]),
+             extract_full_archive = True,
+         )

@@ -1,0 +1,178 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "alignment_type",
+    srcs = [
+        "alignment_type.cc",
+        "alignment_type.inl",
+    ],
+    hdrs = ["alignment_type.hh"],
+    deps = ["@wise_enum"],
+)
+
+clk(
+    name = "alignment_type_clk",
+    srcs = ["alignment_type.clk"],
+    outs = [
+        "alignment_type.cc",
+        "alignment_type.hh",
+        "alignment_type.inl",
+    ],
+)
+
+cc_library(
+    name = "approx_aligner",
+    srcs = ["approx_aligner.inl"],
+    hdrs = ["approx_aligner.hh"],
+    deps = [
+        ":alignment_type",
+        ":approx_aligner_config",
+        "//clockwork:repr_iface",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "approx_aligner_config",
+    srcs = [
+        "approx_aligner_config.cc",
+        "approx_aligner_config.inl",
+    ],
+    hdrs = ["approx_aligner_config.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "approx_aligner_config_clk",
+    srcs = ["approx_aligner_config.clk"],
+    outs = [
+        "approx_aligner_config.cc",
+        "approx_aligner_config.hh",
+        "approx_aligner_config.inl",
+        "approx_aligner_config_proto.proto",
+        "approx_aligner_config_proto_conv.cc",
+        "approx_aligner_config_proto_conv.hh",
+        "approx_aligner_config_proto_conv.inl",
+    ],
+)
+
+proto_library(
+    name = "approx_aligner_config_proto",
+    srcs = ["approx_aligner_config_proto.proto"],
+    deps = ["@protobuf//:duration_proto"],
+)
+
+proto_cc_library(
+    name = "approx_aligner_config_proto_cc_library",
+    srcs = ["approx_aligner_config_proto.pb.cc"],
+    hdrs = ["approx_aligner_config_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "approx_aligner_config_proto_compile",
+    outputs = [
+        "approx_aligner_config_proto.pb.h",
+        "approx_aligner_config_proto.pb.cc",
+        "approx_aligner_config_proto_pb2.py",
+        "approx_aligner_config_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "approx_aligner_config_proto",
+)
+
+cc_library(
+    name = "approx_aligner_config_proto_conv",
+    srcs = [
+        "approx_aligner_config_proto_conv.cc",
+        "approx_aligner_config_proto_conv.inl",
+    ],
+    hdrs = ["approx_aligner_config_proto_conv.hh"],
+    deps = [
+        ":approx_aligner_config",
+        ":approx_aligner_config_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+    ],
+)
+
+proto_py_library(
+    name = "approx_aligner_config_proto_py_library",
+    srcs = ["approx_aligner_config_proto_pb2.py"],
+    data = ["approx_aligner_config_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+cc_library(
+    name = "approx_aligner_policies",
+    srcs = ["approx_aligner_policies.inl"],
+    hdrs = ["approx_aligner_policies.hh"],
+    deps = [":msg_input"],
+)
+
+cc_library(
+    name = "cond_messages_present",
+    srcs = ["cond_messages_present.inl"],
+    hdrs = ["cond_messages_present.hh"],
+    deps = [":exec_condition"],
+)
+
+cc_library(
+    name = "cond_time_since_last_exec",
+    srcs = ["cond_time_since_last_exec.inl"],
+    hdrs = ["cond_time_since_last_exec.hh"],
+    deps = [":exec_condition"],
+)
+
+cc_library(
+    name = "exec_condition",
+    srcs = ["exec_condition.inl"],
+    hdrs = ["exec_condition.hh"],
+)
+
+cc_library(
+    name = "include_common",
+    hdrs = ["include_common.hh"],
+    deps = [
+        ":cond_messages_present",
+        ":cond_time_since_last_exec",
+        ":msg_input",
+        "//clockwork:repr_iface",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "msg_input",
+    srcs = ["msg_input.inl"],
+    hdrs = ["msg_input.hh"],
+    deps = ["//jewels/container:circular_buffer"],
+)

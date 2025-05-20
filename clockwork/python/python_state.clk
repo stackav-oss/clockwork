@@ -1,0 +1,19 @@
+// Telemetry writer cog state
+extern_type PythonState;
+
+cpp_target python_state_extern
+{
+  options
+  {
+    namespace clockwork::python;
+  }
+  extern
+  {
+    header_file: "clockwork/python/python_state.hh";
+    namespace: clockwork::python;
+    type
+    {
+        name: PythonState;
+    }
+  }
+}

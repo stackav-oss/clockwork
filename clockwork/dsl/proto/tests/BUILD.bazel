@@ -1,0 +1,28 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "proto_typereg_test",
+    srcs = [
+        "proto_typereg_test.py",
+        ":__test__.py",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/proto:proto_typereg",
+        "@clockwork_pip//pytest",
+    ],
+)

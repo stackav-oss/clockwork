@@ -1,0 +1,390 @@
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+index 0000000000..68fed37214
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,365 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
++load("@bazel_skylib//rules:write_file.bzl", "write_file")
++
++write_file(
++    name = "aws-cpp-sdk-core-SDKConfig.h",
++    out = "src/aws-cpp-sdk-core/include/aws/core/SDKConfig.h",
++    content = [""],
++)
++
++write_file(
++    name = "aws-crt-cpp-Config.h",
++    out = "crt/aws-crt-cpp/include/aws/crt/Config.h",
++    content = [
++        '#define AWS_CRT_CPP_VERSION "1.3.47"',
++        "#define AWS_CRT_CPP_VERSION_MAJOR 1",
++        "#define AWS_CRT_CPP_VERSION_MINOR 3",
++        "#define AWS_CRT_CPP_VERSION_PATCH 47",
++        '#define AWS_CRT_CPP_GIT_HASH "none"',
++    ],
++)
++
++write_file(
++    name = "aws-c-common-config.h",
++    out = "crt/aws-crt-cpp/crt/aws-c-common/include/aws/common/config.h",
++    content = ["""\
++    #pragma once
++    #define AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS
++    #define AWS_HAVE_GCC_INLINE_ASM
++    #define AWS_HAVE_POSIX_LARGE_FILE_SUPPORT
++    #define AWS_HAVE_EXECINFO
++    #define AWS_HAVE_LINUX_IF_LINK_H
++    """],
++)
++
++cc_library(
++    name = "aws_c_common",
++    srcs = glob(
++        [
++            "crt/aws-crt-cpp/crt/aws-c-common/source/*.c",
++            "crt/aws-crt-cpp/crt/aws-c-common/source/external/*.c",
++            "crt/aws-crt-cpp/crt/aws-c-common/source/posix/*.c",
++        ],
++        allow_empty = False,
++        exclude = [
++            "crt/aws-crt-cpp/crt/aws-c-common/source/windows/**",
++            "crt/aws-crt-cpp/crt/aws-c-common/source/android/**",
++            "crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/**",
++            "crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/**",
++        ],
++    ) + select({
++           "@platforms//cpu:aarch64": glob(["crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/**"]),
++           "@platforms//cpu:x86_64": glob(["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/**/*.c"], exclude = ["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/msvc/*.c"])
++       }),
++    hdrs = [":crt/aws-crt-cpp/crt/aws-c-common/include/aws/common/config.h"] + glob(
++        ["crt/aws-crt-cpp/crt/aws-c-common/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-common/include/"],
++    local_defines = [
++        "CJSON_HIDE_SYMBOLS",
++        "AWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR",
++    ],
++    linkopts = ["-pthread", "-lpthread"],
++)
++
++cc_library(
++    name = "aws_c_cal",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-cal/source/**/*.c"],
++        allow_empty = False,
++        exclude = [
++            "crt/aws-crt-cpp/crt/aws-c-cal/source/windows/**",
++            "crt/aws-crt-cpp/crt/aws-c-cal/source/darwin/**",
++        ],
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-cal/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-cal/include/"],
++    linkopts = ["-ldl"],
++    deps = [
++        ":aws_c_common",
++        "@openssl//:ssl",
++    ],
++)
++
++cc_library(
++    name = "s2n",
++    srcs = glob(
++        [
++            "crt/aws-crt-cpp/crt/s2n/tls/**/*.c",
++            "crt/aws-crt-cpp/crt/s2n/error/**/*.c",
++            "crt/aws-crt-cpp/crt/s2n/stuffer/**/*.c",
++            "crt/aws-crt-cpp/crt/s2n/crypto/**/*.c",
++            "crt/aws-crt-cpp/crt/s2n/utils/**/*.c",
++            "crt/aws-crt-cpp/crt/s2n/pq-crypto/**/*.c",
++        ],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        [
++            "crt/aws-crt-cpp/crt/s2n/api/**",
++            "crt/aws-crt-cpp/crt/s2n/tls/**/*.h",
++            "crt/aws-crt-cpp/crt/s2n/error/**/*.h",
++            "crt/aws-crt-cpp/crt/s2n/stuffer/**/*.h",
++            "crt/aws-crt-cpp/crt/s2n/crypto/**/*.h",
++            "crt/aws-crt-cpp/crt/s2n/utils/**/*.h",
++            "crt/aws-crt-cpp/crt/s2n/pq-crypto/**/*.h",
++        ],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/s2n/api"],
++    strip_include_prefix = "crt/aws-crt-cpp/crt/s2n",
++    visibility = ["//:__subpackages__"],
++    deps = [
++        "@openssl//:ssl",
++    ],
++)
++
++cc_library(
++    name = "aws_c_io",
++    srcs = glob(
++        [
++            "crt/aws-crt-cpp/crt/aws-c-io/source/**/*.c",
++            "crt/aws-crt-cpp/crt/aws-c-io/source/**/*.h",
++        ],
++        allow_empty = False,
++        exclude = [
++            "crt/aws-crt-cpp/crt/aws-c-io/source/windows/**",
++            "crt/aws-crt-cpp/crt/aws-c-io/source/darwin/**",
++            "crt/aws-crt-cpp/crt/aws-c-io/source/bsd/**",
++        ],
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-io/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-io/include/"],
++    local_defines = ["USE_S2N", "INTEL_NO_ITTNOTIFY_API"],
++    deps = [
++        ":aws_c_cal",
++        ":aws_c_common",
++        ":s2n",
++    ],
++)
++
++cc_library(
++    name = "aws_c_mqtt",
++    srcs = glob(
++        [
++            "crt/aws-crt-cpp/crt/aws-c-mqtt/source/**",
++        ],
++        allow_empty = False,
++        exclude = [
++            "crt/aws-crt-cpp/crt/aws-c-mqtt/source/windows/**",
++            "crt/aws-crt-cpp/crt/aws-c-mqtt/source/darwin/**",
++            "crt/aws-crt-cpp/crt/aws-c-mqtt/source/bsd/**",
++        ],
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-mqtt/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-mqtt/include/"],
++    deps = [
++        ":aws_c_common",
++        ":aws_c_http",
++        ":aws_c_io",
++    ],
++)
++
++cc_library(
++    name = "aws_c_compression",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-compression/source/*"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-compression/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-compression/include/"],
++    deps = [
++        ":aws_c_common",
++    ],
++)
++
++cc_library(
++    name = "aws_c_sdkutils",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-sdkutils/source/*"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-sdkutils/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-sdkutils/include/"],
++    deps = [
++        ":aws_c_common",
++    ],
++)
++
++cc_library(
++    name = "aws_c_auth",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-auth/source/*"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-auth/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-auth/include/"],
++    deps = [
++        ":aws_c_common",
++        ":aws_c_http",
++        ":aws_c_io",
++        ":aws_c_sdkutils",
++    ],
++)
++
++cc_library(
++    name = "aws_c_http",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-http/source/**"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-http/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-http/include/"],
++    deps = [
++        ":aws_c_common",
++        ":aws_c_compression",
++        ":aws_c_io",
++    ],
++)
++
++cc_library(
++    name = "aws_checksums",
++    srcs = glob(
++        [
++            "crt/aws-crt-cpp/crt/aws-checksums/source/*",
++            "crt/aws-crt-cpp/crt/aws-checksums/source/intel/**",
++        ],
++        allow_empty = False,
++        exclude = [
++            "crt/aws-crt-cpp/crt/aws-checksums/source/intel/visualc/**",
++        ],
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-checksums/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-checksums/include/"],
++    deps = [
++        ":aws_c_common",
++    ],
++)
++
++cc_library(
++    name = "aws_c_event_stream",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-event-stream/source/**"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-event-stream/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-event-stream/include/"],
++    deps = [
++        ":aws_c_common",
++        ":aws_c_io",
++        ":aws_checksums",
++    ],
++)
++
++cc_library(
++    name = "aws_c_s3",
++    srcs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-s3/source/**"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["crt/aws-crt-cpp/crt/aws-c-s3/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/crt/aws-c-s3/include/"],
++    deps = [
++        ":aws_c_auth",
++        ":aws_c_common",
++        ":aws_checksums",
++    ],
++)
++
++cc_library(
++    name = "aws_crt_cpp",
++    srcs = glob(
++        ["crt/aws-crt-cpp/source/**"],
++        allow_empty = False,
++    ),
++    hdrs = [":aws-crt-cpp-Config.h"] + glob(
++        ["crt/aws-crt-cpp/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["crt/aws-crt-cpp/include/"],
++    deps = [
++        ":aws_c_auth",
++        ":aws_c_common",
++        ":aws_c_event_stream",
++        ":aws_c_http",
++        ":aws_c_io",
++        ":aws_c_mqtt",
++        ":aws_c_s3",
++    ],
++)
++
++cc_library(
++    name = "aws_cpp_sdk_core",
++    srcs = glob(
++        ["src/aws-cpp-sdk-core/source/**"],
++        allow_empty = False,
++        exclude = [
++            "src/aws-cpp-sdk-core/source/**/android/**",
++            "src/aws-cpp-sdk-core/source/**/windows/**",
++            "src/aws-cpp-sdk-core/source/smithy/tracing/impl/**",
++            "src/aws-cpp-sdk-core/source/net/*",
++            "src/aws-cpp-sdk-core/include/aws/core/utils/crypto/bcrypt/*.h",
++            "src/aws-cpp-sdk-core/source/utils/crypto/bcrypt/*.cpp",
++            "src/aws-cpp-sdk-core/include/aws/core/utils/crypto/commoncrypto/*.h",
++            "src/aws-cpp-sdk-core/source/utils/crypto/commoncrypto/*.cpp",
++        ],
++    ),
++    hdrs = [":src/aws-cpp-sdk-core/include/aws/core/SDKConfig.h"] + glob(
++        ["src/aws-cpp-sdk-core/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["src/aws-cpp-sdk-core/include/"],
++    local_defines = ["ENABLE_OPENSSL_ENCRYPTION", "ENABLE_CURL_CLIENT"],
++    deps = [
++        ":aws_crt_cpp",
++        "@zstd",
++        "@curl//:curl",
++        "@openssl//:ssl",
++    ],
++)
++
++cc_library(
++    name = "aws_cpp_sdk_s3",
++    srcs = glob(
++        ["generated/src/aws-cpp-sdk-s3/source/**"],
++        allow_empty = False,
++    ),
++    hdrs = glob(
++        ["generated/src/aws-cpp-sdk-s3/include/**"],
++        allow_empty = False,
++    ),
++    includes = ["generated/src/aws-cpp-sdk-s3/include/"],
++    visibility = ["//visibility:public"],
++    deps = [":aws_cpp_sdk_core"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000000..d49aee4f03
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,10 @@
++module(name = "aws_sdk_cpp")
++
++bazel_dep(name = "openssl")
++bazel_dep(name = "bazel_skylib")
++bazel_dep(name = "platforms")
++bazel_dep(name = "rules_cc")
++bazel_dep(name = "zstd")
++bazel_dep(name = "curl")
++
++
+diff --git WORKSPACE WORKSPACE
+new file mode 100644
+index 0000000000..e69de29bb2

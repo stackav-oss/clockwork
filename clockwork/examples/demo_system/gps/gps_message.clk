@@ -1,0 +1,31 @@
+// Fake GPS message, real GPS messages have a lot more in them.
+schema GpsMessage
+{
+  uuid: d5cb1ef4-1544-43f3-adcd-f297585ba7ad;
+  fields
+  {
+    // Timestamp for when this position was generated.
+    #0 time_of_validity: SyncTime;
+
+    // Latitude, in degrees.
+    #1 latitude_deg: Float64;
+
+    // Longitude, in degrees.
+    #2 longitude_deg: Float64;
+
+    // Elevation above mean sea level, in meters.
+    #3 elevation_m: Float64;
+  }
+}
+
+cpp_target gps_message
+{
+  options
+  {
+    namespace clockwork::demo_system::gps;
+  }
+  schema GpsMessage;
+
+  representation Tachyon<GpsMessage>;
+  interface Tappy<GpsMessage>;
+}

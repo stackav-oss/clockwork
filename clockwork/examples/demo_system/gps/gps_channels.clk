@@ -1,0 +1,17 @@
+use clockwork::examples::demo_system::gps::gps_message;
+
+// Raw GPS packet channel
+channel RawGpsChannel
+{
+  name: "/raw_gps";
+  message_type: Tachyon<gps_message::GpsMessage>;
+  max_num_messages: 10;
+}
+
+// GPS channel
+channel GpsChannel
+{
+  name: "/gps";
+  message_type: Tachyon<gps_message::GpsMessage>;
+  max_num_messages: 10;
+}

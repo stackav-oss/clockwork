@@ -1,0 +1,44 @@
+use clockwork::examples::demo_system::cpu_domain;
+use clockwork::logging::log_writer_config;
+use clockwork::logging::writers::channel_message_rates_config;
+use clockwork::logging::writers::logger;
+use clockwork::logging::writers::logger_channels;
+use clockwork::logging::writers::logger_config;
+use clockwork::logging::writers::logger_status;
+
+box LoggerBox
+{
+  new init_cog: logger::LoggerInitCog;
+  new status_publisher_cog: logger::LoggerStatusPublisherCog;
+
+  new memory: HeapMemory(max_size=300'000'000);
+  new telemetry_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/examples/demo_system/demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon");
+  new config: SerializedDataFile(representation=Protobuf<logger_config::LoggerConfig>, path="clockwork/examples/demo_system/resources/logger_config.pbtxt");
+  new channel_rates_config: SerializedDataFile(representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>, path="clockwork/examples/demo_system/resources/channel_rates_config.pbtxt");
+  new state: State(representation=logger::LoggerCogState, memory_resource=memory, init=init_cog.logger_state);
+
+  connect telemetry_config to init_cog.log_writer_config;
+  connect config to init_cog.logger_config;
+  connect channel_rates_config to init_cog.channel_rates_config;
+  connect init_cog.logger_config_out to logger_channels::LoggerConfigChannel;
+
+  connect state to status_publisher_cog.logger_state;
+  connect status_publisher_cog.logger_status to logger_channels::LoggerStatusChannel;
+  connect status_publisher_cog.channel_rates to logger_channels::LoggerMessageRatesChannel;
+}
+
+cpp_executable logger_exe
+{
+  casing
+  {
+    box LoggerBox;
+  }
+}
+
+box LoggerExe
+{
+  new logger_box: LoggerBox;
+  new logger_proc: Process(executable=logger_exe);
+  apply HostProcess(process=logger_proc) in logger_box;
+  apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to logger_proc;
+}

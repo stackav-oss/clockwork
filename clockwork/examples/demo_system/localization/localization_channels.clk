@@ -1,0 +1,9 @@
+use clockwork::examples::demo_system::localization::pose_message;
+
+// Pose channel
+channel PoseChannel
+{
+  name: "/pose";
+  message_type: Tachyon<pose_message::PoseMessage>;
+  max_num_messages: 100;
+}

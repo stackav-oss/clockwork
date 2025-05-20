@@ -1,0 +1,18 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "configurer",
+    srcs = ["configurer.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/cc_plugin/configurer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/gazelle/cc_plugin/common",
+        "@@gazelle~//config",
+        "@@gazelle~//flag",
+        "@@gazelle~//rule",
+        "@org_skia_go_infra//go/skerr",
+    ],
+)

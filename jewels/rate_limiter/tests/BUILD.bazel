@@ -1,0 +1,15 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "token_bucket_test",
+    srcs = ["token_bucket_test.cc"],
+    deps = [
+        "//jewels/rate_limiter:token_bucket",
+        "@catch2//:catch2_main",
+    ],
+)

@@ -1,0 +1,31 @@
+use clockwork::common::process_description;
+
+// Configuration for a subscriber to a multi-publisher channel.
+schema MultiSubscriberConfig {
+  parameters
+  {
+    // Maximum number of publishers on a multi-publisher channel
+    #0 max_publishers = 256;
+  }
+
+  fields
+  {
+    // Layout of the Pinion buffer; create if publisher, validate if subscriber.
+    #1 buffer_layout: process_description::PinionBufferLayout;
+
+    // Endpoint identifiers for each publisher on the channel.
+    #2 publisher_ids: VarArray<Uuid<process_description::EndpointInstanceId>, max_publishers>;
+  }
+}
+
+cpp_target multi_subscriber_config
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  schema MultiSubscriberConfig;
+  representation Tachyon<MultiSubscriberConfig<>>;
+  interface MultiSubscriberConfigTap: Tap<Tachyon<MultiSubscriberConfig<>>>;
+}

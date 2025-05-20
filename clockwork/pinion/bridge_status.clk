@@ -1,0 +1,82 @@
+// TCP bridge client/server counters
+schema BridgeClientServerCounters
+{
+  uuid: 2a57c3d4-9ef5-4479-a130-c2f8c3d5a75a;
+
+ fields
+ {
+   // Channel name
+   #1 channel_name: VarString<max_size=127>;
+
+   // Messages rate in hz
+   #2 message_rate_hz: Float32;
+
+   // Data rate in bytes per second
+   #3 data_rate_bps: Float32;
+
+   // Compressed data rate in bytes per second
+   #4 compressed_data_rate_bps: Float32;
+
+   // Compression ratio
+   #5 compression_ratio: Float32;
+
+   // Average latency between message publish time and when the bridge received the message
+   #7 average_receive_latency: Duration;
+
+   // Max latency between message publish time and when the bridge received the message
+   #9 max_receive_latency: Duration;
+
+   // Average time spent sending or receiving a message over a socket
+   #10 average_transfer_time: Duration;
+
+   // Max time spent sending or receiving a message over a socket
+   #11 max_transfer_time: Duration;
+
+   // Average time spent compressing or decopressing a message
+   #12 average_compression_time: Duration;
+
+   // Max time spent compressing or decopressing a message
+   #13 max_compression_time: Duration;
+
+   // Average latency between message publish time and when the bridge was done sending the message
+   #14 average_bridge_latency: Duration;
+
+   // Max latency between message publish time and when the bridge was done sending the message
+   #15 max_bridge_latency: Duration;
+ }
+}
+
+// TCP Bridge status message
+schema BridgeStatus
+{
+  uuid: 4d72acda-9d76-471c-a067-25a2b6325b4a;
+
+  fields
+  {
+    // Bridge host name
+    #1 host_name: VarString<max_size=31>;
+
+    // Bridge client counters
+    #2 client_counters: VarArray<BridgeClientServerCounters, max_size=257>;
+
+    // Bridge server counters
+    #3 server_counters: VarArray<BridgeClientServerCounters, max_size=257>;
+  }
+}
+
+cpp_target bridge_status
+{
+  options
+  {
+    namespace clockwork::pinion;
+  }
+
+  schema BridgeClientServerCounters;
+  schema BridgeStatus;
+
+  representation Tachyon<BridgeClientServerCounters>;
+  representation Tachyon<BridgeStatus>;
+
+  interface BridgeClientServerCountersTap : Tap<Tachyon<BridgeClientServerCounters>>;
+  interface BridgeStatusTap : Tap<Tachyon<BridgeStatus>>;
+}

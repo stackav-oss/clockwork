@@ -1,0 +1,56 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "fake_cog",
+    hdrs = ["fake_cog.hh"],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:file",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "fake_epoll_mananger",
+    hdrs = ["fake_epoll_mananger.hh"],
+    deps = [
+        "//clockwork/common:abstract_epoll_manager",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "test_cog",
+    srcs = ["test_cog.cc"],
+    hdrs = ["test_cog.hh"],
+    visibility = ["//clockwork:__subpackages__"],
+    deps = [
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:cog_envelope",
+        "//clockwork/common:cog_execution_error",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+    ],
+)

@@ -1,0 +1,4 @@
+# This is the pattern file used in nanobind stub generation.
+# It is a "last resort" for overriding type signatures for specific functions.
+# It's preferable to be able to generate the desired signature for the general class of type than to override here.
+# See https://nanobind.readthedocs.io/en/latest/typing.html#pattern-files for more information.

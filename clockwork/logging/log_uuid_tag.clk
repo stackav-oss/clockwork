@@ -1,0 +1,12 @@
+// Log UUID tag
+tag LogUuidTag;
+
+cpp_target log_uuid_tag
+{
+  options
+  {
+    namespace clockwork_logging::tags;
+  }
+
+  tag LogUuidTag;
+}

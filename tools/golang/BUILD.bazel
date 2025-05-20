@@ -1,0 +1,12 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "nogo")
+# Tell gazelle to ignore because we import binaries instead of go libraries, which upsets the go_library rule
+# gazelle:exclude force_require.go
+
+nogo(
+    name = "clockwork_nogo",
+    vet = True,
+    visibility = ["//visibility:public"],
+)

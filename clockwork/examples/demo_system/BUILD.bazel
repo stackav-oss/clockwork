@@ -1,0 +1,182 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/examples/demo_system:__subpackages__"],
+)
+
+simplelaunch_runner(
+    name = "demo_system",
+    config = ":localhost.textproto",
+)
+
+clk(
+    name = "cpu_domain_clk",
+    srcs = ["cpu_domain.clk"],
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "demo_system_clk",
+    srcs = ["demo_system.clk"],
+    outs = [
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.camera_box.camera_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.gps_box.gps_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.imu_box.imu_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.lidar_box.lidar_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.localization_box.localization_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.logger_box.logger_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.perception_box.perception_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.spy_box.spy_proc.tachyon",
+        "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
+        "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_simplelaunch_config.textproto",
+        "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":logger_clk",
+        ":spy_clk",
+        "//clockwork/examples/demo_system/camera:camera_clk",
+        "//clockwork/examples/demo_system/camera:video_channel_policies_clk",
+        "//clockwork/examples/demo_system/gps:gps_channel_policies_clk",
+        "//clockwork/examples/demo_system/gps:gps_clk",
+        "//clockwork/examples/demo_system/imu:imu_channel_policies_clk",
+        "//clockwork/examples/demo_system/imu:imu_clk",
+        "//clockwork/examples/demo_system/lidar:lidar_channel_policies_clk",
+        "//clockwork/examples/demo_system/lidar:lidar_clk",
+        "//clockwork/examples/demo_system/localization:localization_channel_policies_clk",
+        "//clockwork/examples/demo_system/localization:localization_clk",
+        "//clockwork/examples/demo_system/perception:perception_channel_policies_clk",
+        "//clockwork/examples/demo_system/perception:perception_clk",
+        "//clockwork/logging/writers:logger_channel_policies_clk",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "localhost.textproto",
+    srcs = [
+        "demo_system.demo_system_sys.LocalHost_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.camera_box.camera_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.gps_box.gps_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.imu_box.imu_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.lidar_box.lidar_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.localization_box.localization_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.logger_box.logger_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.perception_box.perception_proc.tachyon",
+        "clockwork.clockwork.examples.demo_system.demo_system.demo_system_sys.spy_box.spy_proc.tachyon",
+        "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
+        "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
+        ":logger_exe",
+        ":spy_exe",
+        "//clockwork/examples/demo_system/camera:camera_exe",
+        "//clockwork/examples/demo_system/gps:gps_exe",
+        "//clockwork/examples/demo_system/imu:imu_exe",
+        "//clockwork/examples/demo_system/lidar:lidar_exe",
+        "//clockwork/examples/demo_system/localization:localization_exe",
+        "//clockwork/examples/demo_system/perception:perception_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "logger_clk",
+    srcs = ["logger.clk"],
+    outs = [
+        "logger_exe.cc",
+        "logger_exe.hh",
+        "logger_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cpu_domain_clk",
+        "//clockwork/logging:log_writer_config_clk",
+        "//clockwork/logging/writers:channel_message_rates_config_clk",
+        "//clockwork/logging/writers:logger_channels_clk",
+        "//clockwork/logging/writers:logger_clk",
+        "//clockwork/logging/writers:logger_config_clk",
+        "//clockwork/logging/writers:logger_status_clk",
+    ],
+)
+
+cc_binary(
+    name = "logger_exe",
+    srcs = [
+        "logger_exe.cc",
+        "logger_exe.hh",
+        "logger_exe.inl",
+    ],
+    data = [
+        "//clockwork/examples/demo_system/resources:channel_rates_config.pbtxt",
+        "//clockwork/examples/demo_system/resources:logger_config.pbtxt",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging/writers:channel_message_rates",
+        "//clockwork/logging/writers:channel_message_rates_config",
+        "//clockwork/logging/writers:channel_message_rates_config_proto_cc_library",
+        "//clockwork/logging/writers:channel_message_rates_config_proto_conv",
+        "//clockwork/logging/writers:logger_cog",
+        "//clockwork/logging/writers:logger_cog_state",
+        "//clockwork/logging/writers:logger_config",
+        "//clockwork/logging/writers:logger_config_proto_cc_library",
+        "//clockwork/logging/writers:logger_config_proto_conv",
+        "//clockwork/logging/writers:logger_status",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "spy_clk",
+    srcs = ["spy.clk"],
+    outs = [
+        "spy_exe.cc",
+        "spy_exe.hh",
+        "spy_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cpu_domain_clk",
+        "//clockwork/tools/channel_spy:channel_spy_config_clk",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk",
+    ],
+)
+
+cc_binary(
+    name = "spy_exe",
+    srcs = [
+        "spy_exe.cc",
+        "spy_exe.hh",
+        "spy_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//clockwork/tools/channel_spy:channel_spy_config",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)

@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "test_support",
+    srcs = ["test_support.cc"],
+    hdrs = ["test_support.hh"],
+    deps = [
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:wrapping_counter",
+        "//clockwork/logging/offboard:message_chunk_reader",
+        "//clockwork/logging/offboard:types",
+        "//jewels/log_cerr",
+    ],
+)

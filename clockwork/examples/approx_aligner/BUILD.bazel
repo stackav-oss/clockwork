@@ -1,0 +1,104 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "approx_aligner_cog",
+    srcs = [
+        "approx_aligner_cog.cc",
+        "approx_aligner_cog.inl",
+    ],
+    hdrs = ["approx_aligner_cog.hh"],
+    deps = [
+        ":approx_aligner_cog_dial",
+        ":approx_aligner_cog_impl",
+        "//clockwork/cog:include_common",
+    ],
+)
+
+clk(
+    name = "approx_aligner_cog_clk",
+    srcs = ["approx_aligner_cog.clk"],
+    outs = [
+        "approx_aligner_cog.cc",
+        "approx_aligner_cog.hh",
+        "approx_aligner_cog.inl",
+        "approx_aligner_cog_dial.cc",
+        "approx_aligner_cog_dial.hh",
+        "approx_aligner_cog_dial.inl",
+    ],
+    deps = [
+        ":approx_aligner_msgs_clk",
+        "//clockwork/dial:approx_aligner_config_clk",
+    ],
+)
+
+cc_library(
+    name = "approx_aligner_cog_dial",
+    srcs = [
+        "approx_aligner_cog_dial.cc",
+        "approx_aligner_cog_dial.inl",
+    ],
+    hdrs = ["approx_aligner_cog_dial.hh"],
+    deps = [
+        ":approx_aligner_msgs",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "approx_aligner_cog_impl",
+    srcs = ["approx_aligner_cog_impl.cc"],
+    visibility = [
+        "//clockwork/scaffolding/tests:__subpackages__",
+        "//clockwork/tests:__subpackages__",
+    ],
+    deps = [
+        ":approx_aligner_cog_dial",
+        ":approx_aligner_msgs",
+        "//clockwork/dial:alignment_type",
+        "//clockwork/dial:approx_aligner",
+        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/container:circular_buffer",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "@boost//:iterator",
+    ],
+)
+
+cc_library(
+    name = "approx_aligner_msgs",
+    srcs = [
+        "approx_aligner_msgs.cc",
+        "approx_aligner_msgs.inl",
+    ],
+    hdrs = ["approx_aligner_msgs.hh"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "approx_aligner_msgs_clk",
+    srcs = ["approx_aligner_msgs.clk"],
+    outs = [
+        "approx_aligner_msgs.cc",
+        "approx_aligner_msgs.hh",
+        "approx_aligner_msgs.inl",
+    ],
+    deps = ["//clockwork/dial:approx_aligner_config_clk"],
+)

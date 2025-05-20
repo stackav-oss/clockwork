@@ -1,0 +1,32 @@
+diff --git bzl/gazelle.go bzl/gazelle.go
+index 94c32e9..885de3f 100644
+--- bzl/gazelle.go
++++ bzl/gazelle.go
+@@ -203,8 +203,7 @@ func (*bzlLibraryLang) Resolve(c *config.Config, ix *resolve.RuleIndex, rc *repo
+ 
+ var kinds = map[string]rule.KindInfo{
+ 	"bzl_library": {
+-		NonEmptyAttrs:  map[string]bool{"srcs": true, "deps": true},
+-		MergeableAttrs: map[string]bool{"srcs": true},
++		NonEmptyAttrs: map[string]bool{"srcs": true, "deps": true},
+ 	},
+ }
+ 
+@@ -228,12 +227,15 @@ func (*bzlLibraryLang) GenerateRules(args language.GenerateArgs) language.Genera
+ 		if !isBzlSourceFile(f) {
+ 			continue
+ 		}
+-		name := strings.TrimSuffix(f, fileType)
++		// Use a suffix here to avoid name collisions with other gazelle plugins
++		name := strings.TrimSuffix(f, fileType) + "_bzl"
+ 		r := rule.NewRule("bzl_library", name)
+ 
+ 		r.SetAttr("srcs", []string{f})
+ 
+-		shouldSetVisibility := args.File == nil || !args.File.HasDefaultVisibility()
++		// Disable always setting visibility to public by default
++		// Instead let developers set that on their own and don't overwrite what they set
++		shouldSetVisibility := false
+ 		if shouldSetVisibility {
+ 			vis := checkInternalVisibility(args.Rel, "//visibility:public")
+ 			r.SetAttr("visibility", []string{vis})

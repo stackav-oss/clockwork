@@ -1,0 +1,61 @@
+use clockwork::dial::approx_aligner_config::{ApproxAlignerConfig, ApproxAlignerState};
+use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, AlignerFloatMsg, AlignerIntMsg};
+
+// Example Cog with ApproxAligner
+cog ApproxAlignerCog
+{
+    resources
+    {
+        aligner_resource: persistent;
+    }
+
+    configs
+    {
+        aligner_config: Tappy<ApproxAlignerConfig>;
+    }
+
+    states
+    {
+        aligner_state: Tappy<ApproxAlignerState>
+        {
+            mutable: true;
+        }
+    }
+
+    inputs
+    {
+        in_int: Tappy<AlignerIntMsg>
+        {
+          max_msgs: 10;
+          manual_cursor: true;
+        }
+
+        in_float: Tappy<AlignerFloatMsg>
+        {
+          max_msgs: 10;
+          manual_cursor: true;
+        }
+    }
+
+    outputs
+    {
+        out_aligned: Tappy<AlignedDataMsg>;
+    }
+
+    execution
+    {
+        condition new_int: new_message(min=1, input=in_int);
+        condition new_float: new_message(min=1, input=in_float);
+        execute when: (new_int or new_float);
+    }
+}
+
+cpp_target approx_aligner_cog
+{
+  options
+  {
+    namespace clockwork;
+  }
+
+  cog ApproxAlignerCog;
+}

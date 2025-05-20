@@ -1,0 +1,96 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "aligned_storage",
+    srcs = ["aligned_storage.inl"],
+    hdrs = ["aligned_storage.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "bits",
+    srcs = ["bits.inl"],
+    hdrs = ["bits.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "error",
+    srcs = ["error.cc"],
+    hdrs = ["error.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "fields",
+    srcs = ["fields.inl"],
+    hdrs = ["fields.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":bits",
+        "//jewels/meta:concepts",
+        "//jewels/meta:types",
+        "//jewels/std:functional",
+    ],
+)
+
+cc_library(
+    name = "memory_resource",
+    srcs = ["memory_resource.inl"],
+    hdrs = ["memory_resource.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":pointers"],
+)
+
+cc_library(
+    name = "monitor_resource",
+    srcs = ["monitor_resource.cc"],
+    hdrs = ["monitor_resource.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/container:bounded_string",
+        "//jewels/log_cerr",
+    ],
+)
+
+cc_library(
+    name = "pmr_shared_ptr",
+    srcs = ["pmr_shared_ptr.inl"],
+    hdrs = ["pmr_shared_ptr.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":memory_resource"],
+)
+
+cc_library(
+    name = "pmr_unique_ptr",
+    srcs = ["pmr_unique_ptr.inl"],
+    hdrs = ["pmr_unique_ptr.hh"],
+    visibility = ["//visibility:public"],
+    deps = [":memory_resource"],
+)
+
+cc_library(
+    name = "pointers",
+    srcs = ["pointers.inl"],
+    hdrs = ["pointers.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error",
+        "//jewels/std:expected",
+        "@gsl//:pointers",
+    ],
+)
+
+cc_library(
+    name = "unique_object",
+    srcs = ["unique_object.inl"],
+    hdrs = ["unique_object.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/meta:call",
+        "//jewels/meta:type_traits",
+    ],
+)

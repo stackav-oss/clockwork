@@ -1,0 +1,78 @@
+diff --git BUILD.bazel BUILD.bazel
+index 8dac162..8c0415f 100644
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -167,3 +167,19 @@ cc_library(
+     hdrs = ["docs/au_all_units_noio.hh"],
+     visibility = ["//release:__pkg__"],
+ )
++
++# Top-level libraries to set `include` paths
++
++cc_library(
++    name = "au",
++    includes = ["."],
++    visibility = ["//visibility:public"],
++    deps = ["//au"],
++)
++
++cc_library(
++    name = "io",
++    includes = ["."],
++    visibility = ["//visibility:public"],
++    deps = ["//au:io"],
++)
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+index 0000000..4efb188
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,13 @@
++module(name = "au")
++
++bazel_dep(name = "googletest", version = "1.12.1", repo_name = "com_google_googletest")
++bazel_dep(name = "rules_cc")
++bazel_dep(name = "rules_python")
++
++pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
++pip.parse(
++    hub_name = "au_pip_deps",
++    python_version = "3.10",
++    requirements_lock = "//:requirements_lock.txt",
++)
++use_repo(pip, "au_pip_deps")
+diff --git au/BUILD.bazel au/BUILD.bazel
+index 1d7dbc8..859ba0c 100644
+--- au/BUILD.bazel
++++ au/BUILD.bazel
+@@ -17,6 +17,30 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+ ################################################################################
+ # Public libraries and tests
+ 
++test_suite(
++    name = "tests",
++    tests = [
++        "@au//au:au_test",
++        "@au//au:chrono_policy_validation_test",
++        "@au//au:conversion_policy_test",
++        "@au//au:dimension_test",
++        "@au//au:io_test",
++        "@au//au:magnitude_test",
++        "@au//au:math_test",
++        "@au//au:operators_test",
++        "@au//au:packs_test",
++        "@au//au:prefix_test",
++        "@au//au:quantity_point_test",
++        "@au//au:quantity_test",
++        "@au//au:stdx_test",
++        "@au//au:testing_test",
++        "@au//au:unit_of_measure_test",
++        "@au//au:units_test",
++        "@au//au:zero_test",
++    ],
++    visibility = ["//visibility:public"],
++)
++
+ cc_library(
+     name = "au",
+     hdrs = ["au.hh"],

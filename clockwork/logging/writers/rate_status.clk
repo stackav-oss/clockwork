@@ -1,0 +1,35 @@
+// Channel rate status
+enum RateStatus
+{
+  uuid: 07f0b8f2-1a4e-48e8-9a1e-7a9add55db9f;
+
+  values
+  {
+    // Unspecified, value not set
+    #0 unspecified default
+    {
+      underlying_value: 0;
+    }
+
+    // Good message rate
+    #1 good
+    {
+      underlying_value: 1;
+    }
+
+    // Low message rate
+    #2 low
+    {
+      underlying_value: 2;
+    }
+  }
+}
+
+cpp_target rate_status
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+  enum RateStatus;
+}

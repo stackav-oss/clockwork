@@ -1,0 +1,57 @@
+
+use clockwork::dsl::cog::ten_nanosecond::TenNanoseconds;
+
+// Common event metrics schema for tracking cog execution performance
+schema CogEventMetrics
+{
+    uuid: aaa93788-ddfa-42f8-8980-e67d363ad1a7;
+    fields {
+        // Execution timestamp in nanoseconds (epoch time)
+        #0 exec_start_time: Int64;
+
+        // Execution duration in units of 10 nanoseconds
+        #1 exec_duration: TenNanoseconds;
+
+        // Latency from first ready state to execution (in units of 10ns)
+        #2 ready_to_exec_latency: TenNanoseconds;
+
+        // Latency from first execution attempt to actual execution (in units of 10ns)
+        #3 attempt_to_exec_latency: TenNanoseconds;
+
+        // Number of times the cog was re-queued before execution
+        #4 requeue_count: UInt16;
+    }
+}
+
+// Input channel event metrics schema
+schema InputChannelEventMetrics
+{
+    uuid: 0377d15f-ba2d-4f5c-ac7d-d85e736a3186;
+    fields {
+        // Count of messages that were not processed
+        #1 unseen_messages: UInt16;
+
+        // Message staleness in units of 10 nanoseconds
+        #2 staleness: TenNanoseconds;
+
+        // Count of messages that were dropped
+        #3 dropped_messages: UInt16;
+    }
+}
+
+// Cpp target for common cog event metrics
+cpp_target cog_event_metrics_cpp
+{
+  options
+  {
+    namespace clockwork::cog::metrics;
+  }
+  schema CogEventMetrics;
+  schema InputChannelEventMetrics;
+
+  representation Tachyon<CogEventMetrics>;
+  representation Tachyon<InputChannelEventMetrics>;
+
+  interface Tappy<CogEventMetrics>;
+  interface Tappy<InputChannelEventMetrics>;
+}

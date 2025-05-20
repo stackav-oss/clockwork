@@ -1,0 +1,22 @@
+use clockwork::dsl::tests::support::hellomsg;
+
+// Goodbye, Cog!
+//
+// This is a maximally empty cog to test the empty cases.
+cog GoodbyeCog
+{
+    execution
+    {
+        execute when: init;
+    }
+}
+
+cpp_target goodbyecog
+{
+  options
+  {
+    namespace clockwork::cogs;
+  }
+
+  cog GoodbyeCog;
+}

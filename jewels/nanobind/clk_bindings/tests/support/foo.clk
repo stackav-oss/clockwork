@@ -1,0 +1,42 @@
+// Foo
+schema Foo
+{
+  uuid: 7698cf3a-3ba3-4522-9a80-94a52af8c04e;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // DOCUMENTATION REQUIRED
+    #0 question: VarString<max_size=256>;
+
+    // DOCUMENTATION REQUIRED
+    #1 answer: UInt64;
+  }
+}
+
+cpp_target foo
+{
+  options
+  {
+    namespace foo_interface::clk;
+  }
+
+  schema Foo;
+
+  representation Tachyon<Foo>;
+  interface Tap<Tachyon<Foo>>;
+}
+
+nanobind_target foo_clk_nb
+{
+  binding Tap<Tachyon<Foo>>;
+}
+
+py_target foo_clk_py
+{
+  interface Tap<Tachyon<Foo>>;
+}

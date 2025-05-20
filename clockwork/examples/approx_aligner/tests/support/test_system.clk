@@ -1,0 +1,73 @@
+use clockwork::dial::approx_aligner_config::{ApproxAlignerConfig, ApproxAlignerState};
+use clockwork::examples::approx_aligner::approx_aligner_cog::ApproxAlignerCog;
+use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, AlignerFloatMsg, AlignerIntMsg};
+use clockwork::examples::approx_aligner::tests::support::test_cogs::{AlignedMsgTester, FloatMsgProducer, IntMsgProducer};
+
+// Channel for int msg
+channel IntMsgChannel
+{
+  message_type: Tachyon<AlignerIntMsg>;
+  max_num_messages: 20;
+}
+
+// Channel for float msg
+channel FloatMsgChannel
+{
+  message_type: Tachyon<AlignerFloatMsg>;
+  max_num_messages: 20;
+}
+
+// Channel for aligned output msg
+channel AlignedMsgChannel
+{
+  message_type: Tachyon<AlignedDataMsg>;
+  max_num_messages: 20;
+}
+
+box TestSystemBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+  new config: SerializedDataFile(representation=Protobuf<ApproxAlignerConfig>, path="clockwork/examples/approx_aligner/tests/resources/approx_aligner_config.textproto");
+  new state: State(representation=Tachyon<ApproxAlignerState>, memory_resource=memory);
+
+  new float_producer: FloatMsgProducer;
+  new int_producer: IntMsgProducer;
+  new aligner: ApproxAlignerCog;
+  new tester: AlignedMsgTester;
+
+  connect float_producer.out_float to FloatMsgChannel;
+  connect int_producer.out_int to IntMsgChannel;
+
+  connect memory to aligner.aligner_resource;
+  connect config to aligner.aligner_config;
+  connect state to aligner.aligner_state;
+  connect FloatMsgChannel to aligner.in_float;
+  connect IntMsgChannel to aligner.in_int;
+  connect aligner.out_aligned to AlignedMsgChannel;
+
+  connect AlignedMsgChannel to tester.in_aligned;
+}
+
+cpp_executable test_system_exe
+{
+  casing
+  {
+    box TestSystemBox;
+  }
+  offline: true;
+}
+
+cpu_domain TestCpu;
+
+box TestSystem
+{
+  new box: TestSystemBox;
+  new proc: Process(executable=test_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+}
+
+system_target test_system
+{
+  box: TestSystem;
+}

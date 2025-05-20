@@ -1,0 +1,52 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "call_test",
+    srcs = ["call_test.cc"],
+    deps = [
+        "//jewels/meta:call",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "concepts_test",
+    srcs = ["concepts_test.cc"],
+    deps = [
+        "//jewels/meta:concepts",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "integer_sequence_test",
+    srcs = ["integer_sequence_test.cc"],
+    deps = [
+        "//jewels/meta:integer_sequence",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "overloaded_test",
+    srcs = ["overloaded_test.cc"],
+    deps = [
+        "//jewels/meta:overloaded",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "types_test",
+    srcs = ["types_test.cc"],
+    deps = [
+        "//jewels/meta:types",
+        "@catch2//:catch2_main",
+    ],
+)

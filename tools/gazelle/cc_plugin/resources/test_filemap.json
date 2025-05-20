@@ -1,0 +1,7 @@
+{
+  "jpeg.h": "@jpeg//:with_special_features",
+  "png.h": "//third_party:libpng",
+  "replacement_(.*).h": "@test//$1",
+  "spirv-tools/libspirv.hpp": "@spirv_tools//:spirv_tools",
+  "third_party/externals/spirv-cross/spirv_hlsl.hpp": "@spirv_cross"
+}

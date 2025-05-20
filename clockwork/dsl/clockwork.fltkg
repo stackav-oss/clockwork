@@ -1,0 +1,253 @@
+module := (doc . '\n')? , use* , entity+;
+doc := (/ */ . "//" . line:doc_line)+ . / */;
+doc_line := (" " . text:/[^\n]*/)? . "\n";
+
+use := "use" : use_body , ";"? , ;
+use_alias :=  "as" : alias:identifier ;
+use_body := (use_repo:repo_prefix , "::")? , use_path:namespace_path , (("::" , use_block) | use_alias)?;
+repo_prefix := "@" , identifier ;
+use_block := "{" , use_body , ((";"|",") , use_body)* , (";"|",")? , "}" ;
+
+entity := cog | schema | enum | representation | tag | channel | udp_socket | multicast_udp_socket | audio_source | cpp_executable | cpp_target | nanobind_target | py_target | proto_target | system_target | box | strong_type | policy_def | policy | extern_type | cpu_domain | ethernet | assignment_stmt;
+
+cog := doc . "cog" : identifier , "{" , resources_block? , configs_block? , states_block? , inputs_block? , outputs_block? , execution_block , diagnostics_block?, simulation_options_block? , python_options_block? , "}" , ;
+
+resources_block := "resources", "{", resource_def+ , "}" , ;
+resource_def := doc? . resource_memory_def , ;
+resource_memory_def := identifier , ":" , "persistent", ";" , ;
+
+configs_block := "configs", "{", config_def+ , "}" , ;
+config_def := doc? . identifier , ":" , config_type:expr , ";" , ;
+
+states_block := "states", "{", state_def+ , "}" , ;
+state_def := doc? . identifier , ":" , state_type:expr , (state_block | ";") , ;
+state_block := "{" , state_block_param* , "}" ;
+state_block_param := doc? . param:identifier, ":" : value:expr , ";" , ;
+
+inputs_block := "inputs", "{" , input_def+ , "}" , ;
+input_def := doc? . identifier , ":" , input_type:expr , (input_block | ";") , ;
+input_block := "{" , input_block_param* , "}" ;
+input_block_param := doc? . param:identifier, ":" : value:expr , ";" , ;
+
+outputs_block := "outputs", "{", output_def+ , "}" , ;
+output_def := doc? . identifier , ":" , output_type:expr , ";" , ;
+
+execution_block := "execution", "{" , execution_statement* , execute_when , "}", ;
+execution_statement := condition_def | rate_limit_spec ;
+condition_def := doc? . "condition" : identifier, ":", condition_spec, ";", ;
+condition_spec := (time_since_last_exec:"time_since_last_exec" | any_message:"any_message" | new_message:"new_message"), "(", arg_list , ")", ;
+rate_limit_spec := "rate limit" , output:identifier , ":" , limit:nonnegative_integer , "every" , period:literal, ";", ;
+execute_when := doc? . "execute when" , ":", condition_expr, ";",;
+condition_expr := init:"init" | log:"log" | lhs:condition_expr : (op_and:"and" | op_or:"or") : rhs:condition_expr | "(", subexpr:condition_expr, ")" | identifier;
+
+diagnostics_block := "diagnostics", "{", (diagnostics_def+ | diagnostics_param+), "}" , ;
+diagnostics_def := doc? . name:identifier , "{" , diagnostics_param* , "}" , ;
+diagnostics_param := doc? . param:identifier, ":" : value:expr , ";" , ;
+
+simulation_options_block := "simulation_options", "{", sim_options* , "}" , ;
+sim_options := execution_duration;
+execution_duration := "execution_duration", ":", value:literal, ";", ;
+
+python_options_block := "python" , "{" , python_dial_option , python_impl_option , "}" , ;
+python_dial_option := "dial" , ":" : value:expr , ";" , ;
+python_impl_option := "impl" , ":" : value:expr , ";" , ;
+
+schema := doc . "schema" : identifier , "{" , uuid_spec? , schema_options?, schema_parameters_block? , schema_fields_block , schema_history_block? , "}", ;
+schema_parameters_block := "parameters", "{", (schema_field , ";" , )* , "}" , ;
+schema_fields_block := "fields", "{", (schema_field , ";" , )+ , "}", ;
+schema_field := doc? . "#" . field_num:nonnegative_integer , name:identifier , (":" , typespec:expr)? ,
+    ("=" , init_value:expr)?;
+schema_options := "options" , "{" , schema_option* , "}" , ;
+schema_option := schema_option_constructor ;
+schema_option_constructor := "constructor", ":", constructor_expr:expr, ";" , ;
+
+schema_history_block := "history" , "{" , version_spec , fields_history? , schema_history? , "}" , ;
+version_spec :=  "versions" , ":" , "[" , version:nonnegative_integer , ("," , version:nonnegative_integer)* , "]" ,
+    ";" , version_pseudofields? ,;
+version_pseudofields := "version_pseudofields" , ":" , "[" , (version:nonnegative_integer , ("," ,
+    version:nonnegative_integer)*)? , "]" , ";" , ;
+fields_history := doc? . "fields", "{" , field_history* , "}" , ;
+field_history := schema_field , "->" , field_change , ";" , ;
+field_change := (removed:"removed" | became:"became") : "#" . changed_version:nonnegative_integer ;
+
+schema_history := "schema" , "{" , schema_history_name , "}" , ;
+schema_history_name := "name" , "{" , "#" , version:nonnegative_integer , identifier , ";" , "}" , ;
+
+enum := doc . "enum" : identifier , "{" , uuid_spec? , enum_option_block? , enum_values_block , enum_history_block? , "}" , ;
+enum_option_block := "options" , "{" , enum_option* , "}" , ;
+enum_option := enum_option_flags | enum_option_underlying_type | linter_override;
+enum_option_flags := bit_flags:"bit_flags" , ";" , ;
+enum_option_underlying_type := underlying_type_tag:"underlying_type" , ":" , underlying_type:expr , ";" , ;
+linter_override := doc? . "enable_linter_override", ":" , linter_override_type:literal , ";" , ;
+enum_values_block := "values" , "{" , enum_value+ , "}" , ;
+enum_value := doc . "#" . value_num:nonnegative_integer , name:identifier , default:"default"? , (";"| "{" , enum_value_detail* , "}") , ;
+enum_value_detail := underlying_value_tag:"underlying_value" , ":" , value:expr , ";" , ;
+
+enum_history_block := "history" , "{" , version_spec , enum_values_history? , enum_history? , "}" , ;
+enum_values_history := doc? . "values", "{" , enum_value_history* , "}" , ;
+enum_value_history := enum_history_value , "->" , enum_value_change , ";" , ;
+enum_history_value := doc . "#" . value_num:nonnegative_integer , name:identifier , default:"default"? , ("{" , enum_value_detail* , "}")? , ;
+enum_value_change := (removed:"removed" | became:"became") : "#" . changed_version:nonnegative_integer ;
+
+enum_history := "enum" , "{" , enum_history_options_block? , "}" , ;
+enum_history_options_block := "options" , "{" , enum_history_options* , "}" , ;
+enum_history_options := "#" , version:nonnegative_integer , "{" , enum_option* , "}" ,;
+
+uuid_spec := "uuid" , ":" , uuid:/[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}/ , ";" , ;
+
+strong_type := doc . "strong_type" : identifier , "{" , underlying_type, "}" , ;
+underlying_type := "underlying_type" , ":" , typespec:expr , ";" , ;
+
+extern_type := doc . "extern_type" : identifier , ";" , ;
+
+cpp_extern := doc? . "extern" , "{" , cpp_extern_block , "}" , ;
+cpp_extern_block := cpp_extern_header , cpp_extern_namespace , cpp_extern_type* , ;
+cpp_extern_header := "header_file" , ":" , header:literal , ";" , ;
+cpp_extern_namespace := "namespace" , ":" , namespace:namespace_path , ";" , ;
+cpp_extern_type := "type" , "{" , cpp_extern_type_name , cpp_extern_type_factory? , "}" , ;
+cpp_extern_type_name := "name" , ":" , typespec:expr , ";" , ;
+cpp_extern_type_factory := "factory" , ":" , factory:identifier , ";" , ;
+
+representation := doc? . "representation" : (name:identifier , ":" ,)? . typespec:expr
+    , "{" , repr_options? , repr_fields? , "}" , ;
+repr_options := "options" , "{" , repr_option* , "}" , ;
+repr_option := repr_option_align ;
+repr_option_align := doc? . "align", ":", value:expr , ";" , ;
+repr_fields := "fields" , "{" , repr_field* , "}" , ;
+repr_field := doc? . "#" . field_num:nonnegative_integer , name:identifier , "{" , repr_field_option* , "}" , ;
+repr_field_option := repr_option_align ;
+
+tag := doc . "tag" : identifier , ";" , ;
+
+channel := doc . "channel" : identifier , "{" , channel_name? , channel_message_type, channel_option_message_size?
+    , channel_option_num_slots, channel_option_publishers? , "}" , ;
+channel_name := doc? . "name", ":", value:expr , ";" , ;
+channel_message_type := doc? . "message_type", ":", typespec:expr , ";" , ;
+channel_option_message_size := doc? . "message_size", ":", value:expr , ";" , ;
+channel_option_num_slots := doc? . "max_num_messages", ":", value:expr , ";" , ;
+channel_option_publishers := doc? . "publishers", ":", (single:"single" | multiple:"multiple" | diagnostics:"diagnostics" | bridge_status:"bridge_status") , ";" , ;
+
+udp_socket := doc . "udp_socket" : identifier , "{" , udp_socket_address, udp_socket_port , udp_socket_direction , udp_socket_message_type , udp_socket_remote_address? , udp_socket_remote_port? , udp_socket_batch_size? , udp_socket_options?, "}" , ;
+udp_socket_address := "address", ":", value:ipv4_address , ";" , ;
+udp_socket_port := "port", ":", value:literal , ";" , ;
+udp_socket_remote_address := "remote_address", ":", value:ipv4_address , ";" , ;
+udp_socket_remote_port := "remote_port", ":", value:literal , ";" , ;
+udp_socket_direction := "direction", ":", (value:"incoming" | value:"outgoing" | value:"bidirectional") , ";" , ;
+udp_socket_message_type := "message_type", ":", typespec:expr , ";" , ;
+udp_socket_batch_size := "batch_size", ":", value:expr , ";" , ;
+udp_socket_options := "options", "{", udp_socket_option*, "}", ;
+udp_socket_option := (socket_reuse_address | socket_receive_buffer | socket_bind_to_interface);
+socket_reuse_address := "reuse_address", ":", typespec:expr, ";", ;
+socket_receive_buffer := "receive_buffer", ":", typespec:expr, ";", ;
+socket_bind_to_interface := "bind_to_interface", ":", typespec:expr, ";", ;
+
+multicast_udp_socket := doc . "multicast_udp_socket" : identifier , "{" , multicast_udp_socket_group_address , multicast_udp_socket_interface_address, udp_socket_port , udp_socket_remote_port?  , udp_socket_direction , udp_socket_message_type , udp_socket_batch_size? , udp_socket_options?, "}" , ;
+multicast_udp_socket_group_address := "group_address", ":", value:ipv4_address, ";", ;
+multicast_udp_socket_interface_address := "interface_address", ":", value:ipv4_address , ";" , ;
+
+audio_source := doc . "audio_source" : identifier , ;
+
+target_constant := "constant", constant_name:identifier, ";", ;
+
+py_target := doc? . "py_target" : identifier , "{" , py_target_statement+ , "}", ;
+py_target_statement := (cpp_representation | cpp_interface | cpp_enum | py_python_cog_dial | target_constant) ;
+py_python_cog_dial := "python_cog_dial" : typespec:expr , py_python_cog_dial_block , ;
+py_python_cog_dial_block := "{" , (py_python_cog_config_type | py_python_cog_state_type | py_python_cog_input_type | py_python_cog_output_type)* , "}" ;
+py_python_cog_config_type := "configs" . "." . name:identifier , ":" : python_type:expr , ";" , ;
+py_python_cog_state_type := "states" . "." . name:identifier , ":" : python_type:expr , ";" , ;
+py_python_cog_input_type := "inputs" . "." . name:identifier , ":" : python_type:expr , ";" , ;
+py_python_cog_output_type := "outputs" . "." . name:identifier , ":" : python_type:expr , ";" , ;
+
+cpp_target := doc? . "cpp_target" : identifier , "{" , cpp_target_options , cpp_target_statement+ , "}", ;
+cpp_target_options := "options", "{" , cpp_namespace_option? , generate_cog_metrics_option? , "}" , ;
+cpp_namespace_option := "namespace" : namespace_path , ";" ;
+generate_cog_metrics_option := "generate_cog_metrics" : boolean , ";" ;
+cpp_target_statement := (schema_tag | tag_target | cpp_enum | cpp_representation | cpp_interface | cpp_udp_socket | cpp_audio_source | cpp_cog | cpp_python_cog | cpp_extern | converter | nanobind_type_caster | target_constant) ;
+schema_tag := "schema" : typespec:expr , ";" , ;
+tag_target := "tag" : typespec:expr , ";" , ;
+cpp_enum := "enum" : typespec:expr , ";" , ;
+cpp_representation := "representation" : (generic:"generic" :)? . (name:identifier , ":" ,)? . typespec:expr , ";" , ;
+cpp_interface := "interface" : (generic:"generic" :)? . (name:identifier , ":" ,)? . typespec:expr , ";" , ;
+cpp_cog := "cog" : typespec:expr , ";" , ;
+cpp_python_cog := "python_cog" : typespec:expr , ";" , ;
+cpp_udp_socket := "udp_socket" : typespec:expr , ";" , ;
+cpp_audio_source := "audio_source" : typespec:expr , ";" , ;
+converter := "converter" : (generic:"generic" :)? . (name:identifier , ":" ,)? . typespec:expr , ";" , ;
+nanobind_type_caster := "nanobind_type_caster" , "for" , typespec:expr , "from" , python_target:identifier , ";" , ;
+
+nanobind_target := doc? . "nanobind_target" : identifier , "{" , nanobind_target_statement+ , "}", ;
+nanobind_target_statement := (nanobind_binding | target_constant) ;
+nanobind_binding := "binding" : (name:identifier , ":" ,)? . typespec:expr , ";" , ;
+
+casing := doc? . "casing" , "{" , casing_element* , "}" , ;
+casing_element := casing_extern | casing_representation | casing_interface | cpp_cog | cpp_python_cog | cpp_udp_socket | cpp_audio_source | casing_box ;
+casing_extern := "extern" , typespec:expr , ";" , ;
+casing_representation := "representation" , typespec:expr , ";" , ;
+casing_interface := "interface" , typespec:expr , ";" , ;
+casing_box := "box", typespec:expr , ";" , ;
+
+cpp_executable := doc? . "cpp_executable" : identifier, "{" , casing , cpp_executable_param*, "}" , ;
+cpp_executable_param := doc? . param:identifier, ":" : value:expr , ";" , ;
+
+box := doc? . "box" : identifier , "{" , box_element* , "}" , ;
+box_element := new_stmt | connect_stmt | policy_apply_stmt;
+new_stmt := doc? . "new" : identifier , ":" , typespec:expr , ";" , ;
+assignment_stmt := doc? . identifier , (":", typespec:expr)? , "=" , rhs:expr , ";" , ;
+connect_stmt := doc? . "connect" : source:expr : "to" : target:expr , ";" , ;
+policy_apply_stmt := doc? . "apply" : policy_data:expr : (to:"to" | in:"in") : target:expr , ";" , ;
+
+cpu_domain := doc? . "cpu_domain" : identifier , (cpu_domain_options | ";") , ;
+cpu_domain_options := "{" , simplelaunch_node? , simplelaunch_src+ , bridge_cpus? , default_cpus? , "}" ;
+simplelaunch_node := "simplelaunch_node" , ":" , node:expr , ";" , ;
+simplelaunch_src := "simplelaunch_src" , ":" , label:expr , ";" , ;
+bridge_cpus := "bridge_cpus" , ":" , cpu_set , ";" , ;
+default_cpus := "default_cpus" , ":" , cpu_set , ";" , ;
+
+cpu_set := start_cpu:nonnegative_integer , ("-" , end_cpu:nonnegative_integer)? , ;
+
+system_target := doc? . "system_target" : identifier , "{" , system_box , "}" , ;
+system_box := doc? . "box" , ":" , typespec:expr , ";" , ;
+
+ethernet := doc? . "ethernet" : identifier , "{" , ethernet_ipv4+ , "}" , ;
+ethernet_ipv4 := doc? . "ipv4_address" : ipv4_address , ":" , cpu_domain:expr , "{" , bridge_ports , "}" , ;
+bridge_ports := doc? . "bridge_ports" , ":" , begin:nonnegative_integer , "-" , end:nonnegative_integer , ";" , ;
+
+proto_target := doc? . "proto_target" : identifier , "{" , proto_target_options , proto_target_statement+ , "}", ;
+proto_target_options := "options", "{" , proto_package_option? , proto_go_package_option?, proto_validation_option? , "}" , ;
+proto_package_option := "package" : package_name , ";" ;
+proto_go_package_option:= "go_package" : go_package_name , ";" ;
+proto_validation_option:= "validate_proto" : boolean , ";" ;
+proto_target_statement := (proto_representation | proto_enum);
+proto_representation := "representation" : (generic:"generic" :)? . (name:identifier , ":" ,)? . typespec:expr , ";" , ;
+proto_enum := "enum" : typespec:expr , ";" , ;
+
+policy_def := doc . "def" : "policy" : identifier , "{" , policy_def_binds , policy_def_schema , "}" , ;
+policy_def_binds := "binds_to" , ":" , typespec:expr , ";" ;
+policy_def_schema := "schema" , ":" , typespec:expr , ";" ;
+
+policy := doc? . "policy" : policy_class:expr : "for" : target:expr , "{" , assignment_stmt* , "}" , ;
+
+expr := instantiate | call | namespaced_identifier | dotted_identifier | identifier | literal;
+
+instantiate := operand:expr . "<" , arg_list? , ">";
+call := operand:expr . "(" , arg_list? , ")";
+arg_list := arg , ("," , arg)*;
+arg := name:identifier, "=", expr | expr;
+
+identifier := value:/[_a-zA-Z][_a-zA-Z0-9]*/;
+namespaced_identifier := namespace:identifier . "::" . extern_entity:identifier ;
+namespace_path := identifier . ("::" . identifier)*;
+dotted_identifier := (parent:dotted_identifier | root:identifier) , "." , child:identifier;
+package_name := identifier . ("." . identifier)*;
+go_package_name := identifier . (("." | "/" | "-") . identifier)*;
+
+literal := unit_literal | number | string_literal;
+nonnegative_integer := value:/[0-9]('?[0-9])*/;
+integer := sign? . nonnegative_integer;
+number := sign? . whole_part:nonnegative_integer . ("." . fractional_part:nonnegative_integer)? . (/[eE]/ . exponent:integer)?;
+ipv4_address := first:nonnegative_integer . "." . second:nonnegative_integer . "." . third:nonnegative_integer . "." . fourth:nonnegative_integer;
+sign := positive:"+" | negative:"-";
+unit_literal := number . unit_identifier;
+unit_identifier := seconds:"s" | milliseconds:"ms" | microseconds:"us" | bit:"bit" | byte:"byte";
+boolean := true:"true" | false:"false";
+string_literal := value:/("([^"\n\\]|\\.)+"|'([^'\n\\]|\\.)+')/;

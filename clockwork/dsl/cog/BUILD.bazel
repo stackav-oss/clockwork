@@ -1,0 +1,184 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "clk_cog_metrics",
+    srcs = ["clk_cog_metrics.py"],
+    deps = ["//clockwork/dsl/ir:cog"],
+)
+
+cc_library(
+    name = "cog_event_metrics_cpp",
+    srcs = [
+        "cog_event_metrics_cpp.cc",
+        "cog_event_metrics_cpp.inl",
+    ],
+    hdrs = ["cog_event_metrics_cpp.hh"],
+    deps = [
+        ":ten_nanoseconds",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "cog_telemetry_metrics_cpp",
+    srcs = [
+        "cog_telemetry_metrics_cpp.cc",
+        "cog_telemetry_metrics_cpp.inl",
+    ],
+    hdrs = ["cog_telemetry_metrics_cpp.hh"],
+    deps = [
+        ":min_max_mean_cpp",
+        ":ten_nanoseconds",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "common_cog_event_metrics_clk",
+    srcs = ["common_cog_event_metrics.clk"],
+    outs = [
+        "cog_event_metrics_cpp.cc",
+        "cog_event_metrics_cpp.hh",
+        "cog_event_metrics_cpp.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":ten_nanosecond_clk"],
+)
+
+clk(
+    name = "common_cog_telemetry_metrics_clk",
+    srcs = ["common_cog_telemetry_metrics.clk"],
+    outs = [
+        "cog_telemetry_metrics_cpp.cc",
+        "cog_telemetry_metrics_cpp.hh",
+        "cog_telemetry_metrics_cpp.inl",
+        "min_max_mean_cpp.cc",
+        "min_max_mean_cpp.hh",
+        "min_max_mean_cpp.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":ten_nanosecond_clk"],
+)
+
+py_library(
+    name = "cpp_python_cog",
+    srcs = ["cpp_python_cog.py"],
+    deps = [
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:python_cog_dial",
+    ],
+)
+
+py_library(
+    name = "cppcog",
+    srcs = ["cppcog.py"],
+    deps = [
+        ":pycog",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:extern_type",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema_reg",
+        "//clockwork/dsl/ir:units",
+        "//clockwork/dsl/ir:uuid_reg",
+        "@clockwork_pip//pydantic",
+    ],
+)
+
+py_library(
+    name = "cppdial",
+    srcs = ["cppdial.py"],
+    deps = [
+        ":pycog",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+cc_library(
+    name = "min_max_mean_cpp",
+    srcs = [
+        "min_max_mean_cpp.cc",
+        "min_max_mean_cpp.inl",
+    ],
+    hdrs = ["min_max_mean_cpp.hh"],
+    deps = [
+        ":ten_nanoseconds",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+py_library(
+    name = "pycog",
+    srcs = ["pycog.py"],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:diagnostics",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:extern_type",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema_reg",
+        "//clockwork/dsl/ir:units",
+        "//clockwork/dsl/ir:uuid_reg",
+    ],
+)
+
+clk(
+    name = "ten_nanosecond_clk",
+    srcs = ["ten_nanosecond.clk"],
+    outs = [
+        "ten_nanoseconds.cc",
+        "ten_nanoseconds.hh",
+        "ten_nanoseconds.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "ten_nanosecond_type",
+    srcs = ["ten_nanosecond_type.cc"],
+    hdrs = ["ten_nanosecond_type.hh"],
+)
+
+cc_library(
+    name = "ten_nanoseconds",
+    srcs = [
+        "ten_nanoseconds.cc",
+        "ten_nanoseconds.inl",
+    ],
+    hdrs = ["ten_nanoseconds.hh"],
+    deps = [":ten_nanosecond_type"],
+)

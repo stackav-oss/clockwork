@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:python.bzl", "py_binary")
+
+py_binary(
+    name = "print_root_repo",
+    srcs = ["print_root_repo.py"],
+    deps = ["@root_repo//:root_repo_py"],
+)
+
+bzl_library(
+    name = "root_repo_bzl",
+    srcs = ["root_repo.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+bzl_library(
+    name = "root_repo_py_bzl",
+    srcs = ["root_repo_py.bzl"],
+    deps = ["//tools/rules:python_bzl"],
+)

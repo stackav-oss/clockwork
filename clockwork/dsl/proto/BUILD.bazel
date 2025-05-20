@@ -1,0 +1,16 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "proto_typereg",
+    srcs = ["proto_typereg.py"],
+    deps = [
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)

@@ -1,0 +1,30 @@
+// Nested schema in an external module
+schema NestedSchema
+{
+    uuid: 9b4299a0-c8a3-455a-b575-7261c7f2c012;
+
+    fields
+    {
+        // Some field.
+        #0 some_integer: UInt8;
+    }
+}
+
+cpp_target py_bindings_v2_ext_clk_cc
+{
+  options
+  {
+    namespace clockwork::support;
+  }
+  schema NestedSchema;
+  representation Tachyon<NestedSchema>;
+}
+
+
+py_target py_bindings_v2_ext_clk_py
+{
+  use_v2_bindings;
+
+  representation Tachyon<NestedSchema>;
+  interface Tappy<NestedSchema>;
+}

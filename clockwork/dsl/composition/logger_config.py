@@ -63,31 +63,31 @@ LoggedChannelConfig: Final[type[logger_config_proto.LoggedChannelConfig]] = tach
     LWC_MODULE.context,
     LWC_MODULE,
     "LoggedChannelConfig",
-    max_channel_name_size=127,
+    max_channel_name_size=300,
     max_schema_name_size=511,
-    max_schema_definition_size=16383,
+    max_schema_definition_size=20000,
 )[0]
 
 LogWriterConfig: Final[type[logger_config_proto.LogWriterConfig]] = tachyon_dyn.get_instantiation_dataclass(
     LWC_MODULE.context,
     LWC_MODULE,
     "LogWriterConfig",
-    max_channel_name_size=127,
+    max_channel_name_size=300,
     max_schema_name_size=511,
-    max_schema_definition_size=16383,
-    max_num_channels=555,
+    max_schema_definition_size=20000,
+    max_num_channels=2046,
 )[0]
 
 
 def get_channel_logging_policy() -> policy.PolicyClass:
     """Retrieve the global ChannelLoggingPolicy definition."""
     channel_logging_policy_def = CP_MODULE.inner_scope.lookup("ChannelLoggingPolicy")
-    assert isinstance(channel_logging_policy_def, policy.PolicyDef)  # noqa: S101 (invariant)
+    assert isinstance(channel_logging_policy_def, policy.PolicyDef)
     return channel_logging_policy_def.get_resolved()
 
 
 def get_log_reader_policy() -> policy.PolicyClass:
     """Retrieve the global LogReaderPolicy definition."""
     log_reader_policy_def = CP_MODULE.inner_scope.lookup("LogReaderPolicy")
-    assert isinstance(log_reader_policy_def, policy.PolicyDef)  # noqa: S101 (invariant)
+    assert isinstance(log_reader_policy_def, policy.PolicyDef)
     return log_reader_policy_def.get_resolved()

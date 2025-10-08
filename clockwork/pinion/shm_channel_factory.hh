@@ -55,25 +55,31 @@ public:
   ///
   /// Attempt to open a shared memory channel with the specified role using the common settings of this factory
   /// @param role indicates if this is to be a ShmPublisher or ShmSubscriber
-  /// @param name name of the channel, used as the filename (in shm_dir)
+  /// @param uuid_str UUID string name of the channel, used as the filename (in shm_dir)
+  /// @param channel_name Human readable channel name
   /// @param layout the BufferLayout to use for the channel's backing buffer
   /// @param max_subscribers maximum size of the in-process and socket observer collections
   ///
-  jewels::expected<std::shared_ptr<ShmChannel>, pinion::ShmChannel::Error>
-  open(pinion::ShmChannel::Role role, std::string_view name, const BufferLayout& layout, size_t max_subscribers);
+  jewels::expected<std::shared_ptr<ShmChannel>, pinion::ShmChannel::Error> open(
+    pinion::ShmChannel::Role role,
+    std::string_view uuid_str,
+    std::string_view channel_name,
+    const BufferLayout& layout,
+    size_t max_subscribers);
 
   ///
   /// Attempt to open a shared memory channel using the common settings of this factory.
-  /// @param name name of the channel, used as the filename (in shm_dir)
+  /// @param uuid_str UUID string name of the channel, used as the filename (in shm_dir)
+  /// @param channel_name Human readable channel name
   /// @param layout the BufferLayout to use for the channel's backing buffer
   /// @param max_subscribers maximum size of the in-process and socket observer collections
   ///@{
-  jewels::expected<std::shared_ptr<ShmPublisher>, pinion::ShmChannel::Error>
-  open_publisher(std::string_view name, const BufferLayout& layout, size_t max_subscribers);
-  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error>
-  open_subscriber(std::string_view name, const BufferLayout& layout, size_t max_subscribers);
-  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error>
-  open_spy(std::string_view name, const BufferLayout& layout, size_t max_subscribers);
+  jewels::expected<std::shared_ptr<ShmPublisher>, pinion::ShmChannel::Error> open_publisher(
+    std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
+  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_subscriber(
+    std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
+  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_spy(
+    std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
   ///@}
 
   ///

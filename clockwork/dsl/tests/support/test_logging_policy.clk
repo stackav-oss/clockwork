@@ -11,6 +11,11 @@ policy ChannelLoggingPolicy for hellomod::AnotherChan
     log_type = LogType::telemetry;
 }
 
+policy ChannelLoggingPolicy for hellomod::MultiPublisherChannel
+{
+    log_type = LogType::redundant_telemetry;
+}
+
 policy LogReaderPolicy for hellomod::HelloChan
 {
 }

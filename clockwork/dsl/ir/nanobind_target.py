@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from clockwork.dsl import cst
+from clockwork.dsl.bazel.clk_targets import module_to_clk
 from clockwork.dsl.bazel.nanobind_targets import PyCcBinding
 from clockwork.dsl.bazel.targets import get_bazel_label_for_clk_label
 from clockwork.dsl.cpp.context import CppModuleChunks, as_cc_library, write_to_file
@@ -97,7 +98,9 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
             # This is used to compute target dependencies because nanobind modules need to import their dependencies.
             # It's also used for clk-deps to manage the dependencies automatically.
             nanobinding_registry.register_binding(
-                entity.get_resolved().original_type, self._make_nanobind_target_info(entity.get_resolved().alias_name)
+                entity.get_resolved().original_type,
+                self._make_nanobind_target_info(entity.get_resolved().alias_name),
+                self.module.context,
             )
 
     def _get_constants(self) -> list[ImmutableBinding]:
@@ -107,7 +110,7 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
         """
         constants = []
         for constant in self.constants.values():
-            assert isinstance(constant, ImmutableBinding)  # noqa: S101 invariant
+            assert isinstance(constant, ImmutableBinding)
             constants.append(constant)
         return constants
 
@@ -143,7 +146,7 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
         include_dir = self.module.module_id.get_base_path().parent
         cpp_mod = self.render_cpp_entities()
         # Process needs to manage namespace differently, therefore not included as part of `render_cpp_entities`
-        main_target: CcLibrary = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id.repo)
+        main_target: CcLibrary = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id)
 
         # compute target dependencies
         dependent_targets = get_dependent_targets(
@@ -188,5 +191,8 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
                 srcs=[*main_target.srcs, *main_target.hdrs],
                 deps=cc_deps,
                 py_deps=py_deps,
+                data=[
+                    module_to_clk(self.module.module_id.repo, self.module.module_id),
+                ],
             )
         ]

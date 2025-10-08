@@ -7,10 +7,10 @@
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/pinion/bridge_status.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 
 #include <fmt10/base.h>
 #include <fmt10/chrono.h> // IWYU pragma: keep
-#include <fmt10/format.h>
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
 #include <tclap/UnlabeledValueArg.h>
@@ -267,16 +267,17 @@ int main(int32_t argc, char* argv[])
       latency_type_arg.getValue(),
       tool_state);
 
-    clockwork_logging::LogProcessor reader(clockwork_logging::LogReaderConfig{
-      .uri = log_uri,
-      .interval = {},
-      .relative_interval =
-        clockwork_logging::RelativeInterval{
-          .start_offset = std::chrono::seconds(start_offset),
-          .end_offset = std::chrono::nanoseconds(std::numeric_limits<int64_t>::max()),
-        },
-      .topic_filter = {},
-    });
+    clockwork_logging::LogProcessor reader(
+      clockwork_logging::LogReaderConfig{
+        .uri = log_uri,
+        .interval = {},
+        .relative_interval =
+          clockwork_logging::RelativeInterval{
+            .start_offset = std::chrono::seconds(start_offset),
+            .end_offset = std::chrono::nanoseconds(std::numeric_limits<int64_t>::max()),
+          },
+        .topic_filter = {},
+      });
 
     // NOLINTNEXTLINE(cert-err33-c) False positive
     reader.template add_tappy_callback<clockwork::Tappy<clockwork::pinion::BridgeStatus>>(

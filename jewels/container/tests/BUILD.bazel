@@ -20,6 +20,7 @@ cc_test(
     srcs = ["circular_buffer_test.cc"],
     deps = [
         "//jewels/container:circular_buffer",
+        "//jewels/container:circular_buffer_state_clk_cc",
         "//jewels/memory:aligned_storage",
         "//jewels/memory:memory_resource",
         "//jewels/meta:overloaded",

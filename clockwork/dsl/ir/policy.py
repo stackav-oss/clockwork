@@ -14,6 +14,7 @@ from clockwork.dsl import cst
 from clockwork.dsl.compiler_context import CompilerContext, ContextKey
 from clockwork.dsl.ir import clkbuiltins, expr, node, schema, statement, typesys
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -31,6 +32,7 @@ class PolicyClass(node.DocableEntity, typesys.NamedValue, typesys.CallableEntity
     schema: schema.InstantiatedSchema
     source: PolicyDef | None
 
+    @override
     def evaluate_call(
         self,
         *,
@@ -104,7 +106,7 @@ class PolicyDef(node.CstNode[cst.PolicyDef], node.DocableEntity, typesys.NamedVa
         elif not isinstance(typespec, schema.Schema):
             msg = self.schema.append_error_line(f"Expected schema type, got {typespec}")
             raise TypeError(msg)
-        assert isinstance(typespec, schema.Schema | typesys.Instantiation)  # noqa: S101 (for mypy)
+        assert isinstance(typespec, schema.Schema | typesys.Instantiation)
         self.schema = schema.InstantiatedSchema.from_typespec(typespec)
         self.target_bound = (target_bound,)
         self.resolved = PolicyClass(
@@ -124,6 +126,7 @@ class PolicyDef(node.CstNode[cst.PolicyDef], node.DocableEntity, typesys.NamedVa
             raise RuntimeError(msg)
         return self.resolved
 
+    @override
     def evaluate_call(
         self,
         *,
@@ -189,6 +192,7 @@ class PolicyInstance(node.CstNode[cst.Policy], node.DocableEntity, typesys.Value
             resolved=None,
         )
 
+    @override
     def value_key(self) -> str:
         """Generate a unique, comparable, hashable type key for this type."""
         if isinstance(self.target, expr.Expr) or isinstance(self.policy_class, expr.Expr):
@@ -290,7 +294,8 @@ class PolicyContext:
 class PolicyKey(ContextKey[PolicyContext]):
     """Compiler context key."""
 
-    def make_default(self, compiler_context: CompilerContext) -> PolicyContext:  # noqa: ARG002 (match supertype)
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> PolicyContext:
         """Create a default (empty) instance of the context."""
         return PolicyContext(registry=defaultdict(dict))
 

@@ -49,6 +49,17 @@ cc_test(
 )
 
 cc_test(
+    name = "mmap_region_test",
+    srcs = ["mmap_region_test.cc"],
+    deps = [
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:mmap_region",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "path_test",
     srcs = ["path_test.cc"],
     deps = [

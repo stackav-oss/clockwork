@@ -18,6 +18,7 @@
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/schema_encoding.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/filesystem/path.hh"
@@ -45,6 +46,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <list>
 #include <memory_resource>
 #include <optional>
@@ -661,8 +663,9 @@ TEST_CASE("Log messages")
     REQUIRE(interval_result->get_start_timestamp() == message_time1 + (message_interval * (messages_per_file + 1U)));
     REQUIRE(
       interval_result->get_end_timestamp() == message_time1 + (message_interval * ((messages_per_file * 2U) - 1U)));
-    REQUIRE_FALSE(Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time));
+    REQUIRE_FALSE(
+      Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
+        memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time));
   }
 
   SECTION("Get file log interval, no end log record")

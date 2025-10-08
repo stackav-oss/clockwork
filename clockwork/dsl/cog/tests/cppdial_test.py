@@ -1,11 +1,13 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cppdial."""
 
 from pathlib import Path
 
 from clockwork.dsl.cog import cppdial
+from clockwork.dsl.cpp.context import Header
 from clockwork.dsl.ir import cog, compiler, importer
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
@@ -18,7 +20,12 @@ def test_hellocog_dial_render() -> None:
     cog_ir = module.inner_scope.lookup("HelloCog")
     assert cog_ir is not None
     assert isinstance(cog_ir, cog.Cog)
-    dial = cppdial.Dial(cog_ir=cog_ir, class_name="HelloCogDial", cpp_namespace="clockwork::hellocog")
+    dial = cppdial.Dial(
+        cog_ir=cog_ir,
+        class_name="HelloCogDial",
+        cpp_namespace="clockwork::hellocog",
+        dial_header=Header(CLK_REPO, Path("clockwork/dsl/tests/support/hellocog_dial.hh")),
+    )
     cpp_mod = dial.render()
 
     assert (
@@ -50,7 +57,7 @@ public:
     /// Constructor.
     explicit HelloCogDialConfigs(::jewels::memory::ObjectPtr<const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>> cfg_hello);
     /// Get cfg_hello.
-    [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>& get_cfg_hello();
+    [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>& get_cfg_hello() const;
 private:
     /// cfg_hello.
     ::jewels::memory::ObjectPtr<const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>> cfg_hello_;
@@ -62,11 +69,11 @@ public:
     /// Constructor.
     HelloCogDialStates(::jewels::memory::ObjectPtr<const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>> ro_hello, ::jewels::memory::ObjectPtr<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>> rw_hello, ::jewels::memory::ObjectPtr<const ::clockwork::testing::CxxState> extern_hello);
     /// Get ro_hello.
-    [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>& get_ro_hello();
+    [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>& get_ro_hello() const;
     /// Get rw_hello.
     [[nodiscard]] ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>& get_rw_hello();
     /// Get extern_hello.
-    [[nodiscard]] const ::clockwork::testing::CxxState& get_extern_hello();
+    [[nodiscard]] const ::clockwork::testing::CxxState& get_extern_hello() const;
 private:
     /// ro_hello.
     ::jewels::memory::ObjectPtr<const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>> ro_hello_;
@@ -82,11 +89,11 @@ public:
     /// Constructor.
     HelloCogDialConditions(::jewels::memory::ObjectPtr<const ::clockwork::MessagePresentCondition<1U, 4'294'967'295U>> any_msg, ::jewels::memory::ObjectPtr<const ::clockwork::MessagePresentCondition<1U, 2U>> new_msg, ::jewels::memory::ObjectPtr<const ::clockwork::TimeSinceLastExecCondition<500'000'000U>> periodic);
     /// Get any_msg.
-    [[nodiscard]] const ::clockwork::MessagePresentCondition<1U, 4'294'967'295U>& get_any_msg();
+    [[nodiscard]] const ::clockwork::MessagePresentCondition<1U, 4'294'967'295U>& get_any_msg() const;
     /// Get new_msg.
-    [[nodiscard]] const ::clockwork::MessagePresentCondition<1U, 2U>& get_new_msg();
+    [[nodiscard]] const ::clockwork::MessagePresentCondition<1U, 2U>& get_new_msg() const;
     /// Get periodic.
-    [[nodiscard]] const ::clockwork::TimeSinceLastExecCondition<500'000'000U>& get_periodic();
+    [[nodiscard]] const ::clockwork::TimeSinceLastExecCondition<500'000'000U>& get_periodic() const;
 private:
     /// any_msg.
     ::jewels::memory::ObjectPtr<const ::clockwork::MessagePresentCondition<1U, 4'294'967'295U>> any_msg_;
@@ -102,7 +109,7 @@ public:
     /// Constructor.
     HelloCogDialInputs(::jewels::memory::ObjectPtr<const ::clockwork::MessageInputDial<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, 1U>> latest_hello, ::jewels::memory::ObjectPtr<::clockwork::MessageInputDialWithCursorControl<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, 5U>> history_of_hellos);
     /// Get latest_hello.
-    [[nodiscard]] const ::clockwork::MessageInputDial<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, 1U>& get_latest_hello();
+    [[nodiscard]] const ::clockwork::MessageInputDial<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, 1U>& get_latest_hello() const;
     /// Get history_of_hellos.
     [[nodiscard]] ::clockwork::MessageInputDialWithCursorControl<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, 5U>& get_history_of_hellos();
 private:
@@ -139,6 +146,8 @@ private:
 struct HelloCogDial
 {
 public:
+    /// Indicates if the infra fault thresholds header was found and thus if the cog is sending infra faults.
+    [[nodiscard]] static constexpr bool has_infra_faults();
     /// Constructor.
     HelloCogDial(::jewels::time::SyncTime start_time, HelloCogDialResources resources, HelloCogDialConfigs configs, HelloCogDialStates states, HelloCogDialConditions conditions, HelloCogDialInputs inputs, HelloCogDialOutputs outputs, ::jewels::memory::ObjectPtr<::clockwork::diagnostics::ClockworkReporter<::clockwork::diagnostics::SignalGroupId::fault_injector_b>> diagnostics);
     /// Get start_time.
@@ -179,8 +188,15 @@ private:
 void execute_cog(HelloCogDial& /*dial*/);
 """.strip()
     )
+    expected_inline_chunk_body = """
+constexpr auto HelloCogDial::has_infra_faults() -> bool
+{
+    return false;
+}
+"""
+    assert cpp_mod.inline_chunk.render_str(render_includes=True).strip() == expected_inline_chunk_body.strip()
     assert cpp_mod.header_chunk.produce
-    assert not cpp_mod.inline_chunk.produce
+    assert cpp_mod.inline_chunk.produce
     assert cpp_mod.implementation_chunk.produce
 
 
@@ -192,7 +208,12 @@ def test_goodbyecog_dial_render() -> None:
     cog_ir = module.inner_scope.lookup("GoodbyeCog")
     assert cog_ir is not None
     assert isinstance(cog_ir, cog.Cog)
-    dial = cppdial.Dial(cog_ir=cog_ir, class_name="GoodbyeCogDial", cpp_namespace="clockwork::hellocog")
+    dial = cppdial.Dial(
+        cog_ir=cog_ir,
+        class_name="GoodbyeCogDial",
+        cpp_namespace="clockwork::hellocog",
+        dial_header=Header(CLK_REPO, Path("clockwork/dsl/tests/support/goodbyecog_dial.hh")),
+    )
     cpp_mod = dial.render()
 
     assert (
@@ -259,6 +280,8 @@ private:
 struct GoodbyeCogDial
 {
 public:
+    /// Indicates if the infra fault thresholds header was found and thus if the cog is sending infra faults.
+    [[nodiscard]] static constexpr bool has_infra_faults();
     /// Constructor.
     GoodbyeCogDial(::jewels::time::SyncTime start_time, GoodbyeCogDialResources resources, GoodbyeCogDialConfigs configs, GoodbyeCogDialStates states, GoodbyeCogDialConditions conditions, GoodbyeCogDialInputs inputs, GoodbyeCogDialOutputs outputs, GoodbyeCogDialDiagnostics diagnostics);
     /// Get start_time.
@@ -299,6 +322,13 @@ private:
 void execute_cog(GoodbyeCogDial& /*dial*/);
 """.strip()
     )
+    expected_inline_chunk_body = """
+constexpr auto GoodbyeCogDial::has_infra_faults() -> bool
+{
+    return false;
+}
+"""
+    assert cpp_mod.inline_chunk.render_str(render_includes=True).strip() == expected_inline_chunk_body.strip()
     assert cpp_mod.header_chunk.produce
-    assert not cpp_mod.inline_chunk.produce
+    assert cpp_mod.inline_chunk.produce
     assert cpp_mod.implementation_chunk.produce

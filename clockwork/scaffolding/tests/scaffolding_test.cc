@@ -5,11 +5,13 @@
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/abstract_timer.hh"
+#include "clockwork/common/exec_tools.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/common/tests/support/fake_cog.hh"
 #include "clockwork/io/network_var_packet.hh" // IWYU pragma: keep
 #include "clockwork/io/var_packet.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh" // IWYU pragma: keep
+#include "clockwork/logging/log_writer_config.hh"        // IWYU pragma: keep
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
@@ -17,6 +19,7 @@
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/outgoing_udp.hh"
 #include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -25,6 +28,7 @@
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "clockwork/scaffolding/end_process_exception.hh"
 #include "clockwork/scaffolding/scaffolding.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
 #include "clockwork/scaffolding/tests/support/runtime_tools.hh"
@@ -90,10 +94,10 @@ namespace clockwork::scaffolding
 namespace
 {
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) For testing purposes only
 std::mutex catch_mutex;
 
-// NOLINTNEXTLINE(fuchsia-multiple-inheritance)
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance)  Test fixture, inheriting from abstract interfaces
 class Cog1 : public AbstractCog, public pinion::Observer
 {
   static constexpr auto exec_timeout = std::chrono::milliseconds(500);
@@ -137,7 +141,7 @@ public:
   std::shared_ptr<AbstractTimer> timer;
 };
 
-// NOLINTNEXTLINE(fuchsia-multiple-inheritance)
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance)  Test fixture, inheriting from abstract interfaces
 class Cog2 : public AbstractCog, public pinion::Observer
 {
 public:
@@ -175,7 +179,27 @@ public:
   std::atomic<uint32_t> run_count{0};
 };
 
-// NOLINTNEXTLINE(fuchsia-multiple-inheritance)
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance) For testing purposes only
+class Cog2EndProcess : public Cog2
+{
+public:
+  explicit Cog2EndProcess(int exit_code, const std::shared_ptr<AbstractCogQueue>& queue)
+    : Cog2(queue), exit_code_(exit_code)
+  {
+  }
+  [[nodiscard]] std::string_view get_name() const override
+  {
+    return "clockwork::scaffolding::Cog2EndProcess";
+  }
+  jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
+  {
+    run_count++;
+    throw EndProcessException(exit_code_);
+  }
+  int exit_code_;
+};
+
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance) Test fixture, inheriting from abstract interfaces
 class InitCog : public AbstractCog, public pinion::Observer
 {
 public:
@@ -315,8 +339,6 @@ TEST_CASE("scaffolding_run")
     .RETURN(RetT{});
   REQUIRE_CALL(casing, try_instantiate_cog(cog1_desc, ::trompeloeil::_, ::trompeloeil::_))
     .LR_RETURN(CogRetT{cog1 = std::make_shared<Cog1>(_2)});
-  REQUIRE_CALL(casing, try_instantiate_cog(cog2_desc, ::trompeloeil::_, ::trompeloeil::_))
-    .LR_RETURN(CogRetT{cog2 = std::make_shared<Cog2>(_2)});
   REQUIRE_CALL(casing, try_instantiate_cog(cog3_desc, ::trompeloeil::_, ::trompeloeil::_))
     .LR_RETURN(CogRetT{cog3 = std::make_shared<InitCog>(_2)});
   REQUIRE_CALL(casing, try_connect_config(cog1_ep_config1, config1_id)).RETURN(RetT{});
@@ -338,6 +360,7 @@ TEST_CASE("scaffolding_run")
 
   constexpr uint32_t timer_cycles = 4;
 
+  auto do_run = [&](bool deterministic)
   {
     testing::RunStopper exec(
       [&]()
@@ -357,10 +380,34 @@ TEST_CASE("scaffolding_run")
                                          }
                                        }};
 
-    CHECK(run(desc, casing, channel_factory, exec.get_condition()) == EXIT_SUCCESS);
+    if (!deterministic)
+    {
+      return run(desc, casing, channel_factory, exec.get_condition());
+    }
+    const ExecutionParams params{
+      .start_time = jewels::time::SyncTime(std::chrono::nanoseconds(1000000000)),
+      .end_time = jewels::time::SyncTime(std::chrono::nanoseconds(21000000000))};
+    return run_deterministic(desc, casing, channel_factory, exec.get_condition(), params);
+  };
+
+  SECTION("normal")
+  {
+    REQUIRE_CALL(casing, try_instantiate_cog(cog2_desc, ::trompeloeil::_, ::trompeloeil::_))
+      .LR_RETURN(CogRetT{cog2 = std::make_shared<Cog2>(_2)});
+    CHECK(do_run(false) == EXIT_SUCCESS);
+    CHECK(cog2->run_count >= timer_cycles);
+    CHECK(cog3->run_count == 1);
   }
-  CHECK(cog2->run_count >= timer_cycles);
-  CHECK(cog3->run_count == 1);
+
+  SECTION("forced exit")
+  {
+    constexpr uint32_t exit_code = 123;
+    REQUIRE_CALL(casing, try_instantiate_cog(cog2_desc, ::trompeloeil::_, ::trompeloeil::_))
+      .LR_RETURN(CogRetT{cog2 = std::make_shared<Cog2EndProcess>(exit_code, _2)});
+    CHECK_THROWS(do_run(true) == exit_code);
+    CHECK(cog2->run_count == 1);
+    CHECK(cog3->run_count == 1);
+  }
 }
 
 using UdpMsg = Tappy<io::VarPacket<sizeof(int)>>;
@@ -435,8 +482,8 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   const std::pmr::string host{"127.0.0.1"};
   const uint16_t dynamic_port{0U};
   const auto batch_size{1UL};
-  auto maybe_incoming_udp =
-    pinion::IncomingUdp<Msg>::try_make(memres, {.host = host, .port = dynamic_port}, batch_size);
+  auto maybe_incoming_udp = pinion::IncomingUdp<Msg>::try_make(
+    memres, *incoming_udp_endpoint_class, {.host = host, .port = dynamic_port}, batch_size);
   REQUIRE(maybe_incoming_udp);
   auto incoming_udp = *std::move(maybe_incoming_udp);
 
@@ -448,7 +495,8 @@ TEST_CASE("Testing IO connections using round-trip UDP")
 
   auto receiver_port = receiver->port();
   REQUIRE(receiver_port);
-  auto maybe_outgoing_udp = pinion::OutgoingUdp<Msg>::try_make(memres, {.host = host, .port = *receiver_port});
+  auto maybe_outgoing_udp =
+    pinion::OutgoingUdp<Msg>::try_make(memres, *outgoing_udp_endpoint_class, {.host = host, .port = *receiver_port});
   REQUIRE(maybe_outgoing_udp);
   auto outgoing_udp = *std::move(maybe_outgoing_udp);
 
@@ -467,10 +515,10 @@ TEST_CASE("Testing IO connections using round-trip UDP")
       *outgoing_udp_class, *outgoing_udp_inst, jewels::as_single_item_span(outgoing_udp_endpoint), std::nullopt))
     .LR_RETURN(IoConnRetT{std::shared_ptr<EPollable>{}});
   REQUIRE_CALL(casing, try_connect_subscriber(*outgoing_udp_endpoint_instance, ::trompeloeil::_))
-    .LR_SIDE_EFFECT(std::ignore = outgoing_udp->connect_subscriber(std::move(_2)))
+    .LR_SIDE_EFFECT(std::ignore = outgoing_udp->connect_subscriber(*outgoing_udp_endpoint_class, std::move(_2)))
     .LR_RETURN(SubRetT{outgoing_udp.get()});
   REQUIRE_CALL(casing, try_connect_publisher(*incoming_udp_endpoint_instance, ::trompeloeil::_))
-    .LR_SIDE_EFFECT(std::ignore = incoming_udp->connect_publisher(std::move(_2)))
+    .LR_SIDE_EFFECT(std::ignore = incoming_udp->connect_publisher(*incoming_udp_endpoint_class, std::move(_2)))
     .RETURN(RetT{});
   REQUIRE_CALL(casing, finalize()).RETURN(ValidRetT{});
   REQUIRE_CALL(casing, shutdown());

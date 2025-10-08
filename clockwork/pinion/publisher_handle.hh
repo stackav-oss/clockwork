@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory_resource>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <vector>
@@ -67,7 +68,7 @@ public:
   /// method.
   /// @note After calling reserve, either commit or discard must be
   /// called before calling reserve again.
-  [[nodiscard]] jewels::expected<ReservedSlot, ReserveError> reserve() noexcept;
+  [[nodiscard]] jewels::expected<ReservedSlot, ReserveError> reserve(bool connected = true) noexcept;
 
   [[nodiscard]] jewels::expected<BatchReservedSlot, ReserveError> reserve(size_t count) noexcept;
 
@@ -179,6 +180,10 @@ public:
   /// Signal that the reserved slot should be committed when the reserved slot destructs.
   void mark_for_commit() noexcept;
 
+  /// Signal that the reserved slot should be committed when the reserved slot destructs.
+  /// @param publish_time The time to use for the publish timestamp.
+  void sim_only_mark_for_commit_with_fake_timestamp(jewels::time::SyncTime publish_time) noexcept;
+
   /// Signal that the reserved slot should be discarded when the reserved slot destructs.
   void mark_for_discard() noexcept;
 
@@ -207,13 +212,17 @@ public:
   /// @note Will throw if the underlying value has been moved from.
   [[nodiscard]] Slot slot() const noexcept;
 
+  /// Check if the reserved slot is connected to a channel.
+  [[nodiscard]] bool connected() const noexcept;
+
 private:
   friend class PublisherHandle;
 
   /// Construct a reserved slot.
   /// @param publisher_handle A pointer to the publisher handle that reserved the slot.
   /// @param reserved_index Index to the reserved slot.
-  ReservedSlot(jewels::memory::ObjectPtr<PublisherHandle> publisher_handle, BufferIndex reserved_index) noexcept;
+  ReservedSlot(
+    jewels::memory::ObjectPtr<PublisherHandle> publisher_handle, BufferIndex reserved_index, bool connected) noexcept;
 
   /// Handle to commit / discard the slot.
   jewels::memory::ObjectPtr<PublisherHandle> publisher_handle_;
@@ -223,6 +232,12 @@ private:
 
   /// Whether or not to commit.
   ReservationState state_{};
+
+  /// Optional publish time to use that overrides the time passed to process/commit.
+  std::optional<jewels::time::SyncTime> publish_time_{};
+
+  /// Whether or not the slot is connected to a channel.
+  bool connected_;
 };
 
 /// A wrapper to guarantee that any reserved slot is either committed or discarded.
@@ -292,7 +307,21 @@ public:
   /// Ask the infrastructure to publish the message.
   /// @note Publish does not happen at the time of calling this.  The
   /// actual publish is taken care of by the underlying reserved slot.
-  void mark_for_publish() const noexcept;
+  /// @note This is a no-op if !connected().
+  void mark_for_publish() noexcept;
+
+  /// Ask the infrastructure to publish the message with a fake time (sim only).
+  /// @note Publish does not happen at the time of calling this.  The
+  /// actual publish is taken care of by the underlying reserved slot.
+  /// @note This should only be used in simulation or testing.
+  /// @param fake_time The fake time to use for the publish timestamp.
+  void sim_only_mark_for_publish_with_fake_timestamp(jewels::time::SyncTime fake_time) noexcept;
+
+  /// Check if this publishable is marked for publish.
+  [[nodiscard]] bool is_marked_for_publish() const noexcept;
+
+  /// Check if this publishable is connected to a channel.
+  [[nodiscard]] bool connected() const noexcept;
 
 private:
   /// Construct a publishable message.

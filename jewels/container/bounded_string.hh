@@ -77,7 +77,7 @@ public:
   }
 
   /// Allow implicit conversion to a `string_view`, matching `std::string`.
-  // NOLINTNEXTLINE(google-explicit-constructor)
+  // NOLINTNEXTLINE(google-explicit-constructor) Allowing implicit conversion to string_view
   constexpr operator string_view() const noexcept
   {
     return to_string_view();

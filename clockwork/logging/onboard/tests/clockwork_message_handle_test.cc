@@ -12,7 +12,6 @@
 #include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <iterator>
 #include <span>
 
 namespace clockwork_logging::onboard

@@ -173,7 +173,7 @@ def _layout_fields(field_constraints: list[ConstrainedField]) -> Layout:
             if padding > 0:
                 bisect.insort(gaps, Gap(offset=offset, size=padding))
             next_byte = field_offset + size
-            assert next_byte > total_size  # noqa: S101  (sanity check for testing; not needed at runtime)
+            assert next_byte > total_size
             total_size = next_byte
             last_field = layout[-1]
 

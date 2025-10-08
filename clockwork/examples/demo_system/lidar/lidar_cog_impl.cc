@@ -12,8 +12,6 @@
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include <chrono>
 #include <cmath>
 #include <cstddef>

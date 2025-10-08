@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/container/circular_buffer.hh"
+#include "jewels/container/circular_buffer_state_clk_cc.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/meta/overloaded.hh"
@@ -16,19 +17,44 @@
 #include <array>
 #include <cstddef>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory_resource>
 #include <numeric>
 #include <optional>
 #include <span>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace jewels::container::testing
 {
+
+template <class Container>
+struct ClearPolicy
+{
+  using storage_type = Container;
+  using value_type = storage_type;
+  using reference = value_type&;
+  using const_reference = const value_type&;
+  static void construct(reference /*storage*/, const_reference /*value*/) {}
+  static void destruct(reference storage)
+  {
+    storage.clear();
+  }
+
+  static reference get(reference storage)
+  {
+    return storage;
+  }
+
+  static const_reference get(const_reference storage)
+  {
+    // NOLINTNEXTLINE(bugprone-return-const-ref-from-parameter) Ignore this lint issue for this test
+    return storage;
+  }
+};
 
 struct OptionalIntPolicy
 {
@@ -165,13 +191,98 @@ TEST_CASE("Test circular buffer | construction")
 
   SECTION("From container")
   {
-    REQUIRE(!CircularBuffer<jewels::memory::ObjectPolicy<int>>::try_make(
-      std::pmr::vector<jewels::memory::AlignedStorage<int>>(0)));
+    REQUIRE(
+      CircularBuffer<jewels::memory::ObjectPolicy<int>>::try_make(
+        std::pmr::vector<jewels::memory::AlignedStorage<int>>(0)) ==
+      jewels::unexpected{CircularBufferConstructError::empty_storage});
     auto buffer = CircularBuffer<jewels::memory::ObjectPolicy<int>>::try_make(
       std::pmr::vector<jewels::memory::AlignedStorage<int>>(1));
     REQUIRE(buffer);
     buffer->emplace_back(8);
     REQUIRE(*std::begin(*buffer) == 8);
+  }
+
+  SECTION("From container with state")
+  {
+    REQUIRE(
+      CircularBuffer<OptionalIntPolicy>::try_make(
+        std::pmr::vector<std::optional<int>>(3),
+        TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+          .offset = 3,
+          .size = 4,
+        }}) == jewels::unexpected{CircularBufferConstructError::invalid_state_offset});
+    REQUIRE(
+      CircularBuffer<OptionalIntPolicy>::try_make(
+        std::pmr::vector<std::optional<int>>(3),
+        TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+          .offset = 2,
+          .size = 4,
+        }}) == jewels::unexpected{CircularBufferConstructError::invalid_state_size});
+    SECTION("Empty with non-zero offset")
+    {
+      std::array<std::optional<int>, 3U> storage{0, 1, 2};
+      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+        .offset = 2,
+        .size = 0,
+      }};
+      auto buffer =
+        CircularBuffer<OptionalIntPolicy, std::span<std::optional<int>>>::try_make(std::span{storage}, state);
+      REQUIRE(buffer);
+      REQUIRE(buffer->state() == state);
+      REQUIRE(buffer->empty());
+      REQUIRE(storage[2] == 2);
+      buffer->emplace_back(8);
+      REQUIRE(storage[2] == 8);
+      REQUIRE(*std::begin(*buffer) == 8);
+      REQUIRE(
+        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+                             .offset = 2,
+                             .size = 1,
+                           }});
+    }
+    SECTION("Not empty")
+    {
+      std::array<std::optional<int>, 3U> storage{0, 1, 2};
+      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+        .offset = 2,
+        .size = 2,
+      }};
+      auto buffer =
+        CircularBuffer<OptionalIntPolicy, std::span<std::optional<int>>>::try_make(std::span{storage}, state);
+      REQUIRE(buffer);
+      REQUIRE(buffer->state() == state);
+      REQUIRE(std::ranges::equal(*buffer, std::array{2, 0}));
+      buffer->emplace_back(8);
+      REQUIRE(std::ranges::equal(*buffer, std::array{2, 0, 8}));
+      REQUIRE(std::ranges::equal(storage, std::array<std::optional<int>, 3U>{0, 8, 2}));
+      REQUIRE(
+        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+                             .offset = 2,
+                             .size = 3,
+                           }});
+    }
+    SECTION("Full")
+    {
+      std::array<std::optional<int>, 3U> storage{0, 1, 2};
+      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+        .offset = 2,
+        .size = 3,
+      }};
+      auto buffer =
+        CircularBuffer<OptionalIntPolicy, std::span<std::optional<int>>>::try_make(std::span{storage}, state);
+      REQUIRE(buffer);
+      REQUIRE(buffer->state() == state);
+      REQUIRE(std::ranges::equal(*buffer, std::array{2, 0, 1}));
+      REQUIRE(storage[1] == 1);
+      buffer->force_emplace_back(8);
+      REQUIRE(std::ranges::equal(*buffer, std::array{0, 1, 8}));
+      REQUIRE(std::ranges::equal(storage, std::array<std::optional<int>, 3U>{0, 1, 8}));
+      REQUIRE(
+        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+                             .offset = 0,
+                             .size = 3,
+                           }});
+    }
   }
 
   SECTION("From resource")
@@ -223,7 +334,7 @@ TEST_CASE("Test circular buffer | test clear")
     REQUIRE(buffer);
     REQUIRE(buffer->empty());
     REQUIRE(!buffer->full());
-    REQUIRE(buffer->size() == 0U); // Need to make sure size works too NOLINT(readability-container-size-empty)
+    REQUIRE(buffer->size() == 0U); // NOLINT(readability-container-size-empty) Need to make sure size works too
     {
       auto entry = buffer->emplace_back();
       REQUIRE(entry);
@@ -238,7 +349,7 @@ TEST_CASE("Test circular buffer | test clear")
     buffer->clear();
     REQUIRE(buffer->empty());
     REQUIRE(!buffer->full());
-    REQUIRE(buffer->size() == 0U); // Need to make sure size works too NOLINT(readability-container-size-empty)
+    REQUIRE(buffer->size() == 0U); // NOLINT(readability-container-size-empty) Need to make sure size works too
     REQUIRE(storage.at(0U) == std::nullopt);
     REQUIRE(storage.at(1U) == std::nullopt);
     {
@@ -263,7 +374,7 @@ TEST_CASE("Test circular buffer | test clear")
     buffer->clear();
     REQUIRE(buffer->empty());
     REQUIRE(!buffer->full());
-    REQUIRE(buffer->size() == 0U); // Need to make sure size works too NOLINT(readability-container-size-empty)
+    REQUIRE(buffer->size() == 0U); // NOLINT(readability-container-size-empty) Need to make sure size works too
     REQUIRE(storage.at(0U) == std::nullopt);
     REQUIRE(storage.at(1U) == std::nullopt);
 
@@ -608,7 +719,7 @@ size_t calculate_element_offset(
   return position - current_size;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+// NOLINTNEXTLINE(readability-function-cognitive-complexity) Consolidated to avoid repeated setup.
 TEST_CASE("Test circular buffer | all permutations")
 {
   static constexpr auto size{4U};
@@ -800,6 +911,76 @@ TEST_CASE("Test circular buffer | all permutations")
         REQUIRE(buffer->empty());
       }
     }
+  }
+}
+
+TEST_CASE("Examples from readme")
+{
+  constexpr size_t storage_size{8U};
+  SECTION("ObjectPolicy")
+  {
+    using Policy = jewels::memory::ObjectPolicy<int>;
+    std::pmr::vector<typename Policy::storage_type> storage{};
+    storage.resize(storage_size);
+    using CircBuffView = jewels::container::CircularBuffer<Policy, std::span<typename Policy::storage_type>>;
+    // This returns an expected type.  See class documentation on preconditions.
+    auto circ_buff = CircBuffView::try_make(std::span(storage));
+    REQUIRE(circ_buff);
+
+    // Add an element at the back.
+    circ_buff->emplace_back(1);
+    // Add an element at the front.
+    circ_buff->emplace_front(2);
+    // Access front element
+    std::cout << *std::begin(*circ_buff) << "\n"; // Prints 2
+    // Access back element
+    std::cout << *std::prev(std::end(*circ_buff)) << "\n"; // Prints 1
+    // Check the size
+    std::cout << circ_buff->size() << "\n"; // Prints 2
+    // Remove from back
+    circ_buff->pop_back();
+    // Remove from front
+    circ_buff->pop_front();
+    // Check if empty
+    std::cout << circ_buff->empty() << "\n"; // Prints true
+  }
+  SECTION("ClearPolicy")
+  {
+    using Policy = ClearPolicy<std::pmr::vector<int>>;
+    // Notice now the storage element type is a vector instead of an aligned storage.
+    std::pmr::vector<std::pmr::vector<int>> storage{};
+    storage.resize(storage_size);
+    constexpr size_t reserve_size{8U};
+    for (auto& elem : storage)
+    {
+      // Reserve memory ahead of time for each element.
+      // This will be retained as `ClearPolicy` only clears the container when the element is removed.
+      elem.reserve(reserve_size);
+    }
+    using CircBuffView = jewels::container::CircularBuffer<Policy, std::span<typename Policy::storage_type>>;
+    auto circ_buff = CircBuffView::try_make(std::span(storage));
+    REQUIRE(circ_buff);
+  }
+  SECTION("State")
+  {
+    using Policy = jewels::memory::ObjectPolicy<int>;
+    std::pmr::vector<typename Policy::storage_type> storage{};
+    storage.resize(storage_size);
+    using CircBuffView = jewels::container::CircularBuffer<Policy, std::span<typename Policy::storage_type>>;
+    // This returns an expected type.  See class documentation on preconditions.
+    auto circ_buff = CircBuffView::try_make(std::span(storage));
+    REQUIRE(circ_buff);
+
+    // add / remove some elements
+    circ_buff->emplace_back();
+    circ_buff->emplace_back();
+    circ_buff->pop_front();
+
+    // Creates a new circular buffer pointing to identical storage with the same position state.
+    // These two containers would compare equal.
+    auto storage_copy = storage;
+    auto resumed_circ_buff = CircBuffView::try_make(std::span(storage_copy), circ_buff->state());
+    REQUIRE(resumed_circ_buff);
   }
 }
 

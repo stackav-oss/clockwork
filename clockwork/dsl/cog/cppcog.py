@@ -29,7 +29,8 @@ from clockwork.dsl.cog.pycog import (
     StatesStruct,
     TimeSinceLastExecCondition,
 )
-from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, Header, SystemHeader
+from clockwork.dsl.cpp import typereg
+from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, FwdDecl, Header, SystemHeader
 from clockwork.dsl.cpp.typereg import CLOCKWORK_NAMESPACE, get_cpp_type
 from clockwork.dsl.cpp.types import (
     VOID,
@@ -43,6 +44,14 @@ from clockwork.dsl.cpp.types import (
 )
 from clockwork.dsl.ir import cog, primitive, schema_reg, units, uuid_reg
 from clockwork.dsl.ir.clkbuiltins import REPRESENTATION_TAG_TYPE
+from clockwork.dsl.ir.cog_metrics_schema_generation import get_underlying_enum_type
+from clockwork.dsl.ir.diagnostics import (
+    COG_INFRA_DIAGS_GROUP_DEF_NAME,
+    DiagnosticsSignalDef,
+    InfraDiagnosticsDef,
+    infra_defs_header_from_dial_header,
+)
+from clockwork.dsl.ir.diagnostics import NAMESPACE as DIAGNOSTICS_NAMESPACE
 from clockwork.dsl.ir.extern_type import ExternType
 from clockwork.dsl.ir.module_id import CLK_REPO, JEWELS_REPO
 from pydantic.alias_generators import to_snake
@@ -173,6 +182,10 @@ def _gen_const_str(terms: str | Iterable[str], name: str = "name") -> str:
     return f"static constexpr ::std::string_view {name}{init};"
 
 
+def _gen_const_size(value: int, name: str) -> str:
+    return f"static constexpr size_t {name} = {value};"
+
+
 def _gen_const_milliseconds(value: primitive.UnitValue, name: str) -> str:
     return f"static constexpr auto {name} = ::std::chrono::milliseconds({value.value});"
 
@@ -210,6 +223,11 @@ def _gen_factory(
         f"static {class_name}Factory {to_snake(class_name.replace('::', '__'))}_factory_inst;"
     )
     return cpp_mod
+
+
+def _comma_append(lines: list[str], end: str = "") -> list[str]:
+    """Append a comma to all but the last line, where an optional end is appended instead. Used to help code gen lists."""
+    return [i + j for i, j in zip(lines, (",",) * (len(lines) - 1) + (end,), strict=False)]
 
 
 @dataclass(frozen=True)
@@ -262,6 +280,7 @@ class ResourceHandle:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("string_view"),
             ]
         )
         body = [
@@ -358,6 +377,7 @@ class ConfigHandle:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("string_view"),
             ]
         )
         body = [
@@ -455,6 +475,7 @@ class StateHandle:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("string_view"),
             ]
         )
         body = [
@@ -478,7 +499,7 @@ class StateHandle:
         elif isinstance(self.msg_type, schema_reg.InterfaceInfo):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             make_params = f"::{CLOCKWORK_NAMESPACE}::pinion::PublisherHandle publisher"
             make_args = "std::move(publisher)"
-            assert self.msg_type.interface_ir.representation is not None  # noqa: S101 (invariant)
+            assert self.msg_type.interface_ir.representation is not None
             repr_uuid = uuid_reg.lookup_uuid(compiler_context, self.msg_type.interface_ir.representation.typespec)
         else:
             msg = f"Unknown state message type {self.msg_type}"
@@ -586,6 +607,8 @@ class TimeSinceLastExecHandler:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("cstdint"),
+                SystemHeader("string_view"),
             ]
         )
         body = [
@@ -686,6 +709,8 @@ class InputHandler:
            static constexpr auto endpoint_id = uuid***;
            static constexpr ::std::string_view name = ***;
            static constexpr auto max_view_size = ***;
+           static constexpr std::optional<::ssize_t> safety_margin = ***;
+           static constexpr std::optional<size_t> skip_threshold = ***;
            static constexpr auto copy_inputs = ***;
            static constexpr auto manual_cursor = ***;
         };
@@ -696,14 +721,21 @@ class InputHandler:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("sys/types.h"),
                 SystemHeader("cstdint"),
+                SystemHeader("optional"),
+                SystemHeader("string_view"),
+                *self.cog_input.msg_type.includes,
             ]
         )
 
         # Parse parameters
         msg_type = self.cog_input.msg_type.render("")
         max_view_size = f"{self.cog_input.max_msgs}U"
-        copy_inputs = False
+        safety_margin = "std::nullopt" if self.cog_input.safety_margin is None else f"{self.cog_input.safety_margin}"
+        skip_threshold = (
+            "std::nullopt" if self.cog_input.skip_threshold is None else f"{self.cog_input.skip_threshold}U"
+        )
         manual_cursor = f"{self.cog_input.manual_cursor}"
 
         policy_name = to_camel(self.input_name) + "Policy"
@@ -712,7 +744,9 @@ class InputHandler:
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
             _gen_const_str([self.cog_name, policy_name]),
             f"static constexpr auto max_view_size = {max_view_size};",
-            f"static constexpr auto copy_inputs = {str(copy_inputs).lower()};",
+            f"static constexpr std::optional<::ssize_t> safety_margin = {safety_margin};",
+            f"static constexpr std::optional<size_t> skip_threshold = {skip_threshold};",
+            f"static constexpr auto copy_inputs = {str(self.cog_input.copy_inputs).lower()};",
             f"static constexpr auto manual_cursor = {str(manual_cursor).lower()};",
         ]
         chunk.append(_formatted_struct(policy_name, body))
@@ -833,6 +867,7 @@ class InputConditionHandler:
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
                 Header(CLK_REPO, "clockwork/cog/input_condition.hh"),
                 SystemHeader("cstdint"),
+                SystemHeader("string_view"),
             ]
         )
 
@@ -928,6 +963,8 @@ class PublisherHandler:
     policy_name: str
     index: int
     cog_name: str
+    rate_limit: cog.ResolvedRateLimitSpec | None
+    metrics_log_type: cog.MetricsLogType
 
     @classmethod
     def make(cls: type[PublisherHandler], output: Output, cog_name: str, index: int) -> PublisherHandler:
@@ -942,6 +979,8 @@ class PublisherHandler:
             policy_name=policy_name,
             index=index,
             cog_name=cog_name,
+            rate_limit=output.rate_limit,
+            metrics_log_type=output.metrics_log_type,
         )
 
     def render_policy_struct(self) -> CppChunk:
@@ -958,13 +997,26 @@ class PublisherHandler:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("cstdint"),
+                SystemHeader("string_view"),
+                SystemHeader("optional"),
+                *self.msg_type.includes,
             ]
         )
         body = [
             f"using MsgType = {self.msg_type.render('')};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
             _gen_const_str([self.cog_name, self.policy_name]),
+            f"static constexpr bool has_diagnostics = {'true' if self.metrics_log_type == cog.MetricsLogType.none else 'false'};",
         ]
+        if self.rate_limit:
+            period_ns = int(self.rate_limit.period_s * 1e9)
+            body.append(
+                f"static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{{{.limit={self.rate_limit.limit}U, .period=std::chrono::nanoseconds{{{period_ns}U}}}}}};"
+            )
+        else:
+            body.append("static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{};")
+
         chunk.append(_formatted_struct(self.policy_name, body))
         return chunk
 
@@ -1007,6 +1059,39 @@ class Publishers:
             chunk.append(publisher.render_policy_struct())
         policy_template_args = ", ".join([publisher.policy_name for publisher in self.publisher_registry])
         chunk.append(f"using PublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{policy_template_args}>;")
+        # create a constexpr index for each of the metrics logging publishers in the registry
+        for publisher in self.publisher_registry:
+            if publisher.metrics_log_type == cog.MetricsLogType.telemetry:
+                chunk.append(_gen_const_size(publisher.index, "telemetry_metrics_index"))
+            elif publisher.metrics_log_type == cog.MetricsLogType.event:
+                chunk.append(_gen_const_size(publisher.index, "event_metrics_index"))
+        # get the template arguments for the non metrics publishers
+        non_metrics_template_args = [
+            publisher.policy_name
+            for publisher in self.publisher_registry
+            if publisher.metrics_log_type not in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+        ]
+        chunk.append(
+            f"using OutputPublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{', '.join(non_metrics_template_args)}>;"
+        )
+        # get the template arguments for the metrics publishers
+        metrics_template_args = [
+            publisher.policy_name
+            for publisher in self.publisher_registry
+            if publisher.metrics_log_type in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+        ]
+        chunk.append(
+            f"using MetricsPublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{', '.join(metrics_template_args)}>;"
+        )
+
+        if any(
+            (publisher.metrics_log_type == cog.MetricsLogType.telemetry)
+            | (publisher.metrics_log_type == cog.MetricsLogType.event)
+            for publisher in self.publisher_registry
+        ):
+            chunk.append("static constexpr auto publish_metrics = true;")
+        else:
+            chunk.append("static constexpr auto publish_metrics = false;")
         return chunk
 
     def __len__(self) -> int:
@@ -1091,10 +1176,35 @@ class DiagnosticsHandler:
             cog_name=cog_name,
         )
 
-    def render_policy_struct(self) -> CppChunk:
-        """Render States section."""
+    def render_policy_struct(self, extra_defs: Iterable[str] = ()) -> CppChunk:
+        """Render States section.
+
+        Args:
+            extra_defs: Additional lines strings to include in the policy struct.
+        """
         chunk = CppChunk()
-        chunk.context.add_includes(self.manager_type.includes)
+        chunk.context.add_includes(
+            [
+                Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("string_view"),
+                *self.manager_type.includes,
+            ]
+        )
+        if (
+            isinstance(self.manager_type, CppTemplateType)
+            and self.manager_type.arguments is not None
+            and self.manager_type.template_name == "ClockworkManagerStruct"
+        ):
+            lazy_group = self.manager_type.arguments[0]
+            lazy_manager = self.manager_type
+            assert lazy_manager.arguments is not None  # pyright can't follow the assignment
+            lazy_manager.arguments[0] = CppType([], "GroupType", None)
+            manager_def = [
+                f"template<typename GroupType = {lazy_group.render('')}>",
+                f"using ManagerType = {lazy_manager.render('')};",
+            ]
+        else:
+            manager_def = [f"using ManagerType = {self.manager_type.render('')};"]
         chunk.append(
             _formatted_struct(
                 self.policy_name,
@@ -1104,7 +1214,8 @@ class DiagnosticsHandler:
                     _gen_const_str(name="member_name", terms=self.name),
                     _gen_const_str(name="group_name", terms=(self.group_id or "")),
                     _gen_const_str(name="instance_name", terms=(self.instance_id or "")),
-                    f"using ManagerType = {self.manager_type.render('')};",
+                    *manager_def,
+                    *extra_defs,
                 ],
             )
         )
@@ -1139,7 +1250,7 @@ class Diagnosticses:
         return cls(diagnostics_registry=tuple(registry))
 
     def render_diagnostics(self) -> CppChunk:
-        """Render Publishers section."""
+        """Render Diagnostics section."""
         chunk = CppChunk()
         # Add relevant headers
         chunk.context.add_include(Header(CLK_REPO, "clockwork/cog/cog_diagnostics.hh"))
@@ -1162,6 +1273,81 @@ class Diagnosticses:
 
 
 @dataclass
+class InfraDiagnostics:
+    """Class for infra diagnostics."""
+
+    policy: DiagnosticsHandler
+    cog_class_name: str
+    fault_header: Header
+    signals: list[DiagnosticsSignalDef]
+
+    @classmethod
+    def make(
+        cls: type[InfraDiagnostics],
+        cog_diagnostics: Diagnostics,
+        infra_diagnostics: InfraDiagnosticsDef,
+        cog_name: str,
+        cog_class_name: str,
+        dial_header: Header,
+    ) -> InfraDiagnostics:
+        """Make infra diagnostics."""
+        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, cog_diagnostics.uuid)
+        policy_name = to_camel(cog_diagnostics.identifier) + "Policy"
+        fault_header = infra_defs_header_from_dial_header(dial_header)
+        assert infra_diagnostics.signals is not None
+        return cls(
+            policy=DiagnosticsHandler(
+                name=cog_diagnostics.identifier,
+                group_id=cog_diagnostics.group_id,
+                instance_id=cog_diagnostics.instance_id,
+                manager_type=cog_diagnostics.manager_type,
+                reporter_type=cog_diagnostics.reporter_type,
+                endpoint_id=endpoint_id,
+                policy_name=policy_name,
+                index=-1,
+                cog_name=cog_name,
+            ),
+            cog_class_name=cog_class_name,
+            fault_header=fault_header,
+            signals=infra_diagnostics.signals,
+        )
+
+    def render_diagnostics(self, enclosing_namespace: str) -> CppChunk:
+        """Render Infrastructure Diagnostics section."""
+        chunk = CppChunk()
+        diag_ns = DIAGNOSTICS_NAMESPACE
+        base_name = to_camel(self.policy.name)
+        signal_id_name = base_name + "SignalId"
+        threshold_prefix = f"::{enclosing_namespace}::{to_snake(self.cog_class_name)}_"
+        detector_ns = f"{diag_ns}::fault::detector"
+        # Render Signal Descriptors
+        signals_no_fault = [
+            f'::{diag_ns}::Descriptor<{signal_id_name}::{signal.name}, {signal.type}>{{"{signal.name}", "N/A"}}'
+            for signal in self.signals
+        ]
+        # Add relevant headers.  Include string and utility since iwyu can't decide if they are required
+        chunk.context.add_include(SystemHeader("string", iwyu_pragma="IWYU pragma: keep"))
+        chunk.context.add_include(SystemHeader("utility", iwyu_pragma="IWYU pragma: keep"))
+        chunk.append("/// Infra Diagnostics ///")
+        # Render signal enum
+        # Render Signal Group
+        chunk.append(f"struct {COG_INFRA_DIAGS_GROUP_DEF_NAME}")
+        chunk.append("{")
+        chunk.append("};")
+        # Render policy
+        chunk.append(
+            self.policy.render_policy_struct(
+                [
+                ],
+            )
+        )
+        chunk.append(
+            f"using InfraDiagnosticsType = ::{CLOCKWORK_NAMESPACE}::CogInfraDiagnostics<{self.policy.policy_name}>;"
+        )
+        return chunk
+
+
+@dataclass
 class Cog:
     """Representation of a C++ Cog."""
 
@@ -1180,6 +1366,7 @@ class Cog:
     input_conditions: InputConditions | None = None
     publishers: Publishers | None = None
     diagnostics: Diagnosticses | None = None
+    infra_diags: InfraDiagnostics | None = None
 
     cog_policy_name: str = ""
 
@@ -1205,14 +1392,22 @@ class Cog:
             dial_header=dial_header,
         )
 
-    def render(self) -> CppModuleChunks:
+    def render(self) -> CppModuleChunks:  # noqa: PLR0915 naturally large with no easy breaks
         """Generate header and source skeleton for Cog.
 
         Special situations:
         - Toolchain adds namespace enclosure, so it will not be explicitly added here.
         """
         cpp_mod = CppModuleChunks()
-        cpp_mod.header_chunk.context.add_includes([Header(CLK_REPO, "clockwork/cog/include_common.hh")])
+        cpp_mod.header_chunk.context.add_includes(
+            [
+                Header(CLK_REPO, "clockwork/cog/include_common.hh"),
+                SystemHeader("chrono"),
+                SystemHeader("string_view"),
+            ]
+        )
+        if self.cog_ir.metrics_options.metrics_enabled:
+            cpp_mod.header_chunk.context.add_include(FwdDecl(CLOCKWORK_NAMESPACE, "template <class> struct Tap"))
         cpp_mod.implementation_chunk.context.add_includes([Header(CLK_REPO, "clockwork/cog/include_common.hh")])
 
         if self.header_name:
@@ -1251,6 +1446,11 @@ class Cog:
                 ),
                 indent=1,
             )
+
+        cpp_mod.header_chunk.append(
+            _gen_const_size(self.cog_ir.metrics_options.batch_size, "event_metrics_batch_size"), indent=1
+        )
+
         cpp_mod.header_chunk.append(
             f"using CogDial = {dial_type.render(self.cpp_namespace)};",
             indent=1,
@@ -1284,8 +1484,9 @@ class Cog:
         )
         cpp_mod.header_chunk.append(self.input_conditions.render_input_conditions(), indent=1)
 
+        output_dict = self.cog_ir.outputs | self.cog_ir.metrics_outputs
         self.publishers = Publishers.make(
-            OutputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.outputs),
+            OutputsStruct.from_ir(self.cog_ir.module.context, output_dict, self.cog_ir.rate_limits),
             cog_fqn,
         )
         cpp_mod.header_chunk.append(self.publishers.render_publishers(), indent=1)
@@ -1293,12 +1494,27 @@ class Cog:
         self.diagnostics = Diagnosticses.make(
             DiagnosticsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.diagnostics), cog_fqn
         )
+
+        assert self.cog_ir.infra_diagnostics is not None
+        self.infra_diags = InfraDiagnostics.make(
+            Diagnostics.from_cog_infra(
+                self.cog_ir.module.context,
+                self.cog_ir.infra_diagnostics,
+            ),
+            self.cog_ir.infra_diagnostics,
+            cog_fqn,
+            self.class_name,
+            self.dial_header,
+        )
+
         cpp_mod.header_chunk.append(self.diagnostics.render_diagnostics(), indent=1)
+        cpp_mod.header_chunk.append(self.infra_diags.render_diagnostics(self.cpp_namespace), indent=1)
 
         cpp_mod.append(self._generate_is_ready_method())
         cpp_mod.append(self._generate_make_dial_method())
         cpp_mod.append(self._generate_execute_method())
-
+        if self.cog_ir.metrics_options.metrics_enabled:
+            self._append_metrics_methods(cpp_mod)
         cpp_mod.header_chunk.append("};")
 
         cpp_mod.header_chunk.append(
@@ -1319,6 +1535,166 @@ class Cog:
         )
 
         return cpp_mod
+
+    def _append_metrics_methods(self, cpp_mod: CppModuleChunks) -> None:
+        """Append all metrics-related methods to the module."""
+        cpp_mod.append(self._generate_populate_input_event_metrics_method())
+        cpp_mod.append(self._generate_populate_output_event_metrics_method())
+        cpp_mod.append(self._generate_populate_trigger_mask_method())
+        cpp_mod.append(self._generate_populate_condition_trigger_vals_method())
+        cpp_mod.append(self._generate_populate_input_telemetry_metrics_method())
+        cpp_mod.append(self._generate_populate_output_telemetry_metrics_method())
+        cpp_mod.append(self._generate_get_conditions_mask_method(self.cog_ir.module.context))
+        cpp_mod.append(self._generate_populate_telemetry_triggers_method())
+        cpp_mod.append(self._generate_populate_telemetry_metrics_method())
+        cpp_mod.append(self._generate_populate_event_metrics_method())
+
+    def _generate_populate_telemetry_triggers_method(self) -> CppModuleChunks:
+        """Generate populate_telemetry_triggers method to count condition triggers from telemetry metrics."""
+        # Get all condition names
+        condition_names = []
+        if self.timers:
+            condition_names.extend(self.timers.cond_name_to_timer.keys())
+        if self.input_conditions:
+            condition_names.extend(self.input_conditions.input_conditions_registry.keys())
+
+        arg_telemetry_metrics = CppNamedType(
+            CppType([], "::clockwork::TelemetryMetrics", None, const=True, ref=Ref.L),
+            "telemetry_metrics" if condition_names else "/*telemetry_metrics*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "TelemetryMetrics>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "telemetry_metrics_tachyon" if condition_names else "/*telemetry_metrics_tachyon*/",
+        )
+
+        body = CppChunk()
+
+        if condition_names:
+            # Create counters for each condition
+            for condition_name in condition_names:
+                body.append(f"uint16_t {condition_name}_count = 0;")
+
+            # Count condition triggers from the conditions mask vector
+            body.append(
+                f"for (const auto& condition_mask : {arg_telemetry_metrics.argument_name}.conditions_mask_vector)"
+            )
+            body.append("{")
+            body.append(
+                indent=1, chunk=f"auto trigger_flags = static_cast<{self.cog_ir.name}ConditionsMask>(condition_mask);"
+            )
+
+            # For each condition, check if it was triggered in this mask and increment its counter
+            for condition_name in condition_names:
+                body.append(
+                    indent=1,
+                    chunk=f"if ((trigger_flags & {self.cog_ir.name}ConditionsMask::{condition_name}) != {self.cog_ir.name}ConditionsMask::no_conditions_active)",
+                )
+                body.append(indent=1, chunk="{")
+                body.append(indent=2, chunk=f"++{condition_name}_count;")
+                body.append(indent=1, chunk="}")
+
+            body.append("}")
+
+            # Set the counted values in the telemetry metrics tachyon
+            for condition_name in condition_names:
+                body.append(f"{arg_tachyon.argument_name}.set_{condition_name}_trigger_vals({condition_name}_count);")
+
+        populate_telemetry_triggers_method = CppMethod(
+            name="populate_telemetry_triggers",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_telemetry_metrics, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_telemetry_triggers_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+
+    def _generate_populate_condition_trigger_vals_method(self) -> CppModuleChunks:
+        """Generate populate_condition_trigger_vals method to count condition triggers."""
+        # Get all condition names
+        condition_names = []
+        if self.timers:
+            condition_names.extend(self.timers.cond_name_to_timer.keys())
+        if self.input_conditions:
+            condition_names.extend(self.input_conditions.input_conditions_registry.keys())
+        arg_event_metrics = CppNamedType(
+            CppType([], "std::pmr::vector<uint64_t>", None, const=True, ref=Ref.L),
+            "event_metrics_vec" if condition_names else "/*event_metrics_vec*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "TelemetryMetrics>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "telemetry_metrics_tachyon" if condition_names else "/*telemetry_metrics_tachyon*/",
+        )
+
+        body = CppChunk()
+
+        if condition_names:
+            # Create counters for each condition
+            for condition_name in condition_names:
+                body.append(f"uint16_t {condition_name}_count = 0;")
+
+            # Count condition triggers from each condition mask value
+            body.append(f"for (const auto& condition_mask : {arg_event_metrics.argument_name})")
+            body.append("{")
+            body.append(
+                indent=1, chunk=f"auto trigger_flags = static_cast<{self.cog_ir.name}ConditionsMask>(condition_mask);"
+            )
+
+            # For each condition, check if it was triggered in this mask and increment its counter
+            for condition_name in condition_names:
+                body.append(
+                    indent=1,
+                    chunk=f"if ((trigger_flags & {self.cog_ir.name}ConditionsMask::{condition_name}) != {self.cog_ir.name}ConditionsMask::no_conditions_active)",
+                )
+                body.append(indent=1, chunk="{")
+                body.append(indent=2, chunk=f"++{condition_name}_count;")
+                body.append(indent=1, chunk="}")
+
+            body.append("}")
+
+            # Set the counted values in the telemetry metrics
+            for condition_name in condition_names:
+                body.append(f"{arg_tachyon.argument_name}.set_{condition_name}_trigger_vals({condition_name}_count);")
+
+        populate_condition_trigger_vals_method = CppMethod(
+            name="populate_condition_trigger_vals",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_event_metrics, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_condition_trigger_vals_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
 
     def _generate_is_ready_method(self) -> CppModuleChunks:
         execute_when = ExecuteExprHandler(self.cog_ir.execution_spec.condition)
@@ -1385,10 +1761,9 @@ class Cog:
         )
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
-        enclosing_namespace = self.cpp_namespace if self.cpp_namespace is not None else ""  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        return is_ready_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return is_ready_method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace)
 
-    def _generate_make_dial_method(self) -> CppModuleChunks:  # noqa: PLR0915, C901 naturally large with no easy breaks
+    def _generate_make_dial_method(self) -> CppModuleChunks:  # noqa: PLR0915, PLR0912, C901 naturally large with no easy breaks
         arg_params = CppNamedType(
             CppType(
                 [Header(CLK_REPO, "clockwork/cog/simple_cog.hh")],
@@ -1446,7 +1821,10 @@ class Cog:
                 "PublishersType::PublishablesTuple",
                 None,
             ),
-            "publishables" if self.publishers and len(self.publishers) else "/*publishables*/",
+            "publishables"
+            if self.publishers
+            and any(publisher.metrics_log_type == cog.MetricsLogType.none for publisher in self.publishers)
+            else "/*publishables*/",
             ["typename"],
         )
 
@@ -1577,13 +1955,17 @@ class Cog:
         outputs_inner_chunk = CppChunk()
         outputs_inner_chunk.append(f"{self.dial_name}Outputs(")
         if self.publishers:
-            outputs_inner_chunk.append(
-                [
-                    f"{make_obj_ptr(publisher.render_get(arg_publishables.argument_name))}{',' if (idx < len(self.publishers) - 1) else ''}"
-                    for idx, publisher in enumerate(self.publishers)
-                ],
-                indent=1,
-            )
+            non_metrics_publishers = [
+                publisher for publisher in self.publishers if publisher.metrics_log_type == cog.MetricsLogType.none
+            ]
+            if non_metrics_publishers:
+                outputs_inner_chunk.append(
+                    [
+                        f"{make_obj_ptr(publisher.render_get(arg_publishables.argument_name))}{',' if (idx < len(non_metrics_publishers) - 1) else ''}"
+                        for idx, publisher in enumerate(non_metrics_publishers)
+                    ],
+                    indent=1,
+                )
         outputs_inner_chunk.append("),")
         body.append(outputs_inner_chunk, indent=1)
         # diagnostics
@@ -1636,6 +2018,471 @@ class Cog:
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace if self.cpp_namespace is not None else ""  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
         return make_dial_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+    def _generate_get_conditions_mask_method(self, context: CompilerContext) -> CppModuleChunks:
+        """Generate populate_trigger_conditions."""
+        arg_timers = CppNamedType(
+            CppType([], "typename TimersType::ConditionsTuple", None, const=True, ref=Ref.L),
+            "timers" if self.timers else "/*timers*/",
+        )
+
+        arg_input_conditions = CppNamedType(
+            CppType([], "typename ConditionsType::ConditionsTuple", None, const=True, ref=Ref.L),
+            "input_conditions" if self.input_conditions else "/*input_conditions*/",
+        )
+
+        condition_mask_type = typereg.get_cpp_type(
+            context=context,
+            clk_type=get_underlying_enum_type(self.cog_ir.name, self.cog_ir.conditions),
+        )
+
+        body = CppChunk()
+        body.append(f"{condition_mask_type.render('')} condition_mask{{}};")
+
+        if self.timers:
+            for condition_name, timer in self.timers.cond_name_to_timer.items():
+                body.append(f"auto& {condition_name}_handle = std::get<{timer.index}>({arg_timers.argument_name});")
+                body.append(f"if ({condition_name}_handle.is_active())")
+                body.append("{")
+                body.append(
+                    indent=1,
+                    chunk=f"condition_mask = condition_mask | static_cast<{condition_mask_type.render('')}>( {self.cog_ir.name}ConditionsMask::{condition_name});",
+                )
+                body.append("}")
+
+        if self.input_conditions:
+            for condition_name, input_condition in self.input_conditions.input_conditions_registry.items():
+                body.append(
+                    chunk=f"auto& {condition_name}_handle = std::get<{input_condition.index}>({arg_input_conditions.argument_name});",
+                )
+                body.append(f"if ({condition_name}_handle.is_active())")
+                body.append("{")
+                body.append(
+                    indent=1,
+                    chunk=f"condition_mask = condition_mask | static_cast<{condition_mask_type.render('')}>({self.cog_ir.name}ConditionsMask::{condition_name});",
+                )
+                body.append("}")
+
+        body.append("return condition_mask;")
+
+        get_conditions_mask_method = CppMethod(
+            name="get_conditions_mask",
+            doc=None,
+            return_type=condition_mask_type,
+            arguments=[arg_timers, arg_input_conditions],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=True,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return get_conditions_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+    def _generate_populate_trigger_mask_method(self) -> CppModuleChunks:
+        """Generate populate trigger mask."""
+        arg_metrics_vec = CppNamedType(
+            CppType([], "std::pmr::vector<::clockwork::EventMetrics>", None, const=True, ref=Ref.L), "event_metrics_vec"
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "EventMetricsBatch>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "event_metrics_tachyon",
+        )
+
+        body = CppChunk()
+
+        # resize only if the underlying event metrics is too small
+        body.append(
+            f"if ({arg_tachyon.argument_name}.get_underlying_event_metrics().size() < {arg_metrics_vec.argument_name}.size())"
+        )
+        body.append("{")
+        body.append(
+            indent=1,
+            chunk=f"{arg_tachyon.argument_name}.get_underlying_event_metrics().resize({arg_metrics_vec.argument_name}.size());",
+        )
+        body.append("}")
+        body.append(f"for (size_t i = 0; i < {arg_metrics_vec.argument_name}.size(); ++i)")
+        body.append("{")
+
+        body.append(
+            indent=1,
+            chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_trigger_flags(static_cast<{self.cog_ir.name}ConditionsMask>({arg_metrics_vec.argument_name}.at(i).conditions_mask));",
+        )
+        body.append("}")
+
+        populate_trigger_mask_method = CppMethod(
+            name="populate_trigger_mask",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_metrics_vec, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_trigger_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+    def _generate_populate_input_telemetry_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_input_telemetry_metrics."""
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::SubscribersTuple", None, const=True, ref=Ref.L),
+            "inputs" if self.inputs else "/*inputs*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "TelemetryMetrics>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "telemetry_metrics_tachyon" if self.inputs else "/*telemetry_metrics_tachyon*/",
+        )
+
+        body = CppChunk()
+
+        if self.inputs:
+            for index, inpt in enumerate(self.inputs.inputs_registry):
+                body.append(
+                    f"set_input_channel_telemetry_metrics(std::get<{index}>({arg_inputs.argument_name})->get_aggregated_input_metrics().telemetry_metrics, {arg_tachyon.argument_name}.get_mutable_{inpt.input_name}());"
+                )
+
+        populate_input_telemetry_metrics_method = CppMethod(
+            name="populate_input_telemetry_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_inputs, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_input_telemetry_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+
+    def _generate_populate_input_event_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_input_event_metrics."""
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::SubscribersTuple", None, const=True, ref=Ref.L),
+            "inputs" if self.inputs else "/*inputs*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "EventMetricsBatch>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "event_metrics_tachyon" if self.inputs else "/*event_metrics_tachyon*/",
+        )
+        body = CppChunk()
+
+        if self.inputs:
+            for index, inpt in enumerate(self.inputs.inputs_registry):
+                body.append(
+                    f"auto& {inpt.input_name}_event_metrics = std::get<{index}>({arg_inputs.argument_name})->get_aggregated_input_metrics().event_metrics;"
+                )
+                # resize only if the underlying event metrics is too small
+                body.append(
+                    f"if ({arg_tachyon.argument_name}.get_underlying_event_metrics().size() < {inpt.input_name}_event_metrics.size())"
+                )
+                body.append("{")
+                body.append(
+                    indent=1,
+                    chunk=f"{arg_tachyon.argument_name}.get_underlying_event_metrics().resize({inpt.input_name}_event_metrics.size());",
+                )
+                body.append("}")
+                body.append(f"for (size_t i = 0; i < {inpt.input_name}_event_metrics.size(); ++i)")
+                body.append("{")
+
+                body.append(
+                    indent=1,
+                    chunk=f"set_input_channel_event_metrics({inpt.input_name}_event_metrics.at(i), {arg_tachyon.argument_name}.get_mutable_event_metrics()[i].get_mutable_{inpt.input_name}());",
+                )
+                body.append("}")
+                # call reset metrics on the input event metrics
+                body.append(
+                    chunk=f"std::get<{index}>({arg_inputs.argument_name})->reset_metrics();",
+                )
+
+        populate_input_event_metrics_method = CppMethod(
+            name="populate_input_event_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_inputs, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_input_event_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+
+    def _generate_populate_output_event_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_output_event_metrics."""
+        output_publishers = []
+        if self.publishers:
+            # Filter out metrics publishers to get only actual output publishers
+            output_publishers = [
+                publisher
+                for publisher in self.publishers.publisher_registry
+                if publisher.metrics_log_type == cog.MetricsLogType.none
+            ]
+
+        arg_event_metrics = CppNamedType(
+            CppType([], "std::pmr::vector<::clockwork::EventMetrics>", None, const=True, ref=Ref.L),
+            "event_metrics" if output_publishers else "/*event_metrics*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "EventMetricsBatch>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "event_metrics_tachyon" if output_publishers else "/*event_metrics_tachyon*/",
+        )
+
+        body = CppChunk()
+
+        if output_publishers:
+            # Resize the output metrics array if needed
+            body.append(
+                f"if ({arg_tachyon.argument_name}.get_underlying_event_metrics().size() < {arg_event_metrics.argument_name}.size())"
+            )
+            body.append("{")
+            body.append(
+                indent=1,
+                chunk=f"{arg_tachyon.argument_name}.get_underlying_event_metrics().resize({arg_event_metrics.argument_name}.size());",
+            )
+            body.append("}")
+
+            # Iterate through each event metrics entry
+            body.append(f"for (size_t i = 0; i < {arg_event_metrics.argument_name}.size(); ++i)")
+            body.append("{")
+
+            # For each output publisher, set the num_messages for that index
+            for index, publisher in enumerate(output_publishers):
+                body.append(
+                    indent=1,
+                    chunk=f"if ({arg_event_metrics.argument_name}.at(i).output_metrics.contains({index}))",
+                )
+                body.append(indent=1, chunk="{")
+                body.append(
+                    indent=2,
+                    chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_{publisher.output_name}_num_messages({arg_event_metrics.argument_name}.at(i).output_metrics.at({index}));",
+                )
+                body.append(indent=1, chunk="}")
+                body.append(indent=1, chunk="else")
+                body.append(indent=1, chunk="{")
+                body.append(
+                    indent=2,
+                    chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_{publisher.output_name}_num_messages(0);",
+                )
+                body.append(indent=1, chunk="}")
+            body.append("}")
+
+        populate_output_event_metrics_method = CppMethod(
+            name="populate_output_event_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_event_metrics, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_output_event_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+
+    def _generate_populate_output_telemetry_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_output_telemetry_metrics."""
+        output_publishers = []
+        if self.publishers:
+            # Filter out metrics publishers to get only actual output publishers
+            output_publishers = [
+                publisher
+                for publisher in self.publishers.publisher_registry
+                if publisher.metrics_log_type == cog.MetricsLogType.none
+            ]
+
+        arg_telemetry_metrics = CppNamedType(
+            CppType([], "::clockwork::TelemetryMetrics", None, const=True, ref=Ref.L),
+            "telemetry_metrics" if output_publishers else "/*telemetry_metrics*/",
+        )
+
+        arg_tachyon = CppNamedType(
+            CppType(
+                [],
+                "::clockwork::Tap<::clockwork::Tachyon<" + self.cog_ir.name + "TelemetryMetrics>>",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            "telemetry_metrics_tachyon" if output_publishers else "/*telemetry_metrics_tachyon*/",
+        )
+
+        body = CppChunk()
+
+        if output_publishers:
+            # For each output publisher, set the telemetry metrics
+            for index, publisher in enumerate(output_publishers):
+                body.append(
+                    f"if (auto it = {arg_telemetry_metrics.argument_name}.output_metrics.find({index}); it != {arg_telemetry_metrics.argument_name}.output_metrics.end())"
+                )
+                body.append("{")
+                body.append(
+                    indent=1,
+                    chunk=f"populate_tachyon_min_max_mean(it->second, {arg_tachyon.argument_name}.get_mutable_{publisher.output_name}_num_messages());",
+                )
+                body.append("}")
+
+        populate_output_telemetry_metrics_method = CppMethod(
+            name="populate_output_telemetry_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_telemetry_metrics, arg_tachyon],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_output_telemetry_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+
+    def _generate_populate_event_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_event_metrics."""
+        arg_event_metrics = CppNamedType(
+            CppType([], "std::pmr::vector<::clockwork::EventMetrics>", None, const=True, ref=Ref.L),
+            "event_metrics",
+        )
+
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::SubscribersTuple", None, const=True, ref=Ref.L),
+            "inputs",
+        )
+
+        arg_publishables = CppNamedType(
+            CppType(
+                [],
+                "typename PublishersType::PublishablesTuple",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            argument_name="publishables",
+        )
+
+        body = CppChunk()
+
+        body.append(f"auto event_publishable = std::get<event_metrics_index>({arg_publishables.argument_name});")
+        body.append("auto & event_metrics_msg = event_publishable.message();")
+        body.append(f"set_common_event_metrics({arg_event_metrics.argument_name}, event_metrics_msg);")
+        body.append(f"populate_input_event_metrics({arg_inputs.argument_name}, event_metrics_msg);")
+        body.append(f"populate_output_event_metrics({arg_event_metrics.argument_name}, event_metrics_msg);")
+        body.append(f"populate_trigger_mask({arg_event_metrics.argument_name}, event_metrics_msg);")
+        body.append("event_publishable.mark_for_publish();")
+
+        populate_event_metrics_method = CppMethod(
+            name="populate_event_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_event_metrics, arg_inputs, arg_publishables],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_event_metrics_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+    def _generate_populate_telemetry_metrics_method(self) -> CppModuleChunks:
+        """Generate populate_telemetry_metrics."""
+        arg_telemetry_metrics = CppNamedType(
+            CppType([], "::clockwork::TelemetryMetrics", None, const=True, ref=Ref.L), "telemetry_metrics"
+        )
+
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::SubscribersTuple", None, const=True, ref=Ref.L),
+            "inputs",
+        )
+
+        arg_publishables = CppNamedType(
+            CppType(
+                [],
+                "typename PublishersType::PublishablesTuple",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            argument_name="publishables",
+        )
+        body = CppChunk()
+        body.append(
+            f"auto telemetry_publishable = std::get<telemetry_metrics_index>({arg_publishables.argument_name});"
+        )
+        body.append("auto & telemetry_metrics_msg = telemetry_publishable.message();")
+        body.append(f"set_common_telemetry_metrics(telemetry_metrics_msg, {arg_telemetry_metrics.argument_name});")
+        body.append(f"populate_input_telemetry_metrics({arg_inputs.argument_name}, telemetry_metrics_msg);")
+        body.append(f"populate_output_telemetry_metrics({arg_telemetry_metrics.argument_name}, telemetry_metrics_msg);")
+        body.append(f"populate_telemetry_triggers({arg_telemetry_metrics.argument_name}, telemetry_metrics_msg);")
+        body.append("telemetry_publishable.mark_for_publish();")
+
+        populate_telemetry_metrics_method = CppMethod(
+            name="populate_telemetry_metrics",
+            doc=None,
+            return_type=CppType([], "void", None),
+            arguments=[arg_telemetry_metrics, arg_inputs, arg_publishables],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return populate_telemetry_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
 
     def _generate_execute_method(self) -> CppModuleChunks:
         """Generate execute."""

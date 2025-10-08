@@ -214,7 +214,6 @@ schema SomeSchema
  history
  {
    versions: [0, 1];
-   version_pseudofields: [2];
    fields
    {
      #0 some_field: Bool -> became #1;
@@ -252,6 +251,7 @@ In this context `Optional` is treated as equivalent to a `VarArray` with max siz
 This can cause a runtime error if the new container type's size cannot hold the existing data.
 In particular, if changing from `VarArray` to `Optional`, the array must have 0 or 1 element.
 More than one element will cause a runtime error.
+Changing the size of `FixedArray` is not allowed, so changing the type from `Optional` or `VarArray` to `FixedArray` has limited usefullness since the upgrade will fail at runtime unless the size of the `FixedArray` is correct for all instances in the log.
 
 #### Non-container to container type changes
 
@@ -447,3 +447,41 @@ Documentation may also be changed.
 
 The enum UUID may not be changed.
 Value numbers may not be changed.
+
+## Schema Backward Compatability Testing
+
+Clockwork provides a unit test script that can be used to check that the logged channels for a system can be upgraded from a previous version of the schemas for those channels.
+The following Bazel macro is from the [demo system](../../examples/demo_system/README.md) and provides an example of how to validate that changes to the logged channel schemas can be upgraded from a version of the metadata stored in the repo.
+Typically one would use external storage to upload the metadata for each version of the schema and then use this unit test to check compatability before allowing a new version of the schema to merge into the repo.
+
+```bazel
+sh_test(
+    name = "validate_logged_channel_metadata",
+    srcs = ["@clockwork//clockwork/serialization/cpp:validate_logged_channel_metadata_test.sh"],
+    args = [
+        "$(location {0})".format("//clockwork/serialization/cpp:validate_logged_channel_metadata"),
+        "$(location {0})".format("//clockwork/examples/demo_system/resources:logged_channel_metadata.bin"),
+        "$(location {0})".format(":demo_system.demo_system_sys.logged_channel_metadata.pbbin"),
+    ],
+    data = [
+        ":demo_system.demo_system_sys.logged_channel_metadata.pbbin",
+        "//clockwork/examples/demo_system/resources:logged_channel_metadata.bin",
+        "//clockwork/serialization/cpp:validate_logged_channel_metadata",
+    ],
+)
+```
+
+There are some channels that get logged but don't need backward compatibility.
+Use the _enforce_backwards_compatibility_ option in the channel definition to disable the upgradability test for that channel.
+The upgradability test on channels is enabled by default and is disabled by setting _enforce_backwards_compatibility_ to false.
+
+```clk
+// GPS channel
+channel GpsChannel
+{
+  name: "/gps";
+  message_type: Tachyon<gps_message::GpsMessage>;
+  max_num_messages: 10;
+  enforce_backwards_compatibility: false;
+}
+```

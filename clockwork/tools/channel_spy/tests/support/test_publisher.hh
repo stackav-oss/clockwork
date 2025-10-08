@@ -39,11 +39,16 @@ public:
   /// @param[in] pinion_shm_root Shared memory root directory
   /// @param[in] socket_ns Pinion socket namespace
   /// @param[in] uuid_str Channel UUID string
+  /// @param[in] channel_Name Channel name
   /// @param[in] num_slots Number of pinion buffer slots
   /// @param[in] message_size_b Pinion message size in bytes
   /// @return Test publisher
-  [[nodiscard]] static std::shared_ptr<TestPublisher>
-  open(std::string_view pinion_shm_root, std::string_view socket_ns, std::string_view uuid_str, size_t num_slots);
+  [[nodiscard]] static std::shared_ptr<TestPublisher> open(
+    std::string_view pinion_shm_root,
+    std::string_view socket_ns,
+    std::string_view uuid_str,
+    std::string_view channel_name,
+    size_t num_slots);
 
   /// Publish a message on the channel
   /// @param[in] message_time Message timestamp

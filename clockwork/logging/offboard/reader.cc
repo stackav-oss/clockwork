@@ -22,7 +22,6 @@
 #include <ranges>
 #include <regex>
 #include <span>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
@@ -302,12 +301,13 @@ void Reader::MessageReader::advance_prefetch()
       std::promise<LogExpected<jewels::memory::NonNullSharedPtr<MessageChunkReader>>>,
       std::pmr::polymorphic_allocator<std::promise<LogExpected<jewels::memory::NonNullSharedPtr<MessageChunkReader>>>>>(
       memory_resource_);
-    prefetch_list_.push_back(PrefetchListEntry{
-      .min_transmit_time = message_chunk_handle.min_transmit_time,
-      .channel_name = message_chunk_handle.channel_name,
-      .channel_type = message_chunk_handle.channel_type,
-      .chunk_reader_future = promise_ptr->get_future(),
-    });
+    prefetch_list_.push_back(
+      PrefetchListEntry{
+        .min_transmit_time = message_chunk_handle.min_transmit_time,
+        .channel_name = message_chunk_handle.channel_name,
+        .channel_type = message_chunk_handle.channel_type,
+        .chunk_reader_future = promise_ptr->get_future(),
+      });
     async_work_queue_ptr_->schedule_work_item_no_wait(
       [promise_ptr = std::move(promise_ptr), message_chunk_handle = std::move(message_chunk_handle), this]()
       {
@@ -592,6 +592,9 @@ Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view 
   }
   prune_persistent_message_chunks(maybe_log_interval, persistent_message_chunk_map, message_chunk_list);
   message_chunk_list.sort();
+  duplicate_message_filter_ =
+    std::allocate_shared<DuplicateMessageFilter, std::pmr::polymorphic_allocator<DuplicateMessageFilter>>(
+      memory_resource_, memory_resource_, duplicate_message_filter_size, duplicate_message_filter_expiration_interval);
   message_reader_ptr_ = std::allocate_shared<MessageReader, std::pmr::polymorphic_allocator<MessageReader>>(
     memory_resource_,
     memory_resource_,
@@ -604,6 +607,7 @@ Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view 
 void Reader::close()
 {
   message_reader_ptr_ = {};
+  duplicate_message_filter_ = {};
 }
 
 [[nodiscard]] Reader::operator bool()
@@ -613,21 +617,30 @@ void Reader::close()
 
 [[nodiscard]] LogExpected<LoggedMessage> Reader::read_next()
 {
-  if (!message_reader_ptr_)
+  while (true)
   {
-    jewels::log_cerr_error("Failed to read from {}: Not open", uri_str_);
-    return jewels::unexpected(LogError::not_open);
-  }
-  auto read_result = message_reader_ptr_->read_next();
-  // populate the message encoding
-  if (read_result)
-  {
+    if (!message_reader_ptr_)
+    {
+      jewels::log_cerr_error("Failed to read from {}: Not open", uri_str_);
+      return jewels::unexpected(LogError::not_open);
+    }
+    auto read_result = message_reader_ptr_->read_next();
+    if (!read_result)
+    {
+      return read_result;
+    }
+    if (duplicate_message_filter_->is_duplicate(
+          read_result->channel_name, read_result->transmit_time, read_result->sequence_number))
+    {
+      continue;
+    }
+    // populate the message encoding
     if (auto channel_metadata = get_channel_metadata(read_result->channel_name))
     {
       read_result->message_encoding = channel_metadata->message_encoding;
     }
+    return read_result;
   }
-  return read_result;
 }
 
 [[nodiscard]] LogExpected<jewels::memory::ObjectPtr<const std::pmr::unordered_set<std::pmr::string>>>

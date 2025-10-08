@@ -39,16 +39,28 @@ get_deterministic_logging_config(const ExecutionParams& execution_params)
     }
     logging_config.log_writer_config = *log_writer_config_status;
   }
-  if (execution_params.log_publisher_config_path)
+  if (execution_params.channel_publisher_config_path)
   {
-    auto log_publisher_config_status =
-      read_tachyon_config_to_heap<clockwork_logging::LogWriterConfigTap>(*execution_params.log_publisher_config_path);
-    if (!log_publisher_config_status)
+    auto channel_publisher_config_status = read_tachyon_config_to_heap<clockwork_logging::ChannelPublisherConfigTap>(
+      *execution_params.channel_publisher_config_path);
+    if (!channel_publisher_config_status)
     {
       return jewels::unexpected(jewels::MonoError{});
     }
-    logging_config.log_publisher_config = *log_publisher_config_status;
+    logging_config.channel_publisher_config = *channel_publisher_config_status;
   }
+  if (execution_params.metrics_channel_metadata_config_path)
+  {
+    auto metrics_channel_metadata_config_status =
+      read_tachyon_config_to_heap<clockwork::tools::MetricsChannelMetadataConfigTap>(
+        *execution_params.metrics_channel_metadata_config_path);
+    if (!metrics_channel_metadata_config_status)
+    {
+      return jewels::unexpected(jewels::MonoError{});
+    }
+    logging_config.metrics_channel_metadata_config = *metrics_channel_metadata_config_status;
+  }
+
   if (execution_params.suppress_schema_mismatch_errors)
   {
     logging_config.suppress_schema_mismatch_errors = *execution_params.suppress_schema_mismatch_errors;
@@ -74,8 +86,9 @@ calc_start_and_end_times(const ExecutionParams& execution_params)
 
   if (!input_log_uri)
   {
-    jewels::log_cerr_error("If running with the deterministic runner, either an input log uri must be specified or "
-                           "both the start and end time of the simulation must be specified.");
+    jewels::log_cerr_error(
+      "If running with the deterministic runner, either an input log uri must be specified or "
+      "both the start and end time of the simulation must be specified.");
     return jewels::unexpected(jewels::MonoError{});
   }
 

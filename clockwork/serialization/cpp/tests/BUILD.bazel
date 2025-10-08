@@ -1,0 +1,68 @@
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "cc_test_with_embedded_py", "py_test")
+
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "nb_tachyon_upgrader_test",
+    srcs = [
+        "nb_tachyon_upgrader_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/serialization/cpp:nb_tachyon_upgrader",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model_py_library",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v1",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v2",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "tachyon_model_test",
+    srcs = ["tachyon_model_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/serialization/cpp:clk_type",
+        "//clockwork/serialization/cpp:tachyon_model",
+        "//clockwork/serialization/cpp/tests/support:test_schema_v2",
+        "//clockwork/serialization/cpp/tests/support:validate_upgradability",
+        "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//clockwork/serialization/py/tests/support:broken_schema_v1",
+        "//clockwork/serialization/py/tests/support:broken_schema_v2",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test_with_embedded_py(
+    name = "tachyon_upgrader_test",
+    srcs = ["tachyon_upgrader_test.cc"],
+    linkopts = ["-lpthread"],
+    py_deps = ["//clockwork/serialization/py:create_upgrader"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/python:python_init",
+        "//clockwork/serialization/cpp:tachyon_python_upgrader",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
+        "//clockwork/serialization/cpp/tests/support:strong_type_factory",
+        "//clockwork/serialization/cpp/tests/support:test_schema_v1",
+        "//clockwork/serialization/cpp/tests/support:test_schema_v2",
+        "//clockwork/serialization/cpp/tests/support:validate_upgradability",
+        "//clockwork/serialization/py/tests/support:simple_schema_v1",
+        "//clockwork/serialization/py/tests/support:simple_schema_v2",
+        "//jewels/container/tap:var_string",
+        "@catch2//:catch2_main",
+    ],
+)

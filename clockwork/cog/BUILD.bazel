@@ -51,6 +51,20 @@ cc_library(
 )
 
 cc_library(
+    name = "cog_infra_diagnostics",
+    srcs = ["cog_infra_diagnostics.inl"],
+    hdrs = ["cog_infra_diagnostics.hh"],
+    deps = [
+        ":cog_diagnostics",
+        "//clockwork/common:process_description",
+        "//clockwork/pinion:publisher_handle",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
     name = "cog_inputs",
     srcs = ["cog_inputs.inl"],
     hdrs = ["cog_inputs.hh"],
@@ -67,6 +81,7 @@ cc_library(
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
     ],
 )
@@ -106,7 +121,10 @@ cc_library(
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
+        "//jewels/meta:types",
+        "//jewels/rate_limiter:token_bucket",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
     ],
 )
@@ -216,6 +234,7 @@ cc_library(
         ":cog_conditions",
         ":cog_configs",
         ":cog_diagnostics",
+        ":cog_infra_diagnostics",
         ":cog_inputs",
         ":cog_memory_resources",
         ":cog_publishers",
@@ -225,10 +244,15 @@ cc_library(
         ":factory",
         ":input_condition",
         ":input_view",
+        ":set_cog_metrics",
         ":simple_cog",
         "//clockwork:repr_iface",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:process_description",
-        "//jewels/uuid",
+        "//clockwork/diagnostics:reporter",
+        "//jewels/container:compare",
+        "//jewels/memory:pointers",
     ],
 )
 
@@ -252,15 +276,21 @@ cc_library(
     srcs = ["input_view.inl"],
     hdrs = ["input_view.hh"],
     deps = [
+        ":cog_statistics",
         "//clockwork/common:process_description",
         "//clockwork/dial:msg_input",
+        "//clockwork/dsl/cog:ten_nanosecond_type",
         "//clockwork/pinion:buffer",
         "//clockwork/pinion:error",
+        "//clockwork/pinion:slot",
         "//clockwork/pinion:subscriber_handle",
         "//jewels/container:circular_buffer",
         "//jewels/container:compare",
         "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "//jewels/time:conversions",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
         "@boost//:iterator",
     ],
@@ -284,6 +314,23 @@ cc_library(
 )
 
 cc_library(
+    name = "set_cog_metrics",
+    srcs = [
+        "set_cog_metrics.cc",
+        "set_cog_metrics.inl",
+    ],
+    hdrs = ["set_cog_metrics.hh"],
+    deps = [
+        ":cog_statistics",
+        "//clockwork:repr_iface",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:ten_nanosecond_type",
+    ],
+)
+
+cc_library(
     name = "simple_cog",
     srcs = ["simple_cog.inl"],
     hdrs = ["simple_cog.hh"],
@@ -291,6 +338,7 @@ cc_library(
         ":cog_statistics",
         ":interface",
         "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:abstract_timer",
         "//clockwork/common:cog_execution_error",
         "//clockwork/common:forward",

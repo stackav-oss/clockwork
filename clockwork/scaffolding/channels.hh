@@ -5,7 +5,7 @@
 
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
@@ -49,6 +49,22 @@ using ChannelMap = std::pmr::unordered_map<
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
   pinion::ShmChannelFactory& factory);
 
+/// Setup dummy channels for endpoints that are not connected to other components
+///
+/// This function creates placeholder channels for endpoints that don't have active
+/// connections. This is useful for optional endpoints or testing scenarios where
+/// a valid handle is needed even when no actual data flow occurs.
+///
+/// @param[in] endpoints List of not-connected endpoint taps to create dummy channels for
+/// @param[in] casing Reference to the abstract casing to set handles on
+/// @param[in] memres Memory resource used to allocate the returned map and temporary objects
+/// @param[in] factory The channel factory used to generate the dummy channels
+/// @return Map of dummy channels for non-connected endpoints, or error on failure
+jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
+  std::span<const common::NotConnectedEndpointTap> endpoints,
+  AbstractCasing& casing,
+  jewels::memory::MemoryResource memres,
+  pinion::ShmChannelFactory& factory);
 ///
 /// Create all the shared memory channels requested by a process description
 /// This assumes it is being used in a single process context and therefore all shm channels should be publishers.
@@ -59,7 +75,7 @@ using ChannelMap = std::pmr::unordered_map<
 ///
 jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   std::span<const common::PublishEndpointTap> descs,
-  std::span<const clockwork_logging::LoggedChannelConfigTap> logged_channels,
+  std::span<const clockwork_logging::PublishedChannelConfigTap> published_channels,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory);
 

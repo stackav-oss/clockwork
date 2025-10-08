@@ -187,7 +187,7 @@ However, there is no restriction on this; a `cpp_target` can instantiate any Clo
 ### `Tappy`
 
 An alias `Tappy<...>` is provided that is short hand for `Tap<Tachyon<...>>`.
-The `Tappy` alias can be used both within the clockwork language to refer to a Tap-Tachyon interface, but also within C++ to refer to a Tap-Tachyon class type.
+The `Tappy` alias can be used both within the Clockwork language to refer to a Tap-Tachyon interface, but also within C++ to refer to a Tap-Tachyon class type.
 
 ### Instantiating entities in a Python target
 
@@ -312,9 +312,9 @@ This specifies that the Tap interface to `HelloWorld` should be used for setting
 The `Tappy` alias is also supported as are any aliases defined for the representations and interfaces being converted.
 
 In some cases, one may want to validate that all fields in a proto object have been set prior to converting it to Tachyon.
-The `proto_target` has a `validate_proto` option that is defaulted to false.
-However, when set to true, all Protobuf representations defined in that target, will fail conversion if a field or, even a field in a contained representation, is not explicitly set prior to the conversion.
-Regardless of whether this field is set, a `validate_protobuf` function will be generated.
+The `proto_target` has a `validate_proto` option that is defaulted to `true`.
+When set to `true`, all Protobuf representations defined in that target will fail conversion if any field (including sub-fields in contained types) is not explicitly set prior to the conversion.
+Regardless of whether `validate_proto` is `true` or `false`, a `validate_protobuf` function will always be generated.
 
 The converter in this case generates a function called `protobuf_to_tap`.
 The `protobuf_to_tap` function takes a reference to the Tap output to be populated as its first argument, and the input protobuf object as its second argument.

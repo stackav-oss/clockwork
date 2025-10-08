@@ -65,50 +65,67 @@ ShmChannelFactory::ShmChannelFactory(
 }
 
 jewels::expected<std::shared_ptr<ShmChannel>, ShmChannel::Error> ShmChannelFactory::open(
-  ShmChannel::Role role, std::string_view name, const BufferLayout& layout, size_t max_subscribers)
+  ShmChannel::Role role,
+  std::string_view uuid_str,
+  std::string_view channel_name,
+  const BufferLayout& layout,
+  size_t max_subscribers)
 {
   switch (role)
   {
   case ShmChannel::Role::publisher:
-    return open_publisher(name, layout, max_subscribers);
+    return open_publisher(uuid_str, channel_name, layout, max_subscribers);
   case ShmChannel::Role::subscriber:
-    return open_subscriber(name, layout, max_subscribers);
+    return open_subscriber(uuid_str, channel_name, layout, max_subscribers);
   }
 }
 
-jewels::expected<std::shared_ptr<ShmPublisher>, ShmChannel::Error>
-ShmChannelFactory::open_publisher(std::string_view name, const BufferLayout& layout, size_t max_subscribers)
+jewels::expected<std::shared_ptr<ShmPublisher>, ShmChannel::Error> ShmChannelFactory::open_publisher(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
-  return to_shared(ShmPublisher::open(
-    memres_, shm_dir_, socket_ns_, name, layout, max_subscribers, max_subscribers, resume_behavior_));
+  return to_shared(
+    ShmPublisher::open(
+      memres_,
+      shm_dir_,
+      socket_ns_,
+      uuid_str,
+      channel_name,
+      layout,
+      max_subscribers,
+      max_subscribers,
+      resume_behavior_));
 }
 
-jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error>
-ShmChannelFactory::open_subscriber(std::string_view name, const BufferLayout& layout, size_t max_subscribers)
+jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_subscriber(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
-  return to_shared(ShmSubscriber::open(
-    memres_,
-    shm_dir_,
-    socket_ns_,
-    name,
-    layout,
-    max_subscribers,
-    ShmSubscriber::SubscriberRole::subscriber,
-    resume_behavior_));
+  return to_shared(
+    ShmSubscriber::open(
+      memres_,
+      shm_dir_,
+      socket_ns_,
+      uuid_str,
+      channel_name,
+      layout,
+      max_subscribers,
+      ShmSubscriber::SubscriberRole::subscriber,
+      resume_behavior_));
 }
 
-jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error>
-ShmChannelFactory::open_spy(std::string_view name, const BufferLayout& layout, size_t max_subscribers)
+jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_spy(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
-  return to_shared(ShmSubscriber::open(
-    memres_,
-    shm_dir_,
-    socket_ns_,
-    name,
-    layout,
-    max_subscribers,
-    ShmSubscriber::SubscriberRole::spy,
-    resume_behavior_));
+  return to_shared(
+    ShmSubscriber::open(
+      memres_,
+      shm_dir_,
+      socket_ns_,
+      uuid_str,
+      channel_name,
+      layout,
+      max_subscribers,
+      ShmSubscriber::SubscriberRole::spy,
+      resume_behavior_));
 }
 
 const std::pmr::string& ShmChannelFactory::socket_ns() const noexcept

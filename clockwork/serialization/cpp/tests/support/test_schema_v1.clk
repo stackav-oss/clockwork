@@ -1,0 +1,1967 @@
+// Test schema version 1
+schema SmokeTestSchemaV1
+{
+  uuid: a93f1d31-1e15-4365-bab1-14163b66e413;
+  fields
+  {
+    // Int8 Field
+    #1 int8_field: Int8;
+  }
+}
+
+// Test schema version 1
+schema Int8UpgradeTestSchemaV1
+{
+  uuid: 5c02a305-f2aa-4215-933e-6518d4dd6882;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: Int8;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int8;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int8;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int8;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Int8;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Int8;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Int8;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Int8;
+  }
+}
+
+// Test schema version 1
+schema Int16UpgradeTestSchemaV1
+{
+  uuid: c7dd7e06-4216-45f7-991a-01062f80fc28;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: Int16;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int16;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int16;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int16;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Int16;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Int16;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Int16;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Int16;
+  }
+}
+
+// Test schema version 1
+schema Int32UpgradeTestSchemaV1
+{
+  uuid: 4da72a39-17a2-447a-9f68-a3308469327e;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: Int32;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int32;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int32;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int32;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Int32;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Int32;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Int32;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Int32;
+  }
+}
+
+// Test schema version 1
+schema Int64UpgradeTestSchemaV1
+{
+  uuid: e18a4d93-0908-4ebc-bb24-1373e9051ef4;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: Int64;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int64;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int64;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int64;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Int64;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Int64;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Int64;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Int64;
+  }
+}
+
+// Test schema version 1
+schema UInt8UpgradeTestSchemaV1
+{
+  uuid: 25f0b51c-c05f-45d8-b0e4-67538baef4b2;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: UInt8;
+
+    // Int16 field (in version2)
+    #2 int16_field: UInt8;
+
+    // Int32 field (in version2)
+    #3 int32_field: UInt8;
+
+    // Int64 field (in version2)
+    #4 int64_field: UInt8;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt8;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt8;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt8;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt8;
+  }
+}
+
+// Test schema version 1
+schema UInt16UpgradeTestSchemaV1
+{
+  uuid: 64d751ce-c9ee-4fad-bcbd-15c791bda017;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: UInt16;
+
+    // Int16 field (in version2)
+    #2 int16_field: UInt16;
+
+    // Int32 field (in version2)
+    #3 int32_field: UInt16;
+
+    // Int64 field (in version2)
+    #4 int64_field: UInt16;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt16;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt16;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt16;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt16;
+  }
+}
+
+// Test schema version 1
+schema UInt32UpgradeTestSchemaV1
+{
+  uuid: 7a8a6789-9933-4ff0-ba6a-2a0dbd3bd803;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: UInt32;
+
+    // Int16 field (in version2)
+    #2 int16_field: UInt32;
+
+    // Int32 field (in version2)
+    #3 int32_field: UInt32;
+
+    // Int64 field (in version2)
+    #4 int64_field: UInt32;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt32;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt32;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt32;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt32;
+  }
+}
+
+// Test schema version 1
+schema UInt64UpgradeTestSchemaV1
+{
+  uuid: 787dbd7c-c1fc-4612-97cd-5d09a21c8103;
+  fields
+  {
+    // Int8 field (in version2)
+    #1 int8_field: UInt64;
+
+    // Int16 field (in version2)
+    #2 int16_field: UInt64;
+
+    // Int32 field (in version2)
+    #3 int32_field: UInt64;
+
+    // Int64 field (in version2)
+    #4 int64_field: UInt64;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt64;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt64;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt64;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt64;
+  }
+}
+
+// Test schema version 1 (no changes in version 2)
+schema CopyableMemberSchemaTypeV1
+{
+  uuid: fe9fb14e-c518-4738-8590-3d162c0f1305;
+  fields
+  {
+    // UUID field
+    #1 uuid_field: Uuid<Int8>;
+
+    // Int32 array field
+    #2 int32_array_field: FixedArray<Int32, size=4>;
+  }
+}
+
+// Test schema version 1
+schema UpgradedMemberSchemaTypeV1
+{
+  uuid: 4ee6963b-5242-4098-ad64-fa23f6c69ed5;
+  fields
+  {
+    // Field removed in version 2
+    #1 removed_field: Int8;
+
+    // Field upgraded in version 2
+    #2 upgraded_field: UInt32;
+  }
+}
+
+// Test schema version 1
+schema SchemaUpgradeTestSchemaV1
+{
+  uuid: bd67970b-aad1-44aa-84b0-7f0ae04cea49;
+  fields
+  {
+    // Field removed in version 2
+    #1 removed_field: UpgradedMemberSchemaTypeV1;
+
+    // Field upgraded in version 2
+    #2 upgraded_field: UpgradedMemberSchemaTypeV1;
+  }
+}
+
+// Test schema version 1
+schema Float32UpgradeTestSchemaV1
+{
+  uuid: e95085a9-76aa-4b1d-b9e6-fb242d493fad;
+  fields
+  {
+    // Float32 field (in version2)
+    #1 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #2 float64_field: Float32;
+  }
+}
+
+// Test schema version 1
+schema Float64UpgradeTestSchemaV1
+{
+  uuid: 32e04907-e23c-4133-bf14-8b5528504241;
+  fields
+  {
+    // Float32 field (in version2)
+    #1 float32_field: Float64;
+
+    // Float64 field (in version2)
+    #2 float64_field: Float64;
+  }
+}
+
+// Test schema version 1
+schema PrimitiveUpgradeTestSchemaV1
+{
+  uuid: 5227bbad-8e18-4185-8ee5-2bc4096fcf04;
+  fields
+  {
+    // Byte field
+    #1 byte_field: Byte;
+
+    // UUID field
+    #2 uuid_field: Uuid<Int8>;
+
+    // Bool field
+    #3 bool_field: Bool;
+  }
+}
+
+// Test schema version 1
+schema SyncTimeUpgradeTestSchemaV1
+{
+  uuid: 9ab418c9-307f-4e36-b938-a6b57cc3da20;
+  fields
+  {
+    // Int8 field (upgraded to SyncTime in version2)
+    #1 int8_field: Int8;
+
+    // Int16 field (upgraded to SyncTime in version2)
+    #2 int16_field: Int16;
+
+    // Int32 field (upgraded to SyncTime in version2)
+    #3 int32_field: Int32;
+
+    // Int64 field (upgraded to SyncTime in version2)
+    #4 int64_field: Int64;
+
+    // UInt8 field (upgraded to SyncTime in version2)
+    #5 uint8_field: UInt8;
+
+    // UInt16 field (upgraded to SyncTime in version2)
+    #6 uint16_field: UInt16;
+
+    // UInt32 field (upgraded to SyncTime in version2)
+    #7 uint32_field: UInt32;
+
+    // UInt64 field (upgraded to SyncTime in version2)
+    #8 uint64_field: UInt64;
+
+    // SyncTime field
+    #9 synctime_field: SyncTime;
+  }
+}
+
+// Test schema version 1
+schema DurationUpgradeTestSchemaV1
+{
+  uuid: 0eba0466-6343-4dbf-bc0d-317fa3b6de05;
+  fields
+  {
+    // Int8 field (upgraded to Duration in version2)
+    #1 int8_field: Int8;
+
+    // Int16 field (upgraded to Duration in version2)
+    #2 int16_field: Int16;
+
+    // Int32 field (upgraded to Duration in version2)
+    #3 int32_field: Int32;
+
+    // Int64 field (upgraded to Duration in version2)
+    #4 int64_field: Int64;
+
+    // UInt8 field (upgraded to Duration in version2)
+    #5 uint8_field: UInt8;
+
+    // UInt16 field (upgraded to Duration in version2)
+    #6 uint16_field: UInt16;
+
+    // UInt32 field (upgraded to Duration in version2)
+    #7 uint32_field: UInt32;
+
+    // UInt64 field (upgraded to Duration in version2)
+    #8 uint64_field: UInt64;
+
+    // Duration field
+    #9 duration_field: Duration;
+  }
+}
+
+// Test strong type
+strong_type StrongInt32
+{
+  underlying_type: Int32;
+}
+
+// Test strong type
+strong_type StrongInt64
+{
+  underlying_type: Int64;
+}
+
+// Test strong type
+strong_type StrongFloat32
+{
+  underlying_type: Float32;
+}
+
+// Test strong type
+strong_type StrongFloat64
+{
+  underlying_type: Float64;
+}
+
+// Test strong type
+strong_type StrongByte
+{
+  underlying_type: Byte;
+}
+
+// Test schema version 1
+schema StrongTypeUpgradeTestSchemaV1
+{
+  uuid: 31104c7a-de35-4902-9aed-89838cddee46;
+  fields
+  {
+    // Int32 field
+    #1 int32_field: Int32;
+
+    // StrongInt32 field
+    #2 strong_int32_field: StrongInt32;
+
+    // Int64 field
+    #3 int64_field: Int64;
+
+    // StrongInt64 field
+    #4 strong_int64_field: StrongInt64;
+
+    // Float32 field
+    #5 float32_field: Float32;
+
+    // StrongFloat32 field
+    #6 strong_float32_field: StrongFloat32;
+
+    // Float64 field
+    #7 float64_field: Float64;
+
+    // StrongFloat64 field
+    #8 strong_float64_field: StrongFloat64;
+
+    // Byte field
+    #9 byte_field: Byte;
+
+    // StrongByte field
+    #10 strong_byte_field: StrongByte;
+  }
+}
+
+// Test schema version 1
+schema FixedArrayUpgradeTestSchemaV1
+{
+  uuid: 9ce8d7dc-5806-49ad-8ffc-5b98f0651634;
+  fields
+  {
+    // Int32 array field (in version 2)
+    #1 int32_array_field: FixedArray<Int64, size=2>;
+
+    // Float64 array field (in version 2)
+    #2 float64_array_field: FixedArray<Float32, size=2>;
+
+    // UUID array field
+    #3 uuid_array_field: FixedArray<Uuid<Int8>, size=2>;
+
+    // Two dimensional array of UInt64 (in version 2)
+    #4 uint64_2d_array_field: FixedArray<FixedArray<UInt32, size=2>, size=2>;
+
+    // Two dimensional array of UpgradedMemberSchemaTypeV2 (in version 2)
+    #5 schema_2d_array_field: FixedArray<FixedArray<UpgradedMemberSchemaTypeV1, size=2>, size=2>;
+
+    // Array of CopyableMemberSchemaTypeV2 (in version 2)
+    #6 schema_array_field: FixedArray<CopyableMemberSchemaTypeV1, size=4>;
+
+    // Array of UpgradedMemberSchemaTypeV2 (in version 2)
+    #7 upgraded_instance_field: UpgradedMemberSchemaTypeV1;
+
+    // Array of Array of Int32 (in version 2)
+    #8 upgraded_fixed_array_field: FixedArray<UInt64, size=2>;
+
+    // Array of CopyableMemberSchemaTypeV2 (in version 2)
+    #9 upgraded_vararray_field: VarArray<CopyableMemberSchemaTypeV1, max_size=2>;
+
+    // Array of Int8 (in version 2)
+    #10 upgraded_varstring_field: VarString<max_size=8>;
+
+    // Array of UUID (in version 2)
+    #11 upgraded_optional_field: Optional<Uuid<Int8>>;
+  }
+}
+
+// Test schema version 1
+schema VarArrayUpgradeTestSchemaV1
+{
+  uuid: 5e63679f-801e-4c18-ab3e-dc972e6b0dc4;
+  fields
+  {
+    // Int32 array field (in version 2)
+    #1 int32_array_field: VarArray<Int64, max_size=2>;
+
+    // Float64 array field (in version 2)
+    #2 float64_array_field: VarArray<Float32, max_size=2>;
+
+    // UUID array field
+    #3 uuid_array_field: VarArray<Uuid<Int8>, max_size=2>;
+
+    // Two dimensional array of UInt64 (in version 2)
+    #4 uint64_2d_array_field: VarArray<VarArray<UInt32, max_size=2>, max_size=2>;
+
+    // Two dimensional array of UpgradedMemberSchemaTypeV2 (in version 2)
+    #5 schema_2d_array_field: VarArray<VarArray<UpgradedMemberSchemaTypeV1, max_size=2>, max_size=2>;
+
+    // Array of CopyableMemberSchemaTypeV2 (in version 2)
+    #6 schema_array_field: VarArray<CopyableMemberSchemaTypeV1, max_size=4>;
+
+    // Array of UpgradedMemberSchemaTypeV2 (in version 2)
+    #7 upgraded_instance_field: UpgradedMemberSchemaTypeV1;
+
+    // Array of CopyableMemberSchemaTypeV2 (in version 2)
+    #8 upgraded_fixed_array_field: FixedArray<CopyableMemberSchemaTypeV1, size=2>;
+
+    // Array of array of Int32 (in version 2)
+    #9 upgraded_vararray_field: VarArray<UInt64, max_size=2>;
+
+    // Array of Int8 (in version 2)
+    #10 upgraded_varstring_field: VarString<max_size=8>;
+
+    // Array of UUID (in version 2)
+    #11 upgraded_optional_field: Optional<Uuid<Int8>>;
+  }
+}
+
+// Test schema version 1
+schema OptionalUpgradeTestSchemaV1
+{
+  uuid: b159890f-36d0-47a5-b991-146f1d631d54;
+  fields
+  {
+    // Int32 optional field (in version 2)
+    #1 int32_optional_field: Optional<Int64>;
+
+    // Float64 optional field (in version 2)
+    #2 float64_optional_field: Optional<Float32>;
+
+    // UUID optional field
+    #3 uuid_optional_field: Optional<Uuid<Int8>>;
+
+    // Optional of UpgradedMemberSchemaTypeV2 (in version 2)
+    #4 schema_optional_field1: Optional<UpgradedMemberSchemaTypeV1>;
+
+    // Optional of CopyableMemberSchemaTypeV2 (in version 2)
+    #5 schema_optional_field2: Optional<CopyableMemberSchemaTypeV1>;
+
+    // Optional VarString (in version 2)
+    #6 upgraded_instance_field: VarString<max_size=8>;
+
+    // Optional CopyableMemberSchemaTypeV2 (in version 2)
+    #7 upgraded_fixed_array_field: FixedArray<CopyableMemberSchemaTypeV1, size=1>;
+
+    // Optional Int32 (in version 2)
+    #8 upgraded_vararray_field: VarArray<UInt64, max_size=2>;
+
+    // Optional Int8 (in version 2)
+    #9 upgraded_varstring_field: VarString<max_size=8>;
+  }
+}
+
+// Test schema version 1
+schema VarStringUpgradeTestSchemaV1
+{
+  uuid: 3ff2d4c2-524b-482f-9cc7-1c42f93d6dba;
+  fields
+  {
+    // VarString<max_size=17> field (in version 2)
+    #1 varstring_17_field: VarString<max_size=27>;
+
+    // VarString<max_size=27> field (in version 2)
+    #2 varstring_27_field: VarString<max_size=17>;
+
+    // VarString<max_size=32> field (in version 2)
+    #3 varstring_32_field: VarString<max_size=64>;
+
+    // VarString<max_size=64> field (in version 2)
+    #4 varstring_64_field: VarString<max_size=32>;
+
+    // VarString<max_size=16> field (in version 2)
+    #5 varstring_16_field: VarString<max_size=16>;
+
+    // VarString<max_size=4> field (in version 2)
+    #6 upgraded_vararray_field: VarArray<Int8, max_size=3>;
+
+    // VarString<max_size=4> field (in version 2)
+    #7 upgraded_fixed_array_field: FixedArray<Int8, size=3>;
+
+    // VarString<max_size=2> field (in version 2)
+    #8 upgraded_optional_field: Optional<Int8>;
+
+    // VarString<max_size=2> field (in version 2)
+    #9 upgraded_int8_field: Int8;
+  }
+}
+
+// Test schema version 1
+schema BuildTimeUpgradeFailureTestSchemaV1
+{
+  uuid: 03c1b006-0952-4527-87ff-c6c634370af0;
+  fields
+  {
+    // Incompatible type (in version 2)
+    #1 float64_field: Int64;
+  }
+}
+
+// Test schema version 1
+schema RunTimeUpgradeFailureTestSchemaV1
+{
+  uuid: f0715006-a4e2-44e0-bf6c-1977f0e5e67c;
+  fields
+  {
+    // Too small for value (in version 2)
+    #1 varstring_field: VarString<max_size=16>;
+  }
+}
+
+// Int8 value enum version 1
+enum Int8ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: Int8;
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema Int8ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: Int8ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: Int8ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: Int8ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: Int8ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: Int8ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: Int8;
+
+    // Initialized to V2 value1
+    #7 field7: Int8;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: Int8;
+
+    // Initialized to V2 value3_1
+    #9 field9: Int8;
+
+    // Initialized to V2 value4
+    #10 field10: Int8;
+  }
+}
+
+// Int16 value enum version 1
+enum Int16ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: Int16;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema Int16ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: Int16ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: Int16ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: Int16ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: Int16ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: Int16ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: Int16;
+
+    // Initialized to V2 value1
+    #7 field7: Int16;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: Int16;
+
+    // Initialized to V2 value3_1
+    #9 field9: Int16;
+
+    // Initialized to V2 value4
+    #10 field10: Int16;
+  }
+}
+
+// Int32 value enum version 1
+enum Int32ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: Int32;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema Int32ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: Int32ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: Int32ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: Int32ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: Int32ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: Int32ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: Int32;
+
+    // Initialized to V2 value1
+    #7 field7: Int32;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: Int32;
+
+    // Initialized to V2 value3_1
+    #9 field9: Int32;
+
+    // Initialized to V2 value4
+    #10 field10: Int32;
+  }
+}
+
+// Int64 value enum version 1
+enum Int64ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: Int64;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema Int64ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: Int64ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: Int64ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: Int64ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: Int64ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: Int64ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: Int64;
+
+    // Initialized to V2 value1
+    #7 field7: Int64;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: Int64;
+
+    // Initialized to V2 value3_1
+    #9 field9: Int64;
+
+    // Initialized to V2 value4
+    #10 field10: Int64;
+  }
+}
+
+// UInt8 value enum version 1
+enum UInt8ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: UInt8;
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt8ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt8ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt8ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt8ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt8ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt8ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt8;
+
+    // Initialized to V2 value1
+    #7 field7: UInt8;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt8;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt8;
+
+    // Initialized to V2 value4
+    #10 field10: UInt8;
+  }
+}
+
+// UInt16 value enum version 1
+enum UInt16ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: UInt16;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt16ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt16ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt16ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt16ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt16ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt16ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt16;
+
+    // Initialized to V2 value1
+    #7 field7: UInt16;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt16;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt16;
+
+    // Initialized to V2 value4
+    #10 field10: UInt16;
+  }
+}
+
+// UInt32 value enum version 1
+enum UInt32ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: UInt32;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt32ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt32ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt32ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt32ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt32ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt32ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt32;
+
+    // Initialized to V2 value1
+    #7 field7: UInt32;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt32;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt32;
+
+    // Initialized to V2 value4
+    #10 field10: UInt32;
+  }
+}
+
+// UInt64 value enum version 1
+enum UInt64ValueEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    underlying_type: UInt64;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt64ValueEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt64ValueEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt64ValueEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt64ValueEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt64ValueEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt64ValueEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt64;
+
+    // Initialized to V2 value1
+    #7 field7: UInt64;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt64;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt64;
+
+    // Initialized to V2 value4
+    #10 field10: UInt64;
+  }
+}
+
+// UInt8 value enum version 1
+enum UInt8BitFlagEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt8BitFlagEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt8BitFlagEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt8BitFlagEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt8BitFlagEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt8BitFlagEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt8BitFlagEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt8;
+
+    // Initialized to V2 value1
+    #7 field7: UInt8;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt8;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt8;
+
+    // Initialized to V2 value4
+    #10 field10: UInt8;
+  }
+}
+
+// UInt16 value enum version 1
+enum UInt16BitFlagEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    bit_flags;
+    underlying_type: UInt16;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt16BitFlagEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt16BitFlagEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt16BitFlagEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt16BitFlagEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt16BitFlagEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt16BitFlagEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt16;
+
+    // Initialized to V2 value1
+    #7 field7: UInt16;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt16;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt16;
+
+    // Initialized to V2 value4
+    #10 field10: UInt16;
+  }
+}
+
+// UInt32 value enum version 1
+enum UInt32BitFlagEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    bit_flags;
+    underlying_type: UInt32;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt32BitFlagEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt32BitFlagEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt32BitFlagEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt32BitFlagEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt32BitFlagEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt32BitFlagEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt32;
+
+    // Initialized to V2 value1
+    #7 field7: UInt32;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt32;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt32;
+
+    // Initialized to V2 value4
+    #10 field10: UInt32;
+  }
+}
+
+// UInt64 value enum version 1
+enum UInt64BitFlagEnumV1
+{
+  uuid: 2a3b5c04-e7a6-4bd1-a2e1-60974438614c;
+
+  options
+  {
+    bit_flags;
+    underlying_type: UInt64;
+    enable_linter_override: "performance-enum-size";
+  }
+
+  values
+  {
+    // Value is 1 in V2
+    #1 value0 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value is 0 in V2
+    #2 value1
+    {
+      underlying_value: 1;
+    }
+
+    // Removed in v2
+    #3 value2
+    {
+      underlying_value: 2;
+    }
+
+    // Name is value3_1 in V2
+    #4 value3
+    {
+      underlying_value: 4;
+    }
+
+    // Value not changed in v2
+    #5 value4
+    {
+      underlying_value: 8;
+    }
+  }
+}
+
+// Test schema version 1
+schema UInt64BitFlagEnumUpgradeTestSchemaV1
+{
+  uuid: af6e4e50-aa1d-4839-9d7c-d4664ed74f42;
+  fields
+  {
+    // Initialized to V1 value0
+    #1 field1: UInt64BitFlagEnumV1;
+
+    // Initialized to V1 value1
+    #2 field2: UInt64BitFlagEnumV1;
+
+    // Initialized to V1 value2 (removed in v2)
+    #3 field3: UInt64BitFlagEnumV1;
+
+    // Initialized to V1 value3
+    #4 field4: UInt64BitFlagEnumV1;
+
+    // Initialized to V1 value4
+    #5 field5: UInt64BitFlagEnumV1;
+
+    // Initialized to V2 value0
+    #6 field6: UInt64;
+
+    // Initialized to V2 value1
+    #7 field7: UInt64;
+
+    // Initialized to V2 value2 (removed in v2)
+    #8 field8: UInt64;
+
+    // Initialized to V2 value3_1
+    #9 field9: UInt64;
+
+    // Initialized to V2 value4
+    #10 field10: UInt64;
+  }
+}
+
+py_target py_test_schema_v1
+{
+  enum Int8ValueEnumV1;
+  enum Int16ValueEnumV1;
+  enum Int32ValueEnumV1;
+  enum Int64ValueEnumV1;
+  enum UInt8ValueEnumV1;
+  enum UInt16ValueEnumV1;
+  enum UInt32ValueEnumV1;
+  enum UInt64ValueEnumV1;
+  enum UInt8BitFlagEnumV1;
+  enum UInt16BitFlagEnumV1;
+  enum UInt32BitFlagEnumV1;
+  enum UInt64BitFlagEnumV1;
+
+  interface Tappy<SmokeTestSchemaV1>;
+  interface Tappy<Int8UpgradeTestSchemaV1>;
+  interface Tappy<Int16UpgradeTestSchemaV1>;
+  interface Tappy<Int32UpgradeTestSchemaV1>;
+  interface Tappy<Int64UpgradeTestSchemaV1>;
+  interface Tappy<UInt8UpgradeTestSchemaV1>;
+  interface Tappy<UInt16UpgradeTestSchemaV1>;
+  interface Tappy<UInt32UpgradeTestSchemaV1>;
+  interface Tappy<UInt64UpgradeTestSchemaV1>;
+  interface Tappy<CopyableMemberSchemaTypeV1>;
+  interface Tappy<UpgradedMemberSchemaTypeV1>;
+  interface Tappy<Float32UpgradeTestSchemaV1>;
+  interface Tappy<Float64UpgradeTestSchemaV1>;
+  interface Tappy<PrimitiveUpgradeTestSchemaV1>;
+  interface Tappy<SyncTimeUpgradeTestSchemaV1>;
+  interface Tappy<DurationUpgradeTestSchemaV1>;
+  interface Tappy<StrongTypeUpgradeTestSchemaV1>;
+  interface Tappy<FixedArrayUpgradeTestSchemaV1>;
+  interface Tappy<VarArrayUpgradeTestSchemaV1>;
+  interface Tappy<OptionalUpgradeTestSchemaV1>;
+  interface Tappy<VarStringUpgradeTestSchemaV1>;
+  interface Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
+  interface Tappy<RunTimeUpgradeFailureTestSchemaV1>;
+  interface Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
+}
+
+nanobind_target test_schema_v1_clk_nb
+{
+  binding Int8ValueEnumV1;
+  binding Int16ValueEnumV1;
+  binding Int32ValueEnumV1;
+  binding Int64ValueEnumV1;
+  binding UInt8ValueEnumV1;
+  binding UInt16ValueEnumV1;
+  binding UInt32ValueEnumV1;
+  binding UInt64ValueEnumV1;
+  binding UInt8BitFlagEnumV1;
+  binding UInt16BitFlagEnumV1;
+  binding UInt32BitFlagEnumV1;
+  binding UInt64BitFlagEnumV1;
+
+  binding Tappy<SmokeTestSchemaV1>;
+  binding Tappy<Int8UpgradeTestSchemaV1>;
+  binding Tappy<Int16UpgradeTestSchemaV1>;
+  binding Tappy<Int32UpgradeTestSchemaV1>;
+  binding Tappy<Int64UpgradeTestSchemaV1>;
+  binding Tappy<UInt8UpgradeTestSchemaV1>;
+  binding Tappy<UInt16UpgradeTestSchemaV1>;
+  binding Tappy<UInt32UpgradeTestSchemaV1>;
+  binding Tappy<UInt64UpgradeTestSchemaV1>;
+  binding Tappy<CopyableMemberSchemaTypeV1>;
+  binding Tappy<UpgradedMemberSchemaTypeV1>;
+  binding Tappy<SchemaUpgradeTestSchemaV1>;
+  binding Tappy<Float32UpgradeTestSchemaV1>;
+  binding Tappy<Float64UpgradeTestSchemaV1>;
+  binding Tappy<PrimitiveUpgradeTestSchemaV1>;
+  binding Tappy<SyncTimeUpgradeTestSchemaV1>;
+  binding Tappy<DurationUpgradeTestSchemaV1>;
+  binding Tappy<StrongTypeUpgradeTestSchemaV1>;
+  binding Tappy<FixedArrayUpgradeTestSchemaV1>;
+  binding Tappy<VarArrayUpgradeTestSchemaV1>;
+  binding Tappy<VarStringUpgradeTestSchemaV1>;
+  binding Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
+  binding Tappy<RunTimeUpgradeFailureTestSchemaV1>;
+  binding Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
+  binding Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
+}
+
+cpp_target test_schema_v1
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  extern
+  {
+    header_file: "clockwork/serialization/cpp/tests/support/strong_type_factory.hh";
+    namespace: clockwork::tests;
+
+    type
+    {
+      name: StrongInt32;
+      factory: make_strong_int32;
+    }
+
+    type
+    {
+      name: StrongInt64;
+      factory: make_strong_int64;
+    }
+
+    type
+    {
+      name: StrongFloat32;
+      factory: make_strong_float32;
+    }
+
+    type
+    {
+      name: StrongFloat64;
+      factory: make_strong_float64;
+    }
+
+    type
+    {
+      name: StrongByte;
+      factory: make_strong_byte;
+    }
+  }
+
+  enum Int8ValueEnumV1;
+  enum Int16ValueEnumV1;
+  enum Int32ValueEnumV1;
+  enum Int64ValueEnumV1;
+  enum UInt8ValueEnumV1;
+  enum UInt16ValueEnumV1;
+  enum UInt32ValueEnumV1;
+  enum UInt64ValueEnumV1;
+  enum UInt8BitFlagEnumV1;
+  enum UInt16BitFlagEnumV1;
+  enum UInt32BitFlagEnumV1;
+  enum UInt64BitFlagEnumV1;
+
+  schema SmokeTestSchemaV1;
+  representation Tachyon<SmokeTestSchemaV1>;
+  interface Tappy<SmokeTestSchemaV1>;
+
+  schema Int8UpgradeTestSchemaV1;
+  representation Tachyon<Int8UpgradeTestSchemaV1>;
+  interface Tappy<Int8UpgradeTestSchemaV1>;
+
+  schema Int16UpgradeTestSchemaV1;
+  representation Tachyon<Int16UpgradeTestSchemaV1>;
+  interface Tappy<Int16UpgradeTestSchemaV1>;
+
+  schema Int32UpgradeTestSchemaV1;
+  representation Tachyon<Int32UpgradeTestSchemaV1>;
+  interface Tappy<Int32UpgradeTestSchemaV1>;
+
+  schema Int64UpgradeTestSchemaV1;
+  representation Tachyon<Int64UpgradeTestSchemaV1>;
+  interface Tappy<Int64UpgradeTestSchemaV1>;
+
+  schema UInt8UpgradeTestSchemaV1;
+  representation Tachyon<UInt8UpgradeTestSchemaV1>;
+  interface Tappy<UInt8UpgradeTestSchemaV1>;
+
+  schema UInt16UpgradeTestSchemaV1;
+  representation Tachyon<UInt16UpgradeTestSchemaV1>;
+  interface Tappy<UInt16UpgradeTestSchemaV1>;
+
+  schema UInt32UpgradeTestSchemaV1;
+  representation Tachyon<UInt32UpgradeTestSchemaV1>;
+  interface Tappy<UInt32UpgradeTestSchemaV1>;
+
+  schema UInt64UpgradeTestSchemaV1;
+  representation Tachyon<UInt64UpgradeTestSchemaV1>;
+  interface Tappy<UInt64UpgradeTestSchemaV1>;
+
+  schema CopyableMemberSchemaTypeV1;
+  representation Tachyon<CopyableMemberSchemaTypeV1>;
+  interface Tappy<CopyableMemberSchemaTypeV1>;
+
+  schema UpgradedMemberSchemaTypeV1;
+  representation Tachyon<UpgradedMemberSchemaTypeV1>;
+  interface Tappy<UpgradedMemberSchemaTypeV1>;
+
+  schema SchemaUpgradeTestSchemaV1;
+  representation Tachyon<SchemaUpgradeTestSchemaV1>;
+  interface Tappy<SchemaUpgradeTestSchemaV1>;
+
+  schema Float32UpgradeTestSchemaV1;
+  representation Tachyon<Float32UpgradeTestSchemaV1>;
+  interface Tappy<Float32UpgradeTestSchemaV1>;
+
+  schema Float64UpgradeTestSchemaV1;
+  representation Tachyon<Float64UpgradeTestSchemaV1>;
+  interface Tappy<Float64UpgradeTestSchemaV1>;
+
+  schema PrimitiveUpgradeTestSchemaV1;
+  representation Tachyon<PrimitiveUpgradeTestSchemaV1>;
+  interface Tappy<PrimitiveUpgradeTestSchemaV1>;
+
+  schema SyncTimeUpgradeTestSchemaV1;
+  representation Tachyon<SyncTimeUpgradeTestSchemaV1>;
+  interface Tappy<SyncTimeUpgradeTestSchemaV1>;
+
+  schema DurationUpgradeTestSchemaV1;
+  representation Tachyon<DurationUpgradeTestSchemaV1>;
+  interface Tappy<DurationUpgradeTestSchemaV1>;
+
+  schema StrongTypeUpgradeTestSchemaV1;
+  representation Tachyon<StrongTypeUpgradeTestSchemaV1>;
+  interface Tappy<StrongTypeUpgradeTestSchemaV1>;
+
+  schema FixedArrayUpgradeTestSchemaV1;
+  representation Tachyon<FixedArrayUpgradeTestSchemaV1>;
+  interface Tappy<FixedArrayUpgradeTestSchemaV1>;
+
+  schema VarArrayUpgradeTestSchemaV1;
+  representation Tachyon<VarArrayUpgradeTestSchemaV1>;
+  interface Tappy<VarArrayUpgradeTestSchemaV1>;
+
+  schema OptionalUpgradeTestSchemaV1;
+  representation Tachyon<OptionalUpgradeTestSchemaV1>;
+  interface Tappy<OptionalUpgradeTestSchemaV1>;
+
+  schema VarStringUpgradeTestSchemaV1;
+  representation Tachyon<VarStringUpgradeTestSchemaV1>;
+  interface Tappy<VarStringUpgradeTestSchemaV1>;
+
+  schema BuildTimeUpgradeFailureTestSchemaV1;
+  representation Tachyon<BuildTimeUpgradeFailureTestSchemaV1>;
+  interface Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
+
+  schema RunTimeUpgradeFailureTestSchemaV1;
+  representation Tachyon<RunTimeUpgradeFailureTestSchemaV1>;
+  interface Tappy<RunTimeUpgradeFailureTestSchemaV1>;
+
+  schema Int8ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<Int8ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
+
+  schema Int16ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<Int16ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
+
+  schema Int32ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<Int32ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
+
+  schema Int64ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<Int64ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
+
+  schema UInt8ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt8ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
+
+  schema UInt16ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt16ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
+
+  schema UInt32ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt32ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
+
+  schema UInt64ValueEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt64ValueEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
+
+  schema UInt8BitFlagEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt8BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
+
+  schema UInt16BitFlagEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt16BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
+
+  schema UInt32BitFlagEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt32BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
+
+  schema UInt64BitFlagEnumUpgradeTestSchemaV1;
+  representation Tachyon<UInt64BitFlagEnumUpgradeTestSchemaV1>;
+  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
+}

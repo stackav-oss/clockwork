@@ -27,8 +27,8 @@ def workspace_root() -> Path:
 
 def sort_build_file(
     file: Path,
-    buildifier: Path = Path("buildifier"),  # pyright: ignore[reportCallInDefaultInitializer] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    buildozer: Path = Path("buildozer"),  # pyright: ignore[reportCallInDefaultInitializer] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    buildifier: Path = Path("buildifier"),  # pyright: ignore[reportCallInDefaultInitializer] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    buildozer: Path = Path("buildozer"),  # pyright: ignore[reportCallInDefaultInitializer] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Sort the given BUILD.bazel file."""
     if file.name != "BUILD.bazel":

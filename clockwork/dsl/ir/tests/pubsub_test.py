@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
@@ -20,14 +21,16 @@ def fs_importer() -> FilesystemImporter:
 
 
 def test_channel(fs_importer: FilesystemImporter) -> None:
-    assert len(pubsub._CHANNEL_REG) == 0  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     module = compiler.compile_source_file(
-        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellomod.clk")), fs_importer
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellomod.clk")),
+        fs_importer,
     )
-    assert len(pubsub._CHANNEL_REG) == 4  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    chan1 = pubsub._CHANNEL_REG["HelloChan"]  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    chan2 = pubsub._CHANNEL_REG["Name that doesn't follow reasonable conventions!"]  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    chan3 = pubsub._CHANNEL_REG["many_publishers"]  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+
+    registry = module.context[pubsub.CHANNEL_REGISTRY_KEY]
+    assert len(registry.channel_registry) == 5
+    chan1 = registry.channel_registry["HelloChan"]
+    chan2 = registry.channel_registry["Name that doesn't follow reasonable conventions!"]
+    chan3 = registry.channel_registry["many_publishers"]
     assert module.inner_scope.lookup("HelloChan") is chan1
     assert module.inner_scope.lookup("AnotherChan") is chan2
     assert module.inner_scope.lookup("MultiPublisherChannel") is chan3

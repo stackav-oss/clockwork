@@ -1,16 +1,15 @@
 use clockwork::diagnostics::report
 
+max_reporter_name: UInt64 = 256;
+
+max_reporters: UInt64 = 400;
+
 // Display information for a reporter
 schema ReporterInfo
 {
   options
   {
     constructor: source_code_order;
-  }
-  parameters
-  {
-    // The maximum name length for a reporter.
-    #1 max_reporter_name: UInt64;
   }
   fields
   {
@@ -32,18 +31,10 @@ schema DatabaseInfo
   {
     constructor: source_code_order;
   }
-  parameters
-  {
-    // The maximum number reporters (cogs and other system components).
-    #1 max_reporters: UInt64;
-    // The maximum name length for a reporter.
-    #2 max_reporter_name: UInt64;
-  }
-
   fields
   {
     // Connections to remote bridge servers.
-    #3 reporters: VarArray<ReporterInfo<max_reporter_name=max_reporter_name>, max_size=max_reporters>;
+    #3 reporters: VarArray<ReporterInfo, max_size=max_reporters>;
   }
 }
 
@@ -57,9 +48,9 @@ cpp_target database_config
   schema ReporterInfo;
   schema DatabaseInfo;
 
-  representation Tachyon<ReporterInfo<max_reporter_name=256>>;
-  representation Tachyon<DatabaseInfo<max_reporters=400, max_reporter_name=256>>;
+  representation Tachyon<ReporterInfo>;
+  representation Tachyon<DatabaseInfo>;
 
-  interface ReporterInfoTap : Tap<Tachyon<ReporterInfo<max_reporter_name=256>>>;
-  interface DatabaseInfoTap : Tap<Tachyon<DatabaseInfo<max_reporters=400, max_reporter_name=256>>>;
+  interface ReporterInfoTap : Tap<Tachyon<ReporterInfo>>;
+  interface DatabaseInfoTap : Tap<Tachyon<DatabaseInfo>>;
 }

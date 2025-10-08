@@ -38,6 +38,7 @@ py_binary(
     deps = [
         ":py_channel_spy",
         "@clockwork_pip//click",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -48,6 +49,7 @@ cc_library(
         "channel_spy_config.inl",
     ],
     hdrs = ["channel_spy_config.hh"],
+    data = [":channel_spy_config_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -84,7 +86,11 @@ clk(
         "spy_config_init_exe.hh",
         "spy_config_init_exe.inl",
     ],
-    deps = [":channel_spy_config_clk"],
+    deps = [
+        ":channel_spy_config_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    ],
 )
 
 cc_library(
@@ -94,10 +100,19 @@ cc_library(
         "channel_spy_config_init_cog.inl",
     ],
     hdrs = ["channel_spy_config_init_cog.hh"],
+    data = [":channel_spy_config_init_clk"],
     deps = [
         ":channel_spy_config_init_cog_dial",
         ":channel_spy_config_init_cog_impl",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -108,6 +123,7 @@ cc_library(
         "channel_spy_config_init_cog_dial.inl",
     ],
     hdrs = ["channel_spy_config_init_cog_dial.hh"],
+    data = [":channel_spy_config_init_clk"],
     deps = [
         ":channel_spy_config",
         "//clockwork/dial:include_common",
@@ -150,7 +166,6 @@ cc_library(
         "//clockwork/pinion:subscriber_handle",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
         "//jewels/std:expected",
         "@boost//:iterator",
         "@fmt",
@@ -166,7 +181,6 @@ py_cc_binding(
         ":channel_spy_config",
         ":types",
         "//clockwork/pinion:subscriber_handle",
-        "//jewels/memory:pointers",
         "@nanobind",
         "@python_3_10//:python_headers",
     ],
@@ -181,6 +195,7 @@ py_library(
         "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/py:protocol",
         "//clockwork/serialization/py:tachyon_dyn_from_metadata",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 

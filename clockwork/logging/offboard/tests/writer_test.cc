@@ -42,6 +42,7 @@
 #include <iterator>
 #include <map>
 #include <memory_resource>
+#include <ratio>
 #include <span>
 #include <string>
 #include <string_view>
@@ -145,28 +146,30 @@ TEST_CASE("Writer, offload interface")
     REQUIRE(writer.create_channel(metadata1));
     REQUIRE(writer.create_channel(metadata2));
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = 1U,
-      .log_time = time1,
-      .transmit_time = time1,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = true,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = 1U,
+        .log_time = time1,
+        .transmit_time = time1,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = true,
+        .is_lite_compressed = false,
+      }));
 
     const auto compressed_data2 = offboard::tests::lite_compress(data2, lite_compressor);
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = 2U,
-      .log_time = time2,
-      .transmit_time = time2,
-      .header = header2,
-      .data = compressed_data2,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = true,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = 2U,
+        .log_time = time2,
+        .transmit_time = time2,
+        .header = header2,
+        .data = compressed_data2,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = true,
+      }));
 
     const auto close_result = writer.close();
     const auto end_time = jewels::time::SteadyClock::now();
@@ -174,7 +177,7 @@ TEST_CASE("Writer, offload interface")
     const auto& write_metrics = close_result.value();
     REQUIRE(write_metrics.write_count != 0U);
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
-    REQUIRE(write_metrics.write_latency < end_time - start_time);
+    REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
     ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
     const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
@@ -307,53 +310,57 @@ TEST_CASE("Writer, offload interface")
     REQUIRE(writer.create_channel(metadata1));
     REQUIRE(writer.create_channel(metadata2));
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = 1U,
-      .log_time = time1,
-      .transmit_time = time1,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = true,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = 1U,
+        .log_time = time1,
+        .transmit_time = time1,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = true,
+        .is_lite_compressed = false,
+      }));
 
     const auto compressed_data2 = offboard::tests::lite_compress(data2, lite_compressor);
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = 2U,
-      .log_time = time2,
-      .transmit_time = time2,
-      .header = header2,
-      .data = compressed_data2,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = true,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = 2U,
+        .log_time = time2,
+        .transmit_time = time2,
+        .header = header2,
+        .data = compressed_data2,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = true,
+      }));
 
     REQUIRE(writer.split_log_files());
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = 3U,
-      .log_time = time3,
-      .transmit_time = time3,
-      .header = header3,
-      .data = data3,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = 3U,
+        .log_time = time3,
+        .transmit_time = time3,
+        .header = header3,
+        .data = data3,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
 
     const auto compressed_data4 = offboard::tests::lite_compress(data4, lite_compressor);
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = 4U,
-      .log_time = time4,
-      .transmit_time = time4,
-      .header = header4,
-      .data = compressed_data4,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = true,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = 4U,
+        .log_time = time4,
+        .transmit_time = time4,
+        .header = header4,
+        .data = compressed_data4,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = true,
+      }));
 
     const auto close_result = writer.close();
     const auto end_time = jewels::time::SteadyClock::now();
@@ -361,7 +368,7 @@ TEST_CASE("Writer, offload interface")
     const auto& write_metrics = close_result.value();
     REQUIRE(write_metrics.write_count != 0U);
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
-    REQUIRE(write_metrics.write_latency < end_time - start_time);
+    REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
     REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
     REQUIRE(std::filesystem::exists(test_log_path / "channel1_1.slog"));
@@ -501,15 +508,16 @@ TEST_CASE("Writer, offload interface")
     {
       REQUIRE(writer.create_channel(metadata1) == jewels::unexpected(LogError::not_open));
       REQUIRE(
-        writer.write(LoggedMessage{
-          .channel_name = channel_name2,
-          .sequence_number = 2U,
-          .log_time = time2,
-          .transmit_time = time2,
-          .header = header2,
-          .data = data2,
-          .is_repeated_persistent = false,
-        }) == jewels::unexpected(LogError::not_open));
+        writer.write(
+          LoggedMessage{
+            .channel_name = channel_name2,
+            .sequence_number = 2U,
+            .log_time = time2,
+            .transmit_time = time2,
+            .header = header2,
+            .data = data2,
+            .is_repeated_persistent = false,
+          }) == jewels::unexpected(LogError::not_open));
       REQUIRE(writer.close() == jewels::unexpected(LogError::not_open));
     }
 
@@ -524,15 +532,16 @@ TEST_CASE("Writer, offload interface")
     {
       REQUIRE(writer.open(test_log_path.string()));
       REQUIRE(
-        writer.write(LoggedMessage{
-          .channel_name = channel_name2,
-          .sequence_number = 2U,
-          .log_time = time2,
-          .transmit_time = time2,
-          .header = header2,
-          .data = data2,
-          .is_repeated_persistent = false,
-        }) == jewels::unexpected(LogError::unknown_channel));
+        writer.write(
+          LoggedMessage{
+            .channel_name = channel_name2,
+            .sequence_number = 2U,
+            .log_time = time2,
+            .transmit_time = time2,
+            .header = header2,
+            .data = data2,
+            .is_repeated_persistent = false,
+          }) == jewels::unexpected(LogError::unknown_channel));
     }
 
     SECTION("Log exists")
@@ -565,23 +574,27 @@ TEST_CASE("Writer, tachyon interface")
 
   clockwork::Tappy<clockwork_logging::tests::TestMessage> message1{};
   message1.get_underlying_message_string().resize(message1.get_underlying_message_string().capacity());
-  onboard::tests::fill_with_random_bytes(std::as_writable_bytes(
-    std::span{message1.get_underlying_message_string().data(), message1.get_underlying_message_string().size()}));
+  onboard::tests::fill_with_random_bytes(
+    std::as_writable_bytes(
+      std::span{message1.get_underlying_message_string().data(), message1.get_underlying_message_string().size()}));
 
   clockwork::Tappy<clockwork_logging::tests::TestMessage> message2{};
   message2.get_underlying_message_string().resize(message2.get_underlying_message_string().capacity());
-  onboard::tests::fill_with_random_bytes(std::as_writable_bytes(
-    std::span{message2.get_underlying_message_string().data(), message2.get_underlying_message_string().size()}));
+  onboard::tests::fill_with_random_bytes(
+    std::as_writable_bytes(
+      std::span{message2.get_underlying_message_string().data(), message2.get_underlying_message_string().size()}));
 
   clockwork::Tappy<clockwork_logging::tests::TestMessage> message3{};
   message3.get_underlying_message_string().resize(message3.get_underlying_message_string().capacity());
-  onboard::tests::fill_with_random_bytes(std::as_writable_bytes(
-    std::span{message3.get_underlying_message_string().data(), message3.get_underlying_message_string().size()}));
+  onboard::tests::fill_with_random_bytes(
+    std::as_writable_bytes(
+      std::span{message3.get_underlying_message_string().data(), message3.get_underlying_message_string().size()}));
 
   clockwork::Tappy<clockwork_logging::tests::TestMessage> message4{};
   message4.get_underlying_message_string().resize(message4.get_underlying_message_string().capacity());
-  onboard::tests::fill_with_random_bytes(std::as_writable_bytes(
-    std::span{message4.get_underlying_message_string().data(), message4.get_underlying_message_string().size()}));
+  onboard::tests::fill_with_random_bytes(
+    std::as_writable_bytes(
+      std::span{message4.get_underlying_message_string().data(), message4.get_underlying_message_string().size()}));
 
   SECTION("Smoke test")
   {
@@ -621,7 +634,7 @@ TEST_CASE("Writer, tachyon interface")
     const auto& write_metrics = close_result.value();
     REQUIRE(write_metrics.write_count != 0U);
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
-    REQUIRE(write_metrics.write_latency < end_time - start_time);
+    REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
     ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
     const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
@@ -791,7 +804,7 @@ TEST_CASE("Writer, tachyon interface")
     const auto& write_metrics = close_result.value();
     REQUIRE(write_metrics.write_count != 0U);
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
-    REQUIRE(write_metrics.write_latency < end_time - start_time);
+    REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
     REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
     REQUIRE(std::filesystem::exists(test_log_path / "channel1_1.slog"));

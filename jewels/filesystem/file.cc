@@ -115,6 +115,7 @@ jewels::expected<size_t, ErrorCode> File::pread(std::span<std::byte> data, off_t
   size_t total = 0;
   for (int retry = max_retries; retry > 0; retry--)
   {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic) pointer arithmetic required for pread api
     const ssize_t ret = ::pread(descriptor(), data.data() + total, data.size() - total, pos);
     if (ret > 0)
     {

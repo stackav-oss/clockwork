@@ -83,7 +83,6 @@ S3ChunkReader::S3ChunkReader(
 
 [[nodiscard]] LogExpected<void> S3ChunkReader::close()
 {
-  return jewels::unexpected(LogError::not_implemented);
   if (is_closed_)
   {
     return jewels::unexpected(LogError::already_closed);

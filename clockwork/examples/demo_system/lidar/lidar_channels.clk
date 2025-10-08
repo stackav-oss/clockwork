@@ -13,5 +13,5 @@ channel LidarSweepChannel
 {
   name: "/lidar/sweep";
   message_type: Tachyon<lidar_message::LidarSweepMessage<lidar_message::points_per_sweep>>;
-  max_num_messages: 10;
+  max_num_messages: 12;
 }

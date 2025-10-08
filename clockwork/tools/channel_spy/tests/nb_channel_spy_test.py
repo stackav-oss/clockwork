@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Channel spy nanobind wrapper test."""
 
@@ -7,7 +8,7 @@ import uuid
 
 import clockwork.tools.channel_spy.nb_channel_spy as channel_spy_impl
 import clockwork.tools.channel_spy.tests.support.nb_test_helper as test_helper
-import jewels.testing.nb_tmp_directory_guard as tmp_directory_guard  # type: ignore[import-untyped]
+import jewels.testing.nb_tmp_directory_guard as tmp_directory_guard
 from clockwork.serialization.metadata import tachyon
 from clockwork.tools.channel_spy.tests.support import test_message_clk_nb as test_message_clk
 
@@ -20,12 +21,12 @@ class TestChannelSpyNanobindClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        _ = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
+        test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
         channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, socket_ns)
 
         assert channel_spy.channels == ["channel_1", "channel_2"]
         assert (
-            tachyon.get_metadata_from_protobuf(channel_spy.schema_definition("channel_1"))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            tachyon.get_metadata_from_protobuf(channel_spy.schema_definition("channel_1"))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             == test_message_clk.TestMessage.get_tachyon_metadata()
         )
 

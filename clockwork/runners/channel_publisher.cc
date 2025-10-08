@@ -3,7 +3,7 @@
 
 #include "clockwork/runners/channel_publisher.hh"
 
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
@@ -22,13 +22,13 @@ namespace clockwork
 {
 ChannelPublisher::ChannelPublisher(
   jewels::memory::MemoryResource memory_resource,
-  jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_publisher_config,
+  jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config,
   const jewels::memory::NonNullSharedPtr<MessageFetcher>& message_fetcher,
   ShmPublisherMap channels,
   bool suppress_schema_mismatch_errors)
   : memory_resource_(std::move(memory_resource)),
     message_fetcher_(message_fetcher),
-    log_publisher_config_(std::move(log_publisher_config)),
+    channel_publisher_config_(std::move(channel_publisher_config)),
     channels_(std::move(channels), memory_resource_),
     channel_publishers_(memory_resource_),
     suppress_schema_mismatch_errors_(suppress_schema_mismatch_errors)
@@ -38,7 +38,7 @@ ChannelPublisher::ChannelPublisher(
 
 jewels::expected<void, jewels::MonoError> ChannelPublisher::initialize()
 {
-  for (const auto& channel_config : log_publisher_config_->get_channels())
+  for (const auto& channel_config : channel_publisher_config_->get_channels())
   {
     auto channel_name = channel_config.get_channel_name();
 

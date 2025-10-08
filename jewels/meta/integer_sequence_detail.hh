@@ -108,4 +108,13 @@ struct IntegerSequenceFlatten<
     typename IntegerSequenceFlatten<IntType, Seq09, Seq10, Tail...>::type>::type;
 };
 
+template <typename IntType, IntType value, typename Seq>
+struct MakeRepeatedIntegerSequence;
+
+template <typename IntType, IntType value, std::size_t... i_n>
+struct MakeRepeatedIntegerSequence<IntType, value, std::index_sequence<i_n...>>
+{
+  using type = std::integer_sequence<IntType, (static_cast<void>(i_n), value)...>;
+};
+
 } // namespace jewels::meta::detail

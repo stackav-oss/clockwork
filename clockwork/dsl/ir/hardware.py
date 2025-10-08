@@ -19,6 +19,7 @@ from clockwork.dsl.ir import (
     typesys,
 )
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 
 def _cpu_set_from_cst(cst_node: cst.CpuSet, module: node.Module) -> list[int]:
@@ -31,7 +32,7 @@ def _cpu_set_from_cst(cst_node: cst.CpuSet, module: node.Module) -> list[int]:
     Returns:
         List of CPUs in the cpu set.
     """
-    assert module.terminals  # noqa: S101 (for mypy)
+    assert module.terminals
     start_cpu = cst_util.int_from_cst(cst_node.child_start_cpu(), module.terminals)
     if maybe_default_end_cpu := cst_node.maybe_end_cpu():
         end_cpu = cst_util.int_from_cst(maybe_default_end_cpu, module.terminals)
@@ -55,6 +56,8 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
     bridge_cpus: list[int]
     # Default CPUs
     default_cpus: list[int]
+    # Logging backup CPU domain
+    logging_backup: CpuDomain | expr.Expr | None
 
     @classmethod
     def from_cst(cls: type[CpuDomain], cst_node: cst.CpuDomain, module: node.Module) -> CpuDomain:
@@ -69,6 +72,7 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
         simplelaunch_srcs: list[str | expr.Expr] = []
         bridge_cpus: list[int] = []
         default_cpus: list[int] = []
+        logging_backup: CpuDomain | expr.Expr | None = None
         if cpu_domain_options := cst_node.maybe_cpu_domain_options():
             if maybe_simplelaunch_node := cpu_domain_options.maybe_simplelaunch_node():
                 simplelaunch_node = expr.Expr.from_cst(maybe_simplelaunch_node.child_node(), module)
@@ -82,6 +86,9 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
                 bridge_cpus = _cpu_set_from_cst(maybe_bridge_cpus.child_cpu_set(), module)
             if maybe_default_cpus := cpu_domain_options.maybe_default_cpus():
                 default_cpus = _cpu_set_from_cst(maybe_default_cpus.child_cpu_set(), module)
+            if maybe_logging_backup := cpu_domain_options.maybe_logging_backup():
+                logging_backup = expr.Expr.from_cst(maybe_logging_backup.child_cpu_domain(), module)
+                typesys.unify(logging_backup.type_info, clkbuiltins.CPU_DOMAIN_TYPE)
 
         result = cls(
             type_info=clkbuiltins.CPU_DOMAIN_TYPE,
@@ -94,6 +101,7 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
             simplelaunch_srcs=simplelaunch_srcs,
             bridge_cpus=bridge_cpus,
             default_cpus=default_cpus,
+            logging_backup=logging_backup,
         )
         module.context[_CPU_DOMAIN_GLOBAL_NAMESPACE_KEY].register(name, result)
         return result
@@ -117,7 +125,15 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
                 raise TypeError(msg)
             simplelaunch_srcs.append(label_val.value)
         self.simplelaunch_srcs = simplelaunch_srcs
+        if isinstance(self.logging_backup, expr.Expr):
+            logging_backup = self.logging_backup.evaluate()
+            assert isinstance(logging_backup, CpuDomain)
+            if logging_backup == self:
+                msg = self.logging_backup.append_error_line("Logging backup must be a different CPU domain")
+                raise TypeError(msg)
+            self.logging_backup = logging_backup
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return f"CpuDomain({self.name})"
@@ -156,7 +172,8 @@ class CpuDomainGlobalNamespaceContext:
 class CpuDomainGlobalNamespaceContextKey(ContextKey[CpuDomainGlobalNamespaceContext]):
     """Compiler context key."""
 
-    def make_default(self, compiler_context: CompilerContext) -> CpuDomainGlobalNamespaceContext:  # noqa: ARG002 (match supertype)
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> CpuDomainGlobalNamespaceContext:
         """Create a default (empty) instance of the context."""
         return CpuDomainGlobalNamespaceContext(cpu_domains={})
 
@@ -187,7 +204,8 @@ class CpuDomainConnectionContext:
 class CpuDomainConnectionKey(ContextKey[CpuDomainConnectionContext]):
     """Compiler context key."""
 
-    def make_default(self, compiler_context: CompilerContext) -> CpuDomainConnectionContext:  # noqa: ARG002 (match supertype)
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> CpuDomainConnectionContext:
         """Create a default (empty) instance of the context."""
         return CpuDomainConnectionContext(lan_nodes={})
 
@@ -280,7 +298,7 @@ class EthernetNode(node.CstNode[cst.EthernetIpv4], node.DocableEntity, typesys.O
             msg = self.append_error_line("Attempt to resolve more than once.")
             raise RuntimeError(msg)  # noqa: TRY004 (resolving twice is a runtime error)
         cpu_domain = self.cpu_domain.evaluate()
-        assert isinstance(cpu_domain, CpuDomain)  # noqa: S101  (for mypy; assured by type unification)
+        assert isinstance(cpu_domain, CpuDomain)
         existing = get_cpu_domain_connection(self.module, cpu_domain)
         if existing is not None:
             msg = self.cpu_domain.append_error_line(f"Multiple LAN connections for {cpu_domain.value_key()}")

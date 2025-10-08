@@ -99,7 +99,7 @@ template <typename FilesystemType>
   {
     return jewels::unexpected(LogError::not_open);
   }
-  const std::lock_guard guard{mutex_};
+  const std::scoped_lock guard{mutex_};
   return current_offset_;
 }
 
@@ -116,7 +116,7 @@ template <typename FilesystemType>
   }
   size_t chunk_offset{};
   {
-    const std::lock_guard guard{mutex_};
+    const std::scoped_lock guard{mutex_};
     chunk_offset = current_offset_;
     current_offset_ += data.size();
   }
@@ -128,7 +128,7 @@ template <typename FilesystemType>
     return jewels::unexpected(to_log_error(write_result.error()));
   }
   const auto end_time = jewels::time::SteadyClock::now();
-  const std::lock_guard guard{mutex_};
+  const std::scoped_lock guard{mutex_};
   write_metrics_.byte_count += data.size();
   ++write_metrics_.write_count;
   write_metrics_.write_latency += end_time - start_time;

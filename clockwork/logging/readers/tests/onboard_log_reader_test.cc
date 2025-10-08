@@ -44,7 +44,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace clockwork_logging
@@ -210,7 +209,7 @@ TEST_CASE("Onboard Log Reader")
         msg.is_lite_compressed = false;
       }
       REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
-      deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg);
+      deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }
 
@@ -242,7 +241,7 @@ TEST_CASE("Onboard Log Reader")
         msg.is_lite_compressed = false;
       }
       REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
-      deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg);
+      deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }
 

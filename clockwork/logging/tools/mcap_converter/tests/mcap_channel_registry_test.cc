@@ -105,55 +105,58 @@ TEST_CASE("McapChannelRegistry")
   using ChannelPair = std::unordered_map<mcap::ChannelId, mcap::ChannelPtr>::value_type;
   REQUIRE_THAT(
     channels,
-    AnyMatch(Predicate<ChannelPair>(
-      [&metadata1, &schemas](const auto& channel_pair)
-      {
-        const auto& channel = *channel_pair.second;
-        const auto& schema = *schemas.at(channel.schemaId);
-        return channel.topic == metadata1.channel_name &&
-               channel.messageEncoding == wise_enum::to_string(metadata1.message_encoding) &&
-               schema.name == metadata1.schema_name &&
-               schema.encoding == wise_enum::to_string(metadata1.schema_encoding) &&
-               schema.data.size() == metadata1.schema_definition.size() &&
-               std::memcmp(
-                 schema.data.data(),
-                 std::span{metadata1.schema_definition.data(), metadata1.schema_definition.size()}.data(),
-                 schema.data.size()) == 0;
-      })));
+    AnyMatch(
+      Predicate<ChannelPair>(
+        [&metadata1, &schemas](const auto& channel_pair)
+        {
+          const auto& channel = *channel_pair.second;
+          const auto& schema = *schemas.at(channel.schemaId);
+          return channel.topic == metadata1.channel_name &&
+                 channel.messageEncoding == wise_enum::to_string(metadata1.message_encoding) &&
+                 schema.name == metadata1.schema_name &&
+                 schema.encoding == wise_enum::to_string(metadata1.schema_encoding) &&
+                 schema.data.size() == metadata1.schema_definition.size() &&
+                 std::memcmp(
+                   schema.data.data(),
+                   std::span{metadata1.schema_definition.data(), metadata1.schema_definition.size()}.data(),
+                   schema.data.size()) == 0;
+        })));
   REQUIRE_THAT(
     channels,
-    AnyMatch(Predicate<ChannelPair>(
-      [&metadata2, &schemas](const auto& channel_pair)
-      {
-        const auto& channel = *channel_pair.second;
-        const auto& schema = *schemas.at(channel.schemaId);
-        return channel.topic == metadata2.channel_name &&
-               channel.messageEncoding == wise_enum::to_string(metadata2.message_encoding) &&
-               schema.name == metadata2.schema_name &&
-               schema.encoding == wise_enum::to_string(metadata2.schema_encoding) &&
-               schema.data.size() == metadata2.schema_definition.size() &&
-               std::memcmp(
-                 schema.data.data(),
-                 std::span{metadata2.schema_definition.data(), metadata2.schema_definition.size()}.data(),
-                 schema.data.size()) == 0;
-      })));
+    AnyMatch(
+      Predicate<ChannelPair>(
+        [&metadata2, &schemas](const auto& channel_pair)
+        {
+          const auto& channel = *channel_pair.second;
+          const auto& schema = *schemas.at(channel.schemaId);
+          return channel.topic == metadata2.channel_name &&
+                 channel.messageEncoding == wise_enum::to_string(metadata2.message_encoding) &&
+                 schema.name == metadata2.schema_name &&
+                 schema.encoding == wise_enum::to_string(metadata2.schema_encoding) &&
+                 schema.data.size() == metadata2.schema_definition.size() &&
+                 std::memcmp(
+                   schema.data.data(),
+                   std::span{metadata2.schema_definition.data(), metadata2.schema_definition.size()}.data(),
+                   schema.data.size()) == 0;
+        })));
   REQUIRE_THAT(
     channels,
-    AnyMatch(Predicate<ChannelPair>(
-      [&metadata3, &schemas](const auto& channel_pair)
-      {
-        const auto& channel = *channel_pair.second;
-        const auto& schema = *schemas.at(channel.schemaId);
-        return channel.topic == metadata3.channel_name &&
-               channel.messageEncoding == wise_enum::to_string(metadata3.message_encoding) &&
-               schema.name == metadata3.schema_name &&
-               schema.encoding == wise_enum::to_string(metadata3.schema_encoding) &&
-               schema.data.size() == metadata3.schema_definition.size() &&
-               std::memcmp(
-                 schema.data.data(),
-                 std::span{metadata3.schema_definition.data(), metadata3.schema_definition.size()}.data(),
-                 schema.data.size()) == 0;
-      })));
+    AnyMatch(
+      Predicate<ChannelPair>(
+        [&metadata3, &schemas](const auto& channel_pair)
+        {
+          const auto& channel = *channel_pair.second;
+          const auto& schema = *schemas.at(channel.schemaId);
+          return channel.topic == metadata3.channel_name &&
+                 channel.messageEncoding == wise_enum::to_string(metadata3.message_encoding) &&
+                 schema.name == metadata3.schema_name &&
+                 schema.encoding == wise_enum::to_string(metadata3.schema_encoding) &&
+                 schema.data.size() == metadata3.schema_definition.size() &&
+                 std::memcmp(
+                   schema.data.data(),
+                   std::span{metadata3.schema_definition.data(), metadata3.schema_definition.size()}.data(),
+                   schema.data.size()) == 0;
+        })));
 }
 
 } // namespace

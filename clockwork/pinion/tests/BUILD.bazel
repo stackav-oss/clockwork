@@ -35,12 +35,14 @@ cc_test(
     name = "bidirectional_udp_test",
     srcs = ["bidirectional_udp_test.cc"],
     deps = [
+        "//clockwork/common:process_description",
         "//clockwork/io:var_packet",
         "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:bidirectional_udp",
         "//clockwork/pinion:buffer",
         "//clockwork/pinion:error",
         "//clockwork/pinion:in_memory_channel",
+        "//clockwork/pinion:io_connection",
         "//clockwork/pinion:publisher_handle",
         "//clockwork/pinion:slot",
         "//clockwork/pinion:sock_opt",
@@ -59,7 +61,9 @@ cc_test(
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
         "//jewels/std:span",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
+        "@gsl//:util",
     ],
 )
 
@@ -74,7 +78,6 @@ cc_test(
         "//clockwork/pinion:slot",
         "//clockwork/pinion/tests/support:mock_buffer",
         "//clockwork/pinion/tests/support:mock_slot",
-        "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/std:span",
         "@boost//:iterator",
@@ -108,10 +111,13 @@ cc_test(
         "//jewels/memory:pmr_unique_ptr",
         "//jewels/memory:pointers",
         "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
         "//jewels/std:expected",
         "//jewels/std:span",
+        "//jewels/uuid",
         "@boost//:iterator",
         "@catch2//:catch2_main",
+        "@gsl//:util",
     ],
 )
 
@@ -121,11 +127,11 @@ cc_test(
     deps = [
         "//clockwork/pinion:in_memory_channel",
         "//clockwork/pinion:io_connection",
-        "//clockwork/pinion:publisher_handle",
         "//clockwork/pinion:subscriber_handle",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_unique_ptr",
         "//jewels/std:expected",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
     ],
 )
@@ -144,6 +150,7 @@ cc_test(
         "//clockwork/pinion:slot",
         "//clockwork/pinion:sock_opt",
         "//clockwork/pinion/detail:socket_payload",
+        "//clockwork/pinion/tests/support:sockets",
         "//jewels/container:compare",
         "//jewels/filesystem:error_code",
         "//jewels/memory:memory_resource",
@@ -153,6 +160,21 @@ cc_test(
         "//jewels/networking:sock_opt",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "optionally_connected_test",
+    srcs = ["optionally_connected_test.cc"],
+    deps = [
+        "//clockwork/pinion/tests/support:optionally_connected_system_lib",  #keep
+        "//clockwork/scaffolding:offline_scaffolding",  #keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
         "@catch2//:catch2_main",
     ],
 )
@@ -183,7 +205,9 @@ cc_test(
         "//jewels/memory:pointers",
         "//jewels/networking:sock_opt",
         "//jewels/std:expected",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
+        "@gsl//:util",
     ],
 )
 
@@ -224,12 +248,12 @@ cc_test(
         "//clockwork/pinion:shm_subscriber",
         "//clockwork/pinion:slot",
         "//clockwork/pinion:subscriber_handle",
-        "//clockwork/pinion/detail:mmap_region",
         "//clockwork/pinion/tests/support:epoll_snooper",
         "//clockwork/pinion/tests/support:pub_sub",
         "//clockwork/pinion/tests/support:tmp_shm_namespace",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:mmap_region",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -296,6 +320,7 @@ cc_test(
         "//clockwork/common:process_description",
         "//clockwork/common/tests/support:fake_epoll_mananger",
         "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:xxh3_checksum",
         "//clockwork/logging/onboard:types",
         "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:buffer",
@@ -308,6 +333,7 @@ cc_test(
         "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:tcp_socket",
         "//clockwork/pinion/tests/support:pub_sub",
+        "//jewels/callsig:outparam",
         "//jewels/container/tap:var_string",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_unique_ptr",
@@ -315,6 +341,7 @@ cc_test(
         "//jewels/networking:sock_opt",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
         "@boost//:iterator",
         "@catch2//:catch2_main",
@@ -338,7 +365,7 @@ cc_test(
     deps = [
         "//clockwork/common:process_description",
         "//clockwork/logging:lite_compressor",
-        "//clockwork/logging/onboard:types",
+        "//clockwork/logging:xxh3_checksum",
         "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:in_memory_channel",
         "//clockwork/pinion:publisher_handle",

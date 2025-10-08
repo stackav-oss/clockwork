@@ -130,14 +130,15 @@ std::vector<TopicMetadata> OffboardLogReader::get_metadata()
   topic_metadata.reserve(metadata_result.value()->size());
   for (const auto metadata : std::views::values(*metadata_result.value()))
   {
-    topic_metadata.push_back(TopicMetadata{
-      .name = std::string{metadata.channel_name},
-      .type = std::string{metadata.schema_name},
-      .message_encoding = metadata.message_encoding,
-      .channel_type = metadata.channel_type,
-      .schema_encoding = metadata.schema_encoding,
-      .schema_definition = std::string{metadata.schema_definition},
-    });
+    topic_metadata.push_back(
+      TopicMetadata{
+        .name = std::string{metadata.channel_name},
+        .type = std::string{metadata.schema_name},
+        .message_encoding = metadata.message_encoding,
+        .channel_type = metadata.channel_type,
+        .schema_encoding = metadata.schema_encoding,
+        .schema_definition = std::string{metadata.schema_definition},
+      });
   }
   std::ranges::sort(topic_metadata, [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
   return topic_metadata;
@@ -177,12 +178,13 @@ LogExpected<LogMetrics> OffboardLogReader::get_metrics()
   log_metrics.topic_metrics.reserve(offboard_metrics.metrics_map.size());
   for (const auto& [channel_name, metrics] : offboard_metrics.metrics_map)
   {
-    log_metrics.topic_metrics.push_back(LoggedTopicMetrics{
-      .topic = std::string(channel_name),
-      .transmit_time_interval = metrics.transmit_time_interval,
-      .message_count = metrics.message_count,
-      .byte_count = metrics.byte_count,
-    });
+    log_metrics.topic_metrics.push_back(
+      LoggedTopicMetrics{
+        .topic = std::string(channel_name),
+        .transmit_time_interval = metrics.transmit_time_interval,
+        .message_count = metrics.message_count,
+        .byte_count = metrics.byte_count,
+      });
   }
   std::ranges::sort(log_metrics.topic_metrics, [](const auto& lhs, const auto& rhs) { return lhs.topic < rhs.topic; });
   return {std::move(log_metrics)};

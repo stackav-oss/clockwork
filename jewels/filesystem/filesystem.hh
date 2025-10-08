@@ -13,11 +13,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
+#include <iterator>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 namespace jewels::filesystem
@@ -55,7 +58,7 @@ public:
     /// File type
     unsigned char d_type;
     /// Filename (null-terminated)
-    char d_name[1]; // NOLINT(modernize-avoid-c-arrays)
+    char d_name[1]; // NOLINT(modernize-avoid-c-arrays) Required by underlying API
   };
 
   /// Struct used to return filesystem space information
@@ -126,10 +129,21 @@ public:
   /// on failure returns an error code indicating the reason for failure
   [[nodiscard]] jewels::expected<void, ErrorCode> touch(std::string_view path);
 
-  /// Creates a new temporary directory in the filesystem, creating parent directories as needed
+  /// Creates a new temporary directory in the filesystem, creating parent directories as needed.
+  /// An environment variable is read to determine a temporary directory when parent_path is not specified.
   /// @return expected containing the path if the temporary directory was created; on failure returns an error code
   /// indicating the reason for failure
-  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> create_temporary_directory();
+  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode>
+  create_temporary_directory(std::optional<filesystem::Path> parent_path = std::nullopt);
+
+  /// Creates a new temporary file in the filesystem, creating parent directories as needed
+  /// An environment variable is read to determine a temporary directory when parent_path is not specified.
+  /// @param[in] parent_path Optional parent path where the temporary file will be created; if not provided, the
+  /// temporary file will be created in the system's default temporary directory
+  /// @return expected containing a pair of the generated file path and open FileDescriptor if the temporary file was
+  /// created; on failure returns an error code indicating the reason for failure
+  [[nodiscard]] jewels::expected<std::pair<filesystem::Path, FileDescriptor>, ErrorCode>
+  create_temporary_file(std::optional<filesystem::Path> parent_path = std::nullopt);
 
   /// Set the last write time of a file
   /// @param[in] file_path File path

@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Basic sanity tests that nanobind target is parsed correctly and the nanobind registry is populated."""
 
@@ -31,7 +32,8 @@ def fs_importer() -> FilesystemImporter:
 
 def test_nanobind_target(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_file(
-        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellomsg.clk")), fs_importer
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellomsg.clk")),
+        fs_importer,
     )
     nanobind_target_ir = module.inner_scope.lookup("hello_msg_clk_nb", recursive=False)
     assert nanobind_target_ir is not None
@@ -50,14 +52,19 @@ def test_nanobind_target(fs_importer: FilesystemImporter) -> None:
     # check the registry
     for binding in nanobind_target_ir.nanobind_bindings:
         assert binding.resolved is not None
-        target_info = lookup_binding(binding.resolved.original_type)
+        target_info = lookup_binding(binding.resolved.original_type, nanobind_target_ir.module.context)
         assert target_info is not None
         assert target_info.target_id.name == "hello_msg_clk_nb"
 
     # enum sanity check
     assert nanobind_target_ir.nanobind_bindings[0].resolved is not None
     assert isinstance(nanobind_target_ir.nanobind_bindings[0].resolved.original_type, clkenum.ResolvedEnum)
-    assert lookup_binding(nanobind_target_ir.nanobind_bindings[0].resolved.original_type) is not None
+    assert (
+        lookup_binding(
+            nanobind_target_ir.nanobind_bindings[0].resolved.original_type, nanobind_target_ir.module.context
+        )
+        is not None
+    )
     nanobind_target_ir.nanobind_bindings[0].resolved.original_type.name = "foo"
 
     # sanity check on the 3 schemas
@@ -258,29 +265,29 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
     # compute target dependencies and check them
     base_a_dependent_targets = get_dependent_targets(
         [binding.get_resolved() for binding in base_a_ir.nanobind_bindings],
-        base_a_ir._get_target_id(),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        base_a_ir._get_target_id(),
     )
     assert base_a_dependent_targets == NanobindDependencies()
 
     base_b_dependent_targets = get_dependent_targets(
         [binding.get_resolved() for binding in base_b_ir.nanobind_bindings],
-        base_b_ir._get_target_id(),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        base_b_ir._get_target_id(),
     )
     assert base_b_dependent_targets == NanobindDependencies()
 
     enum_c_dependent_targets = get_dependent_targets(
         [binding.get_resolved() for binding in enum_c_ir.nanobind_bindings],
-        enum_c_ir._get_target_id(),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        enum_c_ir._get_target_id(),
     )
     assert enum_c_dependent_targets == NanobindDependencies()
 
     derived_dependent_targets = get_dependent_targets(
         [binding.get_resolved() for binding in derived_ir.nanobind_bindings],
-        derived_ir._get_target_id(),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        derived_ir._get_target_id(),
     )
 
     assert derived_dependent_targets == NanobindDependencies(
-        python_targets={other._get_target_id() for other in [base_a_ir, base_b_ir, enum_c_ir]}  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        python_targets={other._get_target_id() for other in [base_a_ir, base_b_ir, enum_c_ir]}
     )
 
     remove_whitespace = str.maketrans("", "", " \t\n")
@@ -298,6 +305,9 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
             ],
             py_deps=[
                 Label("//jewels/nanobind/clk_bindings/common:common_py"),
+            ],
+            data=[
+                Label("//path/to/mod:nanobind_target_test_clk"),
             ],
         )
 
@@ -318,6 +328,9 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
                 py_deps = [
                     '//jewels/nanobind/clk_bindings/common:common_py'
                 ],
+                data=[
+                    '//path/to/mod:nanobind_target_test_clk'
+                ],
             )""".translate(remove_whitespace)
         )
 
@@ -335,6 +348,9 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
             Label("//path/to/mod:base_a_nb"),
             Label("//path/to/mod:base_b_nb"),
             Label("//path/to/mod:enum_c_nb"),
+        ],
+        data=[
+            Label("//path/to/mod:nanobind_target_test_clk"),
         ],
     )
 
@@ -357,6 +373,9 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
                 '//path/to/mod:base_a_nb',
                 '//path/to/mod:base_b_nb',
                 '//path/to/mod:enum_c_nb'
+            ],
+            data=[
+                '//path/to/mod:nanobind_target_test_clk'
             ],
         )""".translate(remove_whitespace)
     )

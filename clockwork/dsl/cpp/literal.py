@@ -68,7 +68,7 @@ def get_factory_fn(type_info: typesys.Value) -> Factory | None:
     return _CPP_FACTORY_REGISTRY.get(type_info.value_key(), None)
 
 
-def decimal_value_to_cpp(value: primitive.DecimalValue) -> types.CppValueExpr:  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+def decimal_value_to_cpp(value: primitive.DecimalValue) -> types.CppValueExpr:
     """Converts a Clockwork numeric value to its C++ representation.
 
     This function formats a value from the Clockwork IR as a string
@@ -131,7 +131,7 @@ def decimal_value_to_cpp(value: primitive.DecimalValue) -> types.CppValueExpr:  
     raise NotImplementedError(msg)
 
 
-def int_to_cpp(value: int, type_info: clkbuiltins.IntegerPrimitiveType) -> types.CppValueExpr:  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+def int_to_cpp(value: int, type_info: clkbuiltins.IntegerPrimitiveType) -> types.CppValueExpr:
     """Converts Python numeric integer to its C++ representation.
 
     See decimal_value_to_cpp for more details.

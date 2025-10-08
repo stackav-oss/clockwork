@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <memory_resource>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -365,6 +366,42 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
       // NOLINTNEXTLINE(concurrency-mt-unsafe) this test is single-threaded
       ::setenv("XDG_SESSION_DIR", old_value, 1);
     }
+  }
+
+  SECTION("create_temporary_file")
+  {
+    // NOLINTNEXTLINE(concurrency-mt-unsafe) this test is single-threaded
+    auto* old_value = std::getenv("XDG_SESSION_DIR");
+    // NOLINTNEXTLINE(concurrency-mt-unsafe) this test is single-threaded
+    ::setenv("XDG_SESSION_DIR", "/tmp/very/long/path/that/does/not/exist/", 1);
+    const auto possible_temporary_file = filesys.create_temporary_file();
+    REQUIRE(possible_temporary_file);
+    REQUIRE(filesys.exists(possible_temporary_file->first.string()) == true);
+    REQUIRE(filesys.is_regular_file(possible_temporary_file->first.string()) == true);
+    if (old_value != nullptr)
+    {
+      // NOLINTNEXTLINE(concurrency-mt-unsafe) this test is single-threaded
+      ::setenv("XDG_SESSION_DIR", old_value, 1);
+    }
+  }
+
+  SECTION("create_temporary_file with absolute parent path")
+  {
+    auto optional_path =
+      std::make_optional<filesystem::Path>(filesystem::Path{"/tmp/foo/really/here", memory_resource});
+    const auto possible_temporary_file = filesys.create_temporary_file(optional_path);
+    REQUIRE(possible_temporary_file);
+    REQUIRE(filesys.exists(possible_temporary_file->first.string()) == true);
+    REQUIRE(filesys.is_regular_file(possible_temporary_file->first.string()) == true);
+  }
+
+  SECTION("create_temporary_file with relative parent path")
+  {
+    auto optional_path = std::make_optional<filesystem::Path>(filesystem::Path{"foo/really/here", memory_resource});
+    const auto possible_temporary_file = filesys.create_temporary_file(optional_path);
+    REQUIRE(possible_temporary_file);
+    REQUIRE(filesys.exists(possible_temporary_file->first.string()) == true);
+    REQUIRE(filesys.is_regular_file(possible_temporary_file->first.string()) == true);
   }
 
   SECTION("Mkdir/Exists/IsFile/IsDir/GetSize/LastWriteTime")

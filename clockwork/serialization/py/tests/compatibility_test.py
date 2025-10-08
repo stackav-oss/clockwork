@@ -1,217 +1,52 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for compatibility module."""
 
 import unittest.mock
-import uuid
 from typing import Any, cast
 
 import pytest
-from clockwork.dsl.ir import clkbuiltins, compiler, schema
-from clockwork.dsl.ir.importer import FilesystemImporter
-from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
+from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.serialization.metadata import tachyon_model
-from clockwork.serialization.py import compatibility, tachyon_dyn
+from clockwork.serialization.py import compatibility, protocol
+from clockwork.serialization.py.tests.support import (
+    py_simple_schema_v1,
+    py_simple_schema_v2,
+    simple_schema_v2_clk_nb,
+)
 
 
-def fs_importer() -> FilesystemImporter:
-    """Create a filesystem importer for tests."""
-    return FilesystemImporter(compile_fn=compiler.compile_source_file)
-
-
-def compile_simple_schema_v1() -> tuple[Any, schema.InstantiatedSchema]:
-    """Compile a simple schema version 1."""
-    schema_source = """
-    // Test schema version 1
-    schema SimpleSchema
-    {
-      uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
-      fields
-      {
-        // Integer field
-        #1 integer_field: Int32;
-      }
-    }
-
-    cpp_target test
-    {
-        options { namespace test; }
-        schema SimpleSchema;
-        representation Tachyon<SimpleSchema>;
-        interface Tappy<SimpleSchema>;
-    }
-    """
-    module = compiler.compile_source_text(schema_source, ModuleID(CLK_REPO, "simple_schema"), importer=fs_importer())
-    schema_ir = module.inner_scope.lookup("SimpleSchema")
-    assert isinstance(schema_ir, schema.Schema)
-    schema_instance = schema.InstantiatedSchema.from_typespec(schema_ir)
-    return module, schema_instance
-
-
-def compile_simple_schema_v2() -> tuple[Any, schema.InstantiatedSchema]:
-    """Compile a simple schema version 2."""
-    schema_source = """
-    // Test schema version 2
-    schema SimpleSchema
-    {
-      uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
-      fields
-      {
-        // Integer field (upgraded)
-        #1 integer_field: Int64;
-        // String field
-        #2 string_field: VarString<max_size=64>;
-      }
-      history
-      {
-        versions: [1, 2];
-      }
-    }
-
-    cpp_target test
-    {
-        options { namespace test; }
-        schema SimpleSchema;
-        representation Tachyon<SimpleSchema>;
-        interface Tappy<SimpleSchema>;
-    }
-    """
-    module = compiler.compile_source_text(schema_source, ModuleID(CLK_REPO, "simple_schema"), importer=fs_importer())
-    schema_ir = module.inner_scope.lookup("SimpleSchema")
-    assert isinstance(schema_ir, schema.Schema)
-    schema_instance = schema.InstantiatedSchema.from_typespec(schema_ir)
-    return module, schema_instance
-
-
-def test_validate_tachyon_types_compatibility_same_version() -> None:
-    """Test validation when metadata versions match."""
-    module_v2, schema_v2 = compile_simple_schema_v2()
-    serdes: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-    expected_class = serdes.py_class
-
-    expected_metadata = expected_class.get_tachyon_metadata()
-
-    # Same metadata should validate without needing upgrade
-    result = compatibility.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=expected_metadata)
-    assert result is False  # No upgrade needed
-
-
-def test_validate_tachyon_types_compatibility_older_version() -> None:
-    """Test validation when incoming metadata is older version."""
-    module_v1, schema_v1 = compile_simple_schema_v1()
-    module_v2, schema_v2 = compile_simple_schema_v2()
-
-    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-
-    expected_class = serdes_v2.py_class
-    incoming_class = serdes_v1.py_class
-
-    expected_metadata = expected_class.get_tachyon_metadata()
-    incoming_metadata = incoming_class.get_tachyon_metadata()
-
-    # Older version should require upgrade
-    result = compatibility.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
-    assert result is True  # Upgrade needed
-
-
-def test_validate_tachyon_types_compatibility_newer_version() -> None:
-    """Test validation when incoming metadata is newer version."""
-    module_v1, schema_v1 = compile_simple_schema_v1()
-    module_v2, schema_v2 = compile_simple_schema_v2()
-
-    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-
-    expected_class = serdes_v1.py_class
-    incoming_class = serdes_v2.py_class
-
-    expected_metadata = expected_class.get_tachyon_metadata()
-    incoming_metadata = incoming_class.get_tachyon_metadata()
-
-    # Newer version should raise ValueError
-    with pytest.raises(ValueError, match="Incoming version is beyond expected version"):
-        compatibility.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
-
-
-def test_validate_tachyon_types_compatibility_different_uuid() -> None:
-    """Test validation when schemas have different UUIDs."""
-    module_v2, schema_v2 = compile_simple_schema_v2()
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-    expected_class = serdes_v2.py_class
-
-    expected_metadata = expected_class.get_tachyon_metadata()
-
-    # Create a modified metadata with different UUID
-    incoming_metadata = tachyon_model.TachyonMetadata(
-        version=0, outer_type_id=expected_metadata.outer_type_id, types=expected_metadata.types[:]
-    )
-
-    # Modify the UUID in the schema type
-    schema_type = cast("tachyon_model.SchemaType", incoming_metadata.types[incoming_metadata.outer_type_id])
-    modified_schema_type = tachyon_model.SchemaType(
-        schema_uuid=uuid.UUID("00000000-0000-0000-0000-000000000000"),
-        fqn=schema_type.fqn,
-        version=schema_type.version,
-        size=schema_type.size,
-        alignment=schema_type.alignment,
-        hash=schema_type.hash,
-        fields=schema_type.fields,
-    )
-    cast("list[Any]", incoming_metadata.types)[incoming_metadata.outer_type_id] = modified_schema_type
-
-    # Different UUID should raise ValueError
-    with pytest.raises(ValueError, match="Tachyon metadata UUID mismatch"):
-        compatibility.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
-
-
-def test_validate_tachyon_types_compatibility_non_schema() -> None:
-    """Test validation when outer type is not a schema."""
-    module_v2, schema_v2 = compile_simple_schema_v2()
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-    expected_class = serdes_v2.py_class
-
-    expected_metadata = expected_class.get_tachyon_metadata()
-
-    # Create a modified metadata with non-schema outer type
-    incoming_metadata = tachyon_model.TachyonMetadata(
-        version=0, outer_type_id=expected_metadata.outer_type_id, types=expected_metadata.types[:]
-    )
-
-    # Replace schema type with non-schema type
-    cast("list[Any]", incoming_metadata.types)[incoming_metadata.outer_type_id] = tachyon_model.BuiltInType(
-        fqn=".Int32", uuid=uuid.uuid5(clkbuiltins.CLOCKWORK_NAMESPACE_UUID, ".Int32"), size=4, alignment=4, arguments=()
-    )
-
-    # Non-schema type should raise TypeError
-    with pytest.raises(TypeError, match="Expected outer type to be a schema"):
-        compatibility.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
-
-
-def test_create_deserializer_no_upgrade_needed() -> None:
+@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+def test_create_deserializer_no_upgrade_needed(
+    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+) -> None:
     """Test creating a deserializer when no upgrade is needed."""
-    module_v2, schema_v2 = compile_simple_schema_v2()
-
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-    expected_class = serdes_v2.py_class
+    if expected_class == py_simple_schema_v2.SimpleSchemaV2:
+        compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
+    else:
+        compiler_context = CompilerContext()
 
     expected_metadata = expected_class.get_tachyon_metadata()
+    assert isinstance(expected_metadata, tachyon_model.TachyonMetadata)
 
     # When metadata versions match, should return the original deserializer
     needs_ugprade, deserializer = compatibility.create_deserializer(
-        module_v2.context, expected_class, expected_metadata, "SimpleSchema"
+        compiler_context, cast("type[protocol.Tachyon[Any]]", expected_class), expected_metadata, "SimpleSchemaV2"
     )
     assert needs_ugprade is False
 
     # Create a test instance and buffer
-    test_instance = expected_class(integer_field=42, string_field="test")
+    test_instance = expected_class()
+    test_instance.integer_field = 42
+    test_instance.string_field = "test"
     buffer = bytearray(expected_class.get_tachyon_constraint().size)
-    test_instance.serialize_tachyon(memoryview(buffer))
+    test_instance.serialize_tachyon(memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
 
     # Verify the deserializer produces the same result as the class method
     result1: Any = deserializer(memoryview(buffer))
-    result2: Any = expected_class.deserialize_tachyon(memoryview(buffer))
+    result2: Any = expected_class.deserialize_tachyon(memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
 
     assert isinstance(result1, expected_class)
     assert isinstance(result2, expected_class)
@@ -219,26 +54,28 @@ def test_create_deserializer_no_upgrade_needed() -> None:
     assert result1.string_field == result2.string_field
 
     # Additionally, verify the deserializer is callable with the same signature
-    assert callable(deserializer)
-    assert deserializer.__code__.co_argcount == expected_class.deserialize_tachyon.__code__.co_argcount
+    if isinstance(test_instance, py_simple_schema_v2.SimpleSchemaV2):
+        assert callable(deserializer)
+        assert deserializer.__code__.co_argcount == expected_class.deserialize_tachyon.__code__.co_argcount
 
 
-def test_create_deserializer_upgrade_needed() -> None:
+@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+def test_create_deserializer_upgrade_needed(
+    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+) -> None:
     """Test creating a deserializer when upgrade is needed."""
-    module_v1, schema_v1 = compile_simple_schema_v1()
-    module_v2, schema_v2 = compile_simple_schema_v2()
+    if expected_class == py_simple_schema_v2.SimpleSchemaV2:
+        compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
+    else:
+        compiler_context = CompilerContext()
 
-    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-
-    incoming_class = serdes_v1.py_class
-    expected_class = serdes_v2.py_class
+    incoming_class = py_simple_schema_v1.SimpleSchemaV1
 
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
     # Create a deserializer that should upgrade from v1 to v2
     needs_upgrade, deserializer = compatibility.create_deserializer(
-        module_v2.context, expected_class, incoming_metadata, "SimpleSchema"
+        compiler_context, cast("type[protocol.Tachyon[Any]]", expected_class), incoming_metadata, "SimpleSchemaV2"
     )
     assert needs_upgrade is True
     # Check that the deserializer is not the original deserialize_tachyon method
@@ -261,14 +98,10 @@ def test_create_deserializer_upgrade_needed() -> None:
 
 def test_create_deserializer_missing_schema_ir() -> None:
     """Test creating a deserializer when schema IR is missing."""
-    module_v1, schema_v1 = compile_simple_schema_v1()
-    module_v2, schema_v2 = compile_simple_schema_v2()
+    compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
 
-    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
-    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
-
-    incoming_class = serdes_v1.py_class
-    expected_class = serdes_v2.py_class
+    incoming_class = py_simple_schema_v1.SimpleSchemaV1
+    expected_class = py_simple_schema_v2.SimpleSchemaV2
 
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
@@ -279,15 +112,14 @@ def test_create_deserializer_missing_schema_ir() -> None:
 
     # Should raise TypeError when trying to create a deserializer
     with pytest.raises(TypeError, match="is missing get_tachyon_schema_ir method"):
-        compatibility.create_deserializer(module_v2.context, mocked_class, incoming_metadata, "SimpleSchema")  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        compatibility.create_deserializer(compiler_context, mocked_class, incoming_metadata, "SimpleSchemaV2")  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
 
 
 def test_create_deserializer_missing_metadata() -> None:
     """Test creating a deserializer when metadata is missing."""
-    module_v1, schema_v1 = compile_simple_schema_v1()
+    compiler_context = py_simple_schema_v1.SimpleSchemaV1.get_tachyon_compiler_context()
 
-    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
-    incoming_class = serdes_v1.py_class
+    incoming_class = py_simple_schema_v1.SimpleSchemaV1
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
     # Create a class that returns None for get_tachyon_metadata
@@ -297,4 +129,4 @@ def test_create_deserializer_missing_metadata() -> None:
 
     # Should raise ValueError when trying to create a deserializer
     with pytest.raises(ValueError, match="No metadata available"):
-        compatibility.create_deserializer(module_v1.context, mocked_class, incoming_metadata, "SimpleSchema")  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        compatibility.create_deserializer(compiler_context, mocked_class, incoming_metadata, "SimpleSchemaV2")  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip

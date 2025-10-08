@@ -1,14 +1,19 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for clockwork generated nanobindings."""
 
+import copy
 import re
 import struct
 from enum import Enum
 
 import pytest
 from clockwork.dsl.tests.support.nanobindable_messages_clk_nb import (
+    AU_METERS32_CONSTANT,
+    AU_METERS64_CONSTANT,
+    INTEGRAL_STRONG_TYPE_CONSTANT,
     SOME_FALSE_CONSTANT,
     SOME_FLOAT32_CONSTANT,
     SOME_FLOAT64_CONSTANT,
@@ -21,6 +26,7 @@ from clockwork.dsl.tests.support.nanobindable_messages_clk_nb import (
     UNTYPED_INT_CONSTANT,
     UNTYPED_STR_CONSTANT,
     UNTYPED_TRUE_CONSTANT,
+    DistinctGenericMessageAlias,
     Foo,
     FooEnum,
     GenericMessageFloat32,
@@ -79,7 +85,7 @@ def test_msg_var_array() -> None:
     assert foo.msg_array  # non-empty
 
     # capacity checks
-    foo.msg_var_array = [SubMessage()] * 10
+    foo.msg_var_array.from_iter([SubMessage()] * 10)
     assert len(foo.msg_var_array) == 10
     with pytest.raises(ValueError, match=r"push_back: Insufficient capacity"):
         foo.msg_var_array.append(SubMessage())
@@ -87,14 +93,12 @@ def test_msg_var_array() -> None:
     assert len(list(foo.msg_var_array)) == 10  # test converting to list
 
     with pytest.raises(
-        TypeError,
-        match=re.escape("""\
-msg_var_array(): incompatible function arguments. The following argument types are supported:
-    1. msg_var_array(self, arg: clockwork.dsl.tests.support.nanobindable_messages_clk_nb.VarArray_clockwork_clockwork_dsl_tests_support_nanobind_bindings_SubMessage_10 | list[clockwork.dsl.tests.support.nanobindable_messages_clk_nb.SubMessage], /) -> None
-
-Invoked with types: clockwork.dsl.tests.support.nanobindable_messages_clk_nb.Foo, list"""),
+        ValueError,
+        match=re.escape(
+            "VarArray<N9clockwork3TapINS_7TachyonIN3foo10SubMessageEEEEE, 10>: push_back: Insufficient capacity [10]."
+        ),
     ):
-        foo.msg_var_array = [SubMessage()] * 11
+        foo.msg_var_array.from_iter([SubMessage()] * 11)
 
 
 def test_prim_var_array() -> None:
@@ -108,23 +112,19 @@ def test_prim_var_array() -> None:
     assert foo.prim_var_array[0] == 22
 
     # capacity checks
-    foo.prim_var_array = [42] * 10
+    foo.prim_var_array.from_iter([42] * 10)
     assert len(foo.prim_var_array) == 10
     with pytest.raises(ValueError, match=r"Insufficient capacity"):
         foo.prim_var_array.append(42)
 
     with pytest.raises(
-        TypeError,
-        match=re.escape("""\
-prim_var_array(): incompatible function arguments. The following argument types are supported:
-    1. prim_var_array(self, arg: clockwork.dsl.tests.support.nanobindable_messages_clk_nb.VarArray_Int32_10 | list[int], /) -> None
-
-Invoked with types: clockwork.dsl.tests.support.nanobindable_messages_clk_nb.Foo, list"""),
+        ValueError,
+        match=re.escape("VarArray<i, 10>: push_back: Insufficient capacity [10]."),
     ):
-        foo.prim_var_array = [42] * 11
+        foo.prim_var_array.from_iter([42] * 11)
 
     # representation checks
-    foo.prim_var_array = [1, 2, 3]
+    foo.prim_var_array.from_iter([1, 2, 3])
     assert str(foo.prim_var_array) == "[1, 2, 3]"
 
 
@@ -245,7 +245,7 @@ def test_optional_msg() -> None:
     assert foo.optional_msg is None
     # try to mutate value that's None and check that it fails and doesn't change state
     with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'int_field'"):
-        foo.optional_msg.int_field = 2  # type: ignore[attr-defined]
+        foo.optional_msg.int_field = 2  # pyright: ignore[reportAttributeAccessIssue]
     assert foo.optional_msg is None
 
 
@@ -430,6 +430,27 @@ def test_eq() -> None:
     foo2.msg_var_array[0].int_field = 2
     assert foo1 == foo2
 
+    # generic message
+    gen1 = GenericMessageFloat32(value=0.0)
+    gen2 = GenericMessageFloat32(value=0.0)
+    assert gen1 == gen2
+    assert not (gen1 != gen2)  # noqa: SIM202, intentionally checking !=
+
+    gen2.value = 22
+    assert gen1 != gen2
+    assert not (gen1 == gen2)  # noqa: SIM201, intentionally checking ==
+    gen1.value = 22
+    assert gen1 == gen2
+
+    # Distinct instantiations of the same templated type always compare false
+    assert GenericMessageFloat32(value=0.0) != DistinctGenericMessageAlias(value=0)
+    assert GenericMessageFloat32(value=0.0) != DistinctGenericMessageAlias(value=1)
+    assert GenericMessageFloat32(value=1.0) != DistinctGenericMessageAlias(value=0)
+
+    assert not (GenericMessageFloat32(value=0.0) == DistinctGenericMessageAlias(value=0))  # noqa: SIM201, intentionally checking ==
+    assert not (GenericMessageFloat32(value=0.0) == DistinctGenericMessageAlias(value=1))  # noqa: SIM201, intentionally checking ==
+    assert not (GenericMessageFloat32(value=1.0) == DistinctGenericMessageAlias(value=0))  # noqa: SIM201, intentionally checking ==
+
 
 def test_eq_wrong_types() -> None:
     """Equality comparisons with type mismatches.
@@ -487,6 +508,11 @@ def test_constant() -> None:
 
     assert SOME_FLOAT32_CONSTANT == 2.2
     assert SOME_FLOAT64_CONSTANT == 2.2
+
+    assert AU_METERS32_CONSTANT == 22.2
+    assert AU_METERS64_CONSTANT == 22.2
+
+    assert INTEGRAL_STRONG_TYPE_CONSTANT == 22
 
     assert UNTYPED_INT_CONSTANT == 22
     assert UNTYPED_FLOAT_CONSTANT == 2.2
@@ -557,3 +583,50 @@ def test_copy_constructor() -> None:
     assert foo_copy is not foo
     foo.prim = 87
     assert foo_copy.prim != foo.prim
+
+
+@pytest.mark.parametrize(
+    "test_deepcopy",
+    [False, True],
+)
+def test_copy_and_deepcopy(test_deepcopy: bool) -> None:
+    """Test __copy__/__deepcopy__."""
+    foo = Foo()
+    foo.prim = 22
+    foo.msg.int_field = 42
+    foo_copy: Foo
+    foo_copy = copy.deepcopy(foo) if test_deepcopy else copy.copy(foo)
+    assert foo_copy.prim == foo.prim
+    assert foo_copy.msg.int_field == foo.msg.int_field
+    assert foo_copy is not foo
+    foo.prim = 87
+    assert foo_copy.prim != foo.prim
+
+
+@pytest.mark.parametrize(
+    "use_default_constructor",
+    [False, True],
+)
+def test_default(use_default_constructor: bool) -> None:
+    """Test default values."""
+    foo: Foo = Foo() if use_default_constructor else Foo.default()
+    assert foo.msg.int_field == 0
+    assert foo.prim == 0
+    assert not foo.msg_var_array
+    assert list(foo.prim_var_array) == []
+    assert foo.msg_array == 10 * [SubMessage(0)]
+    assert foo.prim_array == 10 * [0]
+    assert foo.optional_msg is None
+    assert foo.optional_prim is None
+    assert foo.optional_enum is None
+    assert foo.var_string == ""
+    assert foo.au_meters == 0.0
+    assert foo.optional_au_meters is None
+    assert not foo.au_meters_var_array
+    assert foo.au_meters_array == 10 * [0.0]
+    assert foo.dep_msg.some_val == 0.0
+    assert str(foo.dep_enum) == "OtherEnum.foo"  # intentionally don't import OtherEnum
+    assert foo.dep_array_size == 23 * [0.0]
+    assert foo.array_of_generic_message == 7 * [DistinctGenericMessageAlias(value=0)]
+    assert foo.sync_time == SyncTime()
+    assert foo.duration == Duration()

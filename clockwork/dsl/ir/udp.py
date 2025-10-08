@@ -14,6 +14,7 @@ from typing import Final, TypeAlias
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys, uuid_reg
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 
 class IODirection(Enum):
@@ -106,7 +107,7 @@ class SocketReuseAddress(node.CstNode[cst.SocketReuseAddress]):
         if value not in (clkbuiltins.TRUE_VALUE, clkbuiltins.FALSE_VALUE):
             msg = node.append_error_line(self.cst_node, self.module, "reuse_address should be `true` or `false`")
             raise TypeError(msg)
-        assert isinstance(value, typesys.NamedValue)  # noqa: S101 for mypy
+        assert isinstance(value, typesys.NamedValue)
 
         self.resolved_value = value
 
@@ -157,7 +158,7 @@ class SocketBindToDevice(node.CstNode[cst.SocketBindToInterface]):
         if value not in (clkbuiltins.TRUE_VALUE, clkbuiltins.FALSE_VALUE):
             msg = node.append_error_line(self.cst_node, self.module, "bind_to_interface should be `true` or `false`")
             raise TypeError(msg)
-        assert isinstance(value, typesys.NamedValue)  # noqa: S101 for mypy
+        assert isinstance(value, typesys.NamedValue)
 
         self.resolved_value = value
 
@@ -404,7 +405,7 @@ class UdpSocket(
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
-        assert isinstance(self.message_type, expr.TypeExpression)  # noqa: S101  (for mypy)
+        assert isinstance(self.message_type, expr.TypeExpression)
         message_type = self.message_type.evaluate()
         if not isinstance(message_type, typesys.Instantiation) or message_type.instantiates is not clkbuiltins.TACHYON:
             msg = self.message_type.append_error_line("Only Tachyon message representations are supported here.")
@@ -431,8 +432,8 @@ class UdpSocket(
             f"{self.port.value}",
         ]
         if self.direction == IODirection.bidirectional:
-            assert isinstance(self.remote_address, primitive.IPv4Address)  # noqa: S101  (for mypy)
-            assert isinstance(self.remote_port, primitive.DecimalValue)  # noqa: S101  (for mypy)
+            assert isinstance(self.remote_address, primitive.IPv4Address)
+            assert isinstance(self.remote_port, primitive.DecimalValue)
             address_strs.extend(
                 [
                     self.remote_address.value,
@@ -441,6 +442,7 @@ class UdpSocket(
             )
         return f"{self.direction.name}({':'.join(address_strs)})"
 
+    @override
     def make_instance(
         self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
     ) -> UdpSocketInstance:

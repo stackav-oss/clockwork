@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -49,7 +50,9 @@ using SomeFlags = ::clockwork::testing::SomeFlags;
 using AnotherTag = ::clockwork::testing::separate_tags::AnotherTag;
 using PaddedMsg = ::clockwork::testing::PaddedMsg;
 using SubMsg = ::clockwork::testing::SubMsg;
-using TapMsg = ::clockwork::testing::TapMsg;
+constexpr int32_t signed_value = 234;
+using TapMsg = ::clockwork::testing::TapMsg<signed_value>;
+using TapMsg2 = ::clockwork::testing::TapMsg2;
 template <auto value, class T>
 using GenericSubMsg = ::clockwork::testing::GenericSubMsg<value, T>;
 template <auto value, class T>
@@ -92,9 +95,10 @@ TEST_CASE("Tachyon")
 
     STATIC_REQUIRE(offsetof(Type, array_of_array) == 48UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().array_of_array) == 40UL);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(std::declval<Type>().array_of_array),
-                   ::jewels::tap::VarArray<::jewels::tap::VarString<3U>, 2U>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(std::declval<Type>().array_of_array),
+        ::jewels::tap::VarArray<::jewels::tap::VarString<3U>, 2U>>);
 
     STATIC_REQUIRE(offsetof(Type, array_of_schema) == 88UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().array_of_schema) == 24UL);
@@ -150,33 +154,37 @@ TEST_CASE("Tachyon")
     STATIC_REQUIRE(
       std::is_same_v<decltype(std::declval<Type>().external_strong_type), ::clockwork::external::ExternalStrongType>);
 
-    STATIC_REQUIRE(offsetof(Type, boolean) == 224UL);
+    STATIC_REQUIRE(offsetof(Type, boolean) == 228UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().boolean) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().boolean), bool>);
 
-    STATIC_REQUIRE(offsetof(Type, default_enum) == 225UL);
+    STATIC_REQUIRE(offsetof(Type, default_enum) == 229UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().default_enum) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().default_enum), SomeEnum>);
 
-    STATIC_REQUIRE(offsetof(Type, enum_with_init) == 226UL);
+    STATIC_REQUIRE(offsetof(Type, enum_with_init) == 230UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().enum_with_init) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().enum_with_init), SomeEnum>);
 
-    STATIC_REQUIRE(offsetof(Type, bool_with_init) == 227UL);
+    STATIC_REQUIRE(offsetof(Type, bool_with_init) == 231UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().bool_with_init) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().bool_with_init), bool>);
 
-    STATIC_REQUIRE(offsetof(Type, default_flags) == 228UL);
+    STATIC_REQUIRE(offsetof(Type, default_flags) == 232UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().default_flags) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().default_flags), SomeFlags>);
 
-    STATIC_REQUIRE(offsetof(Type, flags_with_init) == 229UL);
+    STATIC_REQUIRE(offsetof(Type, flags_with_init) == 233UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().flags_with_init) == 1UL);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().flags_with_init), SomeFlags>);
 
-    STATIC_REQUIRE(offsetof(Type, padding_0_) == 230UL);
-    STATIC_REQUIRE(sizeof(std::declval<Type>().padding_0_) == 2UL);
-    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().padding_0_), std::array<std::byte, 2UL>>);
+    STATIC_REQUIRE(offsetof(Type, integer_with_init) == 224UL);
+    STATIC_REQUIRE(sizeof(std::declval<Type>().integer_with_init) == 4UL);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().integer_with_init), int32_t>);
+
+    STATIC_REQUIRE(offsetof(Type, padding_0_) == 234UL);
+    STATIC_REQUIRE(sizeof(std::declval<Type>().padding_0_) == 6UL);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().padding_0_), std::array<std::byte, 6UL>>);
 
     STATIC_REQUIRE(alignof(Type) == 8UL);
     STATIC_REQUIRE(
@@ -191,7 +199,7 @@ TEST_CASE("Tachyon")
                         sizeof(std::declval<Type>().sync_time) + sizeof(std::declval<Type>().strong_type) +
                         sizeof(std::declval<Type>().external_strong_type) + sizeof(std::declval<Type>().optional) +
                         sizeof(std::declval<Type>().array_of_schema) + sizeof(std::declval<Type>().bool_with_init) +
-                        sizeof(std::declval<Type>().padding_0_));
+                        sizeof(std::declval<Type>().integer_with_init) + sizeof(std::declval<Type>().padding_0_));
   }
   SECTION("Generic")
   {
@@ -212,12 +220,13 @@ TEST_CASE("Tachyon")
   }
   SECTION("Generic with sub-schema")
   {
-    using Type = Tachyon<GenericMsg<3UL, Tappy<SubMsg>>>;
+    using Type = Tachyon<GenericMsg<3UL, SubMsg>>;
     STATIC_REQUIRE(offsetof(Type, array_of_parameterized_type) == 0UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().array_of_parameterized_type) == 32UL);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(std::declval<Type>().array_of_parameterized_type),
-                   ::jewels::tap::VarArray<Tappy<SubMsg>, 3UL>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(std::declval<Type>().array_of_parameterized_type),
+        ::jewels::tap::VarArray<Tappy<SubMsg>, 3UL>>);
 
     STATIC_REQUIRE(offsetof(Type, field) == 32UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().field) == 8UL);
@@ -230,13 +239,14 @@ TEST_CASE("Tachyon")
   }
   SECTION("Generic with generic sub-schema")
   {
-    using Type = Tachyon<GenericMsg<3UL, Tappy<GenericSubMsg<3UL, bool>>>>;
+    using Type = Tachyon<GenericMsg<3UL, GenericSubMsg<3UL, bool>>>;
     STATIC_REQUIRE(std::is_same_v<Tap<Type>, ::clockwork::testing::GenericTapMsgAlias>);
     STATIC_REQUIRE(offsetof(Type, array_of_parameterized_type) == 0UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().array_of_parameterized_type) == 56UL);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(std::declval<Type>().array_of_parameterized_type),
-                   ::jewels::tap::VarArray<Tappy<GenericSubMsg<3UL, bool>>, 3UL>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(std::declval<Type>().array_of_parameterized_type),
+        ::jewels::tap::VarArray<Tappy<GenericSubMsg<3UL, bool>>, 3UL>>);
 
     STATIC_REQUIRE(offsetof(Type, field) == 56UL);
     STATIC_REQUIRE(sizeof(std::declval<Type>().field) == 8UL);
@@ -257,7 +267,7 @@ TEST_CASE("Tachyon")
     }
     SECTION("Schema param")
     {
-      using Type = Tachyon<ParamAsField<Tappy<SubMsg>>>;
+      using Type = Tachyon<ParamAsField<SubMsg>>;
       STATIC_REQUIRE(offsetof(Type, value) == 0UL);
       STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Type>().value), Tappy<SubMsg>>);
     }
@@ -311,9 +321,10 @@ TEST_CASE("Methods")
     REQUIRE(msg.get_array_of_primitives().empty());
     SECTION("Modify using get_underlying")
     {
-      STATIC_REQUIRE(std::is_same_v<
-                     decltype(std::declval<Tappy<TapMsg>&>().get_underlying_array_of_primitives()),
-                     ::jewels::tap::VarArray<int32_t, 9>&>);
+      STATIC_REQUIRE(
+        std::is_same_v<
+          decltype(std::declval<Tappy<TapMsg>&>().get_underlying_array_of_primitives()),
+          ::jewels::tap::VarArray<int32_t, 9>&>);
       ::jewels::tap::VarArray<int32_t, 9> var_array{};
       var_array.emplace_back(123);
       msg.get_underlying_array_of_primitives() = var_array;
@@ -336,9 +347,10 @@ TEST_CASE("Methods")
     REQUIRE(msg.get_var_string() == std::string_view{""});
     SECTION("Modify using get_underlying")
     {
-      STATIC_REQUIRE(std::is_same_v<
-                     decltype(std::declval<Tappy<TapMsg>&>().get_underlying_var_string()),
-                     ::jewels::tap::VarString<2UL>&>);
+      STATIC_REQUIRE(
+        std::is_same_v<
+          decltype(std::declval<Tappy<TapMsg>&>().get_underlying_var_string()),
+          ::jewels::tap::VarString<2UL>&>);
       ::jewels::tap::VarString<2UL> var_string{};
       REQUIRE(var_string.try_set("a"));
       msg.get_underlying_var_string() = var_string;
@@ -404,11 +416,305 @@ TEST_CASE("Methods")
         REQUIRE(msg.value_optional() == 456U);
         REQUIRE(msg.value_mutable_optional() == 456U);
       }
+      SECTION("Modify using set from optional")
+      {
+        msg.setopt_optional(std::optional<uint32_t>{567U});
+        REQUIRE(msg.has_optional());
+        REQUIRE(msg.value_optional() == 567U);
+        REQUIRE(msg.value_mutable_optional() == 567U);
+      }
       SECTION("Clear value")
       {
         REQUIRE(msg.has_optional());
         msg.reset_optional();
         REQUIRE(!msg.has_optional());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional());
+        msg.setopt_optional(std::nullopt);
+        REQUIRE(!msg.has_optional());
+      }
+    }
+  }
+}
+
+TEST_CASE("More methods")
+{
+  Tappy<TapMsg2> msg{};
+  SECTION("Optional<FixedArray>")
+  {
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(std::declval<Tappy<TapMsg2>&>().value_optional_fixed_array()),
+        std::span<const uint32_t, 4U>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_fixed_array()),
+        std::span<uint32_t, 4U>>);
+    REQUIRE(!msg.has_optional_fixed_array());
+    REQUIRE_THROWS(msg.value_optional_fixed_array());
+    REQUIRE_THROWS(msg.value_mutable_optional_fixed_array());
+    SECTION("Modify using set")
+    {
+      const std::array<uint32_t, 4U> value1{123U, 234U, 345U, 456U};
+      msg.set_optional_fixed_array(value1);
+      REQUIRE(msg.has_optional_fixed_array());
+      REQUIRE(std::ranges::equal(msg.value_optional_fixed_array(), value1));
+      REQUIRE(std::ranges::equal(msg.value_mutable_optional_fixed_array(), value1));
+      SECTION("Modify using value_mutable")
+      {
+        const std::array<uint32_t, 4U> value2{234U, 345U, 456U, 567U};
+        std::ranges::copy(value2, msg.value_mutable_optional_fixed_array().begin());
+        REQUIRE(msg.has_optional_fixed_array());
+        REQUIRE(std::ranges::equal(msg.value_optional_fixed_array(), value2));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_fixed_array(), value2));
+      }
+      SECTION("Modify using set from std::optional")
+      {
+        const std::array<uint32_t, 4U> value3{345U, 456U, 567U, 678U};
+        msg.setopt_optional_fixed_array(value3);
+        REQUIRE(msg.has_optional_fixed_array());
+        REQUIRE(std::ranges::equal(msg.value_optional_fixed_array(), value3));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_fixed_array(), value3));
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_fixed_array());
+        msg.reset_optional_fixed_array();
+        REQUIRE(!msg.has_optional_fixed_array());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_fixed_array());
+        msg.setopt_optional_fixed_array(std::nullopt);
+        REQUIRE(!msg.has_optional_fixed_array());
+      }
+    }
+  }
+  SECTION("Optional<VarArray>")
+  {
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_optional_var_array()), std::span<const uint32_t>>);
+    STATIC_REQUIRE(
+      std::
+        is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_var_array()), std::span<uint32_t>>);
+    REQUIRE(!msg.has_optional_var_array());
+    REQUIRE_THROWS(msg.value_optional_var_array());
+    REQUIRE_THROWS(msg.value_mutable_optional_var_array());
+    SECTION("Modify using try_set")
+    {
+      const std::array<uint32_t, 4U> value1{123U, 234U, 345U, 456U};
+      REQUIRE(msg.try_set_optional_var_array(value1));
+      REQUIRE(msg.has_optional_var_array());
+      REQUIRE(std::ranges::equal(msg.value_optional_var_array(), value1));
+      REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_array(), value1));
+      SECTION("Modify using value_mutable")
+      {
+        const std::array<uint32_t, 4U> value2{234U, 345U, 456U, 567U};
+        std::ranges::copy(value2, msg.value_mutable_optional_var_array().begin());
+        REQUIRE(msg.has_optional_var_array());
+        REQUIRE(std::ranges::equal(msg.value_optional_var_array(), value2));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_array(), value2));
+      }
+      SECTION("Modify using try_set from std::optional")
+      {
+        const std::array<uint32_t, 4U> value3{345U, 456U, 567U, 678U};
+        REQUIRE(msg.try_setopt_optional_var_array(value3));
+        REQUIRE(msg.has_optional_var_array());
+        REQUIRE(std::ranges::equal(msg.value_optional_var_array(), value3));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_array(), value3));
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_var_array());
+        msg.reset_optional_var_array();
+        REQUIRE(!msg.has_optional_var_array());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_var_array());
+        REQUIRE(msg.try_setopt_optional_var_array(std::nullopt));
+        REQUIRE(!msg.has_optional_var_array());
+      }
+    }
+  }
+  SECTION("Optional<VarString>")
+  {
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_optional_var_string()), std::string_view>);
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_var_string()), std::span<char>>);
+    REQUIRE(!msg.has_optional_var_string());
+    REQUIRE_THROWS(msg.value_optional_var_string());
+    REQUIRE_THROWS(msg.value_mutable_optional_var_string());
+    SECTION("Modify using try_set")
+    {
+      const std::string_view value1 = "123";
+      REQUIRE(msg.try_set_optional_var_string(value1));
+      REQUIRE(msg.has_optional_var_string());
+      REQUIRE(std::ranges::equal(msg.value_optional_var_string(), value1));
+      REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_string(), value1));
+      SECTION("Modify using value_mutable")
+      {
+        const std::string_view value2 = "ABC";
+        std::ranges::copy(value2, msg.value_mutable_optional_var_string().begin());
+        REQUIRE(msg.has_optional_var_string());
+        REQUIRE(std::ranges::equal(msg.value_optional_var_string(), value2));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_string(), value2));
+      }
+      SECTION("Modify using try_set from std::optional")
+      {
+        const std::string_view value3 = "abc";
+        REQUIRE(msg.try_setopt_optional_var_string(value3));
+        REQUIRE(msg.has_optional_var_string());
+        REQUIRE(std::ranges::equal(msg.value_optional_var_string(), value3));
+        REQUIRE(std::ranges::equal(msg.value_mutable_optional_var_string(), value3));
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_var_string());
+        msg.reset_optional_var_string();
+        REQUIRE(!msg.has_optional_var_string());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_var_string());
+        REQUIRE(msg.try_setopt_optional_var_string(std::nullopt));
+        REQUIRE(!msg.has_optional_var_string());
+      }
+    }
+  }
+  SECTION("Optional<Uuid>")
+  {
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_optional_uuid()), const ::jewels::Uuid<SubMsg>&>);
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_uuid()), ::jewels::Uuid<SubMsg>&>);
+    REQUIRE(!msg.has_optional_uuid());
+    REQUIRE_THROWS(msg.value_optional_uuid());
+    REQUIRE_THROWS(msg.value_mutable_optional_uuid());
+    SECTION("Modify using set")
+    {
+      const auto uuid1 = ::jewels::Uuid<SubMsg>::from_string("11111111111111111111111111111111");
+      REQUIRE(uuid1);
+      msg.set_optional_uuid(*uuid1);
+      REQUIRE(msg.has_optional_uuid());
+      REQUIRE(msg.value_optional_uuid() == *uuid1);
+      REQUIRE(msg.value_mutable_optional_uuid() == *uuid1);
+      SECTION("Modify using value_mutable")
+      {
+        const auto uuid2 = ::jewels::Uuid<SubMsg>::from_string("22222222222222222222222222222222");
+        REQUIRE(uuid2);
+        msg.value_mutable_optional_uuid() = *uuid2;
+        REQUIRE(msg.has_optional_uuid());
+        REQUIRE(msg.value_optional_uuid() == *uuid2);
+        REQUIRE(msg.value_mutable_optional_uuid() == *uuid2);
+      }
+      SECTION("Modify using set from optional")
+      {
+        const auto uuid3 = ::jewels::Uuid<SubMsg>::from_string("33333333333333333333333333333333");
+        REQUIRE(uuid3);
+        msg.setopt_optional_uuid(std::optional<::jewels::Uuid<SubMsg>>{*uuid3});
+        REQUIRE(msg.has_optional_uuid());
+        REQUIRE(msg.value_optional_uuid() == *uuid3);
+        REQUIRE(msg.value_mutable_optional_uuid() == *uuid3);
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_uuid());
+        msg.reset_optional_uuid();
+        REQUIRE(!msg.has_optional_uuid());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_uuid());
+        msg.setopt_optional_uuid(std::nullopt);
+        REQUIRE(!msg.has_optional_uuid());
+      }
+    }
+  }
+  SECTION("Optional<Bool>")
+  {
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_optional_bool()), const bool&>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_bool()), bool&>);
+    REQUIRE(!msg.has_optional_bool());
+    REQUIRE_THROWS(msg.value_optional_bool());
+    REQUIRE_THROWS(msg.value_mutable_optional_bool());
+    SECTION("Modify using set")
+    {
+      msg.set_optional_bool(true);
+      REQUIRE(msg.has_optional_bool());
+      REQUIRE(msg.value_optional_bool());
+      REQUIRE(msg.value_mutable_optional_bool());
+      SECTION("Modify using value_mutable")
+      {
+        msg.value_mutable_optional_bool() = false;
+        REQUIRE(msg.has_optional_bool());
+        REQUIRE(!msg.value_optional_bool());
+        REQUIRE(!msg.value_mutable_optional_bool());
+      }
+      SECTION("Modify using set from optional")
+      {
+        msg.setopt_optional_bool(true);
+        REQUIRE(msg.has_optional_bool());
+        REQUIRE(msg.value_optional_bool());
+        REQUIRE(msg.value_mutable_optional_bool());
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_bool());
+        msg.reset_optional_bool();
+        REQUIRE(!msg.has_optional_bool());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_bool());
+        msg.setopt_optional_bool(std::nullopt);
+        REQUIRE(!msg.has_optional_bool());
+      }
+    }
+  }
+  SECTION("Optional<MyStrongType>")
+  {
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_optional_strong_type()), const uint64_t&>);
+    STATIC_REQUIRE(
+      std::is_same_v<decltype(std::declval<Tappy<TapMsg2>&>().value_mutable_optional_strong_type()), uint64_t&>);
+    REQUIRE(!msg.has_optional_strong_type());
+    REQUIRE_THROWS(msg.value_optional_strong_type());
+    REQUIRE_THROWS(msg.value_mutable_optional_strong_type());
+    SECTION("Modify using set")
+    {
+      msg.set_optional_strong_type(1234U);
+      REQUIRE(msg.has_optional_strong_type());
+      REQUIRE(msg.value_optional_strong_type() == 1234U);
+      REQUIRE(msg.value_mutable_optional_strong_type() == 1234U);
+      SECTION("Modify using value_mutable")
+      {
+        msg.value_mutable_optional_strong_type() = 2345U;
+        REQUIRE(msg.has_optional_strong_type());
+        REQUIRE(msg.value_optional_strong_type() == 2345U);
+        REQUIRE(msg.value_mutable_optional_strong_type() == 2345U);
+      }
+      SECTION("Modify using set from optional")
+      {
+        msg.setopt_optional_strong_type(3456U);
+        REQUIRE(msg.has_optional_strong_type());
+        REQUIRE(msg.value_optional_strong_type() == 3456U);
+        REQUIRE(msg.value_mutable_optional_strong_type() == 3456U);
+      }
+      SECTION("Clear value")
+      {
+        REQUIRE(msg.has_optional_strong_type());
+        msg.reset_optional_strong_type();
+        REQUIRE(!msg.has_optional_strong_type());
+      }
+      SECTION("Clear from std::optional")
+      {
+        REQUIRE(msg.has_optional_strong_type());
+        msg.setopt_optional_strong_type(std::nullopt);
+        REQUIRE(!msg.has_optional_strong_type());
       }
     }
   }
@@ -504,7 +810,7 @@ TEST_CASE("Comparsion operators")
     SECTION("optional")
     {
       REQUIRE(!var_a.has_optional());
-      var_a.set_optional({});
+      var_a.set_optional(0U);
       REQUIRE(var_a != var_b);
     }
     SECTION("bool init")

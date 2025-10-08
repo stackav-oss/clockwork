@@ -10,11 +10,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//tools/gazelle/cc_plugin/common",
-        "@@gazelle~//config",
-        "@@gazelle~//label",
-        "@@gazelle~//repo",
-        "@@gazelle~//resolve",
-        "@@gazelle~//rule",
+        "@@gazelle+//config",
+        "@@gazelle+//label",
+        "@@gazelle+//repo",
+        "@@gazelle+//resolve",
+        "@@gazelle+//rule",
         "@org_skia_go_infra//go/util",
     ],
 )
@@ -25,8 +25,8 @@ go_test(
     embed = [":resolver"],
     deps = [
         "//tools/gazelle/cc_plugin/common",
-        "@@gazelle~//label",
-        "@@gazelle~//rule",
+        "@@gazelle+//label",
+        "@@gazelle+//rule",
         "@com_github_stretchr_testify//assert",
     ],
 )

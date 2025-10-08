@@ -1,0 +1,43 @@
+// Test schema version 2
+schema SimpleSchemaV2
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Integer field (upgraded)
+    #2 integer_field: Int64;
+    // String field
+    #3 string_field: VarString<max_size=64>;
+  }
+  history
+  {
+    versions: [1, 3];
+    fields
+    {
+      #1 integer_field: Int64 -> became #2;
+    }
+  }
+}
+
+py_target py_simple_schema_v2
+{
+    interface Tappy<SimpleSchemaV2>;
+}
+
+nanobind_target simple_schema_v2_clk_nb
+{
+  binding Tappy<SimpleSchemaV2>;
+}
+
+cpp_target simple_schema_v2
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  schema SimpleSchemaV2;
+
+  representation Tachyon<SimpleSchemaV2>;
+  interface Tappy<SimpleSchemaV2>;
+}

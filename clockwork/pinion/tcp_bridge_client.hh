@@ -24,6 +24,7 @@
 #include <memory>
 #include <memory_resource>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,6 +39,23 @@ namespace clockwork::pinion
 struct TcpBridgeClient : public AbstractEPollCallback
 {
 public:
+  /// Return values receiving from the socket
+  WISE_ENUM_CLASS_MEMBER(
+    (ReceiveResult, uint8_t),
+    /// The payload for the current state is complete and ready to be processed
+    payload_complete,
+    /// The last call to read from the socket did not block, the client should keep reading
+    keep_reading,
+    /// All input on the socket has been consumed, the client should wait for the next call to notify
+    input_consumed)
+
+  /// Validate header result
+  WISE_ENUM_CLASS_MEMBER((ValidateHeaderResult, uint8_t), null_header, valid, bad_checksum, invalid)
+
+  /// Bridge client state
+  WISE_ENUM_CLASS_MEMBER(
+    (State, uint8_t), disconnected, connecting, idle, receiving_header, receiving_message, searching_for_next_header)
+
   explicit TcpBridgeClient(
     const jewels::memory::MemoryResource& memres,
     jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
@@ -45,7 +63,6 @@ public:
     PublisherHandle&& publisher,
     SubscriberHandle subscriber,
     jewels::filesystem::FileDescriptor&& timer_fd,
-    TcpSocket&& socket,
     jewels::networking::SocketAddress server_address,
     uint64_t min_sequence_number,
     std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters);
@@ -91,27 +108,44 @@ public:
   [[nodiscard]] TcpBridgeClientServerCounters get_and_reset_counters();
 
 private:
-  /// Read messages from the socket into a buffer slots.
-  void receive_messages();
-
   /// Send an acknowledgment so the server knows we received the last message
-  void send_acknowledgement();
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult send_acknowledgement();
 
   /// Set the state to disconnected and start a timer to reconnect to the server
   void set_reconnect_timer();
 
   /// Starts an async connect to the server
-  void start_reconnect();
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult start_reconnect();
 
   /// Completes the async connect to the server
-  void complete_reconnect();
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult complete_reconnect();
 
-  /// Return values for receive_from_socket
-  WISE_ENUM_CLASS_MEMBER((ReceiveResult, uint8_t), (message_complete, 1), (keep_reading, 2), (input_consumed, 3))
+  /// Search for the next message header
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult search_for_next_header();
 
-  /// Process data read from the socket into the current iovec
+  /// Close the current socket and start the reconnect timer
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult close_socket_and_start_reconnect_timer();
+
+  /// Process data read from the socket into current payload
   /// @return True if more data may be available, false if all data has been consumed
   [[nodiscard]] ReceiveResult receive_from_socket();
+
+  /// Validate the header received from the server
+  /// @return Validate result
+  [[nodiscard]] ValidateHeaderResult validate_header();
+
+  /// Receive the message header
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult receive_header();
+
+  /// Receive the message data and tail
+  /// @return Receive result
+  [[nodiscard]] ReceiveResult receive_message();
 
   jewels::memory::ObjectPtr<AbstractEPollManager> epoll_;
   std::pmr::string channel_name_;
@@ -122,27 +156,40 @@ private:
   std::optional<TcpSocket> socket_;
   jewels::networking::SocketAddress server_address_;
 
-  enum class State : uint8_t
-  {
-    disconnected,
-    connecting,
-    idle,
-    receiving_header,
-    receiving_message
-  };
-  State state_{State::idle};
+  State state_{State::disconnected};
 
   TcpMessageHeader header_{};
-  TcpMessageTail tail_{};
 
   // If a prior call to receive_message() only partially part of a full
-  // payload, this member will hold offsets to the unwritten portion of the
-  // reserved buffer slot. In the common case, this should be zeroed out.
-  std::array<struct iovec, 3> iovecs_{};
+  // payload, this member will hold the data for the remaining data to be read.
+  // In the common case, this should be zeroed empty.
+  //
+  // The buffer backing this span depends on the state.
+  //    - If the state is receiving_header then payload_ covers the unread portion of the
+  //      next message header.
+  //    - If the state is receiving_message then payload_ covers the unread portion of the
+  //      next message data and tail.
+  //    - If the state is searching_for_next_header then payload_ covers the header_search_buffer_
+  //      until some data is read from the socket.
+  std::span<std::byte> payload_;
+
+  // Buffer for data left over from a prior header search.
+  std::span<std::byte> header_search_remainder_;
 
   std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters_;
   clockwork_logging::LiteCompressor lite_compressor_;
+
+  // Buffer used to collect the bytes for next message header candidate
+  std::pmr::vector<std::byte> header_search_candidate_;
+
+  /// Message receive buffer
   std::pmr::vector<std::byte> recv_buffer_;
+
+  /// Header search buffer size
+  static constexpr size_t header_search_buffer_size = 65536U;
+
+  /// Header search buffer
+  std::array<std::byte, header_search_buffer_size> header_search_buffer_{};
 
   /// Current message receive timestamp
   jewels::time::SyncTime current_receive_time_;

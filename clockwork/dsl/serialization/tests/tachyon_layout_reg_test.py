@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for tachyon_layout_reg module."""
 
@@ -9,24 +10,28 @@ import pytest
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.ir import clkbuiltins, typesys
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
+from typing_extensions import override
 
 
 # Create a test type that isn't pre-registered in the registry
 class MockType(typesys.TypeVal):
     """Test type for unit tests."""
 
-    def __init__(self, name: str) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str) -> None:
         """Create test type."""
         self.test_name = name
 
+    @override
     def value_key(self) -> str:
         """Return a unique key for this type."""
         return f"TestType:{self.test_name}"
 
+    @override
     def generic_parameters(self) -> Sequence[typesys.Parameter] | None:
         """This is not a generic type."""
         return None
 
+    @override
     def __str__(self) -> str:
         """String representation."""
         return f"TestType({self.test_name})"
@@ -69,14 +74,17 @@ def test_register_with_generic_parameters_raises(compiler_context: CompilerConte
     class GenericTestType(typesys.TypeVal):
         """Test generic type."""
 
+        @override
         def value_key(self) -> str:
             """Return a unique key for this type."""
             return "GenericTestType"
 
+        @override
         def generic_parameters(self) -> Sequence[typesys.Parameter] | None:
             """This is a generic type."""
             return (typesys.Parameter(name="T", type_bound=clkbuiltins.TYPE_TYPE, default=None),)
 
+        @override
         def __str__(self) -> str:
             """String representation."""
             return "GenericTestType<T>"

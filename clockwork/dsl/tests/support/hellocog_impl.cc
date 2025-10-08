@@ -5,7 +5,12 @@
 
 namespace clockwork::testing::cogs
 {
-void execute_cog(HelloCogDial& /*dial*/) {}
+
+void execute_cog(HelloCogDial& /*dial*/)
+{
+}
+
+void execute_cog(HelloCogWithMetricsDial& /*dial*/) {}
 void execute_cog(HelloInitDial& /*dial*/) {}
 void execute_cog(HelloInit2Dial& /*dial*/) {}
 } // namespace clockwork::testing::cogs

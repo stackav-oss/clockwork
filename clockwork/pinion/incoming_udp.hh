@@ -49,6 +49,7 @@ protected:
   /// @param host The address to connect to
   /// @param port The port to connect to
   IncomingUdpImpl(
+    jewels::Uuid<common::EndpointClassId> publisher_id,
     std::pmr::vector<::iovec>&& io_vecs,
     std::pmr::vector<::mmsghdr>&& mmsg_hdrs,
     std::pmr::vector<::sockaddr_in>&& msg_names,
@@ -60,7 +61,8 @@ protected:
 
   /// Connect the publisher
   /// @param publisher Publisher handle to be connected
-  [[nodiscard]] jewels::expected<void, IoConnection::Error> connect_publisher_impl(pinion::PublisherHandle&& publisher);
+  [[nodiscard]] jewels::expected<void, IoConnection::Error>
+  connect_publisher_impl(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle&& publisher);
 
   /// Register as an epoll callback so that it can be a callback when there are incoming packets
   /// @param manager Epoll manager to register with
@@ -73,6 +75,7 @@ private:
   /// Reserve a new batch.  Pass in the publisher handle to avoid extra optional checks.
   jewels::expected<void, ReserveError> reserve_new_batch(pinion::PublisherHandle& publisher_handle);
 
+  jewels::Uuid<common::EndpointClassId> publisher_id_;
   std::optional<pinion::PublisherHandle> publisher_;
   std::optional<pinion::BatchReservedSlot> reserved_batch_;
   std::pmr::vector<::iovec> io_vecs_;
@@ -107,6 +110,7 @@ public:
   template <jewels::networking::SockOption... options>
   static jewels::expected<jewels::memory::NonNullSharedPtr<IncomingUdp<Msg>>, jewels::filesystem::ErrorCode> try_make(
     jewels::memory::MemoryResource memres,
+    jewels::Uuid<common::EndpointClassId> publisher_id,
     jewels::networking::SocketEndpoint socket_endpoint,
     size_t batch_size,
     const SockOptionValue<options>&... sock_option_values);
@@ -132,7 +136,8 @@ public:
   [[nodiscard]] jewels::expected<void, jewels::MonoError> register_with(AbstractEPollManager& manager) final;
 
   /// Connect the publisher.
-  [[nodiscard]] jewels::expected<void, IoConnection::Error> connect_publisher(pinion::PublisherHandle publisher) final;
+  [[nodiscard]] jewels::expected<void, IoConnection::Error>
+  connect_publisher(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle publisher) final;
 
 private:
   /// Constructor
@@ -142,6 +147,7 @@ private:
   /// @param msg_names Preallocated socketaddr_in s for use with mmesg syscalls.
   /// @param socket_endpoint The address and port to connect to.
   IncomingUdp(
+    jewels::Uuid<common::EndpointClassId> publisher_id,
     jewels::filesystem::FileDescriptor&& file_descriptor,
     std::pmr::vector<::iovec>&& io_vecs,
     std::pmr::vector<::mmsghdr>&& mmsg_hdrs,

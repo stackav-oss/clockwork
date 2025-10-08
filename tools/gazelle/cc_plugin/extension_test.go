@@ -386,7 +386,7 @@ func fix_runfiles_path(path string) string {
 		return runfilesPath
 	}
 	// Assume this test is run not as the root module.
-	return filepath.Join(bazel.RunfilesDir(), "../clockwork~", path)
+	return filepath.Join(bazel.RunfilesDir(), "../clockwork+", path)
 }
 
 // test runs Gazelle on a temporary directory with the given input files, and asserts that Gazelle

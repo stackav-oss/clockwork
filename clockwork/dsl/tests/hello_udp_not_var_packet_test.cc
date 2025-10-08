@@ -34,9 +34,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(IncomingUdpSocket::port == 0U);
     const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
     auto maybe_socket = IncomingUdpSocket::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_socket)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<NotVarPacket>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_socket)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<NotVarPacket>>>>);
     REQUIRE(maybe_socket);
   }
   SECTION("Outgoing")
@@ -48,9 +49,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(OutgoingUdpSocket::port == 0U);
     const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
     auto maybe_socket = OutgoingUdpSocket::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_socket)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<NotVarPacket>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_socket)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<NotVarPacket>>>>);
     REQUIRE(maybe_socket);
   }
 }

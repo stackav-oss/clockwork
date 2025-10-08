@@ -6,21 +6,37 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from clockwork.dsl import cst
 from clockwork.dsl.cpp import types
-from clockwork.dsl.cpp.context import Header
+from clockwork.dsl.cpp.context import Header, MaybeHeader
 from clockwork.dsl.ir import (
     clkbuiltins,
     expr,
     node,
     primitive,
     typesys,
+    uuid_reg,
 )
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span
 from clockwork.dsl.ir.message_type import MessageTypeMixin, resolve_schema_interface
 from clockwork.dsl.ir.module_id import CLK_REPO
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from clockwork.dsl.ir.cog_components import InputDef, OutputDef
+
+
+@dataclass
+class DiagnosticsSignalDef:
+    """Information needed for a infra-defined signal."""
+
+    name: str
+    type: str
+    detector: str
+    fault_id: int
 
 
 @dataclass
@@ -51,7 +67,7 @@ class DiagnosticsDef(
         else:
             name = "diagnostics"
         if parent_scope.lookup("DiagnosticsReport") is None:
-            msg = 'Could not find DiagnosticsReport type, did you "use @clockwork::clockwork::diagnostics::report::Report as DiagnosticsReport;"?'
+            msg = 'Could not find DiagnosticsReport type, did you "use @clockwork::clockwork::diagnostics::report::Report as DiagnosticsReport"?'
             raise TypeError(msg)
         message_type = expr.Expr.from_str("Tap<Tachyon<DiagnosticsReport>>", module)
         result = cls(
@@ -79,7 +95,7 @@ class DiagnosticsDef(
         return result
 
     def _handle_param(self, cst_node: cst.DiagnosticsParam, seen_params: set[str]) -> None:
-        assert self.module.terminals is not None  # noqa: S101  (for mypy)
+        assert self.module.terminals is not None
         name = get_span(name_span := cst_node.child_param().child_value(), self.module.terminals)
         if name in seen_params:
             msg = f"Parameter '{name}' specified more than once:\n" + format_line_with_error(
@@ -122,6 +138,41 @@ class DiagnosticsDef(
 
 
 @dataclass
+class InfraDiagnosticsDef(typesys.NamedAttribute):
+    """Class for infra diagnostics."""
+
+    inputs: Iterable[InputDef]
+    outputs: Iterable[OutputDef]
+    signals: list[DiagnosticsSignalDef] | None
+
+    @classmethod
+    def make(
+        cls: type[InfraDiagnosticsDef],
+        module: node.Module,
+        parent_scope: node.Scope,
+        inputs: Iterable[InputDef],
+        outputs: Iterable[OutputDef],
+    ) -> InfraDiagnosticsDef:
+        """Make infra diagnostics."""
+        result = cls(
+            name=COG_INFRA_DIAGS_GROUP_NAME,
+            scope=parent_scope,
+            type_info=clkbuiltins.COG_CONFIG_TYPE,
+            inputs=list(inputs),
+            outputs=list(outputs),
+            signals=None,
+        )
+        uuid_reg.register_entity_with_stable_key(module.context, result)
+        return result
+
+    def resolve(self) -> None:
+        """Perform finalization of the IR."""
+        for i in (i for j in (self.inputs, self.outputs) for i in j):
+            i.resolve()
+        self.signals = []
+
+
+@dataclass
 class DiagnosticsInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAttribute):
     """An instantiation of a diagnostics source."""
 
@@ -160,16 +211,25 @@ REPORT_DEFS_HEADER: Final = Header(CLK_REPO, "clockwork/diagnostics/report_defin
 
 IMPL_HEADER: Final = Header(CLK_REPO, "clockwork/diagnostics/reporter.hh")
 
+# This redirects to the common shim, since all cog now nominally need this
+MANAGER_IMPL_HEADER: Final = Header(CLK_REPO, "clockwork/cog/include_common.hh")
+
+NAMESPACE: Final = "clockwork::diagnostics"
+
+COG_INFRA_DIAGS_GROUP_NAME: Final = "cog_infra_diagnostics"
+
+COG_INFRA_DIAGS_GROUP_DEF_NAME: Final = "CogInfraDiagnosticsSignalDefs"
+
 SIGNAL_GROUP_ID: Final = types.CppType(
     includes=[REPORT_DEFS_HEADER],
     type_name="SignalGroupId",
-    cpp_namespace="clockwork::diagnostics",
+    cpp_namespace=NAMESPACE,
 )
 
 SIGNAL_GROUP_TEMPLATE: Final = types.CppTemplate(
     includes=[REPORT_DEFS_HEADER],
     template_name="SignalGroup",
-    cpp_namespace="clockwork::diagnostics",
+    cpp_namespace=NAMESPACE,
 )
 
 
@@ -187,7 +247,7 @@ def group_type(group_id_enum: types.CppScopedType) -> types.CppTemplateType:
     return SIGNAL_GROUP_TEMPLATE.instantiate([group_id_enum])
 
 
-def group_instance_id_type(group_type: types.CppTypeExpr) -> types.CppScopedType:  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+def group_instance_id_type(group_type: types.CppTypeExpr) -> types.CppScopedType:
     """Get nested instance type for signal group type."""
     return types.CppScopedType(
         scope=group_type,
@@ -196,7 +256,7 @@ def group_instance_id_type(group_type: types.CppTypeExpr) -> types.CppScopedType
     )
 
 
-def instance_id(instance_id_type: types.CppTypeExpr, instance_id_name: str) -> types.CppScopedValue:  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+def instance_id(instance_id_type: types.CppTypeExpr, instance_id_name: str) -> types.CppScopedValue:
     """Get instance id enum value."""
     return types.CppScopedValue(
         scope=instance_id_type,
@@ -208,3 +268,10 @@ def instance_id(instance_id_type: types.CppTypeExpr, instance_id_name: str) -> t
 def to_instance_id(group_id_name: str, instance_id_name: str) -> types.CppScopedValue:
     """Convert group id and instance id names to an instance id enum value."""
     return instance_id(group_instance_id_type(group_type(group_id(group_id_name))), instance_id_name)
+
+
+def infra_defs_header_from_dial_header(dial_header: types.Header) -> MaybeHeader:
+    """Generates a MaybeHeader for the expected infrastructure diagnostic fault thresholds based on the dial_header."""
+    return MaybeHeader(
+        dial_header.repo, dial_header.path.with_name(dial_header.path.name.replace("_dial.hh", "_diags.hh"))
+    )

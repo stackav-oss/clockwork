@@ -58,6 +58,7 @@ protected:
   /// @param address The address structure associated with the remote host
   /// @param holding_buffer Staging buffer
   OutgoingUdpImpl(
+    jewels::Uuid<common::EndpointClassId> subscriber_id,
     jewels::networking::SocketEndpoint socket_endpoint,
     jewels::networking::SocketAddress address,
     jewels::memory::pmr_unique_ptr<Msg>&& holding_buffer);
@@ -68,7 +69,8 @@ protected:
 
   /// Connect the subscriber
   /// @param subscriber Subscriber handle to be connected
-  jewels::expected<void, IoConnection::Error> connect_subscriber_impl(pinion::SubscriberHandle& subscriber);
+  jewels::expected<void, IoConnection::Error>
+  connect_subscriber_impl(jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle& subscriber);
 
 private:
   /// Helper function to write a specific range of messages to the socket.
@@ -76,6 +78,8 @@ private:
   /// @param available The range of messages to write.
   void write(pinion::SubscriberHandle& subscriber, std::ranges::subrange<BufferIterator> available, int socket_fd);
 
+  // Class ID for the subscriber endpoint.
+  jewels::Uuid<common::EndpointClassId> subscriber_id_;
   /// A subscriber handle to read from.
   std::optional<pinion::SubscriberHandle> subscriber_;
   /// Socket address and port
@@ -115,6 +119,7 @@ public:
   template <jewels::networking::SockOption... options>
   static jewels::expected<jewels::memory::NonNullSharedPtr<OutgoingUdp<Msg>>, jewels::filesystem::ErrorCode> try_make(
     jewels::memory::MemoryResource memres,
+    jewels::Uuid<common::EndpointClassId> subscriber_id,
     jewels::networking::SocketEndpoint socket_endpoint,
     const SockOptionValue<options>&... sock_option_values);
 
@@ -137,7 +142,7 @@ public:
 
   /// Connect the subscriber.
   [[nodiscard]] jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
-  connect_subscriber(pinion::SubscriberHandle subscriber) final;
+  connect_subscriber(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber) final;
 
 private:
   /// Constructor
@@ -146,6 +151,7 @@ private:
   /// @param address The address structure associated with the remote host
   /// @param holding_buffer Staging buffer
   OutgoingUdp(
+    jewels::Uuid<common::EndpointClassId> subscriber_id,
     jewels::filesystem::FileDescriptor&& file_descriptor,
     jewels::networking::SocketEndpoint socket_endpoint,
     jewels::networking::SocketAddress address,

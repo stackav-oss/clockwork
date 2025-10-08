@@ -49,6 +49,11 @@ public:
   [[nodiscard]] jewels::expected<void, jewels::MonoError>
   set_handle(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle handle);
 
+  /// Set up a condition for an endpoint without a subscriber handle
+  /// @param[in] endpoint_id UUID of the endpoint to set up the condition for
+  /// @return Success if condition was set up successfully, error otherwise
+  jewels::expected<void, jewels::MonoError> set_condition(jewels::Uuid<common::EndpointClassId> endpoint_id);
+
   /// Construct the ConditionTypes for the subscribers.
   /// @return tuple with all subscriber conditions
   [[nodiscard]] ConditionsTuple make_conditions() const;

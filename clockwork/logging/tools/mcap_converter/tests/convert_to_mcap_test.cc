@@ -154,7 +154,7 @@ TEST_CASE("Convert to MCAP")
   while (auto msg = reader->next_message())
   {
     REQUIRE(msg);
-    deserialize_tachyon(actual_msgs[std::string(msg->topic)].emplace_back(), *msg);
+    deserialize_tachyon(actual_msgs[std::string(msg->topic)].emplace_back(), msg->data);
   }
 
   REQUIRE(msgs == actual_msgs);

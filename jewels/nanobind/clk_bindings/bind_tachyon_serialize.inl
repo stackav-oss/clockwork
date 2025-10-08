@@ -62,10 +62,11 @@ void tappy_to_ndarray(const clockwork::Tappy<SchemaT>& value, ndarray_type& memo
 {
   if (sizeof(clockwork::Tappy<SchemaT>) != memoryview_handle.nbytes())
   {
-    throw std::runtime_error(fmt::format(
-      "serialize_tachyon: sizeof(clockwork::Tappy<T>) {} != memoryview size {}",
-      sizeof(clockwork::Tappy<SchemaT>),
-      memoryview_handle.nbytes()));
+    throw std::runtime_error(
+      fmt::format(
+        "serialize_tachyon: sizeof(clockwork::Tappy<T>) {} != memoryview size {}",
+        sizeof(clockwork::Tappy<SchemaT>),
+        memoryview_handle.nbytes()));
   }
 
   const std::span<const uint8_t, sizeof(clockwork::Tappy<SchemaT>)> message_span = detail::make_tappy_span(value);
@@ -79,10 +80,11 @@ void ndarray_to_tappy(clockwork::Tappy<SchemaT>& value, const const_ndarray_type
 {
   if (sizeof(clockwork::Tappy<SchemaT>) != memoryview_handle.nbytes())
   {
-    throw std::runtime_error(fmt::format(
-      "serialize_tachyon: sizeof(clockwork::Tappy<T>) {} != memoryview size {}",
-      sizeof(clockwork::Tappy<SchemaT>),
-      memoryview_handle.nbytes()));
+    throw std::runtime_error(
+      fmt::format(
+        "serialize_tachyon: sizeof(clockwork::Tappy<T>) {} != memoryview size {}",
+        sizeof(clockwork::Tappy<SchemaT>),
+        memoryview_handle.nbytes()));
   }
 
   const std::span<const uint8_t, sizeof(clockwork::Tappy<SchemaT>)> ndarray_span =
@@ -145,26 +147,31 @@ void bind_tachyon_constraint_and_metadata(
   ::nanobind::class_<clockwork::Tappy<SchemaT>>& cls,
   std::string_view tachyon_metadata_name,
   const int64_t tachyon_constraint_size,
-  const int64_t tachyon_constraint_alignment)
+  const int64_t tachyon_constraint_alignment,
+  std::string_view tachyon_module_name,
+  std::string_view tachyon_source_file_name,
+  std::string_view tachyon_class_name)
 {
   namespace nb = ::nanobind;
 
   // Sanity check size.
   if (tachyon_constraint_size != sizeof(clockwork::Tappy<SchemaT>))
   {
-    throw std::runtime_error(fmt::format(
-      "Error: tachyon_constraint.size {} != sizeof(clockwork::Tappy<SchemaT>) {}",
-      tachyon_constraint_size,
-      sizeof(clockwork::Tappy<SchemaT>)));
+    throw std::runtime_error(
+      fmt::format(
+        "Error: tachyon_constraint.size {} != sizeof(clockwork::Tappy<SchemaT>) {}",
+        tachyon_constraint_size,
+        sizeof(clockwork::Tappy<SchemaT>)));
   }
 
   // Sanity check alignment.
   if (tachyon_constraint_alignment != alignof(clockwork::Tappy<SchemaT>))
   {
-    throw std::runtime_error(fmt::format(
-      "Error: tachyon_constraint.alignment {} != alignof(clockwork::Tappy<SchemaT>) {}",
-      tachyon_constraint_alignment,
-      alignof(clockwork::Tappy<SchemaT>)));
+    throw std::runtime_error(
+      fmt::format(
+        "Error: tachyon_constraint.alignment {} != alignof(clockwork::Tappy<SchemaT>) {}",
+        tachyon_constraint_alignment,
+        alignof(clockwork::Tappy<SchemaT>)));
   }
 
   // store the metadata name as a class attribute
@@ -201,8 +208,9 @@ void bind_tachyon_constraint_and_metadata(
       nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
       return nb::getattr(class_handle, "__tachyon_metadata");
     },
-    nb::sig("def get_tachyon_metadata() -> "
-            "clockwork.serialization.metadata.tachyon_model.TachyonMetadata"));
+    nb::sig(
+      "def get_tachyon_metadata() -> "
+      "clockwork.serialization.metadata.tachyon_model.TachyonMetadata"));
 
   // Define get_tachyon_constraint(), which forms the constraint on demand
   cls.def_static(
@@ -212,8 +220,57 @@ void bind_tachyon_constraint_and_metadata(
       return nb::module_::import_("clockwork.dsl.serialization.tachyon_reg")
         .attr("FieldConstraint")(sizeof(clockwork::Tappy<SchemaT>), alignof(clockwork::Tappy<SchemaT>));
     },
-    nb::sig("def get_tachyon_constraint() -> "
-            "clockwork.dsl.serialization.tachyon_reg.FieldConstraint"));
+    nb::sig(
+      "def get_tachyon_constraint() -> "
+      "clockwork.dsl.serialization.tachyon_reg.FieldConstraint"));
+
+  // store the module name as a class attribute
+  setattr(
+    cls,
+    "__tachyon_module_name",
+    nb::detail::type_caster<std::string_view>::from_cpp(tachyon_module_name, nb::rv_policy::automatic, nullptr));
+
+  // Define get_tachyon_module_name(), which simply retrieves the module name
+  cls.def_static(
+    "get_tachyon_module_name",
+    []() -> nb::object
+    {
+      nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
+      return nb::getattr(class_handle, "__tachyon_module_name");
+    },
+    nb::sig("def get_tachyon_module_name() -> str"));
+
+  // store the source file name as a class attribute
+  setattr(
+    cls,
+    "__tachyon_source_file_name",
+    nb::detail::type_caster<std::string_view>::from_cpp(tachyon_source_file_name, nb::rv_policy::automatic, nullptr));
+
+  // Define get_tachyon_source_file_name(), which simply retrieves the source file name
+  cls.def_static(
+    "get_tachyon_source_file_name",
+    []() -> nb::object
+    {
+      nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
+      return nb::getattr(class_handle, "__tachyon_source_file_name");
+    },
+    nb::sig("def get_tachyon_source_file_name() -> str"));
+
+  // store the class name as a class attribute
+  setattr(
+    cls,
+    "__tachyon_class_name",
+    nb::detail::type_caster<std::string_view>::from_cpp(tachyon_class_name, nb::rv_policy::automatic, nullptr));
+
+  // Define get_tachyon_class_name(), which simply retrieves the class name
+  cls.def_static(
+    "get_tachyon_class_name",
+    []() -> nb::object
+    {
+      nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
+      return nb::getattr(class_handle, "__tachyon_class_name");
+    },
+    nb::sig("def get_tachyon_class_name() -> str"));
 }
 
 } // namespace jewels::nanobind

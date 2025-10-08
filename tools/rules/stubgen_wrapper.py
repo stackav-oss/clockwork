@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import click
-from nanobind.stubgen import main as stubgen_main  # type: ignore[import-untyped]
+from nanobind.stubgen import main as stubgen_main
 
 REPLACEMENTS = [
     # We want an NDArray, not an ArrayLike
@@ -49,7 +49,7 @@ def wrapper(
     parts = py_module.split("/")
     external_path_parts = 2
     extra_args = []
-    if len(parts) >= external_path_parts and parts[0] == "external" and parts[1].endswith("~"):
+    if len(parts) >= external_path_parts and parts[0] == "external" and parts[1].endswith("+"):
         py_module = "/".join(parts[2:])
         import_path = get_import_path(input_module, Path(py_module))
         extra_args.extend(
@@ -90,9 +90,11 @@ def _cleanup_output(output_pyi: Path) -> None:
         output_text = re.sub(pattern, replacement, output_text)
 
     # If numpy is in there, also import Literal and the full numpy.typing module
-    output_text = output_text.replace(
-        "from numpy.typing", "from typing import Literal\nimport numpy.typing\nfrom numpy.typing"
-    )
+    if "from numpy.typing" in output_text:
+        output_text = output_text.replace(
+            "from numpy.typing",
+            "from typing import Literal\nimport numpy as np\nimport numpy.typing\nfrom numpy.typing",
+        )
 
     output_pyi.write_text(output_text)
 

@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Python log writer."""
 
@@ -9,9 +10,17 @@ import tempfile
 from pathlib import Path
 
 import clockwork.logging.readers.py_log_processor as py_reader
+from clockwork.logging.offboard.nb_types import (
+    LoggedChannelMetadata,
+)
+from clockwork.logging.offboard.nb_types import (
+    LoggedMessage as OffboardLoggedMessage,
+)
 from clockwork.logging.offboard.py_log_writer import LogWriter
 from clockwork.logging.readers.nb_types import (
-    LoggedMessage,
+    LoggedMessage as ReaderLoggedMessage,
+)
+from clockwork.logging.readers.nb_types import (
     LogReaderConfig,
     LogTimestamp,
 )
@@ -48,13 +57,15 @@ def test_legacy_create_channel() -> None:
             "undefined",
             b"Schema definition 1",
         )
-        writer.create_channel(
-            "channel2",
-            "undefined",
-            "regular",
-            "schema2",
-            "undefined",
-            b"Schema definition 2",
+        writer.create_channel_from_metadata(
+            LoggedChannelMetadata(
+                "channel2",
+                "undefined",
+                "regular",
+                "schema2",
+                "undefined",
+                b"Schema definition 2",
+            )
         )
         writer.close()
 
@@ -108,13 +119,15 @@ def test_legacy_write() -> None:
             "undefined",
             b"Schema definition 1",
         )
-        writer.create_channel(
-            "channel2",
-            "undefined",
-            "regular",
-            "schema2",
-            "undefined",
-            b"Schema definition 2",
+        writer.create_channel_from_metadata(
+            LoggedChannelMetadata(
+                "channel2",
+                "undefined",
+                "regular",
+                "schema2",
+                "undefined",
+                b"Schema definition 2",
+            )
         )
 
         for message_num in range(total_messages):
@@ -129,7 +142,22 @@ def test_legacy_write() -> None:
             transmit_time = LogTimestamp(int(0.1 * 1e9) + 1)
             message = [channel_name, message_num, log_time, transmit_time, header, data]
             messages.append(message)
-            writer.write(channel_name, message_num, log_time, transmit_time, header, data)
+            if channel_name == "channel1":
+                writer.write(channel_name, message_num, log_time, transmit_time, header, data)
+            else:
+                writer.write_logged_message(
+                    OffboardLoggedMessage(
+                        channel_name,
+                        message_num,
+                        log_time,
+                        transmit_time,
+                        memoryview(header),
+                        memoryview(data),
+                        False,
+                        "tachyon",
+                        False,
+                    )
+                )
 
         writer.close()
 
@@ -140,7 +168,7 @@ def test_legacy_write() -> None:
         assert metrics.message_count == total_messages
         assert [topic_metric.topic for topic_metric in metrics.topic_metrics] == ["channel1", "channel2"]
 
-        def callback(saved_msg: LoggedMessage) -> None:
+        def callback(saved_msg: ReaderLoggedMessage) -> None:
             msg = messages[saved_msg.sequence_number]
             topic, sequence_number, log_time, publish_time, header, data = msg
             assert topic == saved_msg.topic
@@ -168,7 +196,7 @@ def test_create_tachyon_channel() -> None:
         )
         writer.create_tachyon_channel(
             "channel2",
-            NbTestMessage,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            NbTestMessage,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         )
         writer.close()
 
@@ -205,7 +233,7 @@ def test_create_tachyon_channel() -> None:
         assert metadata2.schema_encoding == "clockwork_tachyon"
         assert (
             metadata2.schema_definition
-            == tachyon_meta.to_protobuf(NbTestMessage.get_tachyon_metadata()).SerializeToString()  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            == tachyon_meta.to_protobuf(NbTestMessage.get_tachyon_metadata()).SerializeToString()  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         )
 
 
@@ -227,7 +255,7 @@ def test_tachyon_write() -> None:
         )
         writer.create_tachyon_channel(
             "channel2",
-            NbTestMessage,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            NbTestMessage,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         )
 
         for message_num in range(total_messages):

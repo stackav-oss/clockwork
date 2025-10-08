@@ -10,6 +10,7 @@ from typing import Final, TypeAlias
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.ir import clkbuiltins, interface, node, representation, schema, typesys
+from typing_extensions import override
 
 DEFAULT_REPRESENTATION_KEY: TypeAlias = tuple[int, str]
 
@@ -17,11 +18,12 @@ DEFAULT_REPRESENTATION_KEY: TypeAlias = tuple[int, str]
 class DefaultRepresentationRegistry(Context):
     """Registry for default schema representations."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty default representation registry."""
         self.name = name
         self.registry: dict[DEFAULT_REPRESENTATION_KEY, representation.Representation] = {}
 
+    @override
     def import_from(self, other: DefaultRepresentationRegistry) -> None:
         """Combine this registry with items from another.
 
@@ -61,7 +63,7 @@ def register_default_representation_options(
     key = _default_representation_key(repr_type=repr_type, schema_ir=schema_ir)
     if key in registry.registry:
         msg = representation_ir.append_error_line(
-            "Cannot define more than one default representation options for each representation/schema pair.\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            "Cannot define more than one default representation options for each representation/schema pair.\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             "You can make one of them a named (non-default) representation if you need more than one representation.",
         )
         raise ValueError(msg)
@@ -96,6 +98,7 @@ def lookup_default_representation(
 class DefaultRepresentationRegistryKey(ContextKey[DefaultRepresentationRegistry]):
     """Compiler context key for default representation registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> DefaultRepresentationRegistry:
         """Create a default instance of the registry."""
         return DefaultRepresentationRegistry(compiler_context.name)
@@ -158,11 +161,12 @@ class RepresentationInfo:
 class RepresentationRegistry(Context):
     """Registry for schema representations."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty representation registry."""
         self.name = name
         self.registry: dict[REPRESENTATION_KEY_TYPE, RepresentationInfo] = {}
 
+    @override
     def import_from(self, other: RepresentationRegistry) -> None:
         """Combine this registry with items from another.
 
@@ -218,6 +222,7 @@ def lookup_representation(
 class RepresentationRegistryKey(ContextKey[RepresentationRegistry]):
     """Compiler context key for representation registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> RepresentationRegistry:
         """Create a default instance of the registry."""
         return RepresentationRegistry(compiler_context.name)
@@ -271,11 +276,12 @@ class InterfaceInfo:
 class InterfaceRegistry(Context):
     """Registry for schema interfaces."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty interface registry."""
         self.name = name
         self.registry: dict[INTERFACE_KEY_TYPE, InterfaceInfo] = {}
 
+    @override
     def import_from(self, other: InterfaceRegistry) -> None:
         """Combine this registry with items from another.
 
@@ -331,6 +337,7 @@ def lookup_interface(
 class InterfaceRegistryKey(ContextKey[InterfaceRegistry]):
     """Compiler context key for interface registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> InterfaceRegistry:
         """Create a default instance of the registry."""
         return InterfaceRegistry(compiler_context.name)

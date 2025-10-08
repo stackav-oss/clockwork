@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cpp_python_cog."""
 
@@ -31,7 +32,7 @@ auto execute_cog(PythonCogDial& dial) -> void
 {
     try
     {
-        ::clockwork::python::python_init_once();
+        ::clockwork::python::throw_if_not_initialized();
         const ::clockwork::python::GilLockGuard gil_guard;
         const auto dial_dict =
             ::clockwork::python::PythonObject::import_module(

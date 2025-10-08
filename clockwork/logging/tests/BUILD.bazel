@@ -15,12 +15,26 @@ cc_test(
 )
 
 cc_test(
+    name = "duplicate_message_filter_test",
+    srcs = ["duplicate_message_filter_test.cc"],
+    deps = [
+        "//clockwork/logging:duplicate_message_filter",
+        "//clockwork/logging:log_timestamp",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "lite_compressor_test",
     srcs = ["lite_compressor_test.cc"],
     deps = [
         "//clockwork/logging:lite_compressor",
         "//clockwork/logging:log_error",
+        "//clockwork/logging:xxh3_checksum",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
         "//jewels/std:expected",
         "@catch2//:catch2_main",
     ],

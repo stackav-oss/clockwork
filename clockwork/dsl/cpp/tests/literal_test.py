@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cpp.literal."""
 
@@ -64,7 +65,7 @@ class LiteralTestCase:
 def int_signed_positive() -> LiteralTestCase:
     return LiteralTestCase(
         value=primitive.DecimalLiteral(
-            value=Decimal("42"),
+            value=Decimal(42),
             type_info=clkbuiltins.INT16,
             module=MagicMock(),
             cst_node=None,
@@ -76,7 +77,7 @@ def int_signed_positive() -> LiteralTestCase:
 def int_signed_negative() -> LiteralTestCase:
     return LiteralTestCase(
         value=primitive.DecimalLiteral(
-            value=Decimal("-42"),
+            value=Decimal(-42),
             type_info=clkbuiltins.INT16,
             module=MagicMock(),
             cst_node=None,
@@ -88,7 +89,7 @@ def int_signed_negative() -> LiteralTestCase:
 def int_unsigned() -> LiteralTestCase:
     return LiteralTestCase(
         value=primitive.DecimalLiteral(
-            value=Decimal("42"),
+            value=Decimal(42),
             type_info=clkbuiltins.UINT64,
             module=MagicMock(),
             cst_node=None,
@@ -150,7 +151,7 @@ def test_literal_to_cpp(test_val: LiteralTestCase) -> None:
 def test_literal_to_cpp_unsupported_type() -> None:
     # Simulating an unsupported type with a mock object or a type not included in the handling logic.
     literal = primitive.DecimalLiteral(
-        value=Decimal("0"),
+        value=Decimal(0),
         type_info=clkbuiltins.FIXED_ARRAY,
         module=MagicMock(),
         cst_node=None,

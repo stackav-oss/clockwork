@@ -246,7 +246,7 @@ TemporaryLogDirectory::~TemporaryLogDirectory()
     return jewels::unexpected(union_result.error());
   }
   return copy_log(
-    memory_resource, temp_log_dir_str, dest_uri, maybe_desired_channels, maybe_log_interval, writer_config_str);
+    memory_resource, temp_log_dir_str, dest_uri, maybe_desired_channels, {}, maybe_log_interval, writer_config_str);
 }
 
 } // namespace clockwork_logging::offboard

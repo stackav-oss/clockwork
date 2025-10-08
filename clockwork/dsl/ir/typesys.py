@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import override
+
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Iterable, Mapping, Sequence
 
@@ -40,6 +42,7 @@ class Value(ABC):
 class ObjectIdentityValue(Value):
     """Base class for values that do not have stable ID beyond their object identity."""
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return str(id(self))
@@ -48,6 +51,7 @@ class ObjectIdentityValue(Value):
 class NamedAttribute(Value, node.NamedEntity):
     """Base class for values that are named.  The name is used as the stable ID."""
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return f"{self.scope.uniq_path}.{self.name}"
@@ -57,6 +61,7 @@ class NamedAttribute(Value, node.NamedEntity):
 class NamedValue(Value, node.NamedEntity):
     """Base class for values that are named.  The name is used as the stable ID."""
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return f"{self.scope.uniq_path}::{self.name}"
@@ -144,6 +149,7 @@ class GenericTypeVal(TypeVal):
 
     parameters: Sequence[Parameter]
 
+    @override
     def generic_parameters(self) -> Sequence[Parameter] | None:
         """Get the generic parameters for the type.
 
@@ -170,10 +176,11 @@ class Instantiation(TypeVal):
     instantiates: TypeVal
     arguments: Mapping[str, Value]
 
+    @override
     def value_key(self) -> str:
         """Generate a unique, comparable, hashable type key for this type."""
         params = self.instantiates.generic_parameters()
-        assert params is not None  # noqa: S101  (invariant)
+        assert params is not None
         arg_str = ",".join(f"{param.name}={self.arguments[param.name].value_key()}" for param in params)
         return f"{self.instantiates.value_key()}<{arg_str}>"
 
@@ -220,7 +227,7 @@ class InferenceVar:
 
     _ID_SEQ = itertools.count()
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         uniq_id: int,
         numeric_type: NumericType = NumericType.NONE,
@@ -242,6 +249,7 @@ class InferenceVar:
         self._resolution: TypeVal | InferenceVar | None = None
         self.cst_node = cst_node
 
+    @override
     def __repr__(self) -> str:
         """Return a string representation of the var."""
         return f"InferenceVar({self._id}, {self.numeric_type}, {self.resolution()})"
@@ -327,6 +335,7 @@ class InferenceVar:
         resolution._resolution = to  # noqa: SLF001 (_resolution is also a TypeVal)
         return to
 
+    @override
     def __str__(self) -> str:
         """Create a human-readable representation of this InferenceVar."""
         resolution = self.resolution()

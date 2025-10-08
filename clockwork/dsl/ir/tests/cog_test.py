@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test the Cog IR module."""
 
@@ -162,6 +163,28 @@ cog SkipCog
     with pytest.raises(TypeError, match="Type inference failed: ::UInt64 != ::String"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "skip_threshold_bad_type"), importer=fs_importer)
 
+    source = """
+use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+// Doc.
+cog SkipCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            skip_threshold: -1;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+"""
+    with pytest.raises(TypeError, match="Attempt to unify NumericType.SIGNED_INTEGER"):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "negative_skip_threshold"), importer=fs_importer)
+
 
 def test_copy_inputs(fs_importer: FilesystemImporter) -> None:
     """Test syntax for input copying."""
@@ -231,6 +254,114 @@ cog PlainCog
     no_copy_cog.resolve()
     assert "message_in" in no_copy_cog.inputs
     assert not no_copy_cog.inputs["message_in"].view_params.copy_inputs
+
+
+def test_optional_inputs_and_outputs(fs_importer: FilesystemImporter) -> None:
+    """Test syntax for input copying."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+// Doc.
+cog OptionalInputCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+// Doc
+cog OptionalOutputCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>;
+    }
+    outputs
+    {
+        message_out: Tappy<HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+
+// Doc.
+cog PlainCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+// Doc
+cog OptionalFalseCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            connect_optional: false;
+        }
+    }
+    outputs
+    {
+        message_out: Tappy<HelloMsg>
+        {
+            connect_optional: false;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "copy_inputs_test"), importer=fs_importer)
+    optional_input_cog = module.inner_scope.lookup("OptionalInputCog")
+    assert isinstance(optional_input_cog, cog.Cog)
+    optional_input_cog.resolve()
+    assert "message_in" in optional_input_cog.inputs
+    assert optional_input_cog.inputs["message_in"].view_params.is_optional
+    optional_output_cog = module.inner_scope.lookup("OptionalOutputCog")
+    assert isinstance(optional_output_cog, cog.Cog)
+    optional_output_cog.resolve()
+    assert "message_out" in optional_output_cog.outputs
+    assert optional_output_cog.outputs["message_out"].is_optional
+    assert not optional_output_cog.inputs["message_in"].view_params.is_optional
+    plain_cog = module.inner_scope.lookup("PlainCog")
+    assert isinstance(plain_cog, cog.Cog)
+    plain_cog.resolve()
+    assert "message_in" in plain_cog.inputs
+    assert not plain_cog.inputs["message_in"].view_params.is_optional
+    optional_false_cog = module.inner_scope.lookup("OptionalFalseCog")
+    assert isinstance(optional_false_cog, cog.Cog)
+    optional_false_cog.resolve()
+    assert "message_in" in optional_false_cog.inputs
+    assert not optional_false_cog.inputs["message_in"].view_params.is_optional
+    assert "message_out" in optional_false_cog.outputs
+    assert not optional_false_cog.outputs["message_out"].is_optional
 
 
 def test_invalid_copy_inputs(fs_importer: FilesystemImporter) -> None:
@@ -327,10 +458,7 @@ cog PlainCog
     assert "message_in" in default_cog.inputs
     # We'll detect this when connecting to a channel and replace with max(view.size, channel.size/2)
     assert isinstance(default_cog.inputs["message_in"].view_params.safety_margin, int)
-    assert (
-        default_cog.inputs["message_in"].view_params.safety_margin
-        == default_cog.inputs["message_in"].view_params.max_msgs
-    )
+    assert default_cog.inputs["message_in"].view_params.safety_margin == -1
 
 
 def test_invalid_safety_margin(fs_importer: FilesystemImporter) -> None:
@@ -533,3 +661,59 @@ cog RateLimitCog
         match=re.escape("Outputs can only have one rate limit, but got multiple for foo"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_too_many"), importer=fs_importer)
+
+
+def test_metrics_options(fs_importer: FilesystemImporter) -> None:
+    """Test syntax for input copying."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+// Doc.
+cog MetricsCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            copy_inputs: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+    metrics_options
+    {
+        enabled: true;
+        batch_size: 42;
+    }
+}
+// Doc.
+cog DisabledMetricsCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            copy_inputs: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+    metrics_options
+    {
+        enabled: false;
+    }
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "metrics_options_test"), importer=fs_importer)
+    metrics_cog = module.inner_scope.lookup("MetricsCog")
+    assert isinstance(metrics_cog, cog.Cog)
+    assert metrics_cog.metrics_options.metrics_enabled
+    assert metrics_cog.metrics_options.batch_size == 42
+    disabled_metrics_cog = module.inner_scope.lookup("DisabledMetricsCog")
+    assert isinstance(disabled_metrics_cog, cog.Cog)
+    assert not disabled_metrics_cog.metrics_options.metrics_enabled

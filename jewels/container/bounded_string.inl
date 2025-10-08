@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <iterator>
 #include <optional>
 #include <string_view>
+#include <sys/types.h>
 
 namespace jewels::container
 {
@@ -71,8 +73,10 @@ constexpr bool BasicBoundedString<max_length, CharT, Traits>::try_concat(std::st
   {
     return false;
   }
-  Traits::copy(data_.data() + size_, tail.data(), tail.size());
+  Traits::copy(std::next(data_.data(), static_cast<ssize_t>(size_)), tail.data(), tail.size());
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic) TODO(OI-3647)
   size_ += tail.size();
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic) TODO(OI-3647)
   data_.data()[size_] = 0;
   return true;
 }

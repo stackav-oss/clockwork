@@ -18,13 +18,14 @@ _DISABLED_TYPE_STUB_ALLOW_LIST = [
 
 # TODO(OI-3125): De-duplicate rule definitions.
 
-def py_cc_binding(name, srcs, deps, dynamic_deps = [], py_deps = None, pyi_file = None, use_type_stubs = None, visibility = None, testonly = None, exec_properties = None, imports = [], disabled_stubs = _DISABLED_TYPE_STUB_ALLOW_LIST):
+def py_cc_binding(name, srcs, deps, data = [], dynamic_deps = [], py_deps = None, pyi_file = None, use_type_stubs = None, visibility = None, testonly = None, exec_properties = None, imports = [], disabled_stubs = _DISABLED_TYPE_STUB_ALLOW_LIST):
     """Create a solib and a Python library wrapping it.
 
     Args:
         name: The name of the wrapper lib.
         srcs: The C++ srcs for the solib.
         deps: The C++ deps.
+        data: The C++ data dependencies.
         dynamic_deps: The cc_shared_library deps.
         py_deps: The python deps.
         pyi_file: Optional manually generated pyi_file for the wrapper lib.
@@ -83,6 +84,7 @@ def py_cc_binding(name, srcs, deps, dynamic_deps = [], py_deps = None, pyi_file 
         name = so_name,
         testonly = testonly,
         srcs = srcs,
+        data = data,
         defines = ["CLK_ENABLE_NANOBIND_TYPE_CASTER=1"],
         linkopts = [
             "-fvisibility=hidden",
@@ -160,6 +162,7 @@ def _py_conditional_genrule_impl(ctx):
             arguments = args,
             progress_message = "Running " + ctx.attr.tool.label.name,
             resource_set = None,
+            env = ctx.attr.tool[RunEnvironmentInfo].environment,
         )
     else:
         for out in ctx.outputs.outs:

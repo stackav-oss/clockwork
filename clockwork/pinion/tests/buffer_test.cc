@@ -8,7 +8,6 @@
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
 #include "clockwork/pinion/tests/support/mock_slot.hh"
-#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 

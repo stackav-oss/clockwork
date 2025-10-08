@@ -5,7 +5,6 @@
 #include "clockwork/tools/channel_spy/channel_spy.hh"
 #include "clockwork/tools/channel_spy/channel_spy_config.hh"
 #include "clockwork/tools/channel_spy/types.hh"
-#include "jewels/memory/pointers.hh"
 
 #include <Python.h>
 #include <nanobind/nanobind.h>
@@ -21,7 +20,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 

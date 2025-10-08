@@ -110,26 +110,28 @@ TEST_CASE("Log with persistent channels")
       REQUIRE(writer.split_log_files());
     }
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = i * 2U,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = i * 2U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = false,
+      }));
     transmit_time -= message_interval;
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = (i * 2U) + 1U,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header2,
-      .data = data2,
-      .is_repeated_persistent = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = (i * 2U) + 1U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header2,
+        .data = data2,
+        .is_repeated_persistent = false,
+      }));
     transmit_time -= message_interval;
   }
   const auto end_time = transmit_time + message_interval;
@@ -431,15 +433,16 @@ TEST_CASE("Log with repeated persistent channels")
       REQUIRE(writer.write(prev_channel2_message));
     }
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = i * 2U,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = i * 2U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = false,
+      }));
     transmit_time += message_interval;
 
     prev_channel2_message = LoggedMessage{

@@ -21,8 +21,8 @@ py_library(
         "//clockwork/dsl/ir:cog",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:hardware",
-        "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:policy",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
@@ -30,9 +30,6 @@ py_library(
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:udp",
         "//clockwork/dsl/ir:uuid_reg",
-        "//clockwork/logging/offboard:nb_log_writer_impl",
-        "//clockwork/logging/readers:nb_log_reader",
-        "//clockwork/logging/tools/upgrade_log:upgrade_lib",
     ],
 )
 

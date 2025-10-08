@@ -92,11 +92,13 @@ cc_test(
         "//clockwork/logging:log_timestamp",
         "//clockwork/logging:message_encoding",
         "//clockwork/logging:schema_encoding",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
         "//clockwork/logging/offboard:copy_log",
         "//clockwork/logging/offboard:reader",
         "//clockwork/logging/offboard:types",
         "//clockwork/logging/offboard:writer",
         "//clockwork/logging/offboard/tests/support:test_support",
+        "//clockwork/logging/offboard/v1:log_union_cc_library",
         "//clockwork/logging/onboard/tests/support:test_support",
         "//clockwork/logging/readers:types",
         "//jewels/memory:memory_resource",
@@ -104,6 +106,7 @@ cc_test(
         "//jewels/std:expected",
         "//jewels/testing:tmp_directory_guard",
         "@catch2//:catch2_main",
+        "@protobuf",
     ],
 )
 
@@ -392,6 +395,25 @@ cc_test(
     ],
 )
 
+py_test(
+    name = "nb_copy_log_test",
+    srcs = [
+        "nb_copy_log_test.py",
+        ":__test__",
+    ],
+    main = "__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/logging/offboard:nb_copy_log",
+        "//clockwork/logging/offboard:py_log_writer",
+        "//clockwork/logging/offboard/v1:log_union_py_library",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_processor",
+        "//clockwork/logging/tests/support:py_test_message",
+        "@clockwork_pip//protobuf",
+    ],
+)
+
 cc_test(
     name = "persistent_reader_test",
     srcs = ["persistent_reader_test.cc"],
@@ -423,6 +445,7 @@ py_test(
     main = "__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/logging/offboard:nb_types",
         "//clockwork/logging/offboard:py_log_writer",
         "//clockwork/logging/readers:nb_types",
         "//clockwork/logging/readers:py_log_processor",

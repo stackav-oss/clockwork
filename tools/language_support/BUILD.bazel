@@ -1,0 +1,104 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@clockwork//tools/language_support:requirements.bzl", "write_python_requirements_source_file")
+load("@rules_multirun//:defs.bzl", "multirun")
+load("//tools/rules:python.bzl", "py_binary")
+
+exports_files([
+    "requirements.txt",
+    "uv_wrapper.py",
+])
+
+bzl_library(
+    name = "requirements_bzl",
+    srcs = ["requirements.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["@aspect_bazel_lib//lib:write_source_files"],
+)
+
+alias(
+    name = "update_gazelle",
+    actual = "//:gazelle_python_manifest.update",
+)
+
+# This is basically a copy of repo_requirements that we can use with pip and uv's `--constraint` option
+write_python_requirements_source_file(
+    name = "update_repo_constraints",
+    # Don't include index URL options so the resulting file can be used independently
+    emit_index_urls = False,
+    # Use existing locked packages in requirements.txt as a starting point because it has extras
+    existing_requirements_out = "requirements.txt",
+    # Don't include hashes, because they break pip's `--constraint` option
+    generate_hashes = False,
+    overrides_in = "requirements_overrides.txt",
+    requirements_in = "requirements.in",
+    requirements_out = "constraints.txt",
+    # Strip extras so the resulting file can be used as a constraints file
+    strip_extras = True,
+)
+
+# This pip hub should stay pinned on Python 3.10, to support dependencies that have no 3.12 support yet.
+write_python_requirements_source_file(
+    name = "update_repo_constraints_310",
+    # Don't include index URL options so the resulting file can be used independently
+    emit_index_urls = False,
+    # Use existing locked packages in requirements_310.txt as a starting point because it has extras
+    existing_requirements_out = "requirements_310.txt",
+    # Don't include hashes, because they break pip's `--constraint` option
+    generate_hashes = False,
+    overrides_in = "requirements_overrides_310.txt",
+    python_version = "3.10",
+    requirements_in = "requirements_310.in",
+    requirements_out = "constraints_310.txt",
+    # Strip extras so the resulting file can be used as a constraints file
+    strip_extras = True,
+)
+
+write_python_requirements_source_file(
+    name = "update_repo_requirements",
+    overrides_in = "requirements_overrides.txt",
+    requirements_in = "requirements.in",
+    requirements_out = "requirements.txt",
+)
+
+# This pip hub should stay pinned on Python 3.10, to support dependencies that have no 3.12 support yet.
+# TODO(DX-29): remove this once all dependencies support Python 3.12
+write_python_requirements_source_file(
+    name = "update_repo_requirements_310",
+    overrides_in = "requirements_overrides_310.txt",
+    python_version = "3.10",
+    requirements_in = "requirements_310.in",
+    requirements_out = "requirements_310.txt",
+)
+
+multirun(
+    name = "update_requirements",
+    commands = [
+        ":update_repo_requirements",
+        ":update_repo_constraints",
+        ":update_repo_requirements_310",
+        ":update_repo_constraints_310",
+    ],
+)
+
+alias(
+    name = "uv_bin",
+    actual = "@clockwork_pip//uv:bin_uv",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "uv_toml",
+    srcs = ["uv.toml"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "uv_wrapper",
+    srcs = ["uv_wrapper.py"],
+    data = ["@clockwork_pip//uv:bin_uv"],
+    visibility = ["//visibility:public"],
+    deps = ["@clockwork_pip//click"],
+)

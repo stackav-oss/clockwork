@@ -22,6 +22,11 @@ using IntegerSequenceFlatten = typename detail::IntegerSequenceFlatten<IntType, 
 template <typename... Seq>
 using IndexSequenceFlatten = IntegerSequenceFlatten<std::size_t, Seq...>;
 
+/// Make an `integer_sequence<IntType, value, value...>` with `value` repeated `count` times
+template <typename IntType, std::size_t count, IntType value>
+using MakeRepeatedIntegerSequence =
+  typename detail::MakeRepeatedIntegerSequence<IntType, value, std::make_index_sequence<count>>::type;
+
 /// Make a std::array<T, N> using the IntType integers in the sequence
 template <typename IntType, IntType... seq>
 constexpr auto to_array(std::integer_sequence<IntType, seq...> /*unused*/)

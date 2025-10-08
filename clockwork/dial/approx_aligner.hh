@@ -101,7 +101,7 @@ struct ApproxAligner
   using SyncTime = jewels::time::SyncTime;
 
   /// Alignment data.
-  struct Alignment
+  struct Alignment // NOLINT(clang-analyzer-core.uninitialized.Assign) TODO(OI-3661)
   {
     /// The objective function score for the alignment.
     ValueType score = {};

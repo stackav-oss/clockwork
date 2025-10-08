@@ -94,12 +94,17 @@ public:
   [[nodiscard]] virtual jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError>
   set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::SubscriberHandle handle) = 0;
 
+  /// Set up a subscriber endpoint without a handle for non-connected endpoints
+  /// @param[in] uuid The id of the subscriber endpoint to set up
+  /// @return Success if endpoint was set up successfully, error otherwise
+  virtual jewels::expected<void, jewels::MonoError> set_subscriber(jewels::Uuid<common::EndpointClassId> uuid) = 0;
+
   /// Set the publisher
   /// @param[in] uuid The id of the publisher endpoint
   /// @param[in] handle The underlying publisher
   /// @return True on success
   [[nodiscard]] virtual jewels::expected<void, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle) = 0;
+  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle, bool connected) = 0;
 
   /// Validate that all the internal handles have been set.
   /// @return Unexpected if any required handles are unset

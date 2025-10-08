@@ -10,11 +10,11 @@ namespace clockwork
 namespace detail
 {
 template <typename FactoryType, typename IdType>
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) Initializing a static member variable.
 FactoryType* ClassFactoryRegistry<FactoryType, IdType>::head_ = nullptr;
 
 template <typename FactoryType, typename IdType>
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) Initializing a static member variable.
 FactoryType* ClassFactoryRegistry<FactoryType, IdType>::tail_ = nullptr;
 
 template <typename FactoryType, typename IdType>

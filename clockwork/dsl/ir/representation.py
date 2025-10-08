@@ -52,7 +52,7 @@ class Representation(typesys.TypeDef, node.DocableEntity, node.CstNode[cst.Repre
         """
         typespec = self._require_resolved()
         schema_ir = typespec.arguments["schema"]
-        assert isinstance(schema_ir, schema.Schema)  # noqa: S101  (invariant maintained by resolve())
+        assert isinstance(schema_ir, schema.Schema)
         return schema_ir
 
     def _require_resolved(self) -> typesys.Instantiation:
@@ -113,7 +113,7 @@ class Representation(typesys.TypeDef, node.DocableEntity, node.CstNode[cst.Repre
         for a_field in self.field_options.values():
             if (schema_name := schema_ir.fields[a_field.field_num].cur_name) != a_field.field_name:
                 msg = a_field.append_error_line(
-                    f'Field {a_field.field_num} in schema "{schema_ir.name}"'  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                    f'Field {a_field.field_num} in schema "{schema_ir.name}"'  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                     f' has name "{schema_name}", not "{a_field.field_name}"',
                 )
                 raise ValueError(msg)
@@ -160,7 +160,7 @@ class CommonOptions:
             raise TypeError(msg)
         if value.type_info is clkbuiltins.BITS:
             value = primitive.bits_to_bytes(value)
-        assert value.type_info is clkbuiltins.BYTES  # noqa: S101  (invariant assured above; for readability)
+        assert value.type_info is clkbuiltins.BYTES
         value = value.as_unit(units.BYTE)
         value_int = int(value.value)
         # Checking for power of 2 by looking for bit_count == 1
@@ -275,7 +275,6 @@ class ResolvedReprInstantiation(node.NamedEntity, node.CstNode[cst.CppRepresenta
     schema_ir: schema.InstantiatedSchema
     is_generic: bool
     typespec: typesys.Instantiation
-    source: ReprInstantiation
 
     def get_schema(self) -> schema.InstantiatedSchema:
         """Get the instantiated schema that this is a representation of."""
@@ -353,7 +352,6 @@ class ReprInstantiation(node.NamedEntity, node.CstNode[cst.CppRepresentation | c
             schema_ir=schema.InstantiatedSchema.from_typespec(ref_schema),
             is_generic=self.is_generic,
             typespec=self.typespec,
-            source=self,
         )
         return self.resolved
 

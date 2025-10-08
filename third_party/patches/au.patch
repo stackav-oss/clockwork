@@ -1,5 +1,5 @@
 diff --git BUILD.bazel BUILD.bazel
-index 8dac162..8c0415f 100644
+index ca329bb..1111b27 100644
 --- BUILD.bazel
 +++ BUILD.bazel
 @@ -167,3 +167,19 @@ cc_library(
@@ -24,7 +24,7 @@ index 8dac162..8c0415f 100644
 +)
 diff --git MODULE.bazel MODULE.bazel
 new file mode 100644
-index 0000000..4efb188
+index 0000000..e3a7ca5
 --- /dev/null
 +++ MODULE.bazel
 @@ -0,0 +1,13 @@
@@ -42,7 +42,7 @@ index 0000000..4efb188
 +)
 +use_repo(pip, "au_pip_deps")
 diff --git au/BUILD.bazel au/BUILD.bazel
-index 1d7dbc8..859ba0c 100644
+index c5ca484..110b8b5 100644
 --- au/BUILD.bazel
 +++ au/BUILD.bazel
 @@ -17,6 +17,30 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -76,3 +76,14 @@ index 1d7dbc8..859ba0c 100644
  cc_library(
      name = "au",
      hdrs = ["au.hh"],
+@@ -465,10 +489,6 @@ cc_test(
+ 
+ cc_library(
+     name = "stdx",
+-    srcs = glob([
+-        "stdx/*.cc",
+-        "stdx/experimental/*.cc",
+-    ]),
+     hdrs = glob([
+         "stdx/*.hh",
+         "stdx/experimental/*.hh",

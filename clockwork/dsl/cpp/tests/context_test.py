@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cpp.context."""
 
@@ -21,6 +22,7 @@ from clockwork.dsl.cpp.context import (
     as_cc_library,
     comment_doc_string,
 )
+from clockwork.dsl.ir.module_id import ModuleID
 
 
 def test_comment_doc_string() -> None:
@@ -224,12 +226,12 @@ def test_as_cc_library_nothing_produced() -> None:
     name = "target"
     fake_package = Path("a/b/c")
     # Always add the deps, because the files are always produced.
-    assert as_cc_library(cpp_mod, name, fake_package, "repo") == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
         deps=[Label("//:a")],
-        data=[],
+        data=[Label("//path/to:file_clk")],
     )
 
 
@@ -247,7 +249,7 @@ def test_as_cc_library() -> None:
 
     name = "target"
     fake_package = Path("a/b/c")
-    assert as_cc_library(cpp_mod, name, fake_package, "repo") == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
@@ -256,7 +258,7 @@ def test_as_cc_library() -> None:
             Label("//:b"),
             Label("//:c"),
         ],
-        data=[],
+        data=[Label("//path/to:file_clk")],
     )
 
 
@@ -275,7 +277,7 @@ def test_as_cc_library_self_referencing() -> None:
     name = "target"
     fake_package = Path("a/b/c")
     cpp_mod.implementation_chunk.context.add_include(Header("repo", str(fake_package / (name + ".hh"))))
-    assert as_cc_library(cpp_mod, name, fake_package, "repo") == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
@@ -284,7 +286,7 @@ def test_as_cc_library_self_referencing() -> None:
             Label("//:b"),
             Label("//:c"),
         ],
-        data=[],
+        data=[Label("//path/to:file_clk")],
     )
 
 
@@ -302,7 +304,7 @@ def test_as_cc_binary() -> None:
 
     name = "target"
     fake_package = Path("a/b/c")
-    assert as_cc_binary(cpp_mod, name, fake_package, "repo") == CcBinary(
+    assert as_cc_binary(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcBinary(
         name=name,
         srcs=[Path(name + ".hh"), Path(name + ".inl"), Path(name + ".cc")],
         deps=[
@@ -329,7 +331,9 @@ def test_as_cc_binary_with_embedded_py() -> None:
     name = "target"
     fake_package = Path("a/b/c")
     py_deps = [Label("//:d"), Label("//:e")]
-    assert as_cc_binary_with_embedded_py(cpp_mod, name, fake_package, py_deps, "repo") == CcBinaryWithEmbeddedPy(
+    assert as_cc_binary_with_embedded_py(
+        cpp_mod, name, fake_package, py_deps, ModuleID("repo", "path/to/file")
+    ) == CcBinaryWithEmbeddedPy(
         name=name,
         srcs=[Path(name + ".hh"), Path(name + ".inl"), Path(name + ".cc")],
         deps=[
@@ -337,9 +341,9 @@ def test_as_cc_binary_with_embedded_py() -> None:
             Label("//:b"),
             Label("//:c"),
         ],
-        data=[],
         py_deps=[
             Label("//:d"),
             Label("//:e"),
         ],
+        data=[],
     )

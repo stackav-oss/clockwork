@@ -11,6 +11,7 @@
 #include <cerrno>
 #include <chrono>
 #include <climits>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -72,6 +73,37 @@ stat_file(std::string_view path, jewels::memory::MemoryResource memory_resource,
     return jewels::unexpected(error);
   }
   return statbuf;
+}
+
+[[nodiscard]] jewels::expected<std::pmr::string, ErrorCode> prepare_template_for_temporary(
+  std::optional<filesystem::Path> parent_path, jewels::memory::MemoryResource memory_resource, Filesystem& filesystem)
+{
+  filesystem::Path template_path{"/tmp", memory_resource};
+  if (parent_path.has_value() && parent_path->is_absolute())
+  {
+    template_path = parent_path.value();
+  }
+  else
+  {
+    const char* session_dir =
+      std::getenv("XDG_SESSION_DIR"); // NOLINT(concurrency-mt-unsafe) Thread-unsafety documented in api
+    if (session_dir != nullptr && std::strlen(session_dir) > 0)
+    {
+      template_path = filesystem::Path{session_dir, memory_resource};
+    }
+  }
+  if (parent_path.has_value() && !parent_path->is_absolute())
+  {
+    template_path /= parent_path->string_view();
+  }
+  constexpr auto only_me = 0700;
+  if (auto possible_create_directories = filesystem.create_directories(template_path, only_me);
+      !possible_create_directories)
+  {
+    return jewels::unexpected(possible_create_directories.error());
+  }
+  template_path /= "XXXXXX";
+  return std::pmr::string{template_path.string_view(), memory_resource};
 }
 
 } // namespace
@@ -154,33 +186,47 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
   return {};
 }
 
-[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> Filesystem::create_temporary_directory()
+[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode>
+Filesystem::create_temporary_directory(std::optional<filesystem::Path> parent_path)
 {
-  const char* session_dir = std::getenv("XDG_SESSION_DIR"); // NOLINT(concurrency-mt-unsafe)
-  if (session_dir == nullptr || std::strlen(session_dir) == 0)
+  auto possible_created_template = prepare_template_for_temporary(std::move(parent_path), memory_resource_, *this);
+  if (!possible_created_template)
   {
-    session_dir = "/tmp"; // Fallback to /tmp if XDG_SESSION_DIR is not set
+    return jewels::unexpected(possible_created_template.error());
   }
-  std::pmr::string template_path = std::pmr::string(session_dir, memory_resource_);
-  constexpr auto only_me = 0700;
-  auto possible_create_directories = create_directories(template_path, only_me);
-
-  possible_create_directories.or_else([](const auto& error)
-                                      { return jewels::expected<void, ErrorCode>(jewels::unexpected(error)); });
-
-  template_path += "/XXXXXX";
-  std::pmr::vector<char> template_path_chars(template_path.begin(), template_path.end(), memory_resource_);
-  template_path_chars.push_back('\0');
-  if (auto* const ret = ::mkdtemp(template_path_chars.data()); ret == nullptr)
+  if (::mkdtemp(possible_created_template->data()) == nullptr)
   {
     const auto error = make_error_code(errno);
-    if (verbosity_ != ErrorVerbosity::off)
+    if (verbosity_ != Filesystem::ErrorVerbosity::off)
     {
-      jewels::log_cerr_error("Failed to create temporary directory '{}': {}", template_path, error.message());
+      jewels::log_cerr_error(
+        "Failed to create temporary directory '{}': {}", possible_created_template->data(), error.message());
     }
     return jewels::unexpected(error);
   }
-  return filesystem::Path{template_path_chars.data(), memory_resource_};
+  return filesystem::Path{*possible_created_template, memory_resource_};
+}
+
+[[nodiscard]] jewels::expected<std::pair<filesystem::Path, FileDescriptor>, ErrorCode>
+Filesystem::create_temporary_file(std::optional<filesystem::Path> parent_path)
+{
+  auto possible_created_template = prepare_template_for_temporary(std::move(parent_path), memory_resource_, *this);
+  if (!possible_created_template)
+  {
+    return jewels::unexpected(possible_created_template.error());
+  }
+  auto possible_fd = ::mkstemp(possible_created_template->data());
+  if (possible_fd == -1)
+  {
+    const auto error = make_error_code(errno);
+    if (verbosity_ != Filesystem::ErrorVerbosity::off)
+    {
+      jewels::log_cerr_error(
+        "Failed to create temporary file '{}': {}", possible_created_template->data(), error.message());
+    }
+    return jewels::unexpected(error);
+  }
+  return std::make_pair(filesystem::Path{*possible_created_template, memory_resource_}, FileDescriptor{possible_fd});
 }
 
 [[nodiscard]] jewels::expected<jewels::time::SyncTime, ErrorCode>

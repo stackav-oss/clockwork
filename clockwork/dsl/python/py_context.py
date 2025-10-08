@@ -16,7 +16,7 @@ class PythonChunks:
     imports: set[str]
     impl: list[str]
 
-    def __init__(self) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self) -> None:
         """Create PythonChunks."""
         self.system_imports = set()
         self.imports = set()

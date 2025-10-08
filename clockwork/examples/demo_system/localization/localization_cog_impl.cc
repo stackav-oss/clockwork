@@ -9,14 +9,12 @@
 #include "clockwork/examples/demo_system/localization/pose_message.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/container/circular_buffer.hh"
-#include "jewels/math/constants.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
 
 #include <chrono>
 #include <cmath>
 #include <compare>
 #include <iterator>
+#include <numbers>
 
 namespace clockwork::demo_system::localization
 {
@@ -25,7 +23,7 @@ namespace
 {
 
 /// Radians per degree of arc
-constexpr auto radians_per_degree = jewels::math::constants::pi<double> / 180.0;
+constexpr auto radians_per_degree = std::numbers::pi_v<double> / 180.0;
 
 /// Diameter of the earth in meters because this demo approximates earth as a sphere
 constexpr auto earth_radius_m = 6378137.0;

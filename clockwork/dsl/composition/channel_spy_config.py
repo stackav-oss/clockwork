@@ -30,18 +30,19 @@ PublishedChannelMetadata: Final[type[channel_spy_config_proto.PublishedChannelMe
         CSC_MODULE.context,
         CSC_MODULE,
         "PublishedChannelMetadata",
-        max_channel_name_size=127,
+        max_channel_name_size=300,
         max_schema_name_size=511,
-        max_schema_definition_size=16383,
+        max_schema_definition_size=20000,
     )[0]
 )
+
 
 ChannelSpyConfig: Final[type[channel_spy_config_proto.ChannelSpyConfig]] = tachyon_dyn.get_instantiation_dataclass(
     CSC_MODULE.context,
     CSC_MODULE,
     "ChannelSpyConfig",
-    max_channel_name_size=127,
+    max_channel_name_size=300,
     max_schema_name_size=511,
-    max_schema_definition_size=16383,
-    max_num_channels=512,
+    max_schema_definition_size=20000,
+    max_num_channels=2048,
 )[0]

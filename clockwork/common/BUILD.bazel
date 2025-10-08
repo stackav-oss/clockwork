@@ -44,6 +44,7 @@ cc_library(
     name = "abstract_epoll_manager",
     srcs = ["abstract_epoll_manager.cc"],
     hdrs = ["abstract_epoll_manager.hh"],
+    visibility = ["//visibility:public"],
     deps = [
         "//jewels/filesystem:error_code",
         "//jewels/memory:memory_resource",
@@ -81,6 +82,7 @@ cc_library(
         "cog_execution_error.inl",
     ],
     hdrs = ["cog_execution_error.hh"],
+    data = [":cog_execution_error_clk"],
     visibility = ["//visibility:public"],
     deps = ["@wise_enum"],
 )
@@ -115,6 +117,7 @@ cc_library(
         "cog_gpu_assignment_config_clk_cc.inl",
     ],
     hdrs = ["cog_gpu_assignment_config_clk_cc.hh"],
+    data = [":cog_gpu_assignment_config_clk"],
     deps = [
         ":process_description",
         "//clockwork:repr_iface",
@@ -177,6 +180,7 @@ cc_library(
         "multi_subscriber_config.inl",
     ],
     hdrs = ["multi_subscriber_config.hh"],
+    data = [":multi_subscriber_config_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":process_description",
@@ -207,6 +211,7 @@ cc_library(
         "platform_diagnostics_config.inl",
     ],
     hdrs = ["platform_diagnostics_config.hh"],
+    data = [":platform_diagnostics_config_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":process_description",
@@ -241,10 +246,12 @@ cc_library(
         "process_description.inl",
     ],
     hdrs = ["process_description.hh"],
+    data = [":process_description_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
+        "//jewels/container:compare",
         "//jewels/container/tap:optional",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",

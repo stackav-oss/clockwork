@@ -1,6 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/common/process_description.hh"
 #include "clockwork/io/var_packet.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/bidirectional_udp.hh"
@@ -8,6 +9,7 @@
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/sock_opt.hh"
@@ -25,10 +27,12 @@
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <arpa/inet.h>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <gsl/util>
 
 #include <algorithm>
 #include <array>
@@ -52,13 +56,25 @@ TEST_CASE("BidirectionalUdp", "Both directions")
 
   const std::pmr::string host = "127.0.0.1";
 
+  const support::Sender sender{};
   auto server = support::Receiver::try_make(std::string{host}, uint16_t{0U});
   REQUIRE(server);
   const auto remote_port = server->port();
   REQUIRE(remote_port);
 
-  auto maybe_bidir =
-    BidirectionalUdp<Msg>::try_make(memres, {.host = host, .port = 0U}, {.host = host, .port = *remote_port});
+  const auto publisher_endpoint_class_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("00000000-0000-0000-0000-000000000001");
+  REQUIRE(publisher_endpoint_class_id);
+  const auto subscriber_endpoint_class_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("00000000-0000-0000-0000-000000000002");
+  REQUIRE(subscriber_endpoint_class_id);
+
+  auto maybe_bidir = BidirectionalUdp<Msg>::try_make(
+    memres,
+    *publisher_endpoint_class_id,
+    *subscriber_endpoint_class_id,
+    {.host = host, .port = 0U},
+    {.host = host, .port = *remote_port});
   REQUIRE(maybe_bidir);
 
   auto bd_socket = *maybe_bidir;
@@ -67,14 +83,32 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   auto local_port = ::ntohs(local_addr->sin_port);
 
   InMemoryChannel<Msg, num_slots> incoming_channel{memres};
+  SECTION("Invalid publisher endpoint id")
+  {
+    auto incoming_publisher = incoming_channel.make_publisher(1UL);
+    REQUIRE(
+      bd_socket->connect_publisher({}, std::move(incoming_publisher)) ==
+      jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
+  }
+
   auto incoming_publisher = incoming_channel.make_publisher(1UL);
   auto incoming_subscriber = incoming_channel.make_subscriber();
-  REQUIRE(bd_socket->connect_publisher(std::move(incoming_publisher)));
+
+  REQUIRE(bd_socket->connect_publisher(*publisher_endpoint_class_id, std::move(incoming_publisher)));
   InMemoryChannel<Msg, num_slots> outgoing_channel{memres};
+
+  SECTION("Invalid subsciber endpoint id")
+  {
+    auto outgoing_subscriber = outgoing_channel.make_subscriber();
+    REQUIRE(
+      bd_socket->connect_subscriber({}, std::move(outgoing_subscriber)) ==
+      jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
+  }
   auto outgoing_publisher = outgoing_channel.make_publisher(0UL);
   auto outgoing_subscriber = outgoing_channel.make_subscriber();
+
   //  The socket "subscribes" to this channel to send data
-  REQUIRE(bd_socket->connect_subscriber(outgoing_subscriber));
+  REQUIRE(bd_socket->connect_subscriber(*subscriber_endpoint_class_id, std::move(outgoing_subscriber)));
 
   constexpr uint32_t ref_test_value = 123U;
 
@@ -88,11 +122,11 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   // Test that the server can send value to the socket and the value is output to the incoming channel
   auto client_addr = jewels::networking::SocketAddress::create(std::string{host}, local_port);
   REQUIRE(
-    support::send_to(
+    sender(
       std::as_bytes(jewels::as_single_item_span(ref_test_value)),
-      server->fd(),
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) needed for socket API
       *(reinterpret_cast<const sockaddr_in*>(client_addr->ptr()))) == sizeof(ref_test_value));
+  REQUIRE(support::wait_for_readable(bd_socket->fd()));
   bd_socket->read();
   const pinion::BufferIterator next_to_consume{};
   auto available = pinion::available_starting_from(incoming_subscriber.available(), next_to_consume);
@@ -110,6 +144,8 @@ TEST_CASE("Socket options")
   const SockOptionValue<jewels::networking::SockOption::so_reuse_address> value{GENERATE(0, 1)};
   auto maybe_udp = BidirectionalUdp<Tachyon<io::VarPacket<sizeof(uint32_t)>>>::try_make(
     memres,
+    {},
+    {},
     {.host = std::pmr::string{"127.0.0.1"}, .port = uint16_t{0U}},
     {.host = std::pmr::string{"127.0.0.1"}, .port = uint16_t{0U}},
     value);

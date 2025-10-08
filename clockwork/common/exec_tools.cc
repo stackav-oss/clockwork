@@ -52,7 +52,8 @@ jewels::expected<pinion::ShmChannelFactory, jewels::MonoError> PinionArgs::make_
 {
   auto requested_resume_maybe = wise_enum::from_string<pinion::ShmChannel::ResumeBehavior>(arg_resume_.getValue());
   auto resume = requested_resume_maybe.value_or(resume_default);
-  if (resume != resume_default)
+  // We know the second condition must be true if the first is, but clang-tidy can't see that so check it explicitly.
+  if (resume != resume_default && requested_resume_maybe.has_value())
   {
     jewels::log_cerr_warn(
       "{} flag set to nondefault: \"{}\".", arg_resume_.longID(), wise_enum::to_string(requested_resume_maybe.value()));
@@ -64,13 +65,21 @@ ExecutionArgs::ExecutionArgs(TCLAP::ArgContainer& parser)
   : deterministic_runner_("", "deterministic-runner", "Use the deterministic runner", parser, false),
     input_log_uri_("", "input-log-uri", "input log file uri for log publisher", false, "", "string", parser),
     output_log_uri_("", "output-log-uri", "Simulation output log file uri", false, "", "string", parser),
-    log_publisher_config_path_(
-      "", "log-publisher-config", "Path to the log publisher config file", false, "", "string", parser),
+    channel_publisher_config_path_(
+      "", "channel-publisher-config", "Path to the channel publisher config file", false, "", "string", parser),
     log_writer_config_path_("", "log-writer-config", "Path to the log writer config file", false, "", "string", parser),
     start_time_ns_("", "sim-start-time-ns", "Start time of simulation in nanoseconds", false, 0U, "uint64_t", parser),
     end_time_ns_("", "sim-end-time-ns", "End time of simulation in nanoseconds", false, 0U, "uint64_t", parser),
     cog_gpu_assignment_config_path_(
       "", "cog-gpu-config", "Path to the cog gpu assignment config file", false, "", "string", parser),
+    metrics_channel_metadata_config_path_(
+      "",
+      "metrics-channel-metadata-config",
+      "Path to the metrics channel metadata config file",
+      false,
+      "",
+      "string",
+      parser),
     suppress_schema_mismatch_errors_(
       "", "suppress-schema-mismatch-errors", "Suppress errors for schema mismatch", parser, false)
 {
@@ -91,12 +100,12 @@ jewels::expected<ExecutionParams, jewels::MonoError> ExecutionArgs::make_executi
     execution_params.end_time.emplace(jewels::time::SyncTime(std::chrono::nanoseconds(end_time_ns_.getValue())));
   }
 
-  if (input_log_uri_.isSet() && log_publisher_config_path_.isSet())
+  if (input_log_uri_.isSet() && channel_publisher_config_path_.isSet())
   {
     execution_params.input_log_uri.emplace(input_log_uri_.getValue());
-    execution_params.log_publisher_config_path.emplace(log_publisher_config_path_.getValue());
+    execution_params.channel_publisher_config_path.emplace(channel_publisher_config_path_.getValue());
   }
-  else if (input_log_uri_.isSet() || log_publisher_config_path_.isSet())
+  else if (input_log_uri_.isSet() || channel_publisher_config_path_.isSet())
   {
     jewels::log_cerr_error("If an input log uri is set a log publisher config path must also be.");
     return jewels::unexpected(jewels::MonoError{});
@@ -116,6 +125,10 @@ jewels::expected<ExecutionParams, jewels::MonoError> ExecutionArgs::make_executi
   if (cog_gpu_assignment_config_path_.isSet())
   {
     execution_params.cog_gpu_assignment_config_path.emplace(cog_gpu_assignment_config_path_.getValue());
+  }
+  if (metrics_channel_metadata_config_path_.isSet())
+  {
+    execution_params.metrics_channel_metadata_config_path.emplace(metrics_channel_metadata_config_path_.getValue());
   }
 
   execution_params.suppress_schema_mismatch_errors.emplace(suppress_schema_mismatch_errors_.getValue());

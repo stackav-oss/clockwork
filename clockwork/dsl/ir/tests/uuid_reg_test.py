@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test uuid_reg."""
 
@@ -28,7 +29,7 @@ def typeval() -> typesys.TypeVal:
 
 def test_register_uuid(compiler_context: CompilerContext, typeval: typesys.TypeVal) -> None:
     """Register an entity via register_uuid."""
-    uuid = uuid5(uuid_reg._UUID_NAMESPACE, "hello_world")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    uuid = uuid5(uuid_reg._UUID_NAMESPACE, "hello_world")
     uuid_reg.register_uuid(compiler_context, typeval, uuid)
 
     # Access the registry from the context
@@ -42,7 +43,7 @@ def test_register_uuid(compiler_context: CompilerContext, typeval: typesys.TypeV
 def test_register_entity(compiler_context: CompilerContext, typeval: typesys.TypeVal) -> None:
     """Register an entity via register_entity."""
     name = "hello_world"
-    expected_uuid = uuid5(uuid_reg._UUID_NAMESPACE, name)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    expected_uuid = uuid5(uuid_reg._UUID_NAMESPACE, name)
     uuid_reg.register_entity(compiler_context, typeval, name)
 
     registry = compiler_context[uuid_reg.UUID_REGISTRY_KEY]
@@ -58,7 +59,7 @@ def test_register_multiple_entities(compiler_context: CompilerContext) -> None:
     vals_uuids = [
         (
             MockType(type_info=cast("typesys.TypeVal", None)),
-            uuid5(uuid_reg._UUID_NAMESPACE, f"hell_world:{i}"),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            uuid5(uuid_reg._UUID_NAMESPACE, f"hell_world:{i}"),
         )
         for i in range(num_to_register)
     ]
@@ -78,20 +79,20 @@ def test_register_multiple_entities(compiler_context: CompilerContext) -> None:
 def test_conflict(compiler_context: CompilerContext) -> None:
     """Test key and uuid conflict detection."""
     name1 = "hello_world:1"
-    id1 = uuid5(uuid_reg._UUID_NAMESPACE, name1)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    id1 = uuid5(uuid_reg._UUID_NAMESPACE, name1)
     val1 = MockType(type_info=cast("typesys.TypeVal", None))
     uuid_reg.register_uuid(compiler_context, val1, id1)
 
     # Conflicting Value/value_key with val1
     name2 = "hello_world:2"
-    id2 = uuid5(uuid_reg._UUID_NAMESPACE, name2)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    id2 = uuid5(uuid_reg._UUID_NAMESPACE, name2)
     val2 = val1
     with pytest.raises(RuntimeError, match=r"Entity with value_key .* already exists."):
         uuid_reg.register_uuid(compiler_context, val2, id2)
 
     # Conflicting UUID val1
     name3 = name1
-    id3 = uuid5(uuid_reg._UUID_NAMESPACE, name3)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    id3 = uuid5(uuid_reg._UUID_NAMESPACE, name3)
     val3 = MockType(type_info=cast("typesys.TypeVal", None))
     with pytest.raises(RuntimeError, match=r"UUID .* already exists."):
         uuid_reg.register_uuid(compiler_context, val3, id3)
@@ -104,7 +105,7 @@ def test_lookup_uuid(compiler_context: CompilerContext) -> None:
     entity_uuid = [
         (
             MockType(type_info=cast("typesys.TypeVal", None)),
-            uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),
         )
         for i in range(num_to_register)
     ]
@@ -135,7 +136,7 @@ def test_lookup_entity(compiler_context: CompilerContext) -> None:
     num_to_register = 5
     uuid_entity = [
         (
-            uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),
             MockType(type_info=cast("typesys.TypeVal", None)),
         )
         for i in range(num_to_register)
@@ -151,7 +152,7 @@ def test_lookup_entity(compiler_context: CompilerContext) -> None:
         assert uuid_reg.lookup_entity(compiler_context, uuid) == entity
 
     # Lookup a bad UUID
-    bad_uuid = uuid5(uuid_reg._UUID_NAMESPACE, "bad_name")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    bad_uuid = uuid5(uuid_reg._UUID_NAMESPACE, "bad_name")
     with pytest.raises(RuntimeError, match=r"UUID .* does not exist .*"):
         uuid_reg.lookup_entity(compiler_context, bad_uuid)
 
@@ -164,11 +165,11 @@ def test_import_from() -> None:
 
     # Add different entries to each context
     entity1 = MockType(type_info=cast("typesys.TypeVal", None))
-    uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "entity1")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "entity1")
     uuid_reg.register_uuid(context1, entity1, uuid1)
 
     entity2 = MockType(type_info=cast("typesys.TypeVal", None))
-    uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "entity2")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "entity2")
     uuid_reg.register_uuid(context2, entity2, uuid2)
 
     # Import context2 into context1
@@ -191,8 +192,8 @@ def test_import_from_conflicts() -> None:
 
     # Same entity with different UUIDs
     entity = MockType(type_info=cast("typesys.TypeVal", None))
-    uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid1")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid2")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid1")
+    uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid2")
 
     uuid_reg.register_uuid(context1, entity, uuid1)
 
@@ -212,7 +213,7 @@ def test_import_from_conflicts() -> None:
 
     entity3 = MockType(type_info=cast("typesys.TypeVal", None))
     entity4 = MockType(type_info=cast("typesys.TypeVal", None))
-    uuid3 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid3")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    uuid3 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid3")
 
     uuid_reg.register_uuid(context3, entity3, uuid3)
 

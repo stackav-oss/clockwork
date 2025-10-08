@@ -48,8 +48,8 @@ jewels::expected<ClockworkSystemRunner, ClockworkSystemRunnerError> ClockworkSys
   system_runner.process_description_ = std::move(*maybe_process_description);
   system_runner.start_time_ = config.start_time;
   system_runner.end_time_ = config.end_time;
-  system_runner.log_publisher_config_ = config.log_publisher_config_;
-  system_runner.log_writer_config_ = config.log_writer_config_;
+  system_runner.channel_publisher_config_ = config.channel_publisher_config;
+  system_runner.log_writer_config_ = config.log_writer_config;
   system_runner.message_writer_ = message_writer;
   system_runner.message_fetcher_ = message_fetcher;
 
@@ -84,7 +84,7 @@ ClockworkSystemRunner::create(const ClockworkSystemRunnerConfig& runner_config)
       return jewels::unexpected(ClockworkSystemRunnerError::error_reading_input_log);
     }
     system_runner.input_log_uri_ = runner_config.input_log_config->log_uri;
-    system_runner.log_publisher_config_ = runner_config.input_log_config->log_config_path;
+    system_runner.channel_publisher_config_ = runner_config.input_log_config->log_config_path;
 
     system_runner.start_time_ = maybe_log_start_time->get_time();
     system_runner.end_time_ = maybe_log_end_time->get_time();
@@ -97,6 +97,8 @@ ClockworkSystemRunner::create(const ClockworkSystemRunnerConfig& runner_config)
     system_runner.log_writer_config_ = runner_config.output_log_config->log_config_path;
     system_runner.output_log_uri_ = runner_config.output_log_config->log_uri;
   }
+
+  system_runner.metrics_channel_metadata_config_ = runner_config.metrics_channel_metadata_config_path;
 
   if (runner_config.start_time)
   {
@@ -143,8 +145,9 @@ jewels::expected<void, ClockworkSystemRunnerError> ClockworkSystemRunner::run()
     .end_time = end_time_,
     .input_log_uri = input_log_uri_,
     .output_log_uri = output_log_uri_,
-    .log_publisher_config_path = log_publisher_config_,
+    .channel_publisher_config_path = channel_publisher_config_,
     .log_writer_config_path = log_writer_config_,
+    .metrics_channel_metadata_config_path = metrics_channel_metadata_config_,
     .message_injectors = MessageInjectors{.message_writer_ = message_writer_, .message_fetcher_ = message_fetcher_}};
   jewels::cli::SimpleExitCondition exit;
   auto result =

@@ -73,6 +73,13 @@ TEST_CASE("Path")
     REQUIRE(Path{path, memory_resource}.has_stem() == std::filesystem::path(path).has_stem());
   }
 
+  SECTION("Absolute")
+  {
+    const auto* const path = GENERATE("/foo/bar.txt", "/foo/.bar", "foo.bar.baz.tar", "/foo/.", "/foo/..", "/foo/bar/");
+    CAPTURE(path);
+    REQUIRE(Path{path, memory_resource}.is_absolute() == std::filesystem::path(path).is_absolute());
+  }
+
   SECTION("Extension")
   {
     const auto* const path = GENERATE(

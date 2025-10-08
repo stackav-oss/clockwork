@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
+#include <sys/types.h>
 
 namespace jewels::hash
 {
@@ -28,7 +30,7 @@ void Sha1::update(std::span<const std::byte> data)
   if (pending_ > 0)
   {
     const uint64_t copy = std::min(block_bytes - pending_, data.size());
-    std::memcpy(buffer_.data() + pending_, data.data(), copy);
+    std::memcpy(std::next(buffer_.data(), static_cast<ssize_t>(pending_)), data.data(), copy);
     data = data.subspan(copy);
     pending_ += copy;
     if (pending_ == block_bytes)
@@ -68,7 +70,7 @@ Sha1::Digest Sha1::get() const
   const uint64_t size = 8 * (block_bytes * blocks + pending_);
   if (pending_ > 0)
   {
-    std::memset(buffer_.data() + pending_, 0, block_bytes - pending_);
+    std::memset(std::next(buffer_.data(), static_cast<ssize_t>(pending_)), 0, block_bytes - pending_);
     buffer_.at(pending_) = append_1bit_byte;
     vog_sha1::buffer_to_block(buffer_, block32);
   }

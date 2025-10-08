@@ -34,14 +34,15 @@ constexpr inline auto c_value = 8U;
 [[nodiscard]] uint32_t do_visit(const VariantType& arg)
 {
   return std::visit(
-    Overloaded{// Handle std::monostate
-               [](std::monostate) { return monostate_value; },
-               // Handle A
-               [](A) { return a_value; },
-               // Handle B
-               [](B) { return b_value; },
-               // Handle C
-               [](C) { return c_value; }},
+    Overloaded{
+      // Handle std::monostate
+      [](std::monostate) { return monostate_value; },
+      // Handle A
+      [](A) { return a_value; },
+      // Handle B
+      [](B) { return b_value; },
+      // Handle C
+      [](C) { return c_value; }},
     arg);
 }
 

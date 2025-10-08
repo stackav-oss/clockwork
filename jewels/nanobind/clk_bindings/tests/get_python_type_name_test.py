@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Shim to run the real tests, which live in 'nb_get_python_type_name_test.cc'."""
 

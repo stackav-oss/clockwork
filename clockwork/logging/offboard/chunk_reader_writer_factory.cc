@@ -76,7 +76,11 @@ ChunkReaderWriterFactory::make_chunk_writer(std::string_view uri_str)
     jewels::log_cerr_error("Invalid log URI: {}", uri_str);
     return jewels::unexpected(LogError::invalid_log_uri);
   }
-  const auto& log_uri = make_result.value();
+  auto log_uri = make_result.value();
+  while (!log_uri.path().empty() && log_uri.path() != "/" && log_uri.path().back() == '/')
+  {
+    log_uri = log_uri.parent_uri();
+  }
   switch (log_uri.scheme())
   {
   case LogUriScheme::file:

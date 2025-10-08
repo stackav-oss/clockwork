@@ -3,47 +3,106 @@ schema BridgeClientServerCounters
 {
   uuid: 2a57c3d4-9ef5-4479-a130-c2f8c3d5a75a;
 
- fields
- {
-   // Channel name
-   #1 channel_name: VarString<max_size=127>;
+  fields
+  {
+    // Channel name
+    #16 channel_name: VarString<max_size=300>;
 
-   // Messages rate in hz
-   #2 message_rate_hz: Float32;
+    // Messages rate in hz
+    #2 message_rate_hz: Float32;
 
-   // Data rate in bytes per second
-   #3 data_rate_bps: Float32;
+    // Data rate in bytes per second
+    #3 data_rate_bps: Float32;
 
-   // Compressed data rate in bytes per second
-   #4 compressed_data_rate_bps: Float32;
+    // Compressed data rate in bytes per second
+    #4 compressed_data_rate_bps: Float32;
 
-   // Compression ratio
-   #5 compression_ratio: Float32;
+    // Compression ratio
+    #5 compression_ratio: Float32;
 
-   // Average latency between message publish time and when the bridge received the message
-   #7 average_receive_latency: Duration;
+    // Average latency between message publish time and when the bridge received the message
+    #7 average_receive_latency: Duration;
 
-   // Max latency between message publish time and when the bridge received the message
-   #9 max_receive_latency: Duration;
+    // Max latency between message publish time and when the bridge received the message
+    #9 max_receive_latency: Duration;
 
-   // Average time spent sending or receiving a message over a socket
-   #10 average_transfer_time: Duration;
+    // Average time spent sending or receiving a message over a socket
+    #10 average_transfer_time: Duration;
 
-   // Max time spent sending or receiving a message over a socket
-   #11 max_transfer_time: Duration;
+    // Max time spent sending or receiving a message over a socket
+    #11 max_transfer_time: Duration;
 
-   // Average time spent compressing or decopressing a message
-   #12 average_compression_time: Duration;
+    // Average time spent compressing or decopressing a message
+    #12 average_compression_time: Duration;
 
-   // Max time spent compressing or decopressing a message
-   #13 max_compression_time: Duration;
+    // Max time spent compressing or decopressing a message
+    #13 max_compression_time: Duration;
 
-   // Average latency between message publish time and when the bridge was done sending the message
-   #14 average_bridge_latency: Duration;
+    // Average latency between message publish time and when the bridge was done sending the message
+    #14 average_bridge_latency: Duration;
 
-   // Max latency between message publish time and when the bridge was done sending the message
-   #15 max_bridge_latency: Duration;
- }
+    // Max latency between message publish time and when the bridge was done sending the message
+    #15 max_bridge_latency: Duration;
+  }
+  history
+  {
+    versions: [15, 16];
+    fields
+    {
+      #1 channel_name: VarString<max_size=127> -> became #16;
+    }
+  }
+}
+
+// TCP Bridge status diagnostics counters
+schema BridgeStatusDiagnosticsCounters
+{
+  uuid: acc8de33-1231-4e6b-9c08-d1c12d461bd0;
+
+  fields
+  {
+    // Dropped message count
+    #1  drop_count: UInt64;
+
+    // Failed send count
+    #2 failed_sends: UInt64;
+
+    // Closed socket count
+    #3 closed_socket_count: UInt64;
+
+    // Failed receive count
+    #4 failed_recvs: UInt64;
+
+    // Failed reservation count
+    #5 failed_reservations: UInt64;
+
+    // Malformed message count
+    #6 malformed_messages: UInt64;
+
+    // Failed commit count
+    #7 failed_commits: UInt64;
+
+    // Failed discard count
+    #8 failed_discards: UInt64;
+
+    // Client socket error count
+    #9 client_socket_errors: UInt64;
+
+    // Unrecoverable progress error count
+    #10 progress_errors: UInt64;
+
+    // EPoll error count
+    #11 epoll_errors: UInt64;
+
+    // Bridge status publish errors
+    #12 status_errors: UInt64;
+
+    // Max bridge latency
+    #13 max_bridge_latency: Duration;
+
+    // Max latency channel name
+    #14 max_latency_channel_name: VarString<300>;
+  }
 }
 
 // TCP Bridge status message
@@ -61,6 +120,13 @@ schema BridgeStatus
 
     // Bridge server counters
     #3 server_counters: VarArray<BridgeClientServerCounters, max_size=257>;
+
+    // Bridge diagnostics counters
+    #4 diagnostics_counters: BridgeStatusDiagnosticsCounters;
+  }
+  history
+  {
+    versions: [3, 4];
   }
 }
 
@@ -72,11 +138,21 @@ cpp_target bridge_status
   }
 
   schema BridgeClientServerCounters;
-  schema BridgeStatus;
-
   representation Tachyon<BridgeClientServerCounters>;
-  representation Tachyon<BridgeStatus>;
+  interface BridgeClientServerCountersTap: Tappy<BridgeClientServerCounters>;
 
-  interface BridgeClientServerCountersTap : Tap<Tachyon<BridgeClientServerCounters>>;
-  interface BridgeStatusTap : Tap<Tachyon<BridgeStatus>>;
+  schema BridgeStatusDiagnosticsCounters;
+  representation Tachyon<BridgeStatusDiagnosticsCounters>;
+  interface BridgeStatusDiagnosticsCountersTap: Tappy<BridgeStatusDiagnosticsCounters>;
+
+  schema BridgeStatus;
+  representation Tachyon<BridgeStatus>;
+  interface BridgeStatusTap: Tappy<BridgeStatus>;
+}
+
+nanobind_target bridge_status_clk_nb
+{
+  binding Tappy<BridgeClientServerCounters>;
+  binding Tappy<BridgeStatusDiagnosticsCounters>;
+  binding Tappy<BridgeStatus>;
 }

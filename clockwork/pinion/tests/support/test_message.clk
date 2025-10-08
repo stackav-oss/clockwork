@@ -1,0 +1,22 @@
+// Test Message
+schema TestMessage
+{
+    uuid: 02262791-640b-4b7b-94ff-6eead9d3b4c3;
+
+    fields
+    {
+        // A test integer field
+        #1 test_field: Int32;
+    }
+}
+
+cpp_target test_message
+{
+    options
+    {
+        namespace clockwork::pinion::test;
+    }
+    schema TestMessage;
+    representation Tachyon<TestMessage>;
+    interface Tappy<TestMessage>;
+}

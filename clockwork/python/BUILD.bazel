@@ -20,7 +20,10 @@ cc_library(
     name = "python_init",
     srcs = ["python_init.cc"],
     hdrs = ["python_init.hh"],
-    deps = ["@python_3_10//:python_headers"],
+    deps = [
+        "@python_3_10//:python_headers",
+        "@wise_enum",
+    ],
 )
 
 cc_library(
@@ -42,7 +45,6 @@ cc_library(
     hdrs = ["python_state.hh"],
     deps = [
         ":gil_lock_guard",
-        ":python_init",
         ":python_object",
         "//jewels/memory:memory_resource",
     ],
@@ -65,5 +67,6 @@ cc_library(
         "python_state_extern.inl",
     ],
     hdrs = ["python_state_extern.hh"],
+    data = [":python_state_clk"],
     deps = [":python_state"],
 )

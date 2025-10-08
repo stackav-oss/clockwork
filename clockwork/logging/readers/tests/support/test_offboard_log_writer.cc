@@ -60,44 +60,47 @@ TestOffboardLogWriter::write_clockwork_test_log(std::string_view log_dir, size_t
   auto current_time = start_time;
   for (uint32_t i = 0U; i < message_count; ++i)
   {
-    if (const auto write_result = writer.write(offboard::LoggedMessage{
-          .channel_name = channel_name1,
-          .sequence_number = i * 4U,
-          .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
-          .transmit_time = LogTimestamp{current_time},
-          .header = header1_,
-          .data = data1_,
-          .is_lite_compressed = false,
-        });
+    if (const auto write_result = writer.write(
+          offboard::LoggedMessage{
+            .channel_name = channel_name1,
+            .sequence_number = i * 4U,
+            .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
+            .transmit_time = LogTimestamp{current_time},
+            .header = header1_,
+            .data = data1_,
+            .is_lite_compressed = false,
+          });
         !write_result)
     {
       return write_result;
     }
     current_time += message_interval;
 
-    if (const auto write_result = writer.write(offboard::LoggedMessage{
-          .channel_name = channel_name2,
-          .sequence_number = (i * 4U) + 1U,
-          .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
-          .transmit_time = LogTimestamp{current_time},
-          .header = header2_,
-          .data = compressed_data2_,
-          .is_lite_compressed = true,
-        });
+    if (const auto write_result = writer.write(
+          offboard::LoggedMessage{
+            .channel_name = channel_name2,
+            .sequence_number = (i * 4U) + 1U,
+            .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
+            .transmit_time = LogTimestamp{current_time},
+            .header = header2_,
+            .data = compressed_data2_,
+            .is_lite_compressed = true,
+          });
         !write_result)
     {
       return write_result;
     }
     current_time += message_interval;
 
-    if (const auto write_result = writer.write(offboard::LoggedMessage{
-          .channel_name = channel_name3,
-          .sequence_number = (i * 4U) + 2U,
-          .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
-          .transmit_time = LogTimestamp{current_time},
-          .header = header3_,
-          .data = data3_,
-        });
+    if (const auto write_result = writer.write(
+          offboard::LoggedMessage{
+            .channel_name = channel_name3,
+            .sequence_number = (i * 4U) + 2U,
+            .log_time = LogTimestamp{current_time + std::chrono::nanoseconds(1)},
+            .transmit_time = LogTimestamp{current_time},
+            .header = header3_,
+            .data = data3_,
+          });
         !write_result)
     {
       return write_result;

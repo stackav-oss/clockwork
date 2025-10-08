@@ -104,7 +104,22 @@ public:
   /// @param buffer_view A non-owning view onto the underlying container.
   /// @param cursor An iterator to the "cursor" element for this input.
   /// @param first_new An iterator to the first new/unseen message in the view.
-  constexpr MessageInputDial(ViewType buffer_view, IteratorType cursor, IteratorType first_new) noexcept;
+  /// @param connected Indicates if this input is connected to a channel.
+  constexpr MessageInputDial(
+    ViewType buffer_view, IteratorType cursor, IteratorType first_new, bool connected = true) noexcept;
+
+  /// Construct from a view, cursor iterator, first_new iterator, and skip count.
+  /// @param buffer_view A non-owning view onto the underlying container.
+  /// @param cursor An iterator to the "cursor" element for this input.
+  /// @param first_new An iterator to the first new/unseen message in the view.
+  /// @param skip_count How many messages were preemptively skipped this cycle.
+  /// @param connected Indicates if this input is connected to a channel.
+  constexpr MessageInputDial(
+    ViewType buffer_view,
+    IteratorType cursor,
+    IteratorType first_new,
+    size_t skip_count,
+    bool connected = true) noexcept;
 
   /// Access the full view
   [[nodiscard]] constexpr const ViewType& get_view() const noexcept;
@@ -124,6 +139,13 @@ public:
   /// End iterator of the view.
   [[nodiscard]] constexpr IteratorType end() const noexcept;
 
+  /// @return If the input was configured with preemptive skipping and was fast-forwarded on this cycle, the number of
+  /// messages that were skipped. Otherwise zero.
+  [[nodiscard]] constexpr size_t num_messages_skipped() const noexcept;
+
+  /// @return True if this input is connected to a channel.
+  [[nodiscard]] constexpr bool connected() const noexcept;
+
 protected:
   /// Set the cursor iterator.
   /// @note This is exposed only by the MessageInputDialWithCursorControl class (below).
@@ -133,6 +155,8 @@ private:
   ViewType buffer_view_;
   IteratorType cursor_;
   IteratorType first_new_;
+  size_t skip_count_;
+  bool connected_;
 };
 
 /// Version of a message input dial that allows the cursor to be set.

@@ -1,6 +1,6 @@
 # Clockwork troubleshooting
 
-This document includes some guidance on how to debug and resolve common issues when building or deploying a clockwork system.
+This document includes some guidance on how to debug and resolve common issues when building or deploying a Clockwork system.
 
 ## Deploying: TCP bridge not delivering messages
 

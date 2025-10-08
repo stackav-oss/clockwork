@@ -58,7 +58,7 @@ class SerializedMessage:
 class DeserializingIterator:
     """Implements a deserializing iterator for logged messages."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         raw_iter: Iterator[LoggedMessage],
         topic_cb_map: dict[str, Callable[[memoryview], Any]],
@@ -143,6 +143,9 @@ class LogReader(_NBLogReader):
                     _, deserializer = compatibility.create_deserializer(
                         compiler_context, message_type, tachyon_metadata, topic_metadata.type
                     )
+                except RuntimeError as e:
+                    _handle_error(str(e), False)
+                    return
                 except ValueError as e:
                     _handle_error(str(e), False)
                     return

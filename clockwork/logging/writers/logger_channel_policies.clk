@@ -17,3 +17,35 @@ policy ChannelLoggingPolicy for logger_channels::LoggerMessageRatesChannel
 {
     log_type = LogType::telemetry;
 }
+
+policy ChannelLoggingPolicy for logger_channels::LoggerConfigChannel1
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerStatusChannel1
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerMessageRatesChannel1
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerConfigChannel2
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerStatusChannel2
+{
+    log_type = LogType::telemetry;
+}
+
+policy ChannelLoggingPolicy for logger_channels::LoggerMessageRatesChannel2
+{
+    log_type = LogType::telemetry;
+}

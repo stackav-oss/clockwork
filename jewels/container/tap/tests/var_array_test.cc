@@ -17,6 +17,7 @@
 #include <iterator>
 #include <ranges>
 #include <span>
+#include <sys/types.h>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -52,7 +53,8 @@ void check_tail_cleared(const VarArray& array)
   using Value = typename VarArray::value_type;
   if (array.size() < array.capacity())
   {
-    auto tail = std::span<const Value>(array.data() + array.size(), array.capacity() - array.size());
+    auto tail = std::span<const Value>(
+      std::next(array.data(), static_cast<ssize_t>(array.size())), array.capacity() - array.size());
     REQUIRE(std::ranges::all_of(tail, [](auto&& item) { return item == Value{}; }));
   }
 }
@@ -209,7 +211,7 @@ TEST_CASE("Test var array")
   SECTION("Move construction")
   {
     VarArray<uint32_t, capacity> orig{1U};
-    const auto copy{std::move(orig)}; // NOLINT(performance-move-const-arg)
+    const auto copy{std::move(orig)}; // NOLINT(performance-move-const-arg) Intentionally testing move behavior
     REQUIRE(copy.size() == 1UL);
     REQUIRE(copy.at(0UL) == 1UL);
   }
@@ -245,7 +247,7 @@ TEST_CASE("Test var array")
   {
     VarArray<uint32_t, capacity> orig{1U};
     VarArray<uint32_t, capacity> copy{};
-    copy = std::move(orig); // NOLINT(performance-move-const-arg)
+    copy = std::move(orig); // NOLINT(performance-move-const-arg) Intentionally testing move behavior
     REQUIRE(copy.size() == 1UL);
     REQUIRE(copy.at(0UL) == 1UL);
   }
@@ -458,8 +460,9 @@ TEST_CASE("Test var array")
     {
       REQUIRE(var_array[i] == 0U);
     }
-    REQUIRE(std::ranges::all_of(
-      as_bytes(jewels::as_single_item_span(var_array)), [](auto byte) { return byte == std::byte{}; }));
+    REQUIRE(
+      std::ranges::all_of(
+        as_bytes(jewels::as_single_item_span(var_array)), [](auto byte) { return byte == std::byte{}; }));
   }
 
   SECTION("reserve")

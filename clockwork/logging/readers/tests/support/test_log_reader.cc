@@ -95,17 +95,18 @@ std::vector<TopicMetadata> TestLogReader::get_metadata()
   auto topics = std::vector<TopicMetadata>();
   for (const auto& [name, record] : msg_records_)
   {
-    topics.emplace_back(TopicMetadata{
-      .name = name,
-      .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
-      .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
-      .channel_type = ChannelType::regular,
-      .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
-      .schema_definition =
-        std::string{
-          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),
-          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.size()},
-    });
+    topics.emplace_back(
+      TopicMetadata{
+        .name = name,
+        .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
+        .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+        .channel_type = ChannelType::regular,
+        .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+        .schema_definition =
+          std::string{
+            clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),
+            clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.size()},
+      });
   }
   return topics;
 }

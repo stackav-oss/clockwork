@@ -12,6 +12,7 @@
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/scaffolding/end_process_exception.hh"
 #include "clockwork/scaffolding/main_impl.hh"
 #include "clockwork/scaffolding/tests/support/runtime_tools.hh"
 #include "clockwork/scaffolding/tests/support/test_cogs_dial.hh"
@@ -31,7 +32,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
-#include <array>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -48,6 +49,7 @@
 
 namespace clockwork::testing
 {
+std::atomic<int> cog1_exit_code = 0; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) test code
 
 void execute_cog(InitCog1Dial& dial)
 {
@@ -60,6 +62,10 @@ void execute_cog(InitCog1Dial& dial)
 
 void execute_cog(TestCog1Dial& dial)
 {
+  if (auto exit_code = cog1_exit_code.load(); exit_code != 0)
+  {
+    throw scaffolding::EndProcessException(exit_code);
+  }
   uint64_t counter = dial.get_states().get_state_a().get_cycle();
   jewels::log_cerr_info("cog 111 exec {}", counter);
   dial.get_outputs().get_out_a().message().set_cycle(counter);
@@ -111,7 +117,7 @@ TEST_CASE("clockwork_integration")
     "clockwork/tests/support/clockwork.clockwork.tests.support.test_system.test_system.proc.tachyon");
   const std::string arg_pinion_dir = tmpdir.get_path().native();
   const std::string arg_pinion_ns = jewels::Uuid<int>::random_uuid().to_string();
-  std::array<const char*, 6> args = {
+  std::vector<const char*> args = {
     {"integration_test_bin",
      "--pinion-dir",
      arg_pinion_dir.c_str(),
@@ -124,8 +130,11 @@ TEST_CASE("clockwork_integration")
       jewels::memory::MemoryResource(std::pmr::get_default_resource()), arg_pinion_ns, arg_pinion_dir)
       .value();
 
+  // The process description file is too big to fit on the stack.
+  auto pd_ptr = std::make_unique<common::ProcessDescriptionTap>();
+  auto& desc = *pd_ptr;
+
   // Load the pd file to lookup UUIDs
-  common::ProcessDescriptionTap desc;
   auto pd_file = jewels::filesystem::File::open(arg_pd_file_name);
   REQUIRE(pd_file);
   auto pd_file_read = pd_file->pread(std::as_writable_bytes(jewels::as_single_item_span(desc)));
@@ -192,7 +201,21 @@ TEST_CASE("clockwork_integration")
       }
     });
 
-  CHECK(main(args.size(), args.data(), exec.get_condition()) == EXIT_SUCCESS);
+  SECTION("success")
+  {
+    CHECK(main(static_cast<int>(args.size()), args.data(), exec.get_condition()) == EXIT_SUCCESS);
+  }
+  SECTION("exit with code")
+  {
+    args.push_back("--deterministic-runner");
+    args.push_back("--sim-start-time-ns");
+    args.push_back("1000000000");
+    args.push_back("--sim-end-time-ns");
+    args.push_back("9000000000");
+    constexpr int test_code = 123;
+    testing::cog1_exit_code = test_code;
+    CHECK(main(static_cast<int>(args.size()), args.data(), exec.get_condition()) == test_code);
+  }
 }
 
 } // namespace

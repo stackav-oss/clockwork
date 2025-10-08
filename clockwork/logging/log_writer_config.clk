@@ -8,13 +8,13 @@ schema LoggedChannelConfig {
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 127;
+    #0 max_channel_name_size = 300;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 16383;
+    #2 max_schema_definition_size = 20000;
   }
 
   fields
@@ -53,16 +53,16 @@ schema LogWriterConfig {
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 127;
+    #0 max_channel_name_size = 300;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 16383;
+    #2 max_schema_definition_size = 20000;
 
     // Maximum number of channels
-    #3 max_num_channels = 555;
+    #3 max_num_channels = 2046;
   }
 
   fields

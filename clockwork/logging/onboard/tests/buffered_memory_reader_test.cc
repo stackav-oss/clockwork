@@ -77,8 +77,9 @@ TEST_CASE("BufferedMemoryReader")
       const auto bytes_to_read = std::min(read_size - offset, write_data_size - read_offset - offset);
       const auto copy_result = reader.zero_copy_out(offset, bytes_to_read);
       REQUIRE(copy_result);
-      REQUIRE(std::ranges::equal(
-        *copy_result | std::views::join, std::span{&write_data.at(read_offset + offset), bytes_to_read}));
+      REQUIRE(
+        std::ranges::equal(
+          *copy_result | std::views::join, std::span{&write_data.at(read_offset + offset), bytes_to_read}));
       REQUIRE(reader.advance(bytes_to_read));
       read_offset += bytes_to_read;
     }
@@ -112,14 +113,17 @@ TEST_CASE("BufferedMemoryReader")
       const auto copy_result =
         reader.zero_copy_out(0U, header_bytes_to_read, data_bytes_to_read, checksum_bytes_to_read);
       REQUIRE(copy_result);
-      REQUIRE(std::ranges::equal(
-        copy_result->at(0U) | std::views::join, std::span{&write_data.at(read_offset), header_bytes_to_read}));
-      REQUIRE(std::ranges::equal(
-        copy_result->at(1U) | std::views::join,
-        std::span{&write_data.at(read_offset + header_bytes_to_read), data_bytes_to_read}));
-      REQUIRE(std::ranges::equal(
-        copy_result->at(2U) | std::views::join,
-        std::span{&write_data.at(read_offset + header_bytes_to_read + data_bytes_to_read), checksum_bytes_to_read}));
+      REQUIRE(
+        std::ranges::equal(
+          copy_result->at(0U) | std::views::join, std::span{&write_data.at(read_offset), header_bytes_to_read}));
+      REQUIRE(
+        std::ranges::equal(
+          copy_result->at(1U) | std::views::join,
+          std::span{&write_data.at(read_offset + header_bytes_to_read), data_bytes_to_read}));
+      REQUIRE(
+        std::ranges::equal(
+          copy_result->at(2U) | std::views::join,
+          std::span{&write_data.at(read_offset + header_bytes_to_read + data_bytes_to_read), checksum_bytes_to_read}));
       const auto total_bytes_to_read = header_bytes_to_read + data_bytes_to_read + checksum_bytes_to_read;
       REQUIRE(reader.advance(total_bytes_to_read));
       read_offset += total_bytes_to_read;

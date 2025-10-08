@@ -1,0 +1,13 @@
+{
+  "IsLabelArg": {
+    "owners": true
+  },
+  "IsSortableListArg": {
+    "allowed_deps": true,
+    "owners": true
+  },
+  "NamePriority": {
+    "owners": 1,
+    "file_owners": 2
+  }
+}

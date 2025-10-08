@@ -65,7 +65,7 @@ class BufferIterator : public boost::iterator_facade<BufferIterator, Slot, std::
   static inline struct alignas(Slot::slot_alignment) DefaultData
   {
     // Allows a default constructor for the iterator.
-  } default_data_; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+  } default_data_; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) Private to class
 
 public:
   /// Default constructor.

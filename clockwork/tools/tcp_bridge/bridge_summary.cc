@@ -7,10 +7,10 @@
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/pinion/bridge_status.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 
 #include <fmt10/base.h>
 #include <fmt10/chrono.h> // IWYU pragma: keep
-#include <fmt10/format.h>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>
 #include <tclap/UnlabeledValueArg.h>
@@ -29,6 +29,7 @@
 #include <ratio>
 #include <span>
 #include <string>
+#include <utility>
 
 namespace clockwork::pinion
 {
@@ -218,16 +219,17 @@ int main(int32_t argc, char* argv[])
     const auto start_offset = start_offset_arg.getValue();
     const auto verbose = verbose_arg.getValue();
 
-    clockwork_logging::LogProcessor reader(clockwork_logging::LogReaderConfig{
-      .uri = log_uri,
-      .interval = {},
-      .relative_interval =
-        clockwork_logging::RelativeInterval{
-          .start_offset = std::chrono::seconds(start_offset),
-          .end_offset = std::chrono::nanoseconds(std::numeric_limits<int64_t>::max()),
-        },
-      .topic_filter = {},
-    });
+    clockwork_logging::LogProcessor reader(
+      clockwork_logging::LogReaderConfig{
+        .uri = log_uri,
+        .interval = {},
+        .relative_interval =
+          clockwork_logging::RelativeInterval{
+            .start_offset = std::chrono::seconds(start_offset),
+            .end_offset = std::chrono::nanoseconds(std::numeric_limits<int64_t>::max()),
+          },
+        .topic_filter = {},
+      });
 
     clockwork::pinion::HostCounterMap counter_map{};
 

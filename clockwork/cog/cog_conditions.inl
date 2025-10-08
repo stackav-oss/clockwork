@@ -72,6 +72,32 @@ jewels::expected<void, jewels::MonoError> CogConditions<Policies...>::set_handle
 }
 
 template <typename... Policies>
+jewels::expected<void, jewels::MonoError>
+CogConditions<Policies...>::set_condition(jewels::Uuid<common::EndpointClassId> endpoint_id)
+{
+  auto try_set = [&endpoint_id]<typename Policy>(std::unique_ptr<InputCondition<Policy>>& condition) -> bool
+  {
+    if (endpoint_id == Policy::endpoint_id)
+    {
+      condition = std::make_unique<InputCondition<Policy>>();
+      return true;
+    }
+    return false;
+  };
+
+  auto set_flags =
+    std::apply([&try_set](auto&... condition) { return std::tuple(try_set(condition)...); }, conditions_);
+  auto is_set = std::apply([](auto&... flag) -> bool { return (flag || ...); }, set_flags);
+
+  if (is_set)
+  {
+    return {};
+  }
+
+  return jewels::unexpected(jewels::MonoError{});
+}
+
+template <typename... Policies>
 auto CogConditions<Policies...>::make_conditions() const -> ConditionsTuple
 {
   return std::apply([](auto&... condition) { return ConditionsTuple(condition->make_condition()...); }, conditions_);

@@ -17,6 +17,7 @@ cc_library(
         "channel_message_rates.inl",
     ],
     hdrs = ["channel_message_rates.hh"],
+    data = [":channel_message_rates_clk"],
     deps = [
         ":rate_status",
         "//clockwork:repr_iface",
@@ -47,6 +48,7 @@ cc_library(
         "channel_message_rates_config.inl",
     ],
     hdrs = ["channel_message_rates_config.hh"],
+    data = [":channel_message_rates_config_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -107,6 +109,7 @@ cc_library(
         "channel_message_rates_config_proto_conv.inl",
     ],
     hdrs = ["channel_message_rates_config_proto_conv.hh"],
+    data = [":channel_message_rates_config_clk"],
     deps = [
         ":channel_message_rates_config",
         ":channel_message_rates_config_proto_cc_library",
@@ -129,21 +132,27 @@ cc_library(
     hdrs = ["deterministic_log_writer.hh"],
     deps = [
         "//clockwork/common:process_description",
+        "//clockwork/logging:channel_type",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_timestamp",
         "//clockwork/logging:log_writer_config",
         "//clockwork/logging:message_encoding",
         "//clockwork/logging:nolint_helper",
+        "//clockwork/logging:schema_encoding",
         "//clockwork/logging/offboard:types",
         "//clockwork/logging/offboard:writer",
         "//clockwork/pinion:shm_publisher",
         "//clockwork/runners:channel_publisher",
         "//clockwork/runners:deterministic_channel_handler",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config",
         "//jewels/container:compare",
+        "//jewels/container/tap:var_array",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
         "//jewels/uuid:uuid_hasher",
     ],
@@ -154,6 +163,7 @@ cc_library(
     srcs = ["log_writer_base.inl"],
     hdrs = ["log_writer_base.hh"],
     deps = [
+        ":channel_message_rates",
         ":channel_message_rates_config",
         ":log_writer_state",
         ":message_rate_counter",
@@ -200,6 +210,7 @@ cc_library(
         "log_writer_state.inl",
     ],
     hdrs = ["log_writer_state.hh"],
+    data = [":log_writer_state_clk"],
     deps = ["@wise_enum"],
 )
 
@@ -274,6 +285,8 @@ clk(
         ":channel_message_rates_config_clk",
         ":logger_config_clk",
         ":logger_status_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/logging:log_writer_config_clk",
     ],
 )
@@ -285,11 +298,24 @@ cc_library(
         "logger_cog.inl",
     ],
     hdrs = ["logger_cog.hh"],
+    data = [":logger_clk"],
     deps = [
+        ":channel_message_rates",
         ":logger_cog_dial",
         ":logger_cog_impl",
         ":logger_cog_state",
+        ":logger_config",
+        ":logger_status",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -300,6 +326,7 @@ cc_library(
         "logger_cog_dial.inl",
     ],
     hdrs = ["logger_cog_dial.hh"],
+    data = [":logger_clk"],
     deps = [
         ":channel_message_rates",
         ":channel_message_rates_config",
@@ -341,6 +368,7 @@ cc_library(
         "logger_config.inl",
     ],
     hdrs = ["logger_config.hh"],
+    data = [":logger_config_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -400,6 +428,7 @@ cc_library(
         "logger_config_proto_conv.inl",
     ],
     hdrs = ["logger_config_proto_conv.hh"],
+    data = [":logger_config_clk"],
     deps = [
         ":logger_config",
         ":logger_config_proto_cc_library",
@@ -422,6 +451,7 @@ cc_library(
         "logger_status.inl",
     ],
     hdrs = ["logger_status.hh"],
+    data = [":logger_status_clk"],
     deps = [
         ":log_writer_state",
         "//clockwork:repr_iface",
@@ -508,6 +538,7 @@ cc_library(
         "rate_status.inl",
     ],
     hdrs = ["rate_status.hh"],
+    data = [":rate_status_clk"],
     deps = ["@wise_enum"],
 )
 

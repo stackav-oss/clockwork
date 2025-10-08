@@ -134,7 +134,7 @@ class PythonDialType:
         Returns:
             Bazel label or None if the type is not qualified.
         """
-        assert isinstance(self.python_type, str)  # noqa: S101 (for mypy)
+        assert isinstance(self.python_type, str)
         return get_bazel_label_for_python_type(self.python_type)
 
 
@@ -163,7 +163,7 @@ class PythonCogDial:
     ) -> dict[str, PythonDialType]:
         dial_types: dict[str, PythonDialType] = {}
         for dial_type_cst in cst_node_children:
-            assert module.terminals  # noqa: S101 (for mypy)
+            assert module.terminals
             member_name = get_span(dial_type_cst.child_name().child_value(), module.terminals)
             if member_name in dial_types:
                 msg = node.append_error_line(dial_type_cst, module, f"Duplicate {member_type} name '{member_name}'")
@@ -180,7 +180,7 @@ class PythonCogDial:
             raise ValueError(msg)
         typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
         dial_block_cst = cst_node.maybe_py_python_cog_dial_block()
-        assert dial_block_cst  # noqa: S101 (for mypy)
+        assert dial_block_cst
         config_types = cls._dial_types_from_cst(dial_block_cst.children_py_python_cog_config_type(), module, "config")
         state_types = cls._dial_types_from_cst(dial_block_cst.children_py_python_cog_state_type(), module, "state")
         input_types = cls._dial_types_from_cst(dial_block_cst.children_py_python_cog_input_type(), module, "input")
@@ -249,7 +249,7 @@ class PythonCogDial:
             msg = self.cog_ir.append_error_line(f"Missing mandatory {PYTHON_STATE_NAME} in cog states")
             raise ValueError(msg)
         for state_key, state_def in self.cog_ir.states.items():
-            assert state_def.resolved  # noqa: S101 (for mypy)
+            assert state_def.resolved
             if state_key == PYTHON_STATE_NAME:
                 if not state_def.resolved.params.mutable:
                     msg = self.cog_ir.append_error_line(f"{PYTHON_STATE_NAME} is not mutable")
@@ -270,15 +270,15 @@ class PythonCogDial:
         """
         python_chunks = py_context.PythonChunks()
         python_chunks.system_imports.add("from dataclasses import dataclass")
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {get_configs_class_name(self.dial_class_name)}:
 """)
-        assert isinstance(self.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
+        assert isinstance(self.cog_ir, cog.Cog)
         for config_name in self.cog_ir.configs:
             dial_type = self.config_types[config_name]
-            assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+            assert isinstance(dial_type.python_type, str)
             python_chunks.imports.add(get_import_for_type(dial_type.python_type))
             python_chunks.impl.append(f"    {config_name}: {dial_type.python_type}")
         python_chunks.impl.append("""
@@ -291,7 +291,7 @@ class {get_configs_class_name(self.dial_class_name)}:
             python_chunks.impl.append("        pass")
         for config_name in self.cog_ir.configs:
             dial_type = self.config_types[config_name]
-            assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+            assert isinstance(dial_type.python_type, str)
             python_chunks.impl.append(
                 f"        self.{config_name} = {dial_type.python_type}.deserialize_tachyon({config_name})"
             )
@@ -304,18 +304,18 @@ class {get_configs_class_name(self.dial_class_name)}:
             Python chunks with the states member definitions.
         """
         python_chunks = py_context.PythonChunks()
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {get_states_class_name(self.dial_class_name)}:
 """)
-        assert isinstance(self.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
+        assert isinstance(self.cog_ir, cog.Cog)
         for state_name in self.cog_ir.states:
             if state_name == PYTHON_STATE_NAME:
                 python_chunks.impl.append(f"    {PYTHON_STATE_NAME}: dict[str, typing.Any]")
             else:
                 dial_type = self.state_types[state_name]
-                assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+                assert isinstance(dial_type.python_type, str)
                 python_chunks.imports.add(get_import_for_type(dial_type.python_type))
                 python_chunks.impl.append(f"    {state_name}: {dial_type.python_type}")
                 if state_name in self.mutable_states:
@@ -332,13 +332,13 @@ class {get_states_class_name(self.dial_class_name)}:
         python_chunks.impl.append("""
     def __init__(
         self,""")
-        assert isinstance(self.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
+        assert isinstance(self.cog_ir, cog.Cog)
         for state_name in self.cog_ir.states:
             if state_name == PYTHON_STATE_NAME:
                 python_chunks.impl.append(f"        {PYTHON_STATE_NAME}: dict[str, typing.Any],")
             else:
                 dial_type = self.state_types[state_name]
-                assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+                assert isinstance(dial_type.python_type, str)
                 python_chunks.impl.append(f"        {state_name}: memoryview,")
         python_chunks.impl.append("    ) -> None:")
         for state_name in self.cog_ir.states:
@@ -346,7 +346,7 @@ class {get_states_class_name(self.dial_class_name)}:
                 python_chunks.impl.append(f"        self.{PYTHON_STATE_NAME} = {PYTHON_STATE_NAME}")
             else:
                 dial_type = self.state_types[state_name]
-                assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+                assert isinstance(dial_type.python_type, str)
                 python_chunks.impl.append(
                     f"        self.{state_name} = {dial_type.python_type}.deserialize_tachyon({state_name})"
                 )
@@ -359,7 +359,7 @@ class {get_states_class_name(self.dial_class_name)}:
         else:
             for state_name, dial_type in self.state_types.items():
                 if state_name in self.mutable_states:
-                    assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+                    assert isinstance(dial_type.python_type, str)
                     python_chunks.impl.append(f"        self.{state_name}.serialize_tachyon(self._{state_name}_buffer)")
         return python_chunks
 
@@ -385,7 +385,7 @@ class {get_states_class_name(self.dial_class_name)}:
         Returns:
             Input slot class name.
         """
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         return self.dial_class_name + _INPUTS_CLASS_SUFFIX + to_camel(input_name) + _SLOT_CLASS_SUFFIX
 
     def _render_input_slot_class(self, input_name: str, input_type: str) -> py_context.PythonChunks:
@@ -426,7 +426,7 @@ class {slot_class_name}:
         python_chunks = py_context.PythonChunks()
         python_chunks.append(self._render_input_slot_class(input_name, input_type))
         input_slot_class_name = self._get_input_slot_class_name(input_name)
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         input_class_name = get_input_class_name(self.dial_class_name, input_name)
         python_chunks.impl.append(f"""
 class {input_class_name}:
@@ -456,12 +456,12 @@ class {input_class_name}:
         """
         python_chunks = py_context.PythonChunks()
         python_chunks.system_imports.add("from dataclasses import dataclass")
-        assert isinstance(self.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
+        assert isinstance(self.cog_ir, cog.Cog)
         for input_name in self.cog_ir.inputs:
             dial_type = self.input_types[input_name]
-            assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+            assert isinstance(dial_type.python_type, str)
             python_chunks.append(self._render_input(input_name, dial_type.python_type))
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {get_inputs_class_name(self.dial_class_name)}:
@@ -469,7 +469,7 @@ class {get_inputs_class_name(self.dial_class_name)}:
         if not self.input_types:
             python_chunks.impl.append("    pass")
         for input_name in self.cog_ir.inputs:
-            assert self.dial_class_name  # noqa: S101 (for mypy)
+            assert self.dial_class_name
             python_chunks.impl.append(f"    {input_name}: {get_input_class_name(self.dial_class_name, input_name)}")
 
         return python_chunks
@@ -485,7 +485,7 @@ class {get_inputs_class_name(self.dial_class_name)}:
             Python chunks with the output class definition.
         """
         python_chunks = py_context.PythonChunks()
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         output_class_name = get_output_class_name(self.dial_class_name, output_name)
         python_chunks.imports.add(get_import_for_type(output_type))
         python_chunks.impl.append(f"""class {output_class_name}:
@@ -514,12 +514,12 @@ class {get_inputs_class_name(self.dial_class_name)}:
         """
         python_chunks = py_context.PythonChunks()
         python_chunks.system_imports.add("from dataclasses import dataclass")
-        assert isinstance(self.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
+        assert isinstance(self.cog_ir, cog.Cog)
         for output_name in self.cog_ir.outputs:
             dial_type = self.output_types[output_name]
-            assert isinstance(dial_type.python_type, str)  # noqa: S101 (for mypy)
+            assert isinstance(dial_type.python_type, str)
             python_chunks.append(self._render_output(output_name, dial_type.python_type))
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {get_outputs_class_name(self.dial_class_name)}:
@@ -527,7 +527,7 @@ class {get_outputs_class_name(self.dial_class_name)}:
         if not self.output_types:
             python_chunks.impl.append("    pass")
         for output_name in self.cog_ir.outputs:
-            assert self.dial_class_name  # noqa: S101 (for mypy)
+            assert self.dial_class_name
             python_chunks.impl.append(f"    {output_name}: {get_output_class_name(self.dial_class_name, output_name)}")
 
         return python_chunks
@@ -544,7 +544,7 @@ class {get_outputs_class_name(self.dial_class_name)}:
         python_chunks.append(self._render_states())
         python_chunks.append(self._render_inputs())
         python_chunks.append(self._render_outputs())
-        assert self.dial_class_name  # noqa: S101 (for mypy)
+        assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {self.dial_class_name}:

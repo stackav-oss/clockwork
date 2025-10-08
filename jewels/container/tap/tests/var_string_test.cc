@@ -190,7 +190,6 @@ TEST_CASE("Test var array")
 
   SECTION("equality")
   {
-    // NOLINTNEXTLINE(readability-container-size-empty)
     REQUIRE(VarString<3>{} == VarString<3>{});
     REQUIRE(VarString<3>{'1'} == VarString<3>{'1'});
     REQUIRE(VarString<3>{'1', '2'} == VarString<3>{'1', '2'});

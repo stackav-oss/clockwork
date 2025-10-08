@@ -81,13 +81,13 @@ TEMPLATE_TEST_CASE("Socket | set nonblocking", "", UnixSocket, TcpSocket)
   auto write = [&server, &mutex]()
   {
     const std::array<char, buffer_size> sendbuf{};
-    const std::lock_guard lock(mutex);
+    const std::scoped_lock lock(mutex);
     CHECK(::send(*server, sendbuf.data(), buffer_size, 0) != -1);
   };
   auto signal = [&mutex, &sleeping, &condition]()
   {
     {
-      const std::lock_guard lock(mutex);
+      const std::scoped_lock lock(mutex);
       sleeping = false;
     }
     condition.notify_one();
@@ -124,7 +124,7 @@ TEMPLATE_TEST_CASE("Socket | set nonblocking", "", UnixSocket, TcpSocket)
       // NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection)
       const ssize_t result = ::recv(client->descriptor(), recvbuf.data(), recvbuf.size(), 0);
       {
-        const std::lock_guard lock(mutex);
+        const std::scoped_lock lock(mutex);
         received = (result != -1);
       }
     }
@@ -160,7 +160,7 @@ TEMPLATE_TEST_CASE("Socket | set nonblocking", "", UnixSocket, TcpSocket)
   CHECK(received);
 
   {
-    const std::lock_guard lock(mutex);
+    const std::scoped_lock lock(mutex);
     exit = true;
   }
   condition.notify_one();

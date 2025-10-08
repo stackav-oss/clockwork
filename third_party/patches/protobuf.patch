@@ -1,32 +1,126 @@
-diff --git src/google/protobuf/BUILD.bazel src/google/protobuf/BUILD.bazel
-index 735610170..73cb65b29 100644
---- src/google/protobuf/BUILD.bazel
-+++ src/google/protobuf/BUILD.bazel
-@@ -339,6 +339,7 @@ cc_library(
-         ":arena_config",
-         ":string_block",
-         "//src/google/protobuf/stubs:lite",
-+        "@com_google_absl//absl/container:layout",
-         "@com_google_absl//absl/log:absl_check",
-         "@com_google_absl//absl/log:absl_log",
-         "@com_google_absl//absl/synchronization",
-diff --git src/google/protobuf/arena.cc src/google/protobuf/arena.cc
-index 51afdbdaf..e846a94a0 100644
---- src/google/protobuf/arena.cc
-+++ src/google/protobuf/arena.cc
-@@ -40,6 +40,7 @@
- #include <vector>
+diff --git MODULE.bazel MODULE.bazel
+index 400186b53..48e9ef629 100644
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -47,10 +47,7 @@ bazel_dep(name = "platforms", version = "0.0.10")
+ register_toolchains("//bazel/private/toolchains:all")
  
- #include "absl/base/attributes.h"
-+#include "absl/container/internal/layout.h"
- #include "absl/synchronization/mutex.h"
- #include "google/protobuf/arena_allocation_policy.h"
- #include "google/protobuf/arenaz_sampler.h"
+ SUPPORTED_PYTHON_VERSIONS = [
+-    "3.9",
+     "3.10",
+-    "3.11",
+-    "3.12",
+ ]
+ 
+ # TODO: Support hermetic / system python in bzlmod.
+@@ -72,7 +69,7 @@ use_repo(
+     system_python = "python_{}".format(SUPPORTED_PYTHON_VERSIONS[-1].replace(".", "_")),
+ )
+ 
+-pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip", dev_dependency = True)
++pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+ 
+ [
+     pip.parse(
+diff --git python/BUILD.bazel python/BUILD.bazel
+index 3a13a97e3..2b2dc1a13 100644
+--- python/BUILD.bazel
++++ python/BUILD.bazel
+@@ -15,6 +15,8 @@ build_targets(name = "python")
+ 
+ licenses(["notice"])
+ 
++exports_files(["requirements.txt"])
++
+ package(
+     default_applicable_licenses = ["//:license"],
+     default_visibility = ["//python/dist:__pkg__"],
+diff --git python/build_targets.bzl python/build_targets.bzl
+index b62d5f05d..14b3eba17 100644
+--- python/build_targets.bzl
++++ python/build_targets.bzl
+@@ -40,6 +40,7 @@ def build_targets(name):
+             ":python_srcs",
+             ":well_known_types_py_pb2",
+         ],
++        imports = ["."],
+     )
+ 
+     native.config_setting(
+@@ -206,7 +207,7 @@ def build_targets(name):
+     py_library(
+         name = "python_srcs",
+         srcs = [":python_src_files"],
+-        imports = ["python"],
++        imports = ["."],
+         srcs_version = "PY2AND3",
+         visibility = [
+             "//:__pkg__",
+@@ -224,7 +225,7 @@ def build_targets(name):
+             "//python/google/protobuf/internal/numpy:__init__.py",
+             "//python/google/protobuf/internal/numpy:numpy_test.py",
+         ],
+-        imports = ["python"],
++        imports = ["."],
+         srcs_version = "PY3",
+         visibility = [
+             "//:__pkg__",
+@@ -327,7 +328,7 @@ def build_targets(name):
+             "google/protobuf/internal/import_test_package/__init__.py",
+             "google/protobuf/internal/test_util.py",
+         ],
+-        imports = ["python"],
++        imports = ["."],
+         srcs_version = "PY2AND3",
+         visibility = ["//python:__subpackages__"],
+         deps = [
+diff --git python/dist/BUILD.bazel python/dist/BUILD.bazel
+index e7d32cb1f..3cf8d3c50 100644
+--- python/dist/BUILD.bazel
++++ python/dist/BUILD.bazel
+@@ -11,7 +11,6 @@ load("@protobuf_pip_deps//:requirements.bzl", "requirement")
+ load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+ load("@rules_python//python:packaging.bzl", "py_wheel")
+-load("@system_python//:version.bzl", "SYSTEM_PYTHON_VERSION")
+ load("//:protobuf_version.bzl", "PROTOBUF_PYTHON_VERSION")
+ load(":dist.bzl", "py_dist", "py_dist_module")
+ load(":py_proto_library.bzl", "py_proto_library")
+@@ -360,7 +359,7 @@ py_wheel(
+     python_tag = selects.with_or({
+         ("//python:limited_api_3.9", "//python:full_api_3.9"): "cp39",
+         "//python:limited_api_3.10": "cp310",
+-        "//conditions:default": "cp" + SYSTEM_PYTHON_VERSION,
++        "//conditions:default": "cp310",
+     }),
+     # LINT.ThenChange(
+     #    :full_api_version,
+diff --git python/dist/dist.bzl python/dist/dist.bzl
+index 7c9095e26..8aa26917b 100644
+--- python/dist/dist.bzl
++++ python/dist/dist.bzl
+@@ -1,7 +1,6 @@
+ """Rules to create python distribution files and properly name them"""
+ 
+ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+-load("@system_python//:version.bzl", "SYSTEM_PYTHON_VERSION")
+ 
+ def _get_suffix(limited_api, python_version, cpu):
+     """Computes an ABI version tag for an extension module per PEP 3149."""
+@@ -17,7 +16,7 @@ def _get_suffix(limited_api, python_version, cpu):
+         return ".cp{}-{}.{}".format(python_version, abi, "pyd")
+ 
+     if python_version == "system":
+-        python_version = SYSTEM_PYTHON_VERSION
++        python_version = "310"
+         if int(python_version) < 38:
+             python_version += "m"
+         abis = {
 diff --git src/google/protobuf/extension_set.cc src/google/protobuf/extension_set.cc
-index 674cb5528..eddb4eb19 100644
+index 00b2c4841..f35f1e01e 100644
 --- src/google/protobuf/extension_set.cc
 +++ src/google/protobuf/extension_set.cc
-@@ -93,7 +93,7 @@ void Register(const ExtensionInfo& info) {
+@@ -95,7 +95,7 @@ void Register(const ExtensionInfo& info) {
    static auto local_static_registry = OnShutdownDelete(new ExtensionRegistry);
    global_registry = local_static_registry;
    if (!local_static_registry->insert(info).second) {
@@ -35,23 +129,11 @@ index 674cb5528..eddb4eb19 100644
                      << info.message->GetTypeName() << "\", field number "
                      << info.number << ".";
    }
-diff --git src/google/protobuf/io/printer.h src/google/protobuf/io/printer.h
-index 2e59ba05f..ea90f8ead 100644
---- src/google/protobuf/io/printer.h
-+++ src/google/protobuf/io/printer.h
-@@ -50,6 +50,7 @@
- #include "absl/functional/function_ref.h"
- #include "absl/log/absl_check.h"
- #include "absl/meta/type_traits.h"
-+#include "absl/strings/str_cat.h"
- #include "absl/strings/str_format.h"
- #include "absl/strings/string_view.h"
- #include "absl/types/optional.h"
 diff --git src/google/protobuf/repeated_ptr_field.h src/google/protobuf/repeated_ptr_field.h
-index 9a7dc60a4..e5281ba7d 100644
+index 52032a7d7..cac0edd87 100644
 --- src/google/protobuf/repeated_ptr_field.h
 +++ src/google/protobuf/repeated_ptr_field.h
-@@ -41,6 +41,8 @@
+@@ -18,6 +18,8 @@
  //
  // This header covers RepeatedPtrField.
  

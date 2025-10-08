@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, typesys
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 
 @dataclass
@@ -79,6 +80,7 @@ class StrongType(node.CstNode[cst.StrongType], node.DocRequiredEntity, typesys.T
 
         return self.typespec
 
+    @override
     def satisfies(self, constraint: typesys.NumericType) -> bool:
         """Check if this type satisfies a constraint.
 

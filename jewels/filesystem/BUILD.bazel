@@ -61,6 +61,18 @@ cc_library(
 )
 
 cc_library(
+    name = "mmap_region",
+    srcs = ["mmap_region.cc"],
+    hdrs = ["mmap_region.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":error_code",
+        "//jewels/log_cerr",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
     name = "path",
     srcs = ["path.cc"],
     hdrs = ["path.hh"],

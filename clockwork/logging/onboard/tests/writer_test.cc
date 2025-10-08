@@ -967,14 +967,15 @@ TEST_CASE("Log messages")
     const uint32_t messages_per_file = 16U;
     for (uint32_t sequence_number = 1U; sequence_number <= messages_per_file; ++sequence_number)
     {
-      logged_messages.emplace_back(Message{
-        .channel_name = channel_name1,
-        .sequence_number = sequence_number,
-        .log_time = log_time1,
-        .message_time = message_time1,
-        .header = {},
-        .data = message_data,
-      });
+      logged_messages.emplace_back(
+        Message{
+          .channel_name = channel_name1,
+          .sequence_number = sequence_number,
+          .log_time = log_time1,
+          .message_time = message_time1,
+          .header = {},
+          .data = message_data,
+        });
       REQUIRE(writer.log_message_wait(logged_messages.back(), message_handle, time1));
     }
 
@@ -1298,14 +1299,15 @@ TEST_CASE("Log messages")
     const uint32_t messages_per_file = 5U;
     for (uint32_t sequence_number = 1U; sequence_number <= messages_per_file; ++sequence_number)
     {
-      logged_messages1.emplace_back(Message{
-        .channel_name = channel_name1,
-        .sequence_number = sequence_number,
-        .log_time = log_time1,
-        .message_time = message_time1,
-        .header = {},
-        .data = message_data,
-      });
+      logged_messages1.emplace_back(
+        Message{
+          .channel_name = channel_name1,
+          .sequence_number = sequence_number,
+          .log_time = log_time1,
+          .message_time = message_time1,
+          .header = {},
+          .data = message_data,
+        });
 
       REQUIRE(writer.log_message_wait(logged_messages1.back(), message_handle, time1));
     }
@@ -1319,14 +1321,15 @@ TEST_CASE("Log messages")
     for (uint32_t sequence_number = messages_per_file + 1U; sequence_number <= messages_per_file * 2U;
          ++sequence_number)
     {
-      logged_messages2.emplace_back(Message{
-        .channel_name = channel_name1,
-        .sequence_number = sequence_number,
-        .log_time = log_time1,
-        .message_time = message_time1,
-        .header = {},
-        .data = message_data,
-      });
+      logged_messages2.emplace_back(
+        Message{
+          .channel_name = channel_name1,
+          .sequence_number = sequence_number,
+          .log_time = log_time1,
+          .message_time = message_time1,
+          .header = {},
+          .data = message_data,
+        });
 
       REQUIRE(writer.log_message_wait(logged_messages2.back(), message_handle, time1));
     }

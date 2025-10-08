@@ -82,14 +82,14 @@ ChannelMessageWriter::add_message(size_t data_size, const ZeroCopyLoggedMessage&
   if (!message_chunk_writer_ptr_->is_empty())
   {
     {
-      const std::lock_guard guard{mutex_};
+      const std::scoped_lock guard{mutex_};
       ++num_pending_async_writes_;
     }
     async_work_queue_ptr_->schedule_work_item(
       [this, message_chunk_writer_ptr = message_chunk_writer_ptr_]()
       {
         const auto write_result = message_chunk_writer_ptr->write_chunk(*chunk_compressor_ptr_, *chunk_writer_ptr_);
-        const std::lock_guard guard{mutex_};
+        const std::scoped_lock guard{mutex_};
         if (!write_result)
         {
           async_write_result_ = jewels::unexpected(write_result.error());
@@ -125,7 +125,7 @@ void ChannelMessageWriter::wait_for_pending_async_write_requests()
 
 [[nodiscard]] LogExpected<void> ChannelMessageWriter::get_async_write_result()
 {
-  const std::lock_guard guard{mutex_};
+  const std::scoped_lock guard{mutex_};
   return async_write_result_;
 }
 

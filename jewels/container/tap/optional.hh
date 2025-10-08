@@ -191,6 +191,13 @@ private:
   detail::OptionalLayout<Value> fields_;
 };
 
+template <class Value>
+  requires jewels::meta::ImplicitLifetimeType<std::decay_t<Value>>
+Optional<std::decay_t<Value>> make_optional(Value&& value);
+
+template <jewels::meta::ImplicitLifetimeType Value, class... Args>
+Optional<Value> make_optional(std::in_place_t /* in_place */, Args&&... args);
+
 } // namespace jewels::tap
 
 #include "jewels/container/tap/optional.inl"

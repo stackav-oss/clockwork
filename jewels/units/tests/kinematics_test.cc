@@ -10,6 +10,8 @@
 #include <au/unit_of_measure.hh>
 #include <catch2/catch_test_macros.hpp>
 
+#include <type_traits>
+
 namespace au::testing
 {
 TEST_CASE("Smoke test for quantities")
@@ -57,4 +59,19 @@ TEST_CASE("Curvature rate units")
   constexpr auto manual_value = 0.3 / meters(1.0) / seconds(1.0);
   CHECK(value == manual_value);
 }
+
+TEST_CASE("RadiansPerNanosecond")
+{
+  const auto value = radians(4.0) / nanoseconds(2.0);
+  REQUIRE(value == rads_per_nanosecond(2.0));
+  STATIC_REQUIRE(au::AreQuantityTypesEquivalent<std::decay_t<decltype(value)>, RadsPerNanosecondD>::value);
+}
+
+TEST_CASE("NanosecondsPerRadian")
+{
+  const auto value = nanoseconds(4.0) / radians(2.0);
+  REQUIRE(value == nanoseconds_per_rad(2.0));
+  STATIC_REQUIRE(au::AreQuantityTypesEquivalent<std::decay_t<decltype(value)>, NanosecondsPerRadD>::value);
+}
+
 } // namespace au::testing

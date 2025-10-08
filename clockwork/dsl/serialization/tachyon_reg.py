@@ -12,6 +12,7 @@ from typing import Final, TypeAlias
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.ir import clkbuiltins, clkenum, primitive, typesys
+from typing_extensions import override
 
 
 @dataclass(frozen=True, eq=True, slots=True)
@@ -77,12 +78,13 @@ SIZE_FIELD_ALIGNMENT: Final = 8
 class TachyonRegistry(Context):
     """Compiler Context for Tachyon field constraints."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty Tachyon registry."""
         self.name = name
         self.type_registry: dict[TypeKey, tuple[str | None, FieldConstraint]] = {}
         self.generic_type_registry: dict[int, CppFactoryType] = {}
 
+    @override
     def import_from(self, other: TachyonRegistry) -> None:
         """Combine this context with items from another.
 
@@ -105,6 +107,7 @@ class TachyonRegistry(Context):
 class TachyonRegistryKey(ContextKey[TachyonRegistry]):
     """Compiler context key for Tachyon field constraints registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> TachyonRegistry:
         """Create a default instance of the registry with built-in types."""
         registry = TachyonRegistry(compiler_context.name)

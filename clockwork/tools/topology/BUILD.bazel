@@ -1,0 +1,42 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+package(
+    default_visibility = [":__subpackages__"],
+)
+
+py_library(
+    name = "topology",
+    srcs = ["topology.py"],
+    imports = ["../../.."],
+)
+
+py_binary(
+    name = "query",
+    srcs = ["query.py"],
+    deps = [
+        ":topology",
+        "@clockwork_pip//click",
+    ],
+)
+
+bzl_library(
+    name = "rules_bzl",
+    srcs = ["rules.bzl"],
+    deps = ["@clockwork//clockwork:rules_bzl"],
+)
+
+py_binary(
+    name = "summarize",
+    srcs = ["summarize.py"],
+    deps = [
+        ":topology",
+        "//clockwork:logical_system_interface",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//click",
+        "@root_repo//:root_repo_py",
+    ],
+)

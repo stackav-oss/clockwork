@@ -108,11 +108,12 @@ MessageChunkWriter::MessageChunkWriter(
       std::span{&data_.at(chunk_offset + message_chunk_message_header_size + message.header.size()), data_size},
       message.data);
   }
-  add_index_entry(MessageChunkIndexEntryV2{
-    .transmit_time_ns = message.transmit_time.get_nanoseconds(),
-    .sequence_number = WrappingCounter<uint32_t>{message.sequence_number},
-    .chunk_offset = static_cast<uint32_t>(chunk_offset),
-  });
+  add_index_entry(
+    MessageChunkIndexEntryV2{
+      .transmit_time_ns = message.transmit_time.get_nanoseconds(),
+      .sequence_number = WrappingCounter<uint32_t>{message.sequence_number},
+      .chunk_offset = static_cast<uint32_t>(chunk_offset),
+    });
   return {};
 }
 
@@ -122,7 +123,7 @@ MessageChunkWriter::write_chunk(const ChunkCompressor& chunk_compressor, ChunkWr
   std::sort(index_.begin(), index_.end());
   const auto index_offset = data_.size();
   size_t index_size{};
-  void* index_data_ptr{};
+  const void* index_data_ptr{};
   std::pmr::vector<MessageChunkIndexEntryV1> v1_index_storage{memory_resource_};
   if (index_format_ == MessageChunkIndexFormat::v2)
   {
@@ -135,10 +136,11 @@ MessageChunkWriter::write_chunk(const ChunkCompressor& chunk_compressor, ChunkWr
     v1_index_storage.reserve(index_.size());
     for (const auto& index_entry : index_)
     {
-      v1_index_storage.emplace_back(MessageChunkIndexEntryV1{
-        .transmit_time_ns = index_entry.transmit_time_ns,
-        .chunk_offset = index_entry.chunk_offset,
-      });
+      v1_index_storage.emplace_back(
+        MessageChunkIndexEntryV1{
+          .transmit_time_ns = index_entry.transmit_time_ns,
+          .chunk_offset = index_entry.chunk_offset,
+        });
     }
     index_data_ptr = v1_index_storage.data();
   }

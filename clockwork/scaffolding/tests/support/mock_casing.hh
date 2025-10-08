@@ -80,6 +80,13 @@ public:
                                                                  pinion::SubscriberHandle),
     override);
 
+  MAKE_MOCK2(
+    set_publisher_handle,
+    (jewels::expected<void, Error>)(jewels::Uuid<common::EndpointInstanceId>, pinion::PublisherHandle),
+    override);
+
+  MAKE_MOCK1(set_subscriber, (jewels::expected<void, Error>)(jewels::Uuid<common::EndpointInstanceId>), override);
+
   MAKE_MOCK3(
     try_connect_state,
     (jewels::expected<void, Error>)(jewels::Uuid<common::EndpointInstanceId>,

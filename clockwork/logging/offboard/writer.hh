@@ -5,6 +5,7 @@
 
 #include "clockwork/logging/channel_type.hh"
 #include "clockwork/logging/compression_type.hh"
+#include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
@@ -239,6 +240,9 @@ private:
 
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
+
+  /// Lite compressor
+  LiteCompressor lite_compressor_;
 
   /// Message chunk index format
   MessageChunkIndexFormat message_chunk_index_format_;

@@ -23,6 +23,7 @@ from clockwork.dsl.ir import (
     typesys,
 )
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -49,6 +50,7 @@ class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.S
         """Get a resolved version of this object."""
         return self
 
+    @override
     def generic_parameters(self) -> list[typesys.Parameter] | None:
         """Get the generic parameters for the type.
 
@@ -60,7 +62,7 @@ class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.S
 
         params = []
         for _, param in sorted(self.parameters.items()):
-            assert isinstance(param.type_info, typesys.TypeVal)  # noqa: S101  (for mypy)
+            assert isinstance(param.type_info, typesys.TypeVal)
             params.append(
                 typesys.Parameter(
                     name=param.cur_name,
@@ -289,6 +291,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
     options: SchemaOptions | None = dc_field(repr=False)
     resolved: ResolvedSchema | None = dc_field(repr=False)
     history: SchemaHistory | None = dc_field(repr=False)
+    programmatically_generated: bool = dc_field(default=False, repr=False)
 
     @classmethod
     def from_cst(
@@ -336,7 +339,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
                 type_info=typesys.InferenceVar.make(context=module, cst_node=parameter.cst_node),
                 parameter_def=parameter,
             )
-            assert isinstance(parameter.type_info, expr.TypeExpression | typesys.InferenceVar)  # noqa: S101 (for mypy)
+            assert isinstance(parameter.type_info, expr.TypeExpression | typesys.InferenceVar)
             typesys.unify(
                 param_ref.type_info,
                 (
@@ -368,7 +371,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
                 field_def=field,
             )
             if not isinstance(field.type_info, expr.TypeExpression):
-                assert isinstance(field.type_info, typesys.InferenceVar)  # noqa: S101  (for mypy; invariant)
+                assert isinstance(field.type_info, typesys.InferenceVar)
                 msg = node.append_error_line(
                     field.type_info.cst_node,
                     module,
@@ -405,6 +408,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
             resolved=None,
         )
 
+    @override
     def generic_parameters(self) -> list[typesys.Parameter] | None:
         """Get the generic parameters for the type.
 
@@ -420,7 +424,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
             field.resolve()
         for _, param in sorted(self.parameters.items()):
             param.resolve()
-            assert isinstance(param.type_info, typesys.TypeVal)  # noqa: S101  (for mypy)
+            assert isinstance(param.type_info, typesys.TypeVal)
             result.append(
                 typesys.Parameter(
                     name=param.cur_name,
@@ -449,7 +453,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
         overlap = pseudo_set.intersection(all_field_nums)
         if overlap:
             msg = self.append_error_line(
-                f"Pseudoversions {overlap} conflict with field numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                f"Pseudoversions {overlap} conflict with field numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                 "Please note: pseudofield numbers are reserved after creation and cannot be reused as field or parameter numbers.\n"
                 "If you're seeing this error after adding a field or parameter, renumber the field(s)/parameter(s)\n"
                 "to not conflict with any already-reserved pseudofield numbers."
@@ -670,7 +674,7 @@ class InstantiatedSchema(typesys.TypeVal):
                 for name, value in result_args.items()
             }
         else:
-            assert isinstance(typespec, Schema | ResolvedSchema)  # noqa: S101  (sanity check)
+            assert isinstance(typespec, Schema | ResolvedSchema)
             schema = typespec.get_resolved()
             args = {}
             result_args = None
@@ -728,13 +732,14 @@ class InstantiatedSchema(typesys.TypeVal):
 
                     if not _are_types_compatible(old_type, new_type):
                         msg = new_field.append_error_line(
-                            f"Incompatible type change in schema {result.schema_name}: field {hist_field.name} "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                            f"Incompatible type change in schema {result.schema_name}: field {hist_field.name} "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                             f"(type {old_type.value_key()}) became field {new_field.cur_name} (type {new_type.value_key()})"
                         )
                         raise ValueError(msg)
 
         return result
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return self.as_instantiation_or_resolved_schema().value_key()
@@ -849,7 +854,7 @@ class FieldDef(node.DocableEntity, node.CstNode[cst.SchemaField]):
             init_value=(expr.Expr.from_cst(init_cst, module) if (init_cst := cst_node.maybe_init_value()) else None),
             resolved=None,
         )
-        assert isinstance(result.type_info, expr.TypeExpression | typesys.InferenceVar)  # noqa: S101  (for mypy)
+        assert isinstance(result.type_info, expr.TypeExpression | typesys.InferenceVar)
         if result.init_value:
             typesys.unify(
                 result.init_value.type_info,
@@ -865,7 +870,7 @@ class FieldDef(node.DocableEntity, node.CstNode[cst.SchemaField]):
         """Perform IR finalization."""
         if self.resolved:
             return self.resolved
-        assert isinstance(self.type_info, expr.TypeExpression | typesys.InferenceVar)  # noqa: S101  (invariant)
+        assert isinstance(self.type_info, expr.TypeExpression | typesys.InferenceVar)
 
         type_info = _resolve_field_type(self.type_info, self.type_info.cst_node, self.module)
 
@@ -909,6 +914,7 @@ class ParameterRef(node.NamedEntity, typesys.DeferrableType):
 
     parameter_def: FieldDef
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         msg = f"Attempt to generate a value key for an unsubstituted generic parameter: {self}"
@@ -927,9 +933,9 @@ def _finalize_type(typ: typesys.TypeVal) -> typesys.TypeVal:
             pass
 
     if isinstance(typ, statement.ImmutableBinding):
-        assert isinstance(typ.type_info, typesys.InferenceVar)  # noqa: S101 (invariant)
+        assert isinstance(typ.type_info, typesys.InferenceVar)
         resolution = typ.type_info.resolution()
-        assert isinstance(resolution, typesys.TypeVal)  # noqa: S101 (invariant; assured by type system)
+        assert isinstance(resolution, typesys.TypeVal)
         return resolution
 
     if isinstance(typ, clkenum.ClkEnum):
@@ -945,7 +951,7 @@ def _substitute_constants(args: dict[str, typesys.Value]) -> None:
     """
     for arg_name, arg_val in args.items():
         if isinstance(arg_val, statement.ImmutableBinding):
-            assert isinstance(arg_val.value, typesys.Value)  # noqa: S101 (invariant)
+            assert isinstance(arg_val.value, typesys.Value)
             args[arg_name] = arg_val.value
 
 
@@ -1103,6 +1109,7 @@ class FieldRef(node.NamedEntity, typesys.Value):
 
     field_def: FieldDef
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         msg = f"Attempt to generate a value key for an unsubstituted field reference: {self}"
@@ -1137,7 +1144,7 @@ class SchemaInstance(typesys.ObjectIdentityValue):
         cls: type[SchemaInstance],
         schema_ir: InstantiatedSchema,
         bindings: Iterable[statement.ImmutableBinding],
-        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         error_report_module: node.Module,
     ) -> SchemaInstance:
         """Create a SchemaInstance from a set of unresolved binding statements.
@@ -1160,7 +1167,7 @@ class SchemaInstance(typesys.ObjectIdentityValue):
         cls: type[SchemaInstance],
         schema_ir: InstantiatedSchema,
         args: Iterable[tuple[str, typesys.Value]],
-        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         error_report_module: node.Module,
     ) -> SchemaInstance:
         """Create a SchemaInstance from a set of arguments."""
@@ -1185,7 +1192,7 @@ class SchemaInstance(typesys.ObjectIdentityValue):
                     and field.type_info.instantiates is clkbuiltins.OPTIONAL
                 ):
                     optional_type = field.type_info.arguments["type"]
-                    assert isinstance(optional_type, typesys.TypeVal)  # noqa: S101 (invariant; assured by type system)
+                    assert isinstance(optional_type, typesys.TypeVal)
                     typesys.unify(arg_value.type_info, optional_type)
                 else:
                     raise
@@ -1253,6 +1260,7 @@ def make_schema_class(  # noqa: PLR0913 (see above)
     fields: Iterable[FieldDef] = (),
     doc: str = "Programmatically-generated schema",
     options: SchemaOptions | None = None,
+    uuid: uuid.UUID | None = None,
 ) -> InstantiatedSchema:
     """Utility function for creating schemas progammatically."""
     if not options:
@@ -1265,13 +1273,14 @@ def make_schema_class(  # noqa: PLR0913 (see above)
         doc=node.Doc(module=module, cst_node=None, value=doc),
         type_info=clkbuiltins.TYPE_TYPE,
         inner_scope=module.inner_scope.make_child_scope(name),
-        uuid=None,
+        uuid=uuid,
         parameters={param.num: param for param in parameters},
         fields={fld.num: fld for fld in fields},
         field_src_order={fld.num: i for i, fld in enumerate(fields)},
         options=options,
         resolved=None,
         history=None,
+        programmatically_generated=True,
     )
     schema.resolve()
     return InstantiatedSchema.from_typespec(schema)
@@ -1279,7 +1288,7 @@ def make_schema_class(  # noqa: PLR0913 (see above)
 
 def _resolve_field_type(
     type_info: typesys.TypeVal | ParameterRef | expr.TypeExpression | typesys.InferenceVar,
-    cst_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    cst_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     module: node.Module,
 ) -> typesys.TypeVal | ParameterRef:
     """Resolve a field type expression into a TypeVal or ParameterRef.
@@ -1333,7 +1342,7 @@ def _resolve_field_type(
     return result
 
 
-def get_python_type(typ: typesys.TypeVal) -> type[Any]:
+def get_python_type(typ: typesys.TypeVal) -> type[Any]:  # noqa: C901, PLR0911 (need to handle all the types)
     """Get the Python type that corresponds to a Clockwork type.
 
     NB: This only handles types that resolve to a primitive or to `str`. It does not handle container types or Optional.
@@ -1360,12 +1369,13 @@ def get_python_type(typ: typesys.TypeVal) -> type[Any]:
             clkbuiltins.UINT16,
             clkbuiltins.UINT32,
             clkbuiltins.UINT64,
-            clkbuiltins.DURATION,
-            clkbuiltins.SYNC_TIME,
         ):
             return int
         if typ in (clkbuiltins.FLOAT32, clkbuiltins.FLOAT64):
             return float
+
+    if typ in (clkbuiltins.DURATION, clkbuiltins.SYNC_TIME):
+        return int
 
     if isinstance(typ, strongtypes.StrongType):
         if not isinstance(typ.typespec, typesys.TypeVal):
@@ -1468,9 +1478,28 @@ def _check_container_compatibility(old_type: typesys.TypeVal, new_type: typesys.
         # [T] -> U: check if T is compatible with U
         return _are_types_compatible(_get_container_inner_type(old_type), new_type)
 
-    assert new_is_container  # noqa: S101  (sanity check)
+    assert new_is_container
     # T -> [U]: check if T is compatible with U
     return _are_types_compatible(old_type, _get_container_inner_type(new_type))
+
+
+def _check_varstring_compatibility(old_type: typesys.TypeVal, new_type: typesys.TypeVal) -> bool | None:
+    """Check compatibility of primitive type with string type.
+
+    Args:
+        old_type: The type of the historical field
+        new_type: The type of the field that replaced it
+
+    Returns:
+        True if types are compatible, False if not, None if not applicable
+    """
+    return (
+        True
+        if old_type in (clkbuiltins.INT8, clkbuiltins.UINT8, clkbuiltins.BYTE)
+        and isinstance(new_type, typesys.Instantiation)
+        and new_type.instantiates is clkbuiltins.VAR_STRING
+        else None
+    )
 
 
 def _check_enum_compatibility(old_type: typesys.TypeVal, new_type: typesys.TypeVal) -> bool | None:
@@ -1526,6 +1555,7 @@ def _are_types_compatible(old_type: typesys.TypeVal, new_type: typesys.TypeVal) 
     """
     compatibility_checks = [
         _check_identical_types,
+        _check_varstring_compatibility,
         _check_python_type_compatibility,
         _check_container_compatibility,
         _check_enum_compatibility,

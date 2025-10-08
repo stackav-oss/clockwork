@@ -10,16 +10,20 @@ from clockwork.dsl.ir import node
 from clockwork.dsl.ir.module_id import ModuleID
 from clockwork.dsl.ir.path_resolver import BazelPathResolver, PathResolver
 
-_MODULE_CACHE: dict[ModuleID, node.Module] = {}
-
 
 @dataclass
 class FilesystemImporter:
-    """Implementation of Importer protocol that loads from the filesystem."""
+    """Implementation of Importer protocol that loads from the filesystem.
+
+    Imports modules from the filesystem.  Maintains an instance-scoped cache of modules, which is added to/accessed
+    with the try_cached_load and cache_module methods.
+    """
 
     compile_fn: Callable[[ModuleID, node.Importer], node.Module]
 
     path_resolver: PathResolver = field(default_factory=BazelPathResolver)
+
+    _cache: dict[ModuleID, node.Module] = field(default_factory=dict)
 
     def resolve_import(self, enclosing_module: node.Module, use_result: node.Module.UseResult) -> node.ImportSpec:
         """Resolve how a UseResult will be interpreted.
@@ -63,14 +67,17 @@ class FilesystemImporter:
         raise FileNotFoundError(msg)
 
     def execute_import(
-        self, spec: node.ImportSpec, enclosing_module: node.Module, use_result: node.Module.UseResult
+        self,
+        spec: node.ImportSpec,
+        enclosing_module: node.Module,
+        use_result: node.Module.UseResult,
     ) -> tuple[node.Module, node.NamedEntity | None]:
         """Execute an import.
 
         Returns:
             The imported module and, optionally, a specific entity to import from it.
         """
-        compiled_module = _MODULE_CACHE.get(spec.module_id)
+        compiled_module = self._cache.get(spec.module_id)
         if compiled_module is None:
             compiled_module = self.compile_fn(spec.module_id, self)
 
@@ -90,8 +97,8 @@ class FilesystemImporter:
         Returns:
             The Module if it's already loaded and cached, otherwise None
         """
-        return _MODULE_CACHE.get(module_id)
+        return self._cache.get(module_id)
 
     def cache_module(self, module_id: ModuleID, module: node.Module) -> None:
         """Add a compiled module to the Module cache."""
-        _MODULE_CACHE[module_id] = module
+        self._cache[module_id] = module

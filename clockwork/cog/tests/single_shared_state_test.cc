@@ -1,23 +1,16 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/cog/cog_conditions.hh"
-#include "clockwork/cog/cog_configs.hh"
-#include "clockwork/cog/cog_diagnostics.hh"
-#include "clockwork/cog/cog_inputs.hh"
-#include "clockwork/cog/cog_memory_resources.hh"
-#include "clockwork/cog/cog_publishers.hh"
 #include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/cog_states.hh"
-#include "clockwork/cog/cog_statistics.hh"
-#include "clockwork/cog/cog_timers.hh"
-#include "clockwork/cog/detail.hh"
 #include "clockwork/cog/simple_cog.hh"
+#include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
 #include "clockwork/runners/thread_pool.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -62,20 +55,11 @@ struct SingleStateCogDial
 
 /// An always ready test cog for testing state locking.
 template <size_t index>
-struct SingleStateCogPolicy
+struct SingleStateCogPolicy : testing::FakeCogPolicy<0, 0>
 {
   static constexpr auto cog_id =
     jewels::Uuid<common::EndpointClassId>::from_string("4989409f-7612-4cd1-96e4-3b37dd6c4cc4").value();
   static constexpr auto name = "clockwork:SingleStateCogPolicy";
-  static constexpr auto simulated_execution_duration = std::chrono::milliseconds(0);
-
-  using MemoryResourcesType = CogMemoryResources<>;
-  using ConfigsType = CogConfigs<>;
-  using TimersType = CogTimers<>;
-  using InputsType = CogInputs<>;
-  using ConditionsType = CogConditions<>;
-  using PublishersType = CogPublishers<>;
-  using DiagnosticsType = CogDiagnostics<>;
 
   struct StatePolicy
   {
@@ -87,14 +71,6 @@ struct SingleStateCogPolicy
   };
 
   using StatesType = CogStates<StatePolicy>;
-
-  [[nodiscard]] static bool is_ready(
-    CogStatistics& /*statistics*/,
-    typename TimersType::ConditionsTuple& /*timers*/,
-    typename ConditionsType::ConditionsTuple& /*conditions*/)
-  {
-    return true;
-  }
 
   // NOLINTNEXTLINE(readability-function-size) Must match the signature of the make_dial function.
   [[nodiscard]] static SingleStateCogDial make_dial(
@@ -131,13 +107,15 @@ TEST_CASE("single shared state", "[simple_cog]")
   auto state = std::make_shared<CogStateDataImpl<TestState>>(resource);
   auto cogs = [&resource, &queue]<size_t... idx>(std::index_sequence<idx...>)
   {
-    return std::make_tuple(std::make_unique<SimpleCog<SingleStateCogPolicy<idx>>>(
-      resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue))...);
+    return std::make_tuple(
+      std::make_unique<SimpleCog<SingleStateCogPolicy<idx>>>(
+        resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue))...);
   }(std::make_index_sequence<thread_count>{});
-  REQUIRE(std::apply(
-    [&state](auto&... cog)
-    { return (cog->set_handle(SingleStateCogPolicy<0>::StatePolicy::endpoint_id, state, true) && ...); },
-    cogs));
+  REQUIRE(
+    std::apply(
+      [&state](auto&... cog)
+      { return (cog->set_handle(SingleStateCogPolicy<0>::StatePolicy::endpoint_id, state, true) && ...); },
+      cogs));
 
   auto pool_config = ThreadPoolConfig{
     .resource = resource,
@@ -173,10 +151,11 @@ TEST_CASE("single shared state", "[simple_cog]")
 
   // Verify no cogs were starved.
 
-  REQUIRE(std::all_of(
-    state->state.counts.begin(),
-    state->state.counts.end(),
-    [&min_exe_count](const auto& count) { return count > min_exe_count; }));
+  REQUIRE(
+    std::all_of(
+      state->state.counts.begin(),
+      state->state.counts.end(),
+      [&min_exe_count](const auto& count) { return count > min_exe_count; }));
 }
 
 } // namespace

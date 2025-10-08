@@ -18,6 +18,7 @@
 #include <boost/system/errc.hpp>
 #include <sched.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory_resource>
@@ -83,6 +84,9 @@ private:
   /// Process top level signals like SIGINT.
   void quit_callback(const boost::system::error_code& error, int signal_number);
 
+  /// Stop all child processes and exit.
+  void quit();
+
   /// Register `accept_connection` callback.
   void register_accept_connection();
 
@@ -90,7 +94,11 @@ private:
   void accept_connection(boost::beast::error_code error_code, boost::asio::ip::tcp::socket socket);
 
   /// Send same signal to all children, with an optional wait
-  void send_signal_to_all(int signal_number, std::string_view signal_name, uint32_t wait_in_s = 0);
+  /// @return The number of children that were sent a signal.
+  size_t send_signal_to_all(int signal_number, std::string_view signal_name, uint32_t wait_in_s = 0);
+
+  /// Send signals to all children and escalate the signal if the child doesn't exit.
+  void escalating_send_signal_to_all();
 
   /// The configuration of this service.
   Config config_;

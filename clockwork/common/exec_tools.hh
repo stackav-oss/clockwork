@@ -59,10 +59,11 @@ struct ExecutionParams
   std::optional<jewels::time::SyncTime> end_time{};
   std::optional<std::string> input_log_uri{};
   std::optional<std::string> output_log_uri{};
-  std::optional<std::string> log_publisher_config_path{};
+  std::optional<std::string> channel_publisher_config_path{};
   std::optional<std::string> log_writer_config_path{};
   std::optional<std::string> cog_gpu_assignment_config_path{};
   std::optional<bool> suppress_schema_mismatch_errors{};
+  std::optional<std::string> metrics_channel_metadata_config_path{};
   MessageInjectors message_injectors{};
 };
 
@@ -77,11 +78,12 @@ private:
   TCLAP::SwitchArg deterministic_runner_;
   TCLAP::ValueArg<std::string> input_log_uri_;
   TCLAP::ValueArg<std::string> output_log_uri_;
-  TCLAP::ValueArg<std::string> log_publisher_config_path_;
+  TCLAP::ValueArg<std::string> channel_publisher_config_path_;
   TCLAP::ValueArg<std::string> log_writer_config_path_;
   TCLAP::ValueArg<uint64_t> start_time_ns_;
   TCLAP::ValueArg<uint64_t> end_time_ns_;
   TCLAP::ValueArg<std::string> cog_gpu_assignment_config_path_;
+  TCLAP::ValueArg<std::string> metrics_channel_metadata_config_path_;
   TCLAP::SwitchArg suppress_schema_mismatch_errors_;
 };
 

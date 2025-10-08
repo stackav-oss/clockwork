@@ -5,7 +5,7 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/exec_tools.hh"
 #include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_runner.hh"
@@ -20,6 +20,7 @@
 #include "clockwork/scaffolding/state.hh"
 #include "clockwork/scaffolding/timer.hh"
 #include "jewels/cli/exit_condition.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -80,17 +81,17 @@ int run_deterministic_impl(
   }
 
   auto logged_channels =
-    (deterministic_logging_config->log_publisher_config
-       ? deterministic_logging_config->log_publisher_config->get_channels()
-       : std::span<const clockwork_logging::LoggedChannelConfigTap>{});
+    (deterministic_logging_config->channel_publisher_config
+       ? deterministic_logging_config->channel_publisher_config->get_channels()
+       : std::span<const clockwork_logging::PublishedChannelConfigTap>{});
   auto channels = setup_deterministic_channels(
     desc.get_pubsub_graph().get_publish_endpoints(), logged_channels, memres_scratch, channel_factory);
   if (!channels)
   {
     return EXIT_FAILURE;
   }
-  auto deterministic_log_writer =
-    setup_deterministic_log_writer(memres_scratch, execution_params, *deterministic_logging_config, *channels);
+  auto deterministic_log_writer = setup_deterministic_log_writer(
+    memres_scratch, execution_params, *deterministic_logging_config, *channels, time_range->start);
   if (!deterministic_log_writer)
   {
     return EXIT_FAILURE;
@@ -168,6 +169,9 @@ int run_deterministic_impl(
   {
     return EXIT_FAILURE;
   }
+
+  auto non_connected_channels =
+    setup_non_connected_channels(desc.get_not_connected_endpoints(), casing, memres_scratch, channel_factory);
 
   if (!casing.finalize())
   {

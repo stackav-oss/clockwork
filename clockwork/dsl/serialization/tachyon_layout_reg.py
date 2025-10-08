@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Final
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.serialization import tachyon_reg
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.dsl.ir import typesys
@@ -18,10 +19,11 @@ if TYPE_CHECKING:
 class LayoutRegistry(Context):
     """Compiler Context for Tachyon structured type layouts."""
 
-    def __init__(self) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self) -> None:
         """Create a new, empty Layout registry."""
         self.layout_registry: dict[tachyon_reg.TypeKey, tachyon_layout.Layout] = {}
 
+    @override
     def import_from(self, other: LayoutRegistry) -> None:
         """Combine this context with items from another.
 
@@ -38,7 +40,8 @@ class LayoutRegistry(Context):
 class LayoutRegistryKey(ContextKey[LayoutRegistry]):
     """Compiler context key for Tachyon structured type layout registry."""
 
-    def make_default(self, compiler_context: CompilerContext) -> LayoutRegistry:  # noqa: ARG002 (conform to supertype)
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> LayoutRegistry:
         """Create a default instance of the layout registry."""
         return LayoutRegistry()
 

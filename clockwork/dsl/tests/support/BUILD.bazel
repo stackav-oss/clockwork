@@ -42,6 +42,7 @@ merge_simplelaunch_config(
         "hellomod.helloworld.HostA_channel_allocations.csv",
         "hellomod.helloworld.HostA_channel_spy_config.tachyon",
         "hellomod.helloworld.HostA_event_logger_config.tachyon",
+        "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
         "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
         "hellomod.helloworld.diagnostics_database_config.tachyon",
         ":helloworld_exe",
@@ -54,6 +55,7 @@ proto_library(
     srcs = ["better_than_inheritance.proto"],
     visibility = ["//visibility:public"],
     deps = [
+        ":dependency_tester_proto",
         ":proto_tester_onboard",
         "@protobuf//:duration_proto",
         "@protobuf//:timestamp_proto",
@@ -66,6 +68,7 @@ proto_cc_library(
     hdrs = ["better_than_inheritance.pb.h"],
     visibility = ["//visibility:public"],
     deps = [
+        ":dependency_tester_proto_cc_library",
         ":proto_tester_onboard_cc_library",
         "@protobuf",
     ],
@@ -96,10 +99,13 @@ cc_library(
         "better_than_inheritance_cpp.inl",
     ],
     hdrs = ["better_than_inheritance_cpp.hh"],
+    data = [":protomsg_clk"],
     visibility = ["//visibility:public"],
     deps = [
+        ":dependency_tester_cpp",
         "//clockwork:repr_iface",
         "//clockwork:tags",
+        "//jewels/container:compare",
         "//jewels/container/tap:optional",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
@@ -115,8 +121,20 @@ proto_py_library(
     srcs = ["better_than_inheritance_pb2.py"],
     data = ["better_than_inheritance_pb2.pyi"],
     deps = [
+        ":dependency_tester_proto_py_library",
         ":proto_tester_onboard_py_library",
         "@protobuf//:protobuf_python",
+    ],
+)
+
+clk(
+    name = "constants_clk",
+    srcs = ["constants.clk"],
+    outs = [
+        "dummy.cc",
+        "dummy.hh",
+        "dummy.inl",
+        "dummy_py.py",
     ],
 )
 
@@ -127,12 +145,15 @@ cc_library(
         "convert_hello_msg.inl",
     ],
     hdrs = ["convert_hello_msg.hh"],
+    data = [":protomsg_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":better_than_inheritance_cc_library",
         ":better_than_inheritance_cpp",
         ":convert_proto_tester",
+        ":dependency_tester_cpp",
         "//clockwork:repr_iface",
+        "//jewels/container:at",
         "//jewels/container/tap:protobuf_to_tap",
         "//jewels/container/tap:tap_to_protobuf",
         "//jewels/std:span",
@@ -146,6 +167,7 @@ cc_library(
         "convert_proto_tester.inl",
     ],
     hdrs = ["convert_proto_tester.hh"],
+    data = [":protomsg_clk"],
     deps = [
         ":better_than_inheritance_cc_library",
         ":better_than_inheritance_cpp",
@@ -164,6 +186,85 @@ cc_library(
 )
 
 cc_library(
+    name = "dependency_tester_cpp",
+    srcs = [
+        "dependency_tester_cpp.cc",
+        "dependency_tester_cpp.inl",
+    ],
+    hdrs = ["dependency_tester_cpp.hh"],
+    data = [":protomsg_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":dependency_tester_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:protobuf_to_tap",
+        "//jewels/container/tap:tap_to_protobuf",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+proto_library(
+    name = "dependency_tester_proto",
+    srcs = ["dependency_tester_proto.proto"],
+)
+
+proto_cc_library(
+    name = "dependency_tester_proto_cc_library",
+    srcs = ["dependency_tester_proto.pb.cc"],
+    hdrs = ["dependency_tester_proto.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "dependency_tester_proto_compile",
+    outputs = [
+        "dependency_tester_proto.pb.h",
+        "dependency_tester_proto.pb.cc",
+        "dependency_tester_proto_pb2.py",
+        "dependency_tester_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "dependency_tester_proto",
+)
+
+proto_py_library(
+    name = "dependency_tester_proto_py_library",
+    srcs = ["dependency_tester_proto_pb2.py"],
+    data = ["dependency_tester_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+cc_library(
+    name = "dummy",
+    srcs = [
+        "dummy.cc",
+        "dummy.inl",
+    ],
+    hdrs = ["dummy.hh"],
+    data = [":constants_clk"],
+)
+
+py_library(
+    name = "dummy_py",
+    srcs = ["dummy_py.py"],
+    data = [":constants_clk"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+cc_library(
     name = "extern_type",
     srcs = ["extern_type.inl"],
     hdrs = ["extern_type.hh"],
@@ -176,6 +277,7 @@ cc_library(
         "goodbyecog.inl",
     ],
     hdrs = ["goodbyecog.hh"],
+    data = [":goodbyecog_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":goodbyecog_dial",
@@ -206,6 +308,7 @@ cc_library(
         "goodbyecog_dial.inl",
     ],
     hdrs = ["goodbyecog_dial.hh"],
+    data = [":goodbyecog_clk"],
     visibility = ["//visibility:public"],
     deps = ["//clockwork/dial:include_common"],
 )
@@ -223,6 +326,7 @@ py_cc_binding(
         "hello_msg_clk_nb.hh",
         "hello_msg_clk_nb.inl",
     ],
+    data = [":hellomsg_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     deps = [
         ":hello_msg_onboard",
@@ -238,11 +342,13 @@ cc_library(
         "hello_msg_onboard.inl",
     ],
     hdrs = ["hello_msg_onboard.hh"],
+    data = [":hellomsg_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":hello_msg_proto_cc_library",
         "//clockwork:repr_iface",
         "//clockwork:tags",
+        "//jewels/container:at",
         "//jewels/container/tap:protobuf_to_tap",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
@@ -296,6 +402,7 @@ cc_library(
         "hello_udp.inl",
     ],
     hdrs = ["hello_udp.hh"],
+    data = [":hello_udp_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -332,6 +439,7 @@ cc_library(
         "hello_udp_not_var_packet.inl",
     ],
     hdrs = ["hello_udp_not_var_packet.hh"],
+    data = [":hello_udp_not_var_packet_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -365,14 +473,25 @@ cc_library(
         "hellocog.inl",
     ],
     hdrs = ["hellocog.hh"],
+    data = [":hellocog_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":cxx_state",
+        ":hello_msg_onboard",
         ":hellocog_dial",
         ":hellocog_impl",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -391,6 +510,8 @@ clk(
     deps = [
         ":hellomsg_clk",
         "//clockwork/diagnostics:report_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
     ],
 )
 
@@ -401,6 +522,7 @@ cc_library(
         "hellocog_dial.inl",
     ],
     hdrs = ["hellocog_dial.hh"],
+    data = [":hellocog_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":cxx_state",
@@ -425,6 +547,7 @@ cc_library(
         "hellomod.inl",
     ],
     hdrs = ["hellomod.hh"],
+    data = [":hellomod_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork/common:process_description",
@@ -448,9 +571,11 @@ clk(
         "hellomod.helloworld.HostA_channel_allocations.csv",
         "hellomod.helloworld.HostA_channel_spy_config.tachyon",
         "hellomod.helloworld.HostA_event_logger_config.tachyon",
+        "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
         "hellomod.helloworld.HostA_simplelaunch_config.textproto",
         "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
         "hellomod.helloworld.diagnostics_database_config.tachyon",
+        "hellomod.helloworld.logged_channel_metadata.pbbin",
         "hellomod.hh",
         "hellomod.inl",
         "helloworld_exe.cc",
@@ -567,6 +692,7 @@ cc_library(
         "msg_with_au.inl",
     ],
     hdrs = ["msg_with_au.hh"],
+    data = [":msg_with_au_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":msg_with_au_proto_cc_library",
@@ -666,6 +792,7 @@ clk(
     visibility = ["//visibility:public"],
     deps = [
         ":nanobind_bindings_dep_clk",
+        ":tapmsg_clk",
         "//jewels/units/clk:au_clk",
     ],
 )
@@ -694,6 +821,7 @@ cc_library(
         "nanobind_test_msg_dependency.inl",
     ],
     hdrs = ["nanobind_test_msg_dependency.hh"],
+    data = [":nanobind_bindings_dep_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -710,6 +838,7 @@ py_cc_binding(
         "nanobind_test_msg_dependency1_clk_nb.hh",
         "nanobind_test_msg_dependency1_clk_nb.inl",
     ],
+    data = [":nanobind_bindings_dep_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     deps = [
         ":nanobind_test_msg_dependency",
@@ -724,11 +853,18 @@ py_cc_binding(
         "nanobind_test_msg_dependency2_clk_nb.hh",
         "nanobind_test_msg_dependency2_clk_nb.inl",
     ],
+    data = [":nanobind_bindings_dep_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     deps = [
         ":nanobind_test_msg_dependency",
         "//jewels/nanobind/clk_bindings/common:common_cc",
     ],
+)
+
+clk(
+    name = "nanobind_type_casters_clk",
+    srcs = ["nanobind_type_casters.clk"],
+    compile = False,
 )
 
 cc_library(
@@ -738,6 +874,7 @@ cc_library(
         "nanobindable_messages.inl",
     ],
     hdrs = ["nanobindable_messages.hh"],
+    data = [":nanobind_bindings_clk"],
     deps = [
         ":nanobind_test_msg_dependency",
         "//clockwork:repr_iface",
@@ -760,6 +897,7 @@ py_cc_binding(
         "nanobindable_messages_clk_nb.hh",
         "nanobindable_messages_clk_nb.inl",
     ],
+    data = [":nanobind_bindings_clk"],
     py_deps = [
         ":nanobind_test_msg_dependency1_clk_nb",
         ":nanobind_test_msg_dependency2_clk_nb",
@@ -850,7 +988,96 @@ clk(
         "convert_proto_tester.cc",
         "convert_proto_tester.hh",
         "convert_proto_tester.inl",
+        "dependency_tester_cpp.cc",
+        "dependency_tester_cpp.hh",
+        "dependency_tester_cpp.inl",
+        "dependency_tester_proto.proto",
         "proto_tester_onboard.proto",
+    ],
+)
+
+clk(
+    name = "py_bindings_v2_clk",
+    srcs = ["py_bindings_v2.clk"],
+    outs = [
+        "py_bindings_v2_clk_cc.cc",
+        "py_bindings_v2_clk_cc.hh",
+        "py_bindings_v2_clk_cc.inl",
+        "py_bindings_v2_clk_py.py",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":py_bindings_v2_ext_clk"],
+)
+
+cc_library(
+    name = "py_bindings_v2_clk_cc",
+    srcs = [
+        "py_bindings_v2_clk_cc.cc",
+        "py_bindings_v2_clk_cc.inl",
+    ],
+    hdrs = ["py_bindings_v2_clk_cc.hh"],
+    data = [":py_bindings_v2_clk"],
+    deps = [
+        "//clockwork:tags",
+        "//jewels/uuid",
+    ],
+)
+
+py_library(
+    name = "py_bindings_v2_clk_py",
+    srcs = ["py_bindings_v2_clk_py.py"],
+    data = [":py_bindings_v2_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":py_bindings_v2_ext_clk_py",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "//jewels/container/tap:py_var_array",
+        "//jewels/container/tap:value_serdes",
+        "//jewels/memory:py_bytes",
+    ],
+)
+
+clk(
+    name = "py_bindings_v2_ext_clk",
+    srcs = ["py_bindings_v2_ext.clk"],
+    outs = [
+        "py_bindings_v2_ext_clk_cc.cc",
+        "py_bindings_v2_ext_clk_cc.hh",
+        "py_bindings_v2_ext_clk_cc.inl",
+        "py_bindings_v2_ext_clk_py.py",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "py_bindings_v2_ext_clk_cc",
+    srcs = [
+        "py_bindings_v2_ext_clk_cc.cc",
+        "py_bindings_v2_ext_clk_cc.inl",
+    ],
+    hdrs = ["py_bindings_v2_ext_clk_cc.hh"],
+    data = [":py_bindings_v2_ext_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:tags",
+        "//jewels/uuid",
+    ],
+)
+
+py_library(
+    name = "py_bindings_v2_ext_clk_py",
+    srcs = ["py_bindings_v2_ext_clk_py.py"],
+    data = [":py_bindings_v2_ext_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "//jewels/container/tap:py_var_array",
+        "//jewels/container/tap:value_serdes",
+        "//jewels/memory:py_bytes",
     ],
 )
 
@@ -873,12 +1100,14 @@ cc_library(
         "tapmsg.inl",
     ],
     hdrs = ["tapmsg.hh"],
+    data = [":tapmsg_clk"],
     visibility = ["//visibility:public"],
     deps = [
         ":extern_type",
         ":taptags",
         "//clockwork:repr_iface",
         "//clockwork:tags",
+        "//jewels/container:compare",
         "//jewels/container/tap:optional",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
@@ -913,6 +1142,7 @@ cc_library(
         "taptag.inl",
     ],
     hdrs = ["taptag.hh"],
+    data = [":tapmsg_clk"],
     visibility = ["//visibility:public"],
 )
 
@@ -923,6 +1153,7 @@ cc_library(
         "taptags.inl",
     ],
     hdrs = ["taptags.hh"],
+    data = [":taptags_clk"],
     visibility = ["//visibility:public"],
 )
 
@@ -945,4 +1176,10 @@ clk(
         ":hellomod_clk",
         "//clockwork/logging:channel_policy_clk",
     ],
+)
+
+clk(
+    name = "testpolicy_clk",
+    srcs = ["testpolicy.clk"],
+    deps = [":hellomsg_clk"],
 )

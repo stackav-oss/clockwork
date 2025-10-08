@@ -3,14 +3,17 @@
 
 """Facilities for compiling Clockwork source to the IR."""
 
+import pickle
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 
 from clockwork.dsl.bazel import clk_targets
+from clockwork.dsl.cog import clk_cog_metrics
 from clockwork.dsl.compiler_context import CompilerContext
-from clockwork.dsl.cpp import context, typereg, types
+from clockwork.dsl.cpp import context, types
+from clockwork.dsl.cpp import typereg as cpp_typereg
 from clockwork.dsl.ir import (
     audio,
     box,
@@ -49,8 +52,14 @@ from clockwork.dsl.ir.representation import (
     ResolvedReprInstantiation,
 )
 from clockwork.dsl.proto import proto_typereg
+from clockwork.dsl.python import typereg as py_typereg
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
 from fltk.fegen.pyrt import terminalsrc
+
+
+def create_filesystem_importer() -> node.Importer:
+    """Create an instance of the FilesystemImporter with the compile_fn property set."""
+    return importer.FilesystemImporter(compile_fn=compile_source_file)
 
 
 def get_resolved_source_text(module_id: ModuleID, path_resolver: PathResolver) -> str:
@@ -65,7 +74,10 @@ def get_resolved_source_text(module_id: ModuleID, path_resolver: PathResolver) -
 
 
 def compile_source_file(
-    module_id: ModuleID, importer: node.Importer, path_resolver: PathResolver | None = None
+    module_id: ModuleID,
+    importer: node.Importer,
+    path_resolver: PathResolver | None = None,
+    out_cache_file: Path | None = None,
 ) -> node.Module:
     """Compiles a DSL source code into a fully-resolved Module IR.
 
@@ -73,6 +85,7 @@ def compile_source_file(
         module_id: Module ID to compile.
         importer: An Importer instance responsible for resolving imports.
         path_resolver: Used to convert a module ID to a file path.
+        out_cache_file: An optional file to use for caching the cst.
 
     Returns:
         A fully resolved Module instance.
@@ -84,11 +97,50 @@ def compile_source_file(
     if module is not None:
         return module
 
-    source_text = get_resolved_source_text(module_id, path_resolver)
+    in_cache_file = path_resolver.find_path(module_id.with_suffix(".clk_pkl"))
+    if in_cache_file and in_cache_file.exists():
+        with in_cache_file.open("rb") as f:
+            cst_node, terminals = pickle.load(f)  # noqa: S301 This artifact is written below and then controlled by bazel.
 
-    result = compile_source_text(source_text, module_id, importer)
-    importer.cache_module(module_id, result)
-    return result
+        module = node.Module.from_cst(
+            module_id=module_id,
+            builtins=clkbuiltins.BUILTINS_SCOPE,
+            cst_node=cst_node,
+            terminals=terminals,
+        )
+
+        resolve_module(module, importer, terminals)
+
+    else:
+        source_text = get_resolved_source_text(module_id, path_resolver)
+        module = compile_source_text(source_text, module_id, importer)
+        if out_cache_file:
+            with out_cache_file.open("wb") as f:
+                pickle.dump((module.cst_node, module.terminals), f)
+
+    importer.cache_module(module_id, module)
+
+    return module
+
+
+def resolve_module(
+    module: node.Module,
+    importer: node.Importer,
+    terminals: terminalsrc.TerminalSource,
+) -> None:
+    """Resolve a module.
+
+    Args:
+        module: The module ID
+        importer: An Importer instance responsible for resolving imports.
+        terminals: Terminal source.
+    """
+    _handle_cog_imports(module)
+    module.resolve_imports(importer)
+
+    entities = _extract_entities(module, terminals)
+
+    _resolve_entities(module, entities)
 
 
 def compile_source_text(
@@ -115,11 +167,7 @@ def compile_source_text(
         terminals=parse_result.terminals,
     )
 
-    module.resolve_imports(importer)
-
-    entities = _extract_entities(module, parse_result.terminals)
-
-    _resolve_entities(module, entities)
+    resolve_module(module, importer, parse_result.terminals)
 
     return module
 
@@ -130,6 +178,21 @@ def to_clk_target(module_id: ModuleID, search_paths: Iterable[Path] | None = Non
         module_id, BazelPathResolver(prefix_paths=list(search_paths) if search_paths else None)
     )
     return to_clk_target_from_text(source_text, module_id, search_paths=search_paths)
+
+
+def _handle_cog_imports(module: node.Module) -> None:
+    assert module.cst_node is not None
+    for entity in module.cst_node.children_entity():
+        if cst_cog := entity.maybe_cog():
+            metrics_enabled = True
+            if (metrics_options := cst_cog.maybe_metrics_options_block()) and (
+                maybe_metrics_enabled := metrics_options.maybe_metrics_enabled_option()
+            ):
+                metrics_value = maybe_metrics_enabled.child_boolean()
+                metrics_enabled = metrics_value.maybe_true() is not None
+            if metrics_enabled:
+                module.unresolved_imports.extend(clk_cog_metrics.get_cog_metrics_imports(module))
+                break
 
 
 def to_clk_target_from_text(
@@ -146,7 +209,7 @@ def to_clk_target_from_text(
         cst_node=parse_result.cst,
         terminals=parse_result.terminals,
     )
-
+    _handle_cog_imports(module)
     deps = set()
     for unresolved_import in module.unresolved_imports:
         try:
@@ -223,7 +286,7 @@ def _extract_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
     """
     entities = ExtractedEntities()
 
-    assert module.cst_node is not None  # noqa: S101  (for mypy)
+    assert module.cst_node is not None
     for entity in module.cst_node.children_entity():
         if cog_cst := entity.maybe_cog():
             cog_ir = cog.Cog.from_cst(module.inner_scope, cog_cst, module=module)
@@ -343,6 +406,7 @@ def _register_entity_uuids(compiler_context: CompilerContext, entities: Extracte
             acog.states.values(),
             acog.inputs.values(),
             acog.outputs.values(),
+            acog.metrics_outputs.values(),
             acog.conditions.values(),
             acog.diagnostics.values(),
         ):
@@ -394,9 +458,9 @@ def _resolve_cpp_target_schema_tags(
 ) -> None:
     """Resolve SchemaTag(s) in a CppTarget."""
     for schema_tag in schema_tags:
-        assert isinstance(schema_tag.schema_ir, schema.Schema)  # noqa: S101  (for mypy)
+        assert isinstance(schema_tag.schema_ir, schema.Schema)
         if schema_tag.schema_ir.generic_parameters():
-            typereg.register_cpp_template(
+            cpp_typereg.register_cpp_template(
                 schema_tag.schema_ir.module.context,
                 schema_tag.schema_ir,
                 types.CppTemplate(
@@ -406,7 +470,7 @@ def _resolve_cpp_target_schema_tags(
                 ),
             )
         else:
-            typereg.register_cpp_type(
+            cpp_typereg.register_cpp_type(
                 schema_tag.schema_ir.module.context,
                 schema_tag.schema_ir,
                 types.CppType(
@@ -427,7 +491,7 @@ def _resolve_proto_target(proto_target_ir: proto_target.ProtoTarget, module: nod
     proto_target_ir.resolve()
 
     for enum in proto_target_ir.enums:
-        assert isinstance(enum.enum_ir, clkenum.ClkEnum)  # noqa: S101 (for mypy)
+        assert isinstance(enum.enum_ir, clkenum.ClkEnum)
         proto_typereg.register_protobuf_type(
             enum.enum_ir,
             proto_typereg.EnumProtobufType(
@@ -437,6 +501,7 @@ def _resolve_proto_target(proto_target_ir: proto_target.ProtoTarget, module: nod
                 type_name=enum.enum_ir.name,
                 validate_fields=False,
             ),
+            module.context,
         )
     for representation_ir in proto_target_ir.representations:
         resolved_repr = representation_ir.get_resolved()
@@ -446,8 +511,11 @@ def _resolve_proto_target(proto_target_ir: proto_target.ProtoTarget, module: nod
             if not resolved_repr.name:
                 msg = f"Protobuf representations require an alias for instantiated generics: {resolved_repr}"
                 raise ValueError(msg)
+            schema_arg = args["schema"]
+            assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
+            schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
             proto_typereg.register_protobuf_type(
-                args["schema"],
+                schema_ir,
                 proto_typereg.DefinedProtobufType(
                     module_id=module.module_id,
                     import_location=str(module_file_name),
@@ -455,6 +523,7 @@ def _resolve_proto_target(proto_target_ir: proto_target.ProtoTarget, module: nod
                     type_name=resolved_repr.name,
                     validate_fields=proto_target_ir.options.validate_proto,
                 ),
+                module.context,
             )
         else:
             proto_typereg.register_protobuf_type(
@@ -466,6 +535,7 @@ def _resolve_proto_target(proto_target_ir: proto_target.ProtoTarget, module: nod
                     type_name=resolved_repr.name if resolved_repr.name else resolved_repr.schema_ir.schema_name,
                     validate_fields=proto_target_ir.options.validate_proto,
                 ),
+                module.context,
             )
 
 
@@ -515,8 +585,8 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
     _resolve_cpp_target_schema_tags(cpp_target_ir.schema_tags, cpp_target_ir.options.namespace, cpp_target_header)
 
     for tag in cpp_target_ir.tags:
-        assert isinstance(tag.tag_ir, strongtypes.Tag)  # noqa: S101  (for mypy)
-        typereg.register_cpp_type(
+        assert isinstance(tag.tag_ir, strongtypes.Tag)
+        cpp_typereg.register_cpp_type(
             module.context,
             tag.tag_ir,
             types.CppType(
@@ -526,8 +596,8 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
             ),
         )
     for enum in cpp_target_ir.enums:
-        assert isinstance(enum.enum_ir, clkenum.ClkEnum)  # noqa: S101 (for mypy)
-        typereg.register_cpp_type(
+        assert isinstance(enum.enum_ir, clkenum.ClkEnum)
+        cpp_typereg.register_cpp_type(
             module.context,
             enum.enum_ir,
             types.CppType(
@@ -563,8 +633,8 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
         )
 
     for cpp_cog in cpp_target_ir.cogs:
-        assert isinstance(cpp_cog.cog_ir, cog.Cog)  # noqa: S101 (for mypy)
-        typereg.register_cpp_type(
+        assert isinstance(cpp_cog.cog_ir, cog.Cog)
+        cpp_typereg.register_cpp_type(
             module.context,
             cpp_cog.cog_ir,
             types.CppType(
@@ -578,8 +648,8 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
         )
 
     for cpp_udp_socket in cpp_target_ir.udp_sockets:
-        assert isinstance(cpp_udp_socket.udp_socket_ir, udp.UdpSocket)  # noqa: S101 (for mypy)
-        typereg.register_cpp_type(
+        assert isinstance(cpp_udp_socket.udp_socket_ir, udp.UdpSocket)
+        cpp_typereg.register_cpp_type(
             module.context,
             cpp_udp_socket.udp_socket_ir,
             types.CppType(
@@ -590,8 +660,8 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
         )
 
     for cpp_audio_source in cpp_target_ir.audio_sources:
-        assert isinstance(cpp_audio_source.audio_source_ir, audio.AudioSource)  # noqa: S101 (for mypy)
-        typereg.register_cpp_type(
+        assert isinstance(cpp_audio_source.audio_source_ir, audio.AudioSource)
+        cpp_typereg.register_cpp_type(
             module.context,
             cpp_audio_source.audio_source_ir,
             types.CppType(
@@ -605,7 +675,7 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
         extern.register(cpp_target_header)
 
     for conv in cpp_target_ir.converters:
-        assert isinstance(conv.typespec, typesys.Instantiation)  # noqa: S101 (for mypy)
+        assert isinstance(conv.typespec, typesys.Instantiation)
         converter.register_schema_conversion(
             conv,
             ConversionRegistration(
@@ -614,15 +684,72 @@ def _resolve_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module
                 include_location=cpp_target_header,
                 namespace=cpp_target_ir.options.namespace,
             ),
+            module.context,
         )
 
 
 def _process_tachyon_repr(compiler_context: CompilerContext, instantiation: typesys.Instantiation) -> None:
     schema_arg = instantiation.arguments["schema"]
-    assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)  # noqa: S101  (invariant)
+    assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
     schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
     layout = tachyon_layout.layout_schema(compiler_context, schema_ir)
     tachyon_layout_reg.register_structured_type(compiler_context, schema_ir, layout)
+
+
+def _resolve_py_target(py_target_ir: py_target.PyTarget, module: node.Module) -> None:
+    """Resolve a PyTarget and process the entities within it.
+
+    This is not meant to be used on its own, but as a helper function for
+    compile_source_text().
+    """
+    py_import_spec = py_target_ir.import_spec()
+
+    py_target_ir.resolve()
+
+    for repr_instantiation_ir in py_target_ir.representations:
+        _register_representation(repr_instantiation_ir.get_resolved())
+
+    for interface_ir in py_target_ir.interfaces:
+        if (
+            not isinstance(interface_ir.typespec, typesys.Instantiation)
+            or interface_ir.typespec.instantiates != clkbuiltins.TAP
+        ):
+            msg = interface_ir.append_error_line("Only Tap<> interfaces are supported by python bindings.")
+            raise NotImplementedError(msg)
+
+        if not interface_ir.representation or not (
+            representation_info := schema_reg.lookup_representation(module.context, interface_ir.representation)
+        ):
+            msg = interface_ir.append_error_line(
+                "Unable to locate representation for interface. Is the representation defined in the .clk file?"
+            )
+            raise ValueError(msg)
+
+        representation_ir = representation_info.representation_ir
+        if representation_ir.typespec.instantiates != clkbuiltins.TACHYON:
+            msg = representation_ir.append_error_line(
+                "Only Tachyon<> representations are supported by python bindings."
+            )
+            raise NotImplementedError(msg)
+
+        schema_ir = representation_ir.schema_ir
+        if schema_ir.schema.generic_parameters():
+            if not interface_ir.name:
+                msg = interface_ir.append_error_line("Python interfaces for generic schemas must have an alias.")
+                raise ValueError(msg)
+            schema_name = interface_ir.name
+        else:
+            schema_name = schema_ir.schema_name
+
+        py_typereg.register_py_type(
+            module.context,
+            schema_ir.as_instantiation_or_resolved_schema(),
+            py_typereg.PyType(
+                repo=module.module_id.repo,
+                import_spec=py_import_spec,
+                class_name=schema_name,
+            ),
+        )
 
 
 # We must disable C901 and PLR0912 here (function complexity, branches) because
@@ -691,14 +818,12 @@ def _resolve_entities(  # noqa: C901, PLR0912 (see above)
         nanobind_target_ir.resolve()
 
     for py_target_ir in entities.py_targets:
-        py_target_ir.resolve()
-        for repr_instantiation_ir in py_target_ir.representations:
-            _register_representation(repr_instantiation_ir.get_resolved())
+        _resolve_py_target(py_target_ir, module)
 
     for system_target_ir in entities.system_targets:
         resolved_system_target = system_target_ir.resolve()
         uuid_reg.register_entity_with_stable_key(module.context, system_target_ir)
-        assert resolved_system_target.box_instance.source is not None  # noqa: S101 (invariant)
+        assert resolved_system_target.box_instance.source is not None
         _register_box_instance_uuids(module.context, resolved_system_target.box_instance.source)
 
     _register_entity_uuids(module.context, entities)
@@ -715,11 +840,11 @@ def _register_strong_type(compiler_context: CompilerContext, strong_type: strong
         raise ValueError(msg)
 
     tachyon_reg.register_type(compiler_context, strong_type, constraint)
-    cpp_type = typereg.get_cpp_type(strong_type.module.context, strong_type.typespec)
+    cpp_type = cpp_typereg.get_cpp_type(strong_type.module.context, strong_type.typespec)
     if not isinstance(cpp_type, types.CppType):
         msg = f"Expected a CppType for underlying type. Received: {cpp_type}"
         raise TypeError(cpp_type)
-    typereg.register_cpp_type(strong_type.module.context, strong_type, cpp_type)
+    cpp_typereg.register_cpp_type(strong_type.module.context, strong_type, cpp_type)
 
-    protobuf_type = proto_typereg.get_protobuf_type(strong_type.typespec)
-    proto_typereg.register_protobuf_type(strong_type, protobuf_type)
+    protobuf_type = proto_typereg.get_protobuf_type(strong_type.typespec, compiler_context)
+    proto_typereg.register_protobuf_type(strong_type, protobuf_type, compiler_context)

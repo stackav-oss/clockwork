@@ -19,6 +19,10 @@ namespace clockwork::support
 template <size_t payload_size>
 jewels::expected<std::array<std::byte, payload_size>, jewels::filesystem::ErrorCode> Receiver::read()
 {
+  if (auto result = wait_for_readable(*file_descriptor_); !result)
+  {
+    return jewels::unexpected{result.error()};
+  }
   std::array<std::byte, payload_size> bytes{};
   const auto bytes_received =
     ::recvfrom(*file_descriptor_, static_cast<void*>(bytes.data()), bytes.size(), MSG_TRUNC, nullptr, nullptr);
@@ -31,11 +35,6 @@ jewels::expected<std::array<std::byte, payload_size>, jewels::filesystem::ErrorC
     return jewels::unexpected{jewels::filesystem::make_error_code(EMSGSIZE)};
   }
   return bytes;
-}
-
-[[nodiscard]] int Receiver::fd()
-{
-  return *file_descriptor_;
 }
 
 } // namespace clockwork::support

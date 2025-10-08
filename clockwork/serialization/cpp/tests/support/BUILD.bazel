@@ -1,0 +1,164 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
+
+package(default_testonly = True)
+
+py_library(
+    name = "py_test_schema_v1",
+    srcs = ["py_test_schema_v1.py"],
+    data = [":test_schema_v1_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+py_library(
+    name = "py_test_schema_v2",
+    srcs = ["py_test_schema_v2.py"],
+    data = [":test_schema_v2_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+cc_library(
+    name = "strong_type_factory",
+    srcs = ["strong_type_factory.inl"],
+    hdrs = ["strong_type_factory.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "test_schema_v1",
+    srcs = [
+        "test_schema_v1.cc",
+        "test_schema_v1.inl",
+    ],
+    hdrs = ["test_schema_v1.hh"],
+    data = [":test_schema_v1_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":strong_type_factory",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container:compare",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/utility:enum_flags",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "test_schema_v1_clk",
+    srcs = ["test_schema_v1.clk"],
+    outs = [
+        "py_test_schema_v1.py",
+        "test_schema_v1.cc",
+        "test_schema_v1.hh",
+        "test_schema_v1.inl",
+        "test_schema_v1_clk_nb.cc",
+        "test_schema_v1_clk_nb.hh",
+        "test_schema_v1_clk_nb.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_cc_binding(
+    name = "test_schema_v1_clk_nb",
+    srcs = [
+        "test_schema_v1_clk_nb.cc",
+        "test_schema_v1_clk_nb.hh",
+        "test_schema_v1_clk_nb.inl",
+    ],
+    data = [":test_schema_v1_clk"],
+    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":test_schema_v1",
+        "//jewels/nanobind/clk_bindings/common:common_cc",
+    ],
+)
+
+cc_library(
+    name = "test_schema_v2",
+    srcs = [
+        "test_schema_v2.cc",
+        "test_schema_v2.inl",
+    ],
+    hdrs = ["test_schema_v2.hh"],
+    data = [":test_schema_v2_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":strong_type_factory",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container:compare",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/utility:enum_flags",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "test_schema_v2_clk",
+    srcs = ["test_schema_v2.clk"],
+    outs = [
+        "py_test_schema_v2.py",
+        "test_schema_v2.cc",
+        "test_schema_v2.hh",
+        "test_schema_v2.inl",
+        "test_schema_v2_clk_nb.cc",
+        "test_schema_v2_clk_nb.hh",
+        "test_schema_v2_clk_nb.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_cc_binding(
+    name = "test_schema_v2_clk_nb",
+    srcs = [
+        "test_schema_v2_clk_nb.cc",
+        "test_schema_v2_clk_nb.hh",
+        "test_schema_v2_clk_nb.inl",
+    ],
+    data = [":test_schema_v2_clk"],
+    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":test_schema_v2",
+        "//jewels/nanobind/clk_bindings/common:common_cc",
+    ],
+)
+
+cc_library(
+    name = "validate_upgradability",
+    srcs = ["validate_upgradability.inl"],
+    hdrs = ["validate_upgradability.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/serialization/cpp:tachyon_model",
+        "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "@catch2//:catch2_main",
+    ],
+)

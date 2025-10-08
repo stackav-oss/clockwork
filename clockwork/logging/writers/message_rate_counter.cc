@@ -3,6 +3,7 @@
 
 #include "clockwork/logging/writers/message_rate_counter.hh"
 
+#include <compare>
 #include <cstddef>
 #include <memory_resource>
 #include <span>
@@ -13,11 +14,14 @@ namespace clockwork_logging
 
 MessageRateCounter::MessageRateCounter(
   jewels::memory::MemoryResource memory_resource,
-  const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
+  const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config,
+  std::chrono::nanoseconds warmup_interval,
+  jewels::time::SteadyTime current_steady_time)
   : memory_resource_(std::move(memory_resource)),
     window_size_sec_(channel_rates_config.get_window_size_sec()),
     min_channel_msg_rates_hz_(memory_resource_),
-    channel_rate_map_(memory_resource_)
+    channel_rate_map_(memory_resource_),
+    warmup_time_(current_steady_time + warmup_interval)
 {
   for (const auto& channel_message_rate : channel_rates_config.get_channel_message_rates())
   {
@@ -56,6 +60,11 @@ void MessageRateCounter::update_channel(
 [[nodiscard]] std::pmr::map<std::string_view, MessageRateCounter::MapEntry>& MessageRateCounter::get_channel_rate_map()
 {
   return channel_rate_map_;
+}
+
+[[nodiscard]] bool MessageRateCounter::is_warmed_up(jewels::time::SteadyTime current_steady_time) const
+{
+  return current_steady_time >= warmup_time_;
 }
 
 } // namespace clockwork_logging

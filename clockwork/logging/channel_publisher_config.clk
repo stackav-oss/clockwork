@@ -1,0 +1,102 @@
+use clockwork::logging::log_uuid_tag::LogUuidTag;
+
+// Published channel configuration
+schema PublishedChannelConfig {
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 300;
+
+    // Maximum schema definition size
+    #1 max_schema_definition_size = 20000;
+
+    // Max module name size
+    #2 max_module_name_size = 31;
+
+    // Max path name size
+    #3 max_path_name_size = 511;
+
+    // Max class name size
+    #4 max_class_name_size = 63;
+  }
+
+  fields
+  {
+    // Channel UUID
+    #5 uuid: Uuid<LogUuidTag>;
+
+    // Number of slots
+    #6 num_slots: UInt32;
+
+    // Message size in bytes
+    #7 message_size: UInt32;
+
+    // Channel name
+    #8 channel_name: VarString<max_channel_name_size>;
+
+    // Schema definition
+    #9 schema_definition: VarArray<Byte, max_schema_definition_size>;
+
+    // Schema module name
+    #10 module_name: VarString<max_module_name_size>;
+
+    // Schema source file name
+    #11 source_file_name: VarString<max_path_name_size>;
+
+    // Schema class name
+    #12 class_name: VarString<max_class_name_size>;
+  }
+}
+
+// Channel publisher configuration
+schema ChannelPublisherConfig {
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 300;
+
+    // Maximum schema definition size
+    #1 max_schema_definition_size = 20000;
+
+    // Max module name size
+    #2 max_module_name_size = 31;
+
+    // Max path name size
+    #3 max_path_name_size = 511;
+
+    // Max class name size
+    #4 max_class_name_size = 63;
+
+    // Maximum number of channels
+    #5 max_num_channels = 555;
+  }
+
+  fields
+  {
+    // Published channels
+    #6 channels: VarArray<
+      PublishedChannelConfig<
+        max_channel_name_size=max_channel_name_size,
+        max_schema_definition_size=max_schema_definition_size,
+        max_module_name_size=max_module_name_size,
+        max_path_name_size=max_path_name_size,
+        max_class_name_size=max_class_name_size>,
+      max_num_channels>;
+  }
+}
+
+cpp_target channel_publisher_config
+{
+  options
+  {
+    namespace clockwork_logging;
+  }
+
+  schema PublishedChannelConfig;
+  representation Tachyon<PublishedChannelConfig<>>;
+  interface PublishedChannelConfigTap: Tap<Tachyon<PublishedChannelConfig<>>>;
+
+  schema ChannelPublisherConfig;
+  representation Tachyon<ChannelPublisherConfig<>>;
+  interface ChannelPublisherConfigTap: Tap<Tachyon<ChannelPublisherConfig<>>>;
+}

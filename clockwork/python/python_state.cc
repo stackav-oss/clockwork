@@ -4,7 +4,6 @@
 #include "clockwork/python/python_state.hh"
 
 #include "clockwork/python/gil_lock_guard.hh"
-#include "clockwork/python/python_init.hh"
 #include "clockwork/python/python_object.hh"
 
 #include <stdexcept>
@@ -13,10 +12,7 @@
 namespace clockwork::python
 {
 
-PythonState::PythonState(jewels::memory::MemoryResource /*memory_resource*/)
-{
-  python_init_once();
-}
+PythonState::PythonState(jewels::memory::MemoryResource /*memory_resource*/) {}
 
 PythonState::~PythonState()
 {

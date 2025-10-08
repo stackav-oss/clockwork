@@ -38,14 +38,16 @@ public:
   /// Make a channel spy subscriber to receive raw message data
   /// @param[in] shm_dir Shared memory directory
   /// @param[in] socket_ns Pinion socket namespace
-  /// @param[in] name Name of the channel file in shm_dir (UUID string)
+  /// @param[in] uuid_str UUID string name of the channel file in shm_dir
+  /// @param[in] channel_name Human readable channel name
   /// @param[in] num_slots Number of pinion buffer slots
   /// @param[in] message_size Pinion buffer message size
   /// @param[in] callback_fn Raw message data callback function
   [[nodiscard]] static std::unique_ptr<ChannelSpySubscriber> make_subscriber(
     std::string_view shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view uuid_str,
+    std::string_view channel_name,
     size_t num_slots,
     size_t message_size,
     RawMessageCallback callback_fn);
@@ -53,14 +55,16 @@ public:
   /// Make a channel spy subscriber to receive python callbacks
   /// @param[in] shm_dir Shared memory directory
   /// @param[in] socket_ns Pinion socket namespace
-  /// @param[in] name Name of the channel file in shm_dir (UUID string)
+  /// @param[in] uuid_str UUID string name of the channel file in shm_dir
+  /// @param[in] channel_name Human readable channel name
   /// @param[in] num_slots Number of pinion buffer slots
   /// @param[in] message_size Pinion buffer message size
   /// @param[in] callback_fn Message callback function
   [[nodiscard]] static std::unique_ptr<ChannelSpySubscriber> make_subscriber(
     std::string_view shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view uuid_str,
+    std::string_view channel_name,
     size_t num_slots,
     size_t message_size,
     PythonCallback callback_fn);
@@ -69,14 +73,16 @@ public:
   /// @tparam MessageType Subscribed message type
   /// @param[in] shm_dir Shared memory directory
   /// @param[in] socket_ns Pinion socket namespace
-  /// @param[in] name Name of the channel file in shm_dir (UUID string)
+  /// @param[in] uuid_str UUID string name of the channel file in shm_dir
+  /// @param[in] channel_name Human readable channel name
   /// @param[in] num_slots Number of pinion buffer slots
   /// @param[in] callback_fn Message callback function
   template <typename MessageType>
   [[nodiscard]] static std::unique_ptr<ChannelSpySubscriber> make_subscriber(
     std::string_view shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view uuid_str,
+    std::string_view channel_name,
     size_t num_slots,
     DeserializedMessageCallback<MessageType> callback_fn)
     requires(TappyType<MessageType> || TachyonType<MessageType>);
@@ -94,14 +100,16 @@ private:
   /// Make a channel spy subscriber with a generic callback function
   /// @param[in] shm_dir Shared memory directory
   /// @param[in] socket_ns Pinion socket namespace
-  /// @param[in] name Name of the channel file in shm_dir (UUID string)
+  /// @param[in] uuid_str UUID string name of the channel file in shm_dir
+  /// @param[in] channel_name Human readable channel name
   /// @param[in] num_slots Number of pinion buffer slots
   /// @param[in] message_size Pinion buffer message size
   /// @param[in] callback_fn Raw message data callback function
   [[nodiscard]] static std::unique_ptr<ChannelSpySubscriber> make_subscriber(
     std::string_view shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view uuid_str,
+    std::string_view channel_name,
     size_t num_slots,
     size_t message_size,
     GenericCallbackFunction callback_fn);

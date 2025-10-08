@@ -1,0 +1,269 @@
+// Broken schema version 2
+schema BrokenIntV2
+{
+  uuid: a38a480f-491f-4844-b219-b5c19388bd8e;
+  fields
+  {
+    // Integer field
+    #1 integer_field: Int64;
+  }
+}
+
+// Broken schema version 2
+schema BrokenOptionalV2
+{
+  uuid: e561350d-eea5-4bc8-b554-f5d097694917;
+  fields
+  {
+    // Optional integer field
+    #1 maybe_integer_field: Optional<Int64>;
+  }
+}
+
+// Broken schema version 2
+schema BrokenArrayV2
+{
+  uuid: f57aa68b-3ea4-4d8d-a79e-8712390a2ddd;
+  fields
+  {
+    // Array of broken schemas
+    #1 broken_array: FixedArray<type=BrokenIntV2, size=2>;
+  }
+}
+
+// Broken schema version 2
+schema BrokenStringV2
+{
+  uuid: a29164bf-2c0b-4efb-b008-8863b8e951aa;
+  fields
+  {
+    // String field
+    #1 string_field: VarString<max_size=128>;
+  }
+}
+
+// Broken schema version 2
+schema BrokenBuiltInV2
+{
+  uuid: c8eeae38-b240-4759-9f21-e0881a079965;
+  fields
+  {
+    // String field
+    #1 builtin_field: VarArray<type=UInt8, max_size=64>;
+  }
+}
+
+// Broken schema version 2
+schema BrokenNameV2
+{
+  uuid: b14e114e-70b3-4ab8-92a1-63bb1de568cc;
+  fields
+  {
+    // Integer field (renamed)
+    #1 renamed_integer_field: Int64;
+  }
+}
+
+// Broken schema version 2
+schema BrokenRemovedV2
+{
+  uuid: bd0ac152-7c91-4adc-be48-0b37a3868565;
+  fields
+  {
+    // Integer field1
+    #1 integer_field1: Int64;
+
+    // Integer field3
+    #3 integer_field3: Int64;
+  }
+}
+
+// Strong type
+strong_type StrongTypeV2
+{
+  underlying_type: Int64;
+}
+
+// Broken schema version 2
+schema BrokenStrongTypeV2
+{
+  uuid: 70b4e493-e93f-43fe-929f-4b79a31244a5;
+  fields
+  {
+    // Strong type field
+    #1 strong_type_field: StrongTypeV2;
+  }
+}
+
+// Enum type
+enum BrokenEnumNameTypeV2
+{
+  uuid: 3e4cd87c-f78a-45cd-9cf9-aa00ba86c4b3;
+  values
+  {
+    // Value 1
+    #1 value_one default;
+
+    // Value 2
+    #2 value_two;
+  }
+}
+
+// Broken schema version 2
+schema BrokenEnumNameV2
+{
+  uuid: 32e76b39-a125-47ac-a917-5682c1063e57;
+  fields
+  {
+    // Enum field
+    #1 enum_field: BrokenEnumNameTypeV2;
+  }
+}
+
+// Broken enum type
+enum BrokenEnumValueTypeV2
+{
+  uuid: 9c568576-c129-42cf-bbaa-372d6e142887;
+  values
+  {
+    // Value 1
+    #1 value1;
+
+    // Value 2
+    #2 value2 default;
+  }
+}
+
+// Broken schema version 2
+schema BrokenEnumValueV2
+{
+  uuid: 16e3fb67-058f-417b-9e03-6bce4df6b392;
+  fields
+  {
+    // Enum field
+    #1 enum_field: BrokenEnumValueTypeV2;
+  }
+}
+
+// Broken enum type
+enum BrokenEnumRemovedTypeV2
+{
+  uuid: 93630dc1-aafe-40e9-833b-aa1afb7968de;
+  values
+  {
+    // Value 1
+    #1 value1 default
+    {
+      underlying_value: 0;
+    }
+
+    // Value 3
+    #3 value3
+    {
+      underlying_value: 2;
+    }
+  }
+}
+
+// Broken schema version 2
+schema BrokenEnumRemovedV2
+{
+  uuid: ac740bca-3e0e-46eb-a961-04a048de8ede;
+  fields
+  {
+    // Enum field
+    #1 enum_field: BrokenEnumRemovedTypeV2;
+  }
+}
+
+py_target py_broken_schema_v2
+{
+  enum BrokenEnumNameTypeV2;
+  enum BrokenEnumValueTypeV2;
+  enum BrokenEnumRemovedTypeV2;
+
+  interface Tappy<BrokenIntV2>;
+  interface Tappy<BrokenOptionalV2>;
+  interface Tappy<BrokenArrayV2>;
+  interface Tappy<BrokenStringV2>;
+  interface Tappy<BrokenBuiltInV2>;
+  interface Tappy<BrokenNameV2>;
+  interface Tappy<BrokenRemovedV2>;
+  interface Tappy<BrokenStrongTypeV2>;
+  interface Tappy<BrokenEnumNameV2>;
+  interface Tappy<BrokenEnumValueV2>;
+  interface Tappy<BrokenEnumRemovedV2>;
+}
+
+nanobind_target broken_schema_v2_clk_nb
+{
+  binding BrokenEnumNameTypeV2;
+  binding BrokenEnumValueTypeV2;
+  binding BrokenEnumRemovedTypeV2;
+  binding Tappy<BrokenIntV2>;
+  binding Tappy<BrokenOptionalV2>;
+  binding Tappy<BrokenArrayV2>;
+  binding Tappy<BrokenStringV2>;
+  binding Tappy<BrokenBuiltInV2>;
+  binding Tappy<BrokenNameV2>;
+  binding Tappy<BrokenRemovedV2>;
+  binding Tappy<BrokenStrongTypeV2>;
+  binding Tappy<BrokenEnumNameV2>;
+  binding Tappy<BrokenEnumValueV2>;
+  binding Tappy<BrokenEnumRemovedV2>;
+}
+
+cpp_target broken_schema_v2
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  schema BrokenIntV2;
+  representation Tachyon<BrokenIntV2>;
+  interface Tappy<BrokenIntV2>;
+
+  schema BrokenOptionalV2;
+  representation Tachyon<BrokenOptionalV2>;
+  interface Tappy<BrokenOptionalV2>;
+
+  schema BrokenArrayV2;
+  representation Tachyon<BrokenArrayV2>;
+  interface Tappy<BrokenArrayV2>;
+
+  schema BrokenStringV2;
+  representation Tachyon<BrokenStringV2>;
+  interface Tappy<BrokenStringV2>;
+
+  schema BrokenBuiltInV2;
+  representation Tachyon<BrokenBuiltInV2>;
+  interface Tappy<BrokenBuiltInV2>;
+
+  schema BrokenNameV2;
+  representation Tachyon<BrokenNameV2>;
+  interface Tappy<BrokenNameV2>;
+
+  schema BrokenRemovedV2;
+  representation Tachyon<BrokenRemovedV2>;
+  interface Tappy<BrokenRemovedV2>;
+
+  schema BrokenStrongTypeV2;
+  representation Tachyon<BrokenStrongTypeV2>;
+  interface Tappy<BrokenStrongTypeV2>;
+
+  enum BrokenEnumNameTypeV2;
+  schema BrokenEnumNameV2;
+  representation Tachyon<BrokenEnumNameV2>;
+  interface Tappy<BrokenEnumNameV2>;
+
+  enum BrokenEnumValueTypeV2;
+  schema BrokenEnumValueV2;
+  representation Tachyon<BrokenEnumValueV2>;
+  interface Tappy<BrokenEnumValueV2>;
+
+  enum BrokenEnumRemovedTypeV2;
+  schema BrokenEnumRemovedV2;
+  representation Tachyon<BrokenEnumRemovedV2>;
+  interface Tappy<BrokenEnumRemovedV2>;
+}

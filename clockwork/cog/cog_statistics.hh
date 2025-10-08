@@ -11,15 +11,16 @@
 #include <wise_enum.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <sys/types.h>
+#include <unordered_map>
 #include <vector>
 
 namespace clockwork
 {
-static constexpr size_t event_metrics_batch_size = 10;
 
 /// Class to hold execution data for a Cog
 struct CogStatistics
@@ -82,44 +83,56 @@ template <>
 inline std::optional<double> MinMaxMean<TenNanoseconds>::mean() const;
 
 /// Metrics common to all cogs that are written in the event log
-struct CogEventMetrics
+struct EventMetrics
 {
   /// Start of execution time
-  int64_t execution_start_time; // 8 bytes (units 1ns signed)
+  int64_t execution_start_time{}; // 8 bytes (units 1ns signed)
 
   /// Execution duration
-  TenNanoseconds execution_duration;
+  TenNanoseconds execution_duration{};
 
   /// Latency between when the cog first became ready and when it actually executed
-  TenNanoseconds latency_first_ready_to_execution;
+  TenNanoseconds latency_first_ready_to_execution{};
 
   /// Latency between when execution was first attempted (prepare for execution) and when it actually executed
-  TenNanoseconds latency_first_attempt_to_execution;
+  TenNanoseconds latency_first_attempt_to_execution{};
 
   /// Number of times the execution needed to be requeued.
-  uint16_t num_requeues_before_execution;
+  uint16_t num_requeues_before_execution{};
+
+  /// Conditions Mask
+  uint64_t conditions_mask{};
+
+  /// Output metrics
+  std::pmr::unordered_map<size_t, uint16_t> output_metrics;
 };
 
 /// Metrics common to all cogs that are written in the telemetry log.
-struct CogTelemetryMetrics
+struct TelemetryMetrics
 {
   /// Execution Duration
-  MinMaxMean<TenNanoseconds> latency_first_ready_to_execution;
+  MinMaxMean<TenNanoseconds> latency_first_ready_to_execution{};
 
   /// Latency between when the cog first became ready and when it actually executed
-  MinMaxMean<TenNanoseconds> latency_first_attempt_to_execution;
+  MinMaxMean<TenNanoseconds> latency_first_attempt_to_execution{};
 
   /// Number of times the execution needed to be requeued.
-  MinMaxMean<uint16_t> num_requeues_before_execution;
+  MinMaxMean<uint16_t> num_requeues_before_execution{};
 
   /// Number of times this cog has been executed
   uint16_t num_executions{};
 
   /// Time between successive executions
-  MinMaxMean<TenNanoseconds> execution_period;
+  MinMaxMean<TenNanoseconds> execution_period{};
 
   /// Execution Duration
-  MinMaxMean<TenNanoseconds> execution_duration;
+  MinMaxMean<TenNanoseconds> execution_duration{};
+
+  /// Output metrics
+  std::pmr::unordered_map<size_t, MinMaxMean<uint16_t>> output_metrics;
+
+  /// Conditions Mask Vector
+  std::pmr::vector<uint64_t> conditions_mask_vector;
 };
 
 /// CogExecution states. Should really be nested in CogMetrics but that would prevent using WISE_ENUM_CLASS
@@ -131,7 +144,7 @@ class CogMetrics
 public:
   /// Constructor for the CogMetrics class
   /// @param resource Memory resource to use for event metrics storage
-  explicit CogMetrics(jewels::memory::MemoryResource resource);
+  explicit CogMetrics(jewels::memory::MemoryResource resource, size_t event_metrics_batch_size);
 
   /// Indicate that the cog's execution conditions have been satisfied
   /// @param ready_time the time the execution conditions were satisfied
@@ -145,7 +158,7 @@ public:
   /// Indicate that execution of the cog began
   /// @param execution_time the time execution began
   /// @return A StateTransitionExpected indicating success or failure of the state transition
-  StateTransitionExpected execution_started(jewels::time::SyncTime execution_time);
+  StateTransitionExpected execution_started(jewels::time::SyncTime execution_time, uint64_t conditions_mask);
 
   /// Indicate that the execution of the cog has completed
   /// @param execution_complete_time time execution of the cog completed
@@ -154,14 +167,20 @@ public:
 
   /// Retrieve the collected event metrics for this cog
   /// @return A vector containing the event metrics history
-  [[nodiscard]] std::pmr::vector<CogEventMetrics> event_metrics() const;
+  [[nodiscard]] std::pmr::vector<EventMetrics> event_metrics() const;
 
   /// Retrieve the aggregated telemetry metrics for this cog
   /// @return The current telemetry metrics
-  [[nodiscard]] CogTelemetryMetrics telemetry_metrics() const;
+  [[nodiscard]] TelemetryMetrics telemetry_metrics() const;
 
   /// Reset all collected metrics to their initial values
   void reset_metrics();
+
+  /// Reset the collected telemetry metrics to their initial values
+  void reset_telemetry_metrics();
+
+  /// Reset the collected event metrics
+  void reset_event_metrics();
 
   // Get the current number of event metrics in the batch
   /// @return The current number of event metrics in the batch
@@ -171,15 +190,27 @@ public:
   /// @return True if the event metrics batch is full, false otherwise
   [[nodiscard]] bool is_event_metrics_batch_full() const;
 
+  /// Update the output metrics for a specific output index
+  /// @param output_index The index of the output to update
+  /// @param value The value to update the output metrics with
+  void update_output_metrics(size_t output_index, uint16_t value);
+
 private:
+  /// Check if the event metrics batch is full
+  /// @note Lock parameter is to ensure that the caller has locked the mutex
+  /// @return True if the event metrics batch is full, false otherwise
+  [[nodiscard]] bool is_event_metrics_batch_full(const std::scoped_lock<std::mutex>& /*unused*/) const;
+
   /// Commit the metrics from the last execution run to the event and telemtry metrics data structures
-  StateTransitionExpected commit_metrics();
+  /// @note Lock parameter is to ensure that the caller has locked the mutex
+  StateTransitionExpected commit_metrics(const std::scoped_lock<std::mutex>& lock);
 
   /// Update the cog telemetry metrics with data from the last execution sequence
   void update_cog_telemetry_metrics();
 
   /// Update the cog event metrics with data from the last execution sequence
-  StateTransitionExpected update_cog_event_metrics();
+  /// @note Lock parameter is to ensure that the caller has locked the mutex
+  StateTransitionExpected update_cog_event_metrics(const std::scoped_lock<std::mutex>& lock);
 
   /// Take a end and start time of an event and convert it to a TenNanoseconds duration
   /// @param end_time end time of the event
@@ -202,6 +233,12 @@ private:
   /// Mutex for thread-safe access to metrics data
   mutable std::mutex metrics_lock_;
 
+  /// Memory resource
+  jewels::memory::MemoryResource memory_resource_;
+
+  /// Event metrics batch size
+  size_t event_metrics_batch_size_;
+
   /// Current execution state of the cog
   CogExecutionState current_state_ = CogExecutionState::waiting_for_ready;
 
@@ -223,13 +260,47 @@ private:
   /// Timestamp when execution completed
   jewels::time::SyncTime execution_complete_time_{};
 
+  /// Conditions Mask
+  uint64_t conditions_mask_{};
+
   /// Collection of event metrics for batch processing
-  std::pmr::vector<CogEventMetrics> event_metrics_;
+  std::pmr::vector<EventMetrics> event_metrics_;
 
   /// Aggregated telemetry metrics for this cog
-  CogTelemetryMetrics telemetry_metrics_{};
+  TelemetryMetrics telemetry_metrics_{};
+
+  using OutputMetricsMap = std::pmr::unordered_map<size_t, uint16_t>;
+
+  /// Output metrics map
+  OutputMetricsMap output_metrics_map_;
 };
 
+struct InputMetrics
+{
+  uint16_t num_unseen_messages{};
+  TenNanoseconds message_staleness{};
+  uint16_t messages_dropped{};
+};
+
+struct InputEventMetrics
+{
+  uint16_t num_unseen_messages{};
+  TenNanoseconds message_staleness{};
+  uint16_t messages_dropped{};
+};
+
+struct InputTelemetryMetrics
+{
+  MinMaxMean<uint16_t> num_unseen_messages{};
+  MinMaxMean<TenNanoseconds> message_staleness{};
+  MinMaxMean<uint16_t> messages_dropped{};
+};
+
+struct AggregatedInputMetrics
+{
+  std::pmr::vector<InputEventMetrics> event_metrics;
+  InputTelemetryMetrics telemetry_metrics{};
+};
 } // namespace clockwork
 
 #include "clockwork/cog/cog_statistics.inl"

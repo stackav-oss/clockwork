@@ -6,6 +6,7 @@
 #include "clockwork/cog/cog_configs.hh"
 #include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/factory.hh"
+#include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/pinion/io_connection.hh"
@@ -259,7 +260,8 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 {
   if (auto iter = io_connections_.find(endpoint); iter != std::end(io_connections_))
   {
-    if (auto result = iter->second.first->connect_publisher(std::move(handle)); !result)
+    auto& [io_connection, endpoint_class_id] = iter->second;
+    if (auto result = io_connection->connect_publisher(endpoint_class_id, std::move(handle)); !result)
     {
       jewels::log_cerr_error(
         "Failed to connect publisher to IO connection {} with error: {}", endpoint, result.error());
@@ -277,7 +279,7 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
     }
     return {};
   }
-  return set_handle<void>(endpoint, std::move(handle));
+  return set_handle<void>(endpoint, std::move(handle), true);
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
@@ -287,7 +289,8 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 {
   if (auto iter = io_connections_.find(endpoint); iter != std::end(io_connections_))
   {
-    auto result = iter->second.first->connect_subscriber(std::move(handle));
+    auto& [io_connection, endpoint_class_id] = iter->second;
+    auto result = io_connection->connect_subscriber(endpoint_class_id, std::move(handle));
     if (!result)
     {
       jewels::log_cerr_error(
@@ -297,6 +300,29 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
     return {*std::move(result)};
   }
   return set_handle<std::shared_ptr<pinion::Observer>>(endpoint, std::move(handle));
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+jewels::expected<void, AbstractCasing::Error>
+CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::set_publisher_handle(
+  jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::PublisherHandle handle)
+{
+  return set_handle<void>(endpoint, std::move(handle), false);
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+jewels::expected<void, AbstractCasing::Error>
+CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::set_subscriber(
+  jewels::Uuid<common::EndpointInstanceId> endpoint)
+{
+  auto endpoint_it = endpoints_.find(endpoint);
+  if (endpoint_it != endpoints_.end())
+  {
+    auto& [cog, class_id] = endpoint_it->second;
+    return cog->set_subscriber(class_id).transform_error([](auto&&)
+                                                         { return AbstractCasing::Error::invalid_class_uuid; });
+  }
+  return jewels::unexpected(AbstractCasing::Error::invalid_instance_uuid);
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>

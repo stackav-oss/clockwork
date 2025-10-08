@@ -200,7 +200,7 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "timeout", "[ApproxAligner::find_alig
   {
     auto result = Aligner::find_alignment(resource, config, state, inputs, now);
     REQUIRE(ApproxAlignerStateType::timeout == result.state);
-    REQUIRE(AlignmentType::full == result.type);
+    REQUIRE(AlignmentType::partial == result.type);
     REQUIRE(result.alignment);
     REQUIRE(static_cast<double>(result.alignment->score) > config.get_minimum_score_threshold());
   }

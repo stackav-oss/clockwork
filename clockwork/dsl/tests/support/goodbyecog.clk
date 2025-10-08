@@ -9,6 +9,10 @@ cog GoodbyeCog
     {
         execute when: init;
     }
+    metrics_options
+    {
+        enabled: false;
+    }
 }
 
 cpp_target goodbyecog

@@ -19,6 +19,9 @@ py_test(
     ],
     data = [
         "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
         "//clockwork/dsl/tests/support:hellocog.clk",
         "//clockwork/dsl/tests/support:hellomod.clk",
         "//clockwork/dsl/tests/support:hellomsg.clk",
@@ -79,6 +82,36 @@ py_test(
 )
 
 py_test(
+    name = "cog_metrics_schema_generation_test",
+    srcs = [
+        "cog_metrics_schema_generation_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
+        "//clockwork/dsl/tests/support:hellocog.clk",
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_metrics_schema_generation",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_test(
     name = "cog_test",
     srcs = [
         "cog_test.py",
@@ -86,6 +119,9 @@ py_test(
     ],
     data = [
         "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
         "//clockwork/dsl/tests/support:hellocog.clk",
         "//clockwork/dsl/tests/support:hellomsg.clk",
     ],
@@ -235,6 +271,9 @@ py_test(
     ],
     data = [
         "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
         "//clockwork/dsl/tests/support:hellocog.clk",
         "//clockwork/dsl/tests/support:hellomod.clk",
         "//clockwork/dsl/tests/support:hellomsg.clk",
@@ -306,6 +345,11 @@ py_test(
         "extern_type_test.py",
         ":__test__",
     ],
+    data = [
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
@@ -348,6 +392,9 @@ py_test(
     ],
     data = [
         "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
         "//clockwork/dsl/tests/support:hellocog.clk",
         "//clockwork/dsl/tests/support:hellomsg.clk",
     ],
@@ -425,6 +472,7 @@ py_test(
         "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:parse",
         "@clockwork_pip//pytest",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -488,6 +536,7 @@ py_test(
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:units",
         "@clockwork_pip//pytest",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -530,6 +579,9 @@ py_test(
     ],
     data = [
         "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
         "//clockwork/dsl/tests/support:hellocog.clk",
         "//clockwork/dsl/tests/support:hellomod.clk",
         "//clockwork/dsl/tests/support:hellomsg.clk",
@@ -564,6 +616,28 @@ py_test(
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:py_target",
         "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "py_target_v2_test",
+    srcs = [
+        "py_target_v2_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/python:typereg",
+        "//clockwork/dsl/serialization:pytap",
+        "//clockwork/dsl/tests/support:py_bindings_v2_clk_py",
+        "//clockwork/dsl/tests/support:py_bindings_v2_ext_clk_py",
+        "//jewels/container/tap:py_var_array",
+        "//jewels/container/tap:value_serdes",
         "@clockwork_pip//pytest",
     ],
 )

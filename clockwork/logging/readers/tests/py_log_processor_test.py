@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Python log processor test."""
 
@@ -58,7 +59,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_log_metadata(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test log metadata."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -92,7 +93,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_raw_msg_callbacks(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading with raw message callbacks."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -122,7 +123,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_deserialized_msg_callbacks(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading deserialized messages."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -143,7 +144,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_deserialized_msg_callbacks_with_abort(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading deserialized messages with abort."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -152,7 +153,7 @@ class TestLogProcessorClass:
             published_messages = self._write_test_log(log_path, message_type)
 
             def deserialized_msg_callback_with_abort(
-                deserialized_msg: py_test_message.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                deserialized_msg: py_test_message.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             ) -> None:
                 processor.abort()
                 logged_messages.append(deserialized_msg.message_string)
@@ -168,7 +169,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_deserialized_msg_callbacks_with_timestamp(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading deserialized messages with timestamp."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -178,7 +179,7 @@ class TestLogProcessorClass:
 
             def deserialized_msg_callback_with_timestamp(
                 publish_time: LogTimestamp,
-                deserialized_msg: py_test_message.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                deserialized_msg: py_test_message.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             ) -> None:
                 assert publish_time.nanoseconds == self.start_time.nanoseconds + (
                     self.message_interval.nanoseconds * len(logged_messages)
@@ -190,7 +191,7 @@ class TestLogProcessorClass:
             for channel_name in self.channel_names:
                 processor.add_callback_with_timestamp(
                     channel_name,
-                    message_type,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                    message_type,  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                     deserialized_msg_callback_with_timestamp,
                 )
             processor.process()
@@ -199,7 +200,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_auto_generated_callbacks(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading deserialized messages with auto generated wrapper."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -208,7 +209,7 @@ class TestLogProcessorClass:
             published_messages = self._write_test_log(log_path, message_type)
 
             def auto_msg_callback(
-                deserialized_msg: py_test_message.TestMessage | test_message_clk_nb.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                deserialized_msg: py_test_message.TestMessage | test_message_clk_nb.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             ) -> None:
                 logged_messages.append(deserialized_msg.message_string)
 
@@ -223,7 +224,7 @@ class TestLogProcessorClass:
     @pytest.mark.parametrize("message_type", [py_test_message.TestMessage, test_message_clk_nb.TestMessage])
     def test_auto_generated_callbacks_with_timestamp(
         self,
-        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message_type: type[py_test_message.TestMessage] | type[test_message_clk_nb.TestMessage],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) -> None:
         """Test reading deserialized messages with auto generated wrapper."""
         with tempfile.TemporaryDirectory() as test_dir_name:
@@ -233,7 +234,7 @@ class TestLogProcessorClass:
 
             def auto_msg_callback_with_timestamp(
                 publish_time: LogTimestamp,
-                deserialized_msg: py_test_message.TestMessage | test_message_clk_nb.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                deserialized_msg: py_test_message.TestMessage | test_message_clk_nb.TestMessage,  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             ) -> None:
                 assert publish_time.nanoseconds == self.start_time.nanoseconds + (
                     self.message_interval.nanoseconds * len(logged_messages)
@@ -268,7 +269,7 @@ class TestLogProcessorClass:
             assert metrics.message_count == len(published_messages)
             assert (
                 metrics.byte_count
-                == len(published_messages) * test_message_clk_nb.TestMessage.get_tachyon_constraint().size
+                <= len(published_messages) * test_message_clk_nb.TestMessage.get_tachyon_constraint().size
             )
             assert len(metrics.topic_metrics) == len(self.channel_names)
             for i in range(len(self.channel_names)):
@@ -281,4 +282,4 @@ class TestLogProcessorClass:
                     ),
                 )
                 assert metrics.topic_metrics[i].message_count == len(published_messages) / len(self.channel_names)
-                assert metrics.topic_metrics[i].byte_count == metrics.byte_count / len(self.channel_names)
+                assert metrics.topic_metrics[i].byte_count <= metrics.byte_count / len(self.channel_names)

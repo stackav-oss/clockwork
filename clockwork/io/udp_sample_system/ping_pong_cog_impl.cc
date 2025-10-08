@@ -10,7 +10,6 @@
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/memory/bits.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <fmt10/base.h>
 
 #include <cstddef>

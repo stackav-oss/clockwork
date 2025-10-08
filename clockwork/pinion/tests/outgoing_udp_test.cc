@@ -23,10 +23,12 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/networking/sock_opt.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <gsl/util>
 
 #include <array>
 #include <cstdint>
@@ -51,8 +53,12 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
   const auto assigned_port = receiver->port();
   REQUIRE(assigned_port);
 
-  auto maybe_outgoing_udp =
-    OutgoingUdp<Msg>::try_make(memres, {.host = std::pmr::string{"127.0.0.1"}, .port = *assigned_port});
+  const auto endpoint_class_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("00000000-0000-0000-0000-000000000001");
+  REQUIRE(endpoint_class_id);
+
+  auto maybe_outgoing_udp = OutgoingUdp<Msg>::try_make(
+    memres, *endpoint_class_id, {.host = std::pmr::string{"127.0.0.1"}, .port = *assigned_port});
   REQUIRE(maybe_outgoing_udp);
   auto outgoing_udp = *std::move(maybe_outgoing_udp);
 
@@ -71,15 +77,23 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
 
     // Size of message slot and size of UDP packet are not the same.
     REQUIRE(
-      outgoing_udp->connect_subscriber(std::move(subscriber)) ==
+      outgoing_udp->connect_subscriber({}, std::move(subscriber)) ==
       jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
   }
 
   InMemoryChannel<Msg, num_slots> channel{memres};
+
+  SECTION("Mismatched endpoint id")
+  {
+    auto subscriber = channel.make_subscriber();
+    REQUIRE(
+      outgoing_udp->connect_subscriber({}, std::move(subscriber)) ==
+      jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
+  }
+
   auto publisher = channel.make_publisher(0UL);
   auto subscriber = channel.make_subscriber();
-
-  REQUIRE(outgoing_udp->connect_subscriber(std::move(subscriber)));
+  REQUIRE(outgoing_udp->connect_subscriber(*endpoint_class_id, std::move(subscriber)));
 
   SECTION("No packets to write ")
   {
@@ -154,8 +168,9 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
 TEST_CASE("Invalid host")
 {
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  REQUIRE_FALSE(OutgoingUdp<Tachyon<io::VarPacket<sizeof(uint32_t)>>>::try_make(
-    memres, {.host = std::pmr::string{"127.0.0.999"}, .port = uint16_t{0U}}));
+  REQUIRE_FALSE(
+    OutgoingUdp<Tachyon<io::VarPacket<sizeof(uint32_t)>>>::try_make(
+      memres, {}, {.host = std::pmr::string{"127.0.0.999"}, .port = uint16_t{0U}}));
 }
 
 TEST_CASE("Socket options")
@@ -163,7 +178,7 @@ TEST_CASE("Socket options")
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
   const SockOptionValue<jewels::networking::SockOption::so_reuse_address> value{GENERATE(0, 1)};
   auto maybe_udp = OutgoingUdp<Tachyon<io::VarPacket<sizeof(uint32_t)>>>::try_make(
-    memres, {.host = std::pmr::string{"127.0.0.1"}, .port = uint16_t{0U}}, value);
+    memres, {}, {.host = std::pmr::string{"127.0.0.1"}, .port = uint16_t{0U}}, value);
   REQUIRE(maybe_udp);
   auto& udp = *maybe_udp;
   REQUIRE(jewels::networking::get_sock_opt<jewels::networking::SockOption::so_reuse_address>(udp->fd()) == value.value);

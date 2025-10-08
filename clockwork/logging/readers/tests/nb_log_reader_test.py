@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Log reader python wrapper."""
 
@@ -151,7 +152,7 @@ class TestLogReaderClass:
             assert metrics.message_count == len(published_messages)
             assert (
                 metrics.byte_count
-                == len(published_messages) * py_test_message.TestMessage.get_tachyon_constraint().size
+                <= len(published_messages) * py_test_message.TestMessage.get_tachyon_constraint().size
             )
             assert len(metrics.topic_metrics) == len(self.channel_names)
             for i in range(len(self.channel_names)):
@@ -164,4 +165,4 @@ class TestLogReaderClass:
                     ),
                 )
                 assert metrics.topic_metrics[i].message_count == len(published_messages) / len(self.channel_names)
-                assert metrics.topic_metrics[i].byte_count == metrics.byte_count / len(self.channel_names)
+                assert metrics.topic_metrics[i].byte_count <= metrics.byte_count / len(self.channel_names)

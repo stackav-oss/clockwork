@@ -93,10 +93,22 @@ cc_library(
         "python_cog.inl",
     ],
     hdrs = ["python_cog.hh"],
+    data = [":python_cog_clk"],
     deps = [
         ":python_cog_dial",
         ":python_cog_impl",
+        ":test_input_message",
+        ":test_output_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -121,6 +133,8 @@ clk(
         ":test_input_message_clk",
         ":test_output_message_clk",
         ":test_state_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/python:python_state_clk",
     ],
 )
@@ -132,6 +146,7 @@ cc_library(
         "python_cog_dial.inl",
     ],
     hdrs = ["python_cog_dial.hh"],
+    data = [":python_cog_clk"],
     deps = [
         ":test_config",
         ":test_input_message",
@@ -149,6 +164,7 @@ cc_library(
         "python_cog_impl.inl",
     ],
     hdrs = ["python_cog_impl.hh"],
+    data = [":python_cog_clk"],
     deps = [
         ":python_cog_dial",
         "//clockwork/python:gil_lock_guard",
@@ -170,6 +186,7 @@ cc_library(
         "test_config.inl",
     ],
     hdrs = ["test_config.hh"],
+    data = [":test_config_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -232,6 +249,7 @@ cc_library(
         "test_config_proto_conv.inl",
     ],
     hdrs = ["test_config_proto_conv.hh"],
+    data = [":test_config_clk"],
     deps = [
         ":test_config",
         ":test_config_proto_cc_library",
@@ -254,6 +272,7 @@ cc_library(
         "test_input_message.inl",
     ],
     hdrs = ["test_input_message.hh"],
+    data = [":test_input_message_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -286,6 +305,7 @@ py_cc_binding(
         "test_input_message_clk_nb.hh",
         "test_input_message_clk_nb.inl",
     ],
+    data = [":test_input_message_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     deps = [
         ":test_input_message",
@@ -300,6 +320,7 @@ cc_library(
         "test_output_message.inl",
     ],
     hdrs = ["test_output_message.hh"],
+    data = [":test_output_message_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -334,6 +355,7 @@ py_cc_binding(
         "test_output_message_clk_nb.hh",
         "test_output_message_clk_nb.inl",
     ],
+    data = [":test_output_message_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//visibility:public"],
     deps = [
@@ -349,6 +371,7 @@ cc_library(
         "test_state.inl",
     ],
     hdrs = ["test_state.hh"],
+    data = [":test_state_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -380,6 +403,7 @@ py_cc_binding(
         "test_state_clk_nb.hh",
         "test_state_clk_nb.inl",
     ],
+    data = [":test_state_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//visibility:public"],
     deps = [

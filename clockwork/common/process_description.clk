@@ -31,6 +31,18 @@ enum MemoryResourceType
   }
 }
 
+// Whether the not connected endpoint is a publisher or subscriber.
+enum NotConnectedEndpointType
+{
+  values
+  {
+    // Publisher
+    #1 publisher default;
+
+    // Subscriber
+    #2 subscriber;
+  }
+}
 // Describes the clockwork graph for a particular process
 schema ProcessDescription
 {
@@ -81,6 +93,12 @@ schema ProcessDescription
 
     // Maximum number of IO connections.
     #23 max_io_connections: UInt64;
+
+    // Maximum channel name length
+    #27 max_channel_name_len: UInt64;
+
+    // Maximum number of not connected endpoints
+    #28 max_not_connected_endpoints: UInt64;
   }
 
   fields
@@ -89,8 +107,7 @@ schema ProcessDescription
     #14 process_id: Uuid<ProcessInstanceId>;
 
     // Every Cog instance, including init Cogs
-    #15 cog_instances:
-      VarArray<CogInstanceDescription<max_instance_path_size=max_instance_path_size, max_endpoints_per_cog=max_endpoints_per_cog>, max_size=max_cog_instances>;
+    #15 cog_instances: VarArray<CogInstanceDescription<max_instance_path_size=max_instance_path_size, max_endpoints_per_cog=max_endpoints_per_cog>, max_size=max_cog_instances>;
 
     // State instances and connections
     #16 state_graph: StateGraph<max_state_instances=max_state_instances, max_instance_path_size=max_instance_path_size, max_state_connections=max_state_connections>;
@@ -99,7 +116,7 @@ schema ProcessDescription
     #17 config_graph: ConfigGraph<max_instance_path_size=max_instance_path_size, max_config_instances=max_config_instances, max_config_connections=max_config_connections, max_file_path_size=max_file_path_size>;
 
     // Publishers and connections
-    #18 pubsub_graph: PubSubGraph<max_publishers=max_publishers, max_pubsub_connections=max_pubsub_connections>;
+    #18 pubsub_graph: PubSubGraph<max_publishers=max_publishers, max_pubsub_connections=max_pubsub_connections, max_channel_name_len=max_channel_name_len>;
 
     // Memory resources
     #19 memory_resource_graph: MemoryResourceGraph<max_instance_path_size=max_instance_path_size, max_memory_resources=max_memory_resources, max_memory_resource_connections=max_memory_resource_connections>;
@@ -115,6 +132,9 @@ schema ProcessDescription
 
     // Log reader cog
     #26 log_cog: Uuid<CogInstanceId>;
+
+    // Not Connected Endpoints
+    #29 not_connected_endpoints: VarArray<NotConnectedEndpoint, max_size=max_not_connected_endpoints>;
   }
 }
 
@@ -127,11 +147,13 @@ schema PubSubGraph
     #1 max_publishers: UInt64;
     // Maximum number of channel connections
     #2 max_pubsub_connections: UInt64;
+    // Maximum channel name length
+    #5 max_channel_name_len: UInt64;
   }
   fields
   {
     // Sorted by publisher_id
-    #3 publish_endpoints: VarArray<PublishEndpoint, max_size=max_publishers>;
+    #3 publish_endpoints: VarArray<PublishEndpoint<max_channel_name_len=max_channel_name_len>, max_size=max_publishers>;
     // Sorted by subscriber_id
     #4 connections: VarArray<PubSubConnection, max_size=max_pubsub_connections>;
   }
@@ -190,6 +212,12 @@ schema EndpointInstanceDescription
 // and validate that it has the expected layout.
 schema PublishEndpoint
 {
+  parameters
+  {
+    // Maximum channel name length
+    #5 max_channel_name_len: UInt64;
+  }
+
   fields
   {
     // Compare this field to the current process_id to know if this is local
@@ -204,6 +232,30 @@ schema PublishEndpoint
 
     // The number of subscribers; only relevant to the publisher.
     #4 num_subscribers: UInt16;
+
+    // Channel name
+    #6 channel_name: VarString<max_size=max_channel_name_len>;
+  }
+}
+
+// Non connected publishers and subscribers. These are endpoints that are not connected to any other endpoints
+schema NotConnectedEndpoint
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // ID of the endpoint
+    #1 endpoint_id: Uuid<EndpointInstanceId>;
+
+    // Type of the endpoint
+    #2 endpoint_type: NotConnectedEndpointType;
+
+    // Layout of the Pinion buffer; create if publisher, validate if subscriber.
+    #3 buffer_layout: PinionBufferLayout;
   }
 }
 
@@ -525,13 +577,15 @@ cpp_target process_description
   schema MemoryResourceGraph;
   schema TimerInstanceDescription;
   schema IoConnectionInstanceDescription;
+  schema NotConnectedEndpoint;
   enum MemoryResourceType;
+  enum NotConnectedEndpointType;
 
   representation Tachyon<EndpointInstanceDescription>;
   representation Tachyon<PinionBufferLayout>;
-  representation Tachyon<PublishEndpoint>;
+  representation Tachyon<PublishEndpoint<max_channel_name_len=300>>;
   representation Tachyon<PubSubConnection>;
-  representation Tachyon<PubSubGraph<max_publishers=521, max_pubsub_connections=920>>;
+  representation Tachyon<PubSubGraph<max_publishers=2048, max_pubsub_connections=920, max_channel_name_len=300>>;
   representation Tachyon<StateInstanceDescription<max_instance_path_size=512>>;
   representation Tachyon<StateConnection>;
   representation Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>;
@@ -541,16 +595,17 @@ cpp_target process_description
   representation Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>;
   representation Tachyon<TimerInstanceDescription<max_instance_path_size=512>>;
   representation Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>;
-  representation Tachyon<CogInstanceDescription<max_endpoints_per_cog=50,max_instance_path_size=512>>;
-  representation Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=432>>;
+  representation Tachyon<CogInstanceDescription<max_endpoints_per_cog=55,max_instance_path_size=512>>;
+  representation Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=509>>;
   representation Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>;
-  representation Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=401, max_endpoints_per_cog=50, max_state_instances=267, max_state_connections=432, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=521, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32>>;
+  representation Tachyon<NotConnectedEndpoint>;
+  representation Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=501, max_endpoints_per_cog=55, max_state_instances=267, max_state_connections=509, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=2048, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32, max_channel_name_len=300, max_not_connected_endpoints=1024>>;
 
   interface EndpointInstanceDescriptionTap : Tap<Tachyon<EndpointInstanceDescription>>;
   interface PinionBufferLayoutTap : Tap<Tachyon<PinionBufferLayout>>;
-  interface PublishEndpointTap : Tap<Tachyon<PublishEndpoint>>;
+  interface PublishEndpointTap : Tap<Tachyon<PublishEndpoint<max_channel_name_len=300>>>;
   interface PubSubConnectionTap : Tap<Tachyon<PubSubConnection>>;
-  interface PubSubGraphTap : Tap<Tachyon<PubSubGraph<max_publishers=521, max_pubsub_connections=920>>>;
+  interface PubSubGraphTap : Tap<Tachyon<PubSubGraph<max_publishers=2048, max_pubsub_connections=920, max_channel_name_len=300>>>;
   interface StateInstanceDescriptionTap : Tap<Tachyon<StateInstanceDescription<max_instance_path_size=512>>>;
   interface StateConnectionTap : Tap<Tachyon<StateConnection>>;
   interface ConfigInstanceDescriptionTap : Tap<Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>>;
@@ -560,8 +615,9 @@ cpp_target process_description
   interface MemoryResourceGraphTap : Tap<Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>>;
   interface TimerInstanceDescriptionTap : Tap<Tachyon<TimerInstanceDescription<max_instance_path_size=512>>>;
   interface IoConnectionInstanceDescriptionTap : Tap<Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>>;
-  interface CogInstanceDescriptionTap : Tap<Tachyon<CogInstanceDescription<max_endpoints_per_cog=50,max_instance_path_size=512>>>;
-  interface StateGraphTap : Tap<Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=432>>>;
+  interface CogInstanceDescriptionTap : Tap<Tachyon<CogInstanceDescription<max_endpoints_per_cog=55,max_instance_path_size=512>>>;
+  interface StateGraphTap : Tap<Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=509>>>;
   interface ConfigGraphTap : Tap<Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>>;
-  interface ProcessDescriptionTap : Tap<Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=401, max_endpoints_per_cog=50, max_state_instances=267, max_state_connections=432, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=521, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32>>>;
+  interface NotConnectedEndpointTap : Tap<Tachyon<NotConnectedEndpoint>>;
+  interface ProcessDescriptionTap : Tap<Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=501, max_endpoints_per_cog=55, max_state_instances=267, max_state_connections=509, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=2048, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32, max_channel_name_len=300, max_not_connected_endpoints=1024>>>;
 }

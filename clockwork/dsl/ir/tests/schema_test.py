@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test the Schema IR module."""
 
@@ -159,7 +160,7 @@ def test_error_bad_field_type_expression_during_resolution(hellomsg_schema_first
         module=schema_ir.module,
         cst_node=None,
         type_info=clkbuiltins.INT16,
-        value=Decimal("1"),
+        value=Decimal(1),
     )
     with pytest.raises(
         TypeError,

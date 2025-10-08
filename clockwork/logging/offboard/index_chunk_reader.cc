@@ -93,12 +93,13 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
       return jewels::unexpected(channel_index_result.error());
     }
     const auto* channel_index_ptr = channel_index_result.value();
-    channel_entries.push_back(ChannelEntry{
-      .channel_name = channel_info.channel_name,
-      .channel_type = channel_info.channel_type,
-      .compression_type = channel_info.compression_type,
-      .channel_index = std::span{channel_index_ptr, channel_entry.channel_index_size},
-    });
+    channel_entries.push_back(
+      ChannelEntry{
+        .channel_name = channel_info.channel_name,
+        .channel_type = channel_info.channel_type,
+        .compression_type = channel_info.compression_type,
+        .channel_index = std::span{channel_index_ptr, channel_entry.channel_index_size},
+      });
   }
   return channel_entries;
 }
@@ -156,19 +157,20 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
       }
       if (chunk_is_read)
       {
-        chunk_handles.push_back(reader::MessageChunkHandle{
-          .chunk_handle =
-            reader::ChunkHandle{
-              .compression_type = channel_entry.compression_type,
-              .location = index_iter->location,
-              .chunk_reader_ptr = chunk_reader_ptr.get(),
-              .chunk_compressor_ptr = chunk_compressor_ptr.get(),
-            },
-          .channel_name = channel_entry.channel_name,
-          .channel_type = channel_entry.channel_type,
-          .min_transmit_time = chunk_interval.get_start_timestamp(),
-          .maybe_log_interval = maybe_log_interval,
-        });
+        chunk_handles.push_back(
+          reader::MessageChunkHandle{
+            .chunk_handle =
+              reader::ChunkHandle{
+                .compression_type = channel_entry.compression_type,
+                .location = index_iter->location,
+                .chunk_reader_ptr = chunk_reader_ptr.get(),
+                .chunk_compressor_ptr = chunk_compressor_ptr.get(),
+              },
+            .channel_name = channel_entry.channel_name,
+            .channel_type = channel_entry.channel_type,
+            .min_transmit_time = chunk_interval.get_start_timestamp(),
+            .maybe_log_interval = maybe_log_interval,
+          });
       }
       index_iter = next_index_iter;
     }

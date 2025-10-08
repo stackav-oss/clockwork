@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <iterator>
 #include <memory>
 #include <span>
 
@@ -19,7 +20,7 @@ TEST_CASE("Smoke test")
   REQUIRE(span.size() == 3);
   REQUIRE(span.data() == arr.data());
   REQUIRE(std::to_address(span.begin()) == arr.data());
-  REQUIRE(std::to_address(span.end()) == arr.data() + 3);
+  REQUIRE(std::to_address(span.end()) == std::next(arr.data(), 3));
 }
 
 TEST_CASE("Single span")

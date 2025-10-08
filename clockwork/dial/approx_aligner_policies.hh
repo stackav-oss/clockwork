@@ -6,7 +6,6 @@
 #include "clockwork/dial/msg_input.hh"
 
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <sys/types.h>
 #include <tuple>
@@ -43,22 +42,6 @@ struct TovNanosecondsNsSuffixApproxAlignerInput
   static constexpr ValueType get_value(const MsgType& msg)
   {
     return msg.get_time_of_validity_ns().time_since_epoch().count();
-  }
-};
-
-/// Common definition for an ApproxAligner input using time of validity.
-/// @tparam DialInputType The message dial input type.
-template <typename DialInputType>
-struct TovSecondsApproxAlignerInput
-{
-  using MsgType = typename DialInputType::MsgType;
-  static constexpr auto max_msgs = DialInputType::max_msgs;
-  using ValueType = double;
-
-  static constexpr ValueType get_value(const MsgType& msg)
-  {
-    return std::chrono::duration_cast<std::chrono::duration<double>>(msg.get_time_of_validity().time_since_epoch())
-      .count();
   }
 };
 

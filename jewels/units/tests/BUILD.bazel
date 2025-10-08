@@ -6,6 +6,17 @@ load("//tools/rules:cc.bzl", "cc_test")
 package(default_testonly = True)
 
 cc_test(
+    name = "degrees_test",
+    srcs = ["degrees_test.cc"],
+    deps = [
+        "//jewels/units:degrees",
+        "//jewels/units:magnitude",
+        "//jewels/units:quantity",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "distance_test",
     srcs = ["distance_test.cc"],
     deps = [

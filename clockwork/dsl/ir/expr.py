@@ -13,6 +13,7 @@ from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, node, parse, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.module_id import ModuleID
+from typing_extensions import override
 
 if TYPE_CHECKING:  # pragma: nocover
     from collections.abc import Collection, Sequence
@@ -34,7 +35,7 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
             return SimpleExpr(
                 value=node.DeferredLookup.make(
                     cst_identifier=identifier,
-                    expected_type=typesys.Value | node.NameProxy,  # type: ignore[arg-type]
+                    expected_type=typesys.Value | node.NameProxy,  # pyright: ignore[reportArgumentType] Type not known ahead of time
                     terminals=module.terminals,
                 ),
                 resolved_value=None,
@@ -122,6 +123,7 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
             ValueError: if there is any error in expression evaluation.
         """
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         msg = f"Attempt to generate a value key for an unevaluated expression: {self}"
@@ -144,6 +146,7 @@ class SimpleExpr(Expr):
             return ["value"]
         return []
 
+    @override
     def evaluate(self) -> typesys.Value:
         """Evaluate the expression.
 
@@ -184,6 +187,7 @@ class NamespaceLookupExpr(Expr):
     namespace: node.Deferrable[node.NamespaceEntity]
     name: str
 
+    @override
     def evaluate(self) -> typesys.Value:
         """Evaluate the expression.
 
@@ -259,7 +263,7 @@ class DottedIdentifierExpr(Expr):
         parent: SimpleExpr | DottedIdentifierExpr
         if parent_cst := cst_node.maybe_parent():
             parent = DottedIdentifierExpr.from_child_cst(parent_cst, expr_cst, module)
-            assert isinstance(parent, DottedIdentifierExpr)  # noqa: S101  Guaranteed by grammar
+            assert isinstance(parent, DottedIdentifierExpr)
         else:
             root = get_span(cst_node.child_root().child_value(), module.terminals)
             parent = SimpleExpr(
@@ -269,12 +273,12 @@ class DottedIdentifierExpr(Expr):
                 resolved_value=None,
                 value=node.DeferredLookup(
                     root,
-                    typesys.Value | node.NameProxy,  # type: ignore[arg-type]
+                    typesys.Value | node.NameProxy,  # pyright: ignore[reportArgumentType] Type not known ahead of time
                     cst_node.child_root(),
                     module.terminals,
                 ),
             )
-            assert isinstance(parent, SimpleExpr)  # noqa: S101  Guaranteed by grammar
+            assert isinstance(parent, SimpleExpr)
         attribute = get_span(cst_node.child_child().child_value(), module.terminals)
         return cls(
             module=module,
@@ -285,6 +289,7 @@ class DottedIdentifierExpr(Expr):
             attribute=attribute,
         )
 
+    @override
     def evaluate(self) -> typesys.Value:
         """Evaluate the expression.
 
@@ -317,6 +322,7 @@ class InstantiateExpr(Expr):
     operand: Expr
     arguments: Sequence[tuple[str | None, Expr]]
 
+    @override
     def evaluate(self) -> typesys.Value:
         """Evaluate the expression.
 
@@ -357,6 +363,7 @@ class CallExpr(Expr):
     operand: Expr
     arguments: Sequence[tuple[str | None, Expr]]
 
+    @override
     def evaluate(self) -> typesys.Value:
         """Evaluate the expression.
 
@@ -408,6 +415,7 @@ class TypeExpression(Expr):
             resolved_value=None,
         )
 
+    @override
     def evaluate(self) -> typesys.TypeVal | typesys.DeferrableType:
         """Evaluate the expression.
 
@@ -418,7 +426,7 @@ class TypeExpression(Expr):
             ValueError: if there is any error in expression evaluation.
         """
         if self.resolved_value is not None:
-            assert isinstance(self.resolved_value, typesys.TypeVal)  # noqa: S101  (for mypy; invariant)
+            assert isinstance(self.resolved_value, typesys.TypeVal)
             return self.resolved_value
         resolved_value = self.expr.evaluate()
         if not isinstance(resolved_value, typesys.TypeVal | typesys.DeferrableType):

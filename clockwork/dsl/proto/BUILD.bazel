@@ -9,8 +9,10 @@ py_library(
     name = "proto_typereg",
     srcs = ["proto_typereg.py"],
     deps = [
+        "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//typing_extensions",
     ],
 )

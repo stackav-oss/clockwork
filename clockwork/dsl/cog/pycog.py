@@ -9,11 +9,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from clockwork.dsl.ir.cog_components import AnyMessagePresent
+
 if TYPE_CHECKING:
+    from collections import abc
     from uuid import UUID
 
     from clockwork.dsl.compiler_context import CompilerContext
-    from clockwork.dsl.ir.diagnostics import DiagnosticsDef
+    from clockwork.dsl.ir.diagnostics import DiagnosticsDef, InfraDiagnosticsDef
 
 from clockwork.dsl.cpp import context, literal, typereg, types
 from clockwork.dsl.ir import (
@@ -27,6 +30,8 @@ from clockwork.dsl.ir import (
     units,
     uuid_reg,
 )
+from clockwork.dsl.ir.cog_components import NewMessagePresent, TimeSinceLastExec
+from clockwork.dsl.ir.diagnostics import COG_INFRA_DIAGS_GROUP_DEF_NAME, COG_INFRA_DIAGS_GROUP_NAME
 from clockwork.dsl.ir.module_id import CLK_REPO
 
 
@@ -56,11 +61,11 @@ class ConditionsStruct:
         for condition_def in condition_defs.values():
             name = cls.name_for(condition_def)
             cond = condition_def.condition
-            if isinstance(cond, cog.TimeSinceLastExec):
+            if isinstance(cond, TimeSinceLastExec):
                 conditions[name] = TimeSinceLastExecCondition.from_ir(compiler_context, name, condition_def)
-            elif isinstance(cond, cog.AnyMessagePresent):
+            elif isinstance(cond, AnyMessagePresent):
                 conditions[name] = AnyMessageCondition.from_ir(compiler_context, name, condition_def)
-            elif isinstance(cond, cog.NewMessagePresent):
+            elif isinstance(cond, NewMessagePresent):
                 conditions[name] = NewMessageCondition.from_ir(compiler_context, name, condition_def)
             else:
                 msg = f"Condition type for {name} is not supported."
@@ -97,7 +102,7 @@ class TimeSinceLastExecCondition(ConditionBase):
     ) -> TimeSinceLastExecCondition:
         """Create a class representation of time since last exec condition IR."""
         condition = condition_def.condition
-        assert isinstance(condition, cog.TimeSinceLastExec)  # noqa: S101  (invariant)
+        assert isinstance(condition, cog.TimeSinceLastExec)
 
         time_ns = condition.duration.as_unit(units.NANOSECONDS).value
 
@@ -137,14 +142,14 @@ class MessagesPresentCondition(ConditionBase):
     ) -> MessagesPresentCondition:
         """Create a class representation of messages present condition IR."""
         condition = condition_def.condition
-        assert isinstance(condition, cog.MessagesPresent)  # noqa: S101  (invariant)
+        assert isinstance(condition, cog.MessagesPresent)
         input_name = condition.input_name
-        assert isinstance(condition.lower_bound, int)  # noqa: S101  (invariant)
+        assert isinstance(condition.lower_bound, int)
         lower_bound = condition.lower_bound
         if condition.upper_bound is None:
             upper_bound = 2**clkbuiltins.UINT32.bit_width - 1
         else:
-            assert isinstance(condition.upper_bound, int)  # noqa: S101  (invariant)
+            assert isinstance(condition.upper_bound, int)
             upper_bound = condition.upper_bound
 
         lower_bound_literal = literal.int_to_cpp(lower_bound, clkbuiltins.UINT32)
@@ -423,9 +428,12 @@ class Input:
     identifier: str
     msg_type: types.CppType | types.CppTemplateType
     cpp_type: types.CppType | types.CppTemplateType
+    safety_margin: int | None
     max_msgs: int
+    skip_threshold: int | None
     manual_cursor: bool
     no_dial: bool
+    copy_inputs: bool
     uuid: UUID
 
     @classmethod
@@ -452,14 +460,18 @@ class Input:
                 expr.Expr,
             )
             or isinstance(input_def.view_params.max_msgs, expr.Expr)
+            or isinstance(input_def.view_params.safety_margin, expr.Expr)
             or isinstance(input_def.view_params.manual_cursor, expr.Expr)
+            or isinstance(input_def.view_params.skip_threshold, expr.Expr)
             or isinstance(input_def.view_params.no_dial, expr.Expr)
+            or isinstance(input_def.view_params.copy_inputs, expr.Expr)
         ):
             msg = f"Attempt to generate dial input for unresolved schema: {input_def.message_type}"
             raise NotImplementedError(msg)
 
         msg_type = typereg.get_cpp_type(input_def.module.context, input_def.message_type.interface_ir.typespec)
         max_msgs = input_def.view_params.max_msgs
+        safety_margin = input_def.view_params.safety_margin
         manual_cursor = input_def.view_params.manual_cursor
         no_dial = input_def.view_params.no_dial
 
@@ -480,8 +492,11 @@ class Input:
             msg_type=msg_type,
             cpp_type=cpp_type,
             max_msgs=max_msgs,
+            safety_margin=safety_margin,
+            skip_threshold=input_def.view_params.skip_threshold,
             manual_cursor=manual_cursor,
             no_dial=no_dial,
+            copy_inputs=input_def.view_params.copy_inputs,
             uuid=uuid_reg.lookup_uuid(compiler_context, input_def),
         )
 
@@ -495,22 +510,26 @@ class Input:
 class OutputsStruct:
     """Represents the Outputs sub-struct of a C++ Dial."""
 
-    output_defs: dict[str, cog.OutputDef]
+    output_defs: abc.Mapping[str, cog.OutputDef | cog.MetricsOutputDef]
     outputs: dict[str, Output]
 
     @classmethod
     def from_ir(
         cls: type[OutputsStruct],
         compiler_context: CompilerContext,
-        output_defs: dict[str, cog.OutputDef],
+        output_defs: abc.Mapping[str, cog.OutputDef | cog.MetricsOutputDef],
+        rate_limit_specs: dict[str, cog.RateLimitSpec],
     ) -> OutputsStruct:
         """Create Outputs representation from IR.
 
-        Example: OutputsStruct.from_ir(cog_ir.outputs)
+        Example: OutputsStruct.from_ir(context, cog_ir.outputs, cog_ir.rate_limits)
         """
         outputs: dict[str, Output] = {}
-        for output_def in output_defs.values():
-            output = Output.from_ir(compiler_context, output_def)
+        for output_key, output_def in output_defs.items():
+            if isinstance(output_def, cog.OutputDef):
+                output = Output.from_ir(compiler_context, output_def, rate_limit_specs.get(output_key))
+            else:
+                output = Output.from_metrics_output_def(compiler_context, output_def, rate_limit_specs.get(output_key))
             outputs[output.identifier] = output
         return cls(output_defs=output_defs, outputs=outputs)
 
@@ -522,33 +541,50 @@ class Output:
     identifier: str
     msg_type: types.CppType | types.CppTemplateType
     cpp_type: types.CppType | types.CppTemplateType
+    rate_limit: cog.ResolvedRateLimitSpec | None
     uuid: UUID
+    metrics_log_type: cog.MetricsLogType
+
+    @classmethod
+    def from_metrics_output_def(
+        cls: type[Output],
+        compiler_context: CompilerContext,
+        output_def: cog.MetricsOutputDef,
+        rate_limit: cog.RateLimitSpec | None,
+    ) -> Output:
+        """Create an Output from a MetricsOutputDef."""
+        return cls._handle_schema_output(compiler_context, output_def.get_interface_info(), output_def, rate_limit)
 
     @classmethod
     def from_ir(
         cls: type[Output],
         compiler_context: CompilerContext,
         output_def: cog.OutputDef,
+        rate_limit: cog.RateLimitSpec | None,
     ) -> Output:
         """Create an Output."""
         msg_type = output_def.message_type
         if isinstance(msg_type, schema_reg.InterfaceInfo):
-            return cls._handle_schema_output(compiler_context, output_def)
+            return cls._handle_schema_output(compiler_context, msg_type, output_def, rate_limit)
         msg = f"Attempt to create an output for non-Interface type {type(msg_type)}: {msg_type}"
         raise NotImplementedError(msg)
 
     @classmethod
     def _handle_schema_output(
-        cls: type[Output], compiler_context: CompilerContext, output_def: cog.OutputDef
+        cls: type[Output],
+        compiler_context: CompilerContext,
+        message_type: schema_reg.InterfaceInfo,
+        output_def: cog.OutputDef | cog.MetricsOutputDef,
+        rate_limit: cog.RateLimitSpec | None,
     ) -> Output:
-        if isinstance(output_def.message_type, expr.Expr) or isinstance(
-            output_def.message_type.interface_ir.typespec,
+        if isinstance(message_type, expr.Expr) or isinstance(
+            message_type.interface_ir.typespec,
             expr.Expr,
         ):
-            msg = f"Attempt to generate dial output for unresolved schema: {output_def.message_type}"
+            msg = f"Attempt to generate dial output for unresolved schema: {message_type}"
             raise NotImplementedError(msg)
         identifier = cls.name_for(output_def)
-        msg_type = typereg.get_cpp_type(output_def.module.context, output_def.message_type.interface_ir.typespec)
+        msg_type = typereg.get_cpp_type(output_def.module.context, message_type.interface_ir.typespec)
 
         cpp_type = types.CppTemplateType(
             include=[context.Header(CLK_REPO, "clockwork/pinion/publisher_handle.hh")],
@@ -562,11 +598,13 @@ class Output:
             identifier=identifier,
             msg_type=msg_type,
             cpp_type=cpp_type,
+            rate_limit=rate_limit.get_resolved() if rate_limit else None,
             uuid=uuid_reg.lookup_uuid(compiler_context, output_def),
+            metrics_log_type=output_def.log_type,
         )
 
     @classmethod
-    def name_for(cls: type[Output], output_def: cog.OutputDef) -> str:
+    def name_for(cls: type[Output], output_def: cog.OutputDef | cog.MetricsOutputDef) -> str:
         """Produce the member variable name for the given input."""
         return output_def.name
 
@@ -626,33 +664,70 @@ class Diagnostics:
             raise NotImplementedError(msg)
         group_id_value = types.CppScopedValue(
             scope=types.CppType(
-                includes=[diagnostics.REPORT_DEFS_HEADER],
+                includes=[diagnostics.REPORT_DEFS_HEADER, diagnostics.IMPL_HEADER],
                 type_name="SignalGroupId",
                 cpp_namespace="clockwork::diagnostics",
             ),
             header=[],
             name=diagnostics_def.group_id,
         )
+        return cls.from_params(
+            identifier=cls.name_for(diagnostics_def),
+            group_type=group_id_value,
+            group_id=diagnostics_def.group_id,
+            instance_id=diagnostics_def.instance_id,
+            uuid=uuid_reg.lookup_uuid(compiler_context, diagnostics_def),
+        )
+
+    @classmethod
+    def from_cog_infra(
+        cls: type[Diagnostics],
+        compiler_context: CompilerContext,
+        diagnostics_def: InfraDiagnosticsDef,
+    ) -> Diagnostics:
+        """Create Diagnostics representation for the given cog's infrastructure checks."""
+        return cls.from_params(
+            identifier=diagnostics_def.name,
+            group_type=types.CppType([], COG_INFRA_DIAGS_GROUP_DEF_NAME, None),
+            group_id=COG_INFRA_DIAGS_GROUP_NAME,
+            instance_id=None,
+            uuid=uuid_reg.lookup_uuid(compiler_context, diagnostics_def),
+        )
+
+    @classmethod
+    def from_params(
+        cls: type[Diagnostics],
+        identifier: str,
+        group_type: types.CppTypeExpr | types.CppValueExpr,
+        group_id: str,
+        instance_id: str | None,
+        uuid: UUID,
+    ) -> Diagnostics:
+        """Create Diagnostics representation from parameters, to support classic and cog-infra diagnostics."""
+        suffix = "" if isinstance(group_type, types.CppValueExpr) else "Struct"
+        # TODO(OI-3528): Note that here includes is left empty, and the group_id_value will have the IMPL_HEADER.
+        # This is to work around the fact that we don't have fancy support for include_common.hh being able to provide
+        # a header. As a result, if IMPL_HEADER where included here, it would get included by every cog in the system.
         manager_type = types.CppTemplateType(
-            include=[diagnostics.IMPL_HEADER],
-            template_name="ClockworkManager",
+            include=[],
+            template_name="ClockworkManager" + suffix,
             cpp_namespace="clockwork::diagnostics",
-            arguments=[group_id_value],
+            arguments=[group_type],
         )
         reporter_type = types.CppTemplateType(
             include=[diagnostics.IMPL_HEADER],
-            template_name="ClockworkReporter",
+            template_name="ClockworkReporter" + suffix,
             cpp_namespace="clockwork::diagnostics",
-            arguments=[group_id_value],
+            arguments=[group_type],
         )
         return cls(
-            identifier=cls.name_for(diagnostics_def),
-            group_id=diagnostics_def.group_id,
-            instance_id=diagnostics_def.instance_id,
+            identifier=identifier,
+            group_id=group_id,
+            instance_id=instance_id,
             cpp_type=reporter_type,
             manager_type=manager_type,
             reporter_type=reporter_type,
-            uuid=uuid_reg.lookup_uuid(compiler_context, diagnostics_def),
+            uuid=uuid,
         )
 
     @classmethod

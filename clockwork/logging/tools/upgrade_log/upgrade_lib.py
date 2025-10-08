@@ -18,6 +18,7 @@ from clockwork.serialization.metadata import tachyon_model
 from clockwork.serialization.py import protocol, tachyon_dyn
 from clockwork.serialization.py.compatibility import validate_tachyon_types_compatibility
 from clockwork.serialization.py.tachyon_dyn_from_metadata import py_type_from_metadata
+from typing_extensions import override
 
 
 class ChannelHandler(ABC):
@@ -42,6 +43,7 @@ class CopyHandler(ChannelHandler):
 
     topic_metadata: TopicMetadata
 
+    @override
     def setup_output_channel(self, writer: LogWriter) -> None:
         """Set up the output channel with original metadata."""
         writer.create_channel(
@@ -53,6 +55,7 @@ class CopyHandler(ChannelHandler):
             self.topic_metadata.schema_definition,
         )
 
+    @override
     def process_message(
         self,
         writer: LogWriter,
@@ -78,6 +81,7 @@ class UpgradeHandler(ChannelHandler):
     target_schema: InstantiatedSchema
     compiler_context: CompilerContext
 
+    @override
     def setup_output_channel(self, writer: LogWriter) -> None:
         """Set up the output channel with upgraded schema metadata."""
         # Generate metadata from the target schema
@@ -91,6 +95,7 @@ class UpgradeHandler(ChannelHandler):
             self.topic_metadata.schema_definition,
         )
 
+    @override
     def process_message(
         self,
         writer: LogWriter,

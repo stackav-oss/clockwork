@@ -109,8 +109,9 @@ constexpr auto offset_from()
 template <typename FieldType, auto span_size>
 [[nodiscard]] FieldValueType<FieldType> read_field(std::span<const std::byte, span_size> data)
 {
-  return FieldType::read_transform(jewels::memory::bit_cast_to<typename FieldType::DestinationType>(
-    data.template subspan<FieldType::offset_bytes, FieldType::size_bytes>()));
+  return FieldType::read_transform(
+    jewels::memory::bit_cast_to<typename FieldType::DestinationType>(
+      data.template subspan<FieldType::offset_bytes, FieldType::size_bytes>()));
 }
 
 template <typename FieldType, auto span_size>

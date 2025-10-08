@@ -48,7 +48,6 @@ _CPP_REPRESENTATION_TAG_TYPE: Final = types.CppType(
 )
 
 # Module-level instances for C++ template types
-_CPP_FIXED_ARRAY_TEMPLATE: Final = types.CppTemplate([SystemHeader("array")], "array", "std")
 _CPP_VAR_ARRAY_TEMPLATE: Final = types.CppTemplate(
     includes=[Header(JEWELS_REPO, "jewels/container/tap/var_array.hh")],
     template_name="VarArray",
@@ -84,11 +83,6 @@ _CPP_TAP_INIT_TEMPLATE: Final = types.CppTemplate(
     template_name="TapInit",
     cpp_namespace="clockwork",
 )
-_CPP_UUID_TEMPLATE: Final = types.CppTemplate(
-    includes=[Header(JEWELS_REPO, "jewels/uuid/uuid.hh")],
-    cpp_namespace="jewels",
-    template_name="Uuid",
-)
 _CPP_OPTIONAL_TEMPLATE: Final = types.CppTemplate(
     includes=[Header(JEWELS_REPO, "jewels/container/tap/optional.hh")],
     cpp_namespace="jewels::tap",
@@ -99,7 +93,7 @@ _CPP_OPTIONAL_TEMPLATE: Final = types.CppTemplate(
 class CppTypeRegistry(Context):
     """Compiler Context for C++ type mappings."""
 
-    def __init__(self) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self) -> None:
         """Create a new, empty type registry."""
         self.cpp_type_registry: dict[str, types.CppType] = {}
         self.cpp_template_registry: dict[str, types.CppTemplate] = {}
@@ -151,7 +145,7 @@ class CppTypeRegistryKey(ContextKey[CppTypeRegistry]):
         registry.cpp_type_registry[clkbuiltins.REPRESENTATION_TAG_TYPE.value_key()] = _CPP_REPRESENTATION_TAG_TYPE
 
         # Register built-in template types
-        registry.cpp_template_registry[clkbuiltins.FIXED_ARRAY.value_key()] = _CPP_FIXED_ARRAY_TEMPLATE
+        registry.cpp_template_registry[clkbuiltins.FIXED_ARRAY.value_key()] = types.ARRAY
         registry.cpp_template_registry[clkbuiltins.VAR_ARRAY.value_key()] = _CPP_VAR_ARRAY_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.VAR_STRING.value_key()] = _CPP_VAR_STRING_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.POD.value_key()] = _CPP_POD_TEMPLATE
@@ -159,7 +153,7 @@ class CppTypeRegistryKey(ContextKey[CppTypeRegistry]):
         registry.cpp_template_registry[clkbuiltins.TACHYON.value_key()] = _CPP_TACHYON_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.TAPPY.value_key()] = _CPP_TAPPY_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.TAP_INIT.value_key()] = _CPP_TAP_INIT_TEMPLATE
-        registry.cpp_template_registry[clkbuiltins.UUID.value_key()] = _CPP_UUID_TEMPLATE
+        registry.cpp_template_registry[clkbuiltins.UUID.value_key()] = types.UUID
         registry.cpp_template_registry[clkbuiltins.OPTIONAL.value_key()] = _CPP_OPTIONAL_TEMPLATE
 
         return registry
@@ -302,7 +296,7 @@ def _get_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantia
 
     arguments: list[types.CppTypeExpr | types.CppValueExpr] = []
     parameters = clk_type.instantiates.generic_parameters()
-    assert parameters is not None  # noqa: S101  (for mypy)
+    assert parameters is not None
     for param in parameters:
         try:
             arg = clk_type.arguments[param.name]

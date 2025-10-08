@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for 'bind_var_array.hh'.
 
@@ -69,7 +70,7 @@ def test_str_and_repr() -> None:
 
     # truncation
     long_containers = LongContainers()
-    long_containers.long_var_array = [2] * 60
+    long_containers.long_var_array.from_iter([2] * 60)
     assert str(long_containers.long_var_array) == "[2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, ...]"
     assert repr(long_containers.long_var_array) == "[" + ", ".join(["2"] * 60) + "]"
 
@@ -81,6 +82,17 @@ def test_iter() -> None:
     arr.extend(expected)
     assert expected == list(arr)
     assert expected == list(element for element in arr)  # noqa: C400 be explicit about the iterator
+
+
+def test_from_iter() -> None:
+    """Test .from_iter()."""
+    arr = VarArray_Int32_10()
+    arr.from_iter(range(10, 20))
+    assert list(arr) == list(range(10, 20))
+
+    # again once it's not empty
+    arr.from_iter(range(10, 20))
+    assert list(arr) == list(range(10, 20))
 
 
 def test_getitem() -> None:
@@ -126,7 +138,7 @@ def test_init() -> None:
 
     # test with property assignment
     foo = Foo()
-    foo.prim_var_array = [10, 11, 12]
+    foo.prim_var_array.from_iter([10, 11, 12])
     assert list(foo.prim_var_array) == [10, 11, 12]
 
     # test with explicit iterator
@@ -372,7 +384,7 @@ __setitem__(): incompatible function arguments. The following argument types are
 Invoked with types: jewels.nanobind.clk_bindings.tests.support.bind_array_msg_clk_nb.VarArray_Int32_10, slice, int"""),
     ):
         # this is an intentional incorrect type, so we have to type: ignore it
-        arr[1::2] = 42  # type: ignore[call-overload]
+        arr[1::2] = 42  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     arr = VarArray_Int32_10()
     with pytest.raises(
@@ -545,26 +557,22 @@ def test_nested_var_array_bytes() -> None:
     assert not orig
 
     # Different sizes
-    obj.nested_var_byte_array = [b"ab", b"xyz"]
-    assert obj.nested_var_byte_array == [b"ab", b"xyz"]
-    obj.nested_var_byte_array = [b"ab"]
-    assert obj.nested_var_byte_array == [b"ab"]
-    obj.nested_var_byte_array = []
-    assert obj.nested_var_byte_array == []
+    obj.nested_var_byte_array.from_iter([b"ab", b"xyz"])
+    assert list(obj.nested_var_byte_array) == [b"ab", b"xyz"]
+    obj.nested_var_byte_array.from_iter([b"ab"])
+    assert list(obj.nested_var_byte_array) == [b"ab"]
+    obj.nested_var_byte_array.from_iter([])
+    assert list(obj.nested_var_byte_array) == []
 
     # Exceeds capacity
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "nested_var_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_var_byte_array = [b"abcd", b"xyz"]
+        obj.nested_var_byte_array.from_iter([b"abcd", b"xyz"])
 
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "nested_var_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_var_byte_array = [b"abc", b"wxyz"]
+        obj.nested_var_byte_array.from_iter([b"abc", b"wxyz"])

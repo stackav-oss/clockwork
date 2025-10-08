@@ -1,0 +1,48 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//clockwork/tools/topology:rules.bzl", "topology_summary")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "summarize_test",
+    srcs = [
+        "summarize_test.py",
+        ":__test__",
+    ],
+    data = [":test_system_multi_node_topology_summary"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/tests/support:py_test_utils",
+        "//clockwork/tools/topology",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+topology_summary(
+    name = "test_system_multi_node_topology_summary",
+    system_target = "//clockwork/tests/support:test_system_multi_node_clk",
+)
+
+py_test(
+    name = "topology_test",
+    srcs = [
+        "topology_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/tools/topology",
+        "@clockwork_pip//pytest",
+    ],
+)

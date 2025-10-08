@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Final
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, node, typesys, units
 from clockwork.dsl.ir.cst_util import decimal_from_cst, get_span
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -61,6 +62,7 @@ class UnitValue(typesys.Value):
         magnitude_shift = self.unit.scale - unit.scale
         return UnitValue.make(unit=unit, value=self.value.scaleb(magnitude_shift))
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         canonical = self.as_unit(self.unit.canonical_unit)
@@ -102,6 +104,7 @@ class DecimalValue(typesys.Value):
 
     value: Decimal
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return str(self.value)
@@ -193,6 +196,7 @@ class StringValue(typesys.Value):
         """Construct a StringValue from a Python string."""
         return cls(type_info=clkbuiltins.STRING, value=value)
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return self.value

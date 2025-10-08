@@ -28,15 +28,17 @@ void CogStatistics::on_execute_complete(bool is_overrun)
   }
 }
 
-CogMetrics::CogMetrics(jewels::memory::MemoryResource resource)
-  : event_metrics_{std::move(resource)}
+CogMetrics::CogMetrics(jewels::memory::MemoryResource resource, size_t event_metrics_batch_size)
+  : memory_resource_{std::move(resource)},
+    event_metrics_batch_size_(event_metrics_batch_size),
+    event_metrics_{memory_resource_}
 {
-  event_metrics_.reserve(event_metrics_batch_size);
-};
+  event_metrics_.reserve(event_metrics_batch_size_);
+}
 
 void CogMetrics::cog_ready(jewels::time::SyncTime ready_time)
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   if (current_state_ == CogExecutionState::waiting_for_ready)
   {
     current_state_ = CogExecutionState::ready;
@@ -46,16 +48,10 @@ void CogMetrics::cog_ready(jewels::time::SyncTime ready_time)
 
 StateTransitionExpected CogMetrics::execution_attempted(jewels::time::SyncTime attempt_time)
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
-  if ((current_state_ != CogExecutionState::ready) && (current_state_ != CogExecutionState::execution_attempted))
-  {
-    print_invalid_transition_error(current_state_, CogExecutionState::execution_attempted);
-    return jewels::unexpected(jewels::MonoError{});
-  }
+  const std::scoped_lock lock{metrics_lock_};
 
   if (current_state_ == CogExecutionState::ready)
   {
-    current_state_ = CogExecutionState::execution_attempted;
     num_requeues_before_execution_ = 0;
     first_attempt_time_ = attempt_time;
   }
@@ -63,13 +59,13 @@ StateTransitionExpected CogMetrics::execution_attempted(jewels::time::SyncTime a
   {
     ++num_requeues_before_execution_;
   }
-
+  current_state_ = CogExecutionState::execution_attempted;
   return StateTransitionExpected{};
 }
 
-StateTransitionExpected CogMetrics::execution_started(jewels::time::SyncTime execution_time)
+StateTransitionExpected CogMetrics::execution_started(jewels::time::SyncTime execution_time, uint64_t conditions_mask)
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   if (current_state_ != CogExecutionState::execution_attempted)
   {
     print_invalid_transition_error(current_state_, CogExecutionState::execution_started);
@@ -77,12 +73,13 @@ StateTransitionExpected CogMetrics::execution_started(jewels::time::SyncTime exe
   }
   current_state_ = CogExecutionState::execution_started;
   execution_start_time_ = execution_time;
+  conditions_mask_ = conditions_mask;
   return StateTransitionExpected{};
 }
 
 StateTransitionExpected CogMetrics::execution_completed(jewels::time::SyncTime execution_complete_time)
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   if (current_state_ != CogExecutionState::execution_started)
   {
     // Regardless of whether this is a valid state transition, transition back to the initial state so we can
@@ -93,7 +90,7 @@ StateTransitionExpected CogMetrics::execution_completed(jewels::time::SyncTime e
   current_state_ = CogExecutionState::waiting_for_ready;
   execution_complete_time_ = execution_complete_time;
 
-  auto result = commit_metrics();
+  auto result = commit_metrics(lock);
   if (!result.has_value())
   {
     return jewels::unexpected(jewels::MonoError{});
@@ -101,34 +98,48 @@ StateTransitionExpected CogMetrics::execution_completed(jewels::time::SyncTime e
   return StateTransitionExpected{};
 }
 
-std::pmr::vector<CogEventMetrics> CogMetrics::event_metrics() const
+std::pmr::vector<EventMetrics> CogMetrics::event_metrics() const
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   return event_metrics_;
 }
 
-CogTelemetryMetrics CogMetrics::telemetry_metrics() const
+TelemetryMetrics CogMetrics::telemetry_metrics() const
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   return telemetry_metrics_;
 }
 
-StateTransitionExpected CogMetrics::commit_metrics()
+StateTransitionExpected CogMetrics::commit_metrics(const std::scoped_lock<std::mutex>& lock)
 {
-  auto event_metrics_update_success = update_cog_event_metrics();
+  auto event_metrics_update_success = update_cog_event_metrics(lock);
   if (!event_metrics_update_success.has_value())
   {
     return jewels::unexpected(jewels::MonoError{});
   }
   update_cog_telemetry_metrics();
+  output_metrics_map_.clear();
   previous_execution_start_time_.emplace(execution_start_time_);
   return StateTransitionExpected{};
 }
 
 void CogMetrics::reset_metrics()
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
-  telemetry_metrics_ = CogTelemetryMetrics{};
+  const std::scoped_lock lock{metrics_lock_};
+  telemetry_metrics_ = TelemetryMetrics{.output_metrics{memory_resource_}, .conditions_mask_vector{memory_resource_}};
+  event_metrics_.clear();
+  output_metrics_map_.clear();
+}
+
+void CogMetrics::reset_telemetry_metrics()
+{
+  const std::scoped_lock lock{metrics_lock_};
+  telemetry_metrics_ = TelemetryMetrics{.output_metrics{memory_resource_}, .conditions_mask_vector{memory_resource_}};
+}
+
+void CogMetrics::reset_event_metrics()
+{
+  const std::scoped_lock lock{metrics_lock_};
   event_metrics_.clear();
 }
 
@@ -146,41 +157,50 @@ void CogMetrics::update_cog_telemetry_metrics()
     update_min_max_duration(
       execution_start_time_, *previous_execution_start_time_, telemetry_metrics_.execution_period);
   }
+  for (const auto& [index, output_count] : output_metrics_map_)
+  {
+    telemetry_metrics_.output_metrics[index].update(output_count); // NOLINT(cert-err33-c) False positive
+  }
   ++telemetry_metrics_.num_executions;
 }
 
-StateTransitionExpected CogMetrics::update_cog_event_metrics()
+StateTransitionExpected CogMetrics::update_cog_event_metrics(const std::scoped_lock<std::mutex>& lock)
 {
-  if (is_event_metrics_batch_full())
+  if (is_event_metrics_batch_full(lock))
   {
-    jewels::log_cerr_error(
-      "Cog event metrics size {} exceeds the maximum size {}. "
-      "This indicates that the event metrics should have been serviced and published but were not. ",
-      event_metrics_.size(),
-      event_metrics_batch_size);
     return jewels::unexpected(jewels::MonoError{});
   }
-  CogEventMetrics updated_metrics{};
+  EventMetrics updated_metrics{.output_metrics{memory_resource_}};
   updated_metrics.execution_start_time = jewels::time::get_ns(execution_start_time_);
 
   updated_metrics.execution_duration = to_recorded_duration(execution_complete_time_, execution_start_time_);
   updated_metrics.latency_first_ready_to_execution = to_recorded_duration(execution_start_time_, first_ready_time_);
   updated_metrics.latency_first_attempt_to_execution = to_recorded_duration(execution_start_time_, first_attempt_time_);
   updated_metrics.num_requeues_before_execution = static_cast<uint16_t>(num_requeues_before_execution_);
-
-  event_metrics_.emplace_back(updated_metrics);
+  updated_metrics.conditions_mask = conditions_mask_;
+  auto& event_metrics = event_metrics_.emplace_back(std::move(updated_metrics));
+  for (const auto& [index, output_count] : output_metrics_map_)
+  {
+    event_metrics.output_metrics[index] = output_count;
+  }
   return StateTransitionExpected{};
 }
 
 size_t CogMetrics::current_event_metrics_batch_size() const
 {
-  const std::lock_guard<std::mutex> lock{metrics_lock_};
+  const std::scoped_lock lock{metrics_lock_};
   return event_metrics_.size();
 }
 
 [[nodiscard]] bool CogMetrics::is_event_metrics_batch_full() const
 {
-  return event_metrics_.size() == event_metrics_batch_size;
+  const std::scoped_lock lock{metrics_lock_};
+  return event_metrics_.size() == event_metrics_batch_size_;
+}
+
+[[nodiscard]] bool CogMetrics::is_event_metrics_batch_full(const std::scoped_lock<std::mutex>& /*unused*/) const
+{
+  return event_metrics_.size() == event_metrics_batch_size_;
 }
 
 TenNanoseconds CogMetrics::to_recorded_duration(jewels::time::SyncTime end_time, jewels::time::SyncTime start_time)
@@ -216,6 +236,12 @@ void CogMetrics::print_invalid_transition_error(CogExecutionState from_state, Co
     "Invalid cog metrics state transition from: {} to: {} ",
     wise_enum::to_string(from_state),
     wise_enum::to_string(attempted_state));
+}
+
+void CogMetrics::update_output_metrics(size_t output_index, uint16_t value)
+{
+  const std::scoped_lock lock{metrics_lock_};
+  output_metrics_map_[output_index] = value;
 }
 
 } // namespace clockwork

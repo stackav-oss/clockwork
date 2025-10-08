@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, cast
 
 from clockwork.dsl import cst
 from clockwork.dsl.bazel.targets import Label
-from clockwork.dsl.cog.clk_cog_metrics import generate_metrics_file
 from clockwork.dsl.cog.cppcog import to_dial_name
 from clockwork.dsl.cog.cppdial import Dial as DialGenerator
 from clockwork.dsl.cpp import literal, typereg, types
@@ -55,9 +54,9 @@ if TYPE_CHECKING:
 
 
 def _render_cpp_constant(binding: ImmutableBinding) -> types.CppNamedValue:
-    assert isinstance(binding.type_info, typesys.InferenceVar)  # noqa: S101 (invariant)
+    assert isinstance(binding.type_info, typesys.InferenceVar)
     resolution = binding.type_info.resolution()
-    assert isinstance(resolution, typesys.TypeVal)  # noqa: S101 (invariant; assured by type system)
+    assert isinstance(resolution, typesys.TypeVal)
 
     cpp_type = (
         types.STRING_VIEW
@@ -65,7 +64,7 @@ def _render_cpp_constant(binding: ImmutableBinding) -> types.CppNamedValue:
         else typereg.get_cpp_type(binding.module.context, resolution)
     )
 
-    cpp_value: types.CppValueExpr | None = None  # pyright: ignore[reportInvalidTypeForm] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    cpp_value: types.CppValueExpr | None = None
     if binding.value in (clkbuiltins.FALSE_VALUE, clkbuiltins.TRUE_VALUE):
         cpp_value = literal.bool_value_to_cpp(binding.value)
     elif isinstance(binding.value, primitive.DecimalValue):
@@ -249,6 +248,22 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
                 entity,
             ).resolve()
 
+        for member_cog in self.cogs:
+            if not isinstance(member_cog.cog_ir, cog.Cog):
+                msg = "Attempted to access an unresolved Cog"
+                raise TypeError(msg)
+
+            # Add the generated clockwork representations, interfaces, schemas, enums, etc. to the target.
+            # This ensures that the necessary corresponding c++ will be generated.
+            self.representations.extend(member_cog.cog_ir.generated_repr())
+            self.interfaces.extend(member_cog.cog_ir.generated_interfaces())
+            self.schema_tags.extend(
+                SchemaTag(schema_ir=generated_schema) for generated_schema in member_cog.cog_ir.generated_schemas()
+            )
+            self.enums.extend(
+                EnumTarget(enum_ir=generated_enum) for generated_enum in member_cog.cog_ir.generated_enums()
+            )
+
     def render_cpp_entities(self) -> CppModuleChunks:
         """Convert primary entities (Cogs, Interfaces) to C++."""
         cpp_mod = CppModuleChunks()
@@ -265,7 +280,7 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         ):
             # mypy can't/won't reason through chain
             cpp_mod.append(
-                cast(  # pyright: ignore[reportUnnecessaryCast] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                cast(  # pyright: ignore[reportUnnecessaryCast] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                     "SchemaTag | TagTarget | EnumTarget | CppCog | converter.Converter | CppUdpSocket | CppAudioSource",
                     tag,
                 ).render(self.module.context, self.options.namespace)
@@ -329,37 +344,6 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         """
         return [cpp_cog.cog_ir for cpp_cog in self.cogs if isinstance(cpp_cog.cog_ir, cog.Cog)]
 
-    def _generate_metrics_content(self, cog_irs: list[cog.Cog]) -> str | None:
-        """Generate metrics content for the given cog IRs.
-
-        Args:
-            cog_irs: List of Cog IR objects
-
-        Returns:
-            String containing the metrics content, or None if no metrics to generate
-        """
-        if not cog_irs:
-            return None
-
-        return generate_metrics_file(cog_irs, f"{self.options.namespace}::metrics", f"{self.name}_metrics")
-
-    def _write_metrics_file(self, content: str, write_dir: Path) -> None:
-        """Write metrics content to a file.
-
-        Args:
-            content: String containing the metrics content
-            write_dir: Directory to write to.
-            include_dir: Include directory for the module
-        """
-        if not content:
-            return
-        metrics_file_path = write_dir / f"{self.name}_metrics.clk"
-
-        metrics_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with metrics_file_path.open("w") as f:
-            f.write(content)
-
     def render_and_write(self, root_dir: Path) -> None:
         """Convert to C++ and write output to files."""
         write_dir = root_dir / BazelPathResolver().to_buildtime_path(self.module.module_id).parent
@@ -377,19 +361,12 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         if python_cog_cpp_mod:
             write_to_file(python_cog_cpp_mod, write_dir, include_dir, self.name + "_impl", self.module.module_id.repo)
 
-        # Generate and write metrics if there are cogs in this target and metrics generation is enabled
-        if self.cogs and self.options.generate_cog_metrics:
-            cog_irs = self._get_valid_cog_irs()
-            metrics_content = self._generate_metrics_content(cog_irs)
-            if metrics_content is not None:
-                self._write_metrics_file(metrics_content, write_dir)
-
     def output_targets(self) -> list[CcLibrary]:
         """Extract language target dependency information."""
         include_dir = self.module.module_id.get_base_path().parent
         cpp_mod = self.render_cpp_entities()
         # Process needs to manage namespace differently, therefore not included as part of `render_cpp_entities`
-        main_target = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id.repo)
+        main_target = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id)
         targets = [main_target]
 
         dial_cpp_mod = self.render_cpp_dial()
@@ -400,28 +377,13 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             # with a `_impl` suffix.
             main_target.deps = [*list(main_target.deps), Label(f"//{include_dir}:{self.name}_impl")]
 
-            targets.append(as_cc_library(dial_cpp_mod, self.name + "_dial", include_dir, self.module.module_id.repo))
+            targets.append(as_cc_library(dial_cpp_mod, self.name + "_dial", include_dir, self.module.module_id))
 
         python_cog_cpp_mod = self.render_cpp_python_cog()
         if python_cog_cpp_mod:
-            targets.append(
-                as_cc_library(python_cog_cpp_mod, self.name + "_impl", include_dir, self.module.module_id.repo)
-            )
+            targets.append(as_cc_library(python_cog_cpp_mod, self.name + "_impl", include_dir, self.module.module_id))
 
         return targets
-
-    def get_metrics_file_path(self) -> Path | None:
-        """Get the path of the metrics file if it would be generated.
-
-        Returns:
-            Path to the metrics file or None if no metrics file would be generated
-        """
-        if self.cogs and self.options.generate_cog_metrics:
-            cog_irs = self._get_valid_cog_irs()
-            if cog_irs and self._generate_metrics_content(cog_irs):
-                include_dir = self.module.module_id.get_base_path().parent
-                return include_dir / f"{self.name}_metrics.clk"
-        return None
 
 
 @dataclass
@@ -581,8 +543,8 @@ class EnumTarget:
         cpp_mod.header_chunk.append(f"({self.enum_ir.name}, {cpp_type.render(cpp_namespace)}),", indent=1)
         for index, (_, value) in enumerate(self.enum_ir.values.items(), start=1):
             suffix = "," if index < len(self.enum_ir.values) else ")"
-            assert isinstance(value.integer_value, int)  # noqa: S101  (sanity check)
-            assert ir_type.signed or value.integer_value >= 0  # noqa: S101  (sanity check)
+            assert isinstance(value.integer_value, int)
+            assert ir_type.signed or value.integer_value >= 0
             cpp_mod.header_chunk.append(f"({value.name}, {value.integer_value}){suffix}", indent=1)
         if self.enum_ir.bit_flags:
             cpp_mod.header_chunk.context.add_include(Header(JEWELS_REPO, "jewels/utility/enum_flags.hh"))
@@ -598,11 +560,16 @@ class CppDial:
 
     def render(self, namespace: str) -> CppModuleChunks:
         """Convert the dial to C++."""
-        if not isinstance(self.cpp_cog.cog_ir, Cog):
+        if not isinstance(self.cpp_cog.cog_ir, Cog) or self.cpp_cog.dial_header is None:
             # This is resolved by the CppCog.  No need for an extra resolve here.
             msg = "Attempt to render before resolving."
             raise TypeError(msg)
 
         dial_class_name = to_dial_name(self.cpp_cog.cog_ir.name)
-        dial_gen = DialGenerator(cog_ir=self.cpp_cog.cog_ir, class_name=dial_class_name, cpp_namespace=namespace)
+        dial_gen = DialGenerator(
+            cog_ir=self.cpp_cog.cog_ir,
+            dial_header=self.cpp_cog.dial_header,
+            class_name=dial_class_name,
+            cpp_namespace=namespace,
+        )
         return dial_gen.render()

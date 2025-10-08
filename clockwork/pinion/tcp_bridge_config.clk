@@ -8,16 +8,13 @@ schema TcpBridgeClientConfig
   {
     // The ShmChannel that will serve as the source of messages for
     // the bridge server.
-    #1 publisher_endpoint: process_description::PublishEndpoint;
+    #1 publisher_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
 
     // The IPv4 address of the bridge server to connect to.
     #2 server_address: VarString<max_size=15>;
 
     // The TCP port of the bridge server to connect to.
     #3 server_port: UInt16;
-
-    // Channel name
-    #4 channel_name: VarString<max_size=127>;
   }
 }
 
@@ -43,7 +40,7 @@ schema TcpBridgeServerConfig
     #5 num_clients: UInt64;
 
     // Channel name
-    #6 channel_name: VarString<max_size=127>;
+    #6 channel_name: VarString<max_size=300>;
   }
 }
 
@@ -74,7 +71,7 @@ schema TcpBridgeConfig
     #6 host_name: VarString<max_size=31>;
 
     // Bridge status publisher endpoint
-    #7 status_publish_endpoint: process_description::PublishEndpoint;
+    #7 status_publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
   }
 }
 

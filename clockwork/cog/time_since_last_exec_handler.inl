@@ -27,7 +27,7 @@ template <typename Policy>
 void TimeSinceLastExecHandler<Policy>::notify(const Event& event)
 {
   {
-    const std::lock_guard lock{mutex_};
+    const std::scoped_lock lock{mutex_};
     expected_next_trigger_ += std::chrono::nanoseconds(threshold_ns);
     triggered_ = true;
   }
@@ -41,7 +41,7 @@ template <typename Policy>
 auto TimeSinceLastExecHandler<Policy>::make_condition(jewels::time::SyncTime now) const
   -> TimeSinceLastExecCondition<threshold_ns>
 {
-  const std::lock_guard lock{mutex_};
+  const std::scoped_lock lock{mutex_};
   const auto time_since_last_exec = (now - last_exec_time_);
   return TimeSinceLastExecCondition<threshold_ns>(triggered_, time_since_last_exec);
 }
@@ -50,7 +50,7 @@ template <typename Policy>
 auto TimeSinceLastExecHandler<Policy>::update_last_exec_time(jewels::time::SyncTime last_exec_time, bool was_active)
   -> jewels::expected<Status, jewels::MonoError>
 {
-  const std::lock_guard lock{mutex_};
+  const std::scoped_lock lock{mutex_};
   last_exec_time_ = last_exec_time;
   triggered_ = false;
 

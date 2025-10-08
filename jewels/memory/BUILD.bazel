@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
 
 cc_library(
     name = "aligned_storage",
@@ -82,6 +83,13 @@ cc_library(
         "//jewels/std:expected",
         "@gsl//:pointers",
     ],
+)
+
+py_library(
+    name = "py_bytes",
+    srcs = ["py_bytes.py"],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(

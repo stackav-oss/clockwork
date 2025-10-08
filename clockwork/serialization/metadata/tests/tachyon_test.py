@@ -1,15 +1,17 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
 import pytest
-from clockwork.dsl.ir import compiler, schema
+from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.metadata import tachyon
@@ -29,7 +31,10 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
     )
     tap_msg = module.inner_scope.lookup("TapMsg")
     assert isinstance(tap_msg, schema.Schema)
-    schema_ir = schema.InstantiatedSchema.from_typespec(tap_msg)
+    schema_ir = schema.InstantiatedSchema.make(
+        tap_msg.get_resolved(),
+        {"signed_value": primitive.DecimalValue(value=Decimal(234), type_info=clkbuiltins.INT64)},
+    )
     builder = tachyon.Builder(module.context)
     schema_id = builder.handle_type(schema_ir)
     assert len(builder.types) == 25
@@ -57,7 +62,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
         f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum",
         f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags",
         f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SubMsg",
-        f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg",
+        f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg<signed_value=234>",
         f"@{CLK_REPO}::clockwork::dsl::tests::support::taptags::AnotherTag",
     ]
     assert builder.value_key_to_id[schema_ir.value_key()] == schema_id
@@ -65,14 +70,20 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
     assert isinstance(schema_type, model.SchemaType)
     assert schema_type == model.SchemaType(
         fqn=f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg",
-        size=232,
+        size=240,
         alignment=8,
         schema_uuid=UUID("cae6ee0b-ec41-40cf-8b87-fb1583e5985d"),
-        version=21,
+        version=24,
         fields=(
             model.SchemaField(offset=160, num=1, name="integer", type_id=builder.value_key_to_id["::Int64"]),
-            model.SchemaField(offset=216, num=2, name="floating_point", type_id=builder.value_key_to_id["::Float32"]),
-            model.SchemaField(offset=224, num=3, name="boolean", type_id=builder.value_key_to_id["::Bool"]),
+            model.SchemaField(
+                offset=216,
+                num=2,
+                name="floating_point",
+                type_id=builder.value_key_to_id["::Float32"],
+                init_value=model.FloatInitialValue(value=Decimal("1.234")),
+            ),
+            model.SchemaField(offset=228, num=3, name="boolean", type_id=builder.value_key_to_id["::Bool"]),
             model.SchemaField(
                 offset=0,
                 num=4,
@@ -102,16 +113,17 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
                 ],
             ),
             model.SchemaField(
-                offset=225,
+                offset=229,
                 num=8,
                 name="default_enum",
                 type_id=builder.value_key_to_id[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum"],
             ),
             model.SchemaField(
-                offset=226,
+                offset=230,
                 num=9,
                 name="enum_with_init",
                 type_id=builder.value_key_to_id[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum"],
+                init_value=model.UnsignedInitialValue(value=1),
             ),
             model.SchemaField(
                 offset=168,
@@ -132,7 +144,13 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             model.SchemaField(
                 offset=200, num=14, name="optional", type_id=builder.value_key_to_id["::Optional<type=::UInt32>"]
             ),
-            model.SchemaField(offset=227, num=15, name="bool_with_init", type_id=builder.value_key_to_id["::Bool"]),
+            model.SchemaField(
+                offset=231,
+                num=15,
+                name="bool_with_init",
+                type_id=builder.value_key_to_id["::Bool"],
+                init_value=model.BoolInitialValue(value=True),
+            ),
             model.SchemaField(
                 offset=192,
                 num=16,
@@ -146,6 +164,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
                 type_id=builder.value_key_to_id[
                     f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::ExternalStrongType"
                 ],
+                init_value=model.UnsignedInitialValue(value=123),
             ),
             model.SchemaField(
                 offset=208,
@@ -154,19 +173,27 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
                 type_id=builder.value_key_to_id["::FixedArray<type=::Int32,size=2>"],
             ),
             model.SchemaField(
-                offset=144, num=19, name="var_string", type_id=builder.value_key_to_id["::VarString<max_size=2>"]
-            ),
-            model.SchemaField(
-                offset=228,
+                offset=232,
                 num=20,
                 name="default_flags",
                 type_id=builder.value_key_to_id[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags"],
             ),
             model.SchemaField(
-                offset=229,
+                offset=233,
                 num=21,
                 name="flags_with_init",
                 type_id=builder.value_key_to_id[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags"],
+                init_value=model.UnsignedInitialValue(value=2),
+            ),
+            model.SchemaField(
+                offset=144, num=23, name="var_string", type_id=builder.value_key_to_id["::VarString<max_size=2>"]
+            ),
+            model.SchemaField(
+                offset=224,
+                num=24,
+                name="integer_with_init",
+                type_id=builder.value_key_to_id["::Int32"],
+                init_value=model.SignedInitialValue(value=234),
             ),
         ),
         hash=b"\xf1\x90\n\xb9\x0e\xd1\x19\xb3<+\rln\x95\x16\x81",
@@ -184,7 +211,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
     # Now make a minor change and check that the hash changes
     fix_array_int_2.arguments = (fix_array_int_2.arguments[0], "3")
     assert (
-        schema_type.get_hash(builder.types, force_recompute=True) == b"7M%\x05 \x95\x8a\xf5\xea\x07\x8c|\x9a\x8a\xc6E"
+        schema_type.get_hash(builder.types, force_recompute=True) == b"\x8d\xecm\x0f\n\xbar\xa0\x1e\x1f\\\x8f\x12o@\xaf"
     )
     meta = builder.get_metadata(schema_id)
     pb_meta = tachyon.to_protobuf(meta)
@@ -206,10 +233,10 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
     {{
       "schema": {{
         "fqn": "@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg",
-        "size": 232,
+        "size": 240,
         "alignment": 8,
         "schemaUuid": "yubuC+xBQM+Lh/sVg+WYXQ==",
-        "version": 21,
+        "version": 24,
         "fields": [
           {{
             "offset": 160,
@@ -221,10 +248,13 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "offset": 216,
             "num": 2,
             "name": "floating_point",
-            "typeId": 2
+            "typeId": 2,
+            "initValue": {{
+              "floatValue": "1.234"
+            }}
           }},
           {{
-            "offset": 224,
+            "offset": 228,
             "num": 3,
             "name": "boolean",
             "typeId": 3
@@ -253,16 +283,19 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "typeId": 10
           }},
           {{
-            "offset": 225,
+            "offset": 229,
             "num": 8,
             "name": "default_enum",
             "typeId": 13
           }},
           {{
-            "offset": 226,
+            "offset": 230,
             "num": 9,
             "name": "enum_with_init",
-            "typeId": 13
+            "typeId": 13,
+            "initValue": {{
+              "unsignedValue": "1"
+            }}
           }},
           {{
             "offset": 168,
@@ -295,10 +328,13 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "typeId": 17
           }},
           {{
-            "offset": 227,
+            "offset": 231,
             "num": 15,
             "name": "bool_with_init",
-            "typeId": 3
+            "typeId": 3,
+            "initValue": {{
+              "boolValue": true
+            }}
           }},
           {{
             "offset": 192,
@@ -310,7 +346,10 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "offset": 220,
             "num": 17,
             "name": "external_strong_type",
-            "typeId": 21
+            "typeId": 21,
+            "initValue": {{
+              "unsignedValue": "123"
+            }}
           }},
           {{
             "offset": 208,
@@ -319,25 +358,48 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "typeId": 22
           }},
           {{
-            "offset": 144,
-            "num": 19,
-            "name": "var_string",
+            "offset": 232,
+            "num": 20,
+            "name": "default_flags",
             "typeId": 23
           }},
           {{
-            "offset": 228,
-            "num": 20,
-            "name": "default_flags",
+            "offset": 233,
+            "num": 21,
+            "name": "flags_with_init",
+            "typeId": 23,
+            "initValue": {{
+              "unsignedValue": "2"
+            }}
+          }},
+          {{
+            "offset": 144,
+            "num": 23,
+            "name": "var_string",
             "typeId": 24
           }},
           {{
-            "offset": 229,
-            "num": 21,
-            "name": "flags_with_init",
-            "typeId": 24
+            "offset": 224,
+            "num": 24,
+            "name": "integer_with_init",
+            "typeId": 5,
+            "initValue": {{
+              "signedValue": "234"
+            }}
           }}
         ],
-        "hash": "N00lBSCVivXqB4x8morGRQ=="
+        "hash": "jextDwq6cqAeH1yPEm9Arw==",
+        "history": {{
+          "removed": [
+            22
+          ],
+          "became": {{
+            "19": 23
+          }},
+          "versions": [
+            21, 23, 24
+          ]
+        }}
       }}
     }},
     {{
@@ -452,7 +514,10 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
             "typeId": 1
           }}
         ],
-        "hash": "M20viTs+0+VatnGxcdgzlg=="
+        "hash": "M20viTs+0+VatnGxcdgzlg==",
+        "history": {{
+          "versions": [ 1 ]
+        }}
       }}
     }},
     {{
@@ -489,19 +554,30 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
         "fqn": "@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum",
         "underlyingTypeId": 12,
         "enumUuid": "AtGmAVxpRt2ZIgb+4ztYHg==",
-        "version": 2,
+        "version": 4,
         "values": [
           {{
-            "num": 1,
+            "num": 3,
             "name": "first_value"
           }},
           {{
-            "num": 2,
+            "num": 4,
             "value": "1",
             "name": "second_value"
           }}
         ],
-        "hash": "97B2EGONP7vFH09GNt873A=="
+        "hash": "Z2N4r1BR4dT55hmAd6S8Vg==",
+        "history": {{
+          "removed": [
+            2
+          ],
+          "became": {{
+            "1": 3
+          }},
+          "versions": [
+            2, 4
+          ]
+        }}
       }}
     }},
     {{
@@ -603,6 +679,52 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
       }}
     }},
     {{
+      "clkEnum": {{
+        "fqn": "@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags",
+        "underlyingTypeId": 12,
+        "enumUuid": "nWbu+BAZSKKXHvm7iy3wbA==",
+        "version": 6,
+        "values": [
+          {{
+            "name": "none"
+          }},
+          {{
+            "num": 3,
+            "value": "1",
+            "name": "flag1"
+          }},
+          {{
+            "num": 4,
+            "value": "2",
+            "name": "flag2"
+          }},
+          {{
+            "num": 5,
+            "value": "4",
+            "name": "flag3"
+          }},
+          {{
+            "num": 6,
+            "value": "3",
+            "name": "flag12"
+          }}
+        ],
+        "hash": "dPIfhUZnAHdD2BzGfXm4sQ==",
+        "options": 1,
+        "history": {{
+          "removed": [
+            2
+          ],
+          "became": {{
+            "1": 3
+          }},
+          "versions": [
+            0, 6
+          ]
+        }}
+      }}
+    }},
+    {{
       "builtIn": {{
         "fqn": ".VarString",
         "size": 16,
@@ -615,44 +737,9 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
         "hash": "xw/ca2d+YOYCyxGmJLrJLg==",
         "uuid": "7OKUZWNQVjGbYX8uTKOb4w=="
       }}
-    }},
-    {{
-      "clkEnum": {{
-        "fqn": "@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags",
-        "underlyingTypeId": 12,
-        "enumUuid": "nWbu+BAZSKKXHvm7iy3wbA==",
-        "version": 4,
-        "values": [
-          {{
-            "name": "none"
-          }},
-          {{
-            "num": 1,
-            "value": "1",
-            "name": "flag1"
-          }},
-          {{
-            "num": 2,
-            "value": "2",
-            "name": "flag2"
-          }},
-          {{
-            "num": 3,
-            "value": "4",
-            "name": "flag3"
-          }},
-          {{
-            "num": 4,
-            "value": "3",
-            "name": "flag12"
-          }}
-        ],
-        "hash": "JncXa3a4xoVkbguhmrxASQ==",
-        "options": 1
-      }}
     }}
   ],
-  "version": 2
+  "version": 3
 }}"""
     expected = json_format.Parse(expected_json, model_pb2.TachyonMetadata())  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     assert json_format.MessageToJson(expected) == json_format.MessageToJson(pb_meta2)  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip

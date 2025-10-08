@@ -4,7 +4,7 @@ schema ChannelMessageRateConfig
   fields
   {
     // Channel name
-    #0 channel_name: VarString<max_size=127>;
+    #0 channel_name: VarString<max_size=300>;
 
     // Minimum message rate in hz
     #1 min_msg_rate_hz : Float64;

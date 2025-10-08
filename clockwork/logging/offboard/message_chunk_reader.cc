@@ -77,11 +77,12 @@ MessageChunkReader::MessageChunkReader(
         return jewels::unexpected(message_header_result.error());
       }
       const auto* message_header_ptr = message_header_result.value();
-      index_storage_.emplace_back(MessageChunkIndexEntryV2{
-        .transmit_time_ns = index_entry.transmit_time_ns,
-        .sequence_number = WrappingCounter<uint32_t>{message_header_ptr->sequence_number},
-        .chunk_offset = chunk_offset,
-      });
+      index_storage_.emplace_back(
+        MessageChunkIndexEntryV2{
+          .transmit_time_ns = index_entry.transmit_time_ns,
+          .sequence_number = WrappingCounter<uint32_t>{message_header_ptr->sequence_number},
+          .chunk_offset = chunk_offset,
+        });
     }
     std::sort(index_storage_.begin(), index_storage_.end());
     index_span_ = std::span<const MessageChunkIndexEntryV2>{index_storage_};

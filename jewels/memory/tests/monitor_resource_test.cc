@@ -63,15 +63,15 @@ TEST_CASE("monitor resource | peak")
   CHECK(pool.peak() == 2 * size);
   CHECK(pool.threshold() == limit);
   blobs.emplace_back(1, res);
-  CHECK(pool.used() == 2 * size + 1);
-  CHECK(pool.peak() == 2 * size + 1);
-  CHECK(pool.threshold() == 2 * size + 1 + size);
+  CHECK(pool.used() == (2 * size) + 1);
+  CHECK(pool.peak() == (2 * size) + 1);
+  CHECK(pool.threshold() == (2 * size) + 1 + size);
   blobs.emplace_back(size, res);
-  CHECK(pool.used() == 3 * size + 1);
-  CHECK(pool.peak() == 3 * size + 1);
-  CHECK(pool.threshold() == 2 * size + 1 + size);
+  CHECK(pool.used() == (3 * size) + 1);
+  CHECK(pool.peak() == (3 * size) + 1);
+  CHECK(pool.threshold() == (2 * size) + 1 + size);
   blobs.emplace_back(10, res);
-  CHECK(pool.threshold() == 3 * size + 1 + 10 + size);
+  CHECK(pool.threshold() == (3 * size) + 1 + 10 + size);
 }
 
 } // namespace jewels::memory

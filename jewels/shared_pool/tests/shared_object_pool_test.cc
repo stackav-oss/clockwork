@@ -20,10 +20,10 @@ namespace
 {
 
 /// Number of times the constructor was called
-size_t constructor_count = 0U; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+size_t constructor_count = 0U; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) Test only.
 
 /// Number of times the destructor was called
-size_t destructor_count = 0U; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+size_t destructor_count = 0U; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) Test only.
 
 /// Class used to test object lifecycle
 struct TestClass

@@ -24,6 +24,7 @@ cc_library(
         "database_config.inl",
     ],
     hdrs = ["database_config.hh"],
+    data = [":database_config_clk"],
     deps = [
         ":report",
         "//clockwork:repr_iface",
@@ -53,6 +54,7 @@ cc_library(
         "report.inl",
     ],
     hdrs = ["report.hh"],
+    data = [":report_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",

@@ -74,4 +74,25 @@ struct TachyonLoggingTraits
   static constexpr auto schema_encoding = clockwork_logging::SchemaEncoding::clockwork_tachyon;
 };
 
+namespace detail
+{
+/// Base case helper struct for removing Tap<Tachyon<...>>
+template <class T>
+struct RemoveTapTachyonImpl
+{
+  using Type = T;
+};
+
+/// Sepcialization for removing Tap<Tachyon<...>>
+template <class T>
+struct RemoveTapTachyonImpl<Tap<Tachyon<T>>>
+{
+  using Type = T;
+};
+} // namespace detail
+
+/// Remove Tap<Tachyon<...>> from a type if exists.
+template <class T>
+using RemoveTapTachyon = typename detail::RemoveTapTachyonImpl<T>::Type;
+
 } // namespace clockwork

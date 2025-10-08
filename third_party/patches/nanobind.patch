@@ -81,7 +81,7 @@ index 0000000..b7ec3be
 +
 +# No need to register the toolchain for Python, we just want the headers.
 diff --git include/nanobind/nanobind.h include/nanobind/nanobind.h
-index ba45dab..75adc65 100644
+index d245a0f..85db9cf 100644
 --- include/nanobind/nanobind.h
 +++ include/nanobind/nanobind.h
 @@ -36,22 +36,22 @@
@@ -124,13 +124,13 @@ index ba45dab..75adc65 100644
  #if defined(_MSC_VER)
  #  pragma warning(pop)
 diff --git include/nanobind/nb_class.h include/nanobind/nb_class.h
-index 86bc022..116b63c 100644
+index e1a953f..7954ae7 100644
 --- include/nanobind/nb_class.h
 +++ include/nanobind/nb_class.h
-@@ -464,7 +464,9 @@ public:
+@@ -480,7 +480,9 @@ public:
      using Base  = typename detail::extract<T, detail::is_base,  Ts...>::type;
      using Alias = typename detail::extract<T, detail::is_alias, Ts...>::type;
-
+ 
 -    static_assert(sizeof(Alias) < (1 << 24), "Instance size is too big!");
 +    // Fix upstream bug. Dscussion here https://github.com/wjakob/nanobind/discussions/759
 +    // Upstream fix here will make it to nanobind 2.3: https://github.com/wjakob/nanobind/commit/2aacdcfdd312dabda3d65e683e418e4b3c8c0b04
@@ -138,11 +138,13 @@ index 86bc022..116b63c 100644
      static_assert(alignof(Alias) < (1 << 8), "Instance alignment is too big!");
      static_assert(
          sizeof...(Ts) == !std::is_same_v<Base, T> + !std::is_same_v<Alias, T>,
-diff --git include/nanobind/nb_class.h include/nanobind/nb_class.h
-https://github.com/wjakob/nanobind/issues/747
+diff --git include/nanobind/stl/detail/nb_optional.h include/nanobind/stl/detail/nb_optional.h
+index 78365c9..deda218 100644
 --- include/nanobind/stl/detail/nb_optional.h
 +++ include/nanobind/stl/detail/nb_optional.h
-@@ -23,4 +23,5 @@ struct optional_caster {
+@@ -21,9 +21,10 @@ struct optional_caster {
+     NB_TYPE_CASTER(Optional, optional_name(Caster::Name))
+ 
      bool from_python(handle src, uint8_t flags, cleanup_list* cleanup) noexcept {
 -        if (src.is_none())
 -            // default-constructed value is already empty
@@ -150,3 +152,6 @@ https://github.com/wjakob/nanobind/issues/747
 +            value.reset();
              return true;
 +        }
+ 
+         Caster caster;
+         if (!caster.from_python(src, flags_for_local_caster<T>(flags), cleanup) ||

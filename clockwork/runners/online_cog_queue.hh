@@ -67,6 +67,12 @@ public:
   ///
   CogQueueStats stats() const override;
 
+  ///
+  /// Check if this cog queue is offline.
+  /// @returns true if this cog queue is running offline.
+  ///
+  [[nodiscard]] bool is_offline() const override;
+
 private:
   ///
   /// Mutex used for access to the queue.

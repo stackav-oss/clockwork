@@ -13,8 +13,10 @@ from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Final
 
 from clockwork.dsl.bazel.cc_targets import CcBinary, CcBinaryWithEmbeddedPy, CcLibrary
+from clockwork.dsl.bazel.clk_targets import module_to_clk
 from clockwork.dsl.bazel.targets import Label
-from clockwork.dsl.ir.module_id import CLK_REPO, JEWELS_REPO
+from clockwork.dsl.ir.module_id import CLK_REPO, JEWELS_REPO, ModuleID
+from typing_extensions import override
 
 if TYPE_CHECKING:
     import typing
@@ -53,7 +55,7 @@ class Header(Include):
     path: PurePath
     iwyu_pragma: str | None
 
-    def __init__(self, repo: str | None, path: PurePath | str, iwyu_pragma: str | None = None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, repo: str | None, path: PurePath | str, iwyu_pragma: str | None = None) -> None:
         """Create a new Header.
 
         Args:
@@ -70,13 +72,20 @@ class Header(Include):
         """True if this is a system header (so that <> should be used instead of "")."""
         return False
 
+    @property
+    def quoted_path(self) -> str:
+        """Render this header path as a string, including delimiters."""
+        return f"<{self.path}>" if self.is_system else f'"{self.path}"'
+
+    @override
     def render(self) -> str:
         """Render this header path as a string, including delimiters."""
-        base_include = f"#include <{self.path}>" if self.is_system else f'#include "{self.path}"'
+        base_include = f"#include {self.quoted_path}"
         if self.iwyu_pragma:
             return f"{base_include} // {self.iwyu_pragma}"
         return base_include
 
+    @override
     def __lt__(self, other: Include) -> bool:
         """Implement ordering with system headers first, then lexicographic."""
         if not isinstance(other, Header):
@@ -103,6 +112,15 @@ class Header(Include):
         return Label(f"//{package}:{name}")
 
 
+class MaybeHeader(Header):
+    """A C++ header file that is included if it exists."""
+
+    @override
+    def render(self) -> str:
+        """Render this header path as a string, including delimiters."""
+        return "\n".join((f"#if __has_include({self.quoted_path})", Header.render(self), "#endif"))
+
+
 class SystemHeader(Header):
     """A C++ system header file.
 
@@ -115,6 +133,7 @@ class SystemHeader(Header):
         super().__init__(repo=None, path=path, iwyu_pragma=iwyu_pragma)
 
     @property
+    @override
     def is_system(self) -> bool:
         """True if this is a system header (so that <> should be used instead of "")."""
         return True
@@ -128,10 +147,12 @@ class FwdDecl(Include):
     namespace: str
     decl: str
 
+    @override
     def render(self) -> str:
         """Render declaration as a string."""
         return f"namespace {self.namespace} {{ {self.decl}; }} // IWYU pragma: keep"
 
+    @override
     def __lt__(self, other: Include) -> bool:
         """Implement ordering with all headers first, then lexicographic."""
         if not isinstance(other, FwdDecl):
@@ -148,7 +169,10 @@ class CppContext:
 
     meta_includes: typing.ClassVar = {
         Header(CLK_REPO, "clockwork/cog/include_common.hh"): {
+            Header(JEWELS_REPO, "jewels/container/compare.hh"),
+            Header(JEWELS_REPO, "jewels/memory/pointers.hh"),
             Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+            Header(JEWELS_REPO, "jewels/std/expected.hh"),
             Header(CLK_REPO, "clockwork/cog/cog_conditions.hh"),
             Header(CLK_REPO, "clockwork/cog/cog_configs.hh"),
             Header(CLK_REPO, "clockwork/cog/cog_diagnostics.hh"),
@@ -161,6 +185,8 @@ class CppContext:
             Header(CLK_REPO, "clockwork/cog/input_condition.hh"),
             Header(CLK_REPO, "clockwork/cog/input_view.hh"),
             Header(CLK_REPO, "clockwork/cog/simple_cog.hh"),
+            Header(CLK_REPO, "clockwork/common/abstract_cog.hh"),
+            Header(CLK_REPO, "clockwork/common/abstract_cog_queue.hh"),
             Header(CLK_REPO, "clockwork/common/process_description.hh"),
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
         },
@@ -176,7 +202,7 @@ class CppContext:
         },
     }
 
-    def __init__(self) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self) -> None:
         """Construct a new context."""
         self.includes: set[Include] = set()
 
@@ -350,7 +376,7 @@ class CppModuleChunks:
         )
 
 
-def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, current_repo: str) -> CcLibrary:
+def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, module_id: ModuleID) -> CcLibrary:
     """Generate a CcLibrary target."""
     suffixes = ("hh", "inl", "cc")
     # Paths are relative to the module's directory.
@@ -366,7 +392,8 @@ def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, current_re
         for include in chunk.context.get_includes():
             if (
                 isinstance(include, Header)
-                and (target_label := include.target_label(current_repo))
+                and not isinstance(include, MaybeHeader)
+                and (target_label := include.target_label(module_id.repo))
                 and target_label != this_target_label
             ):
                 deps.add(target_label)
@@ -376,31 +403,38 @@ def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, current_re
         hdrs=hdrs,
         srcs=srcs,
         deps=sorted(deps),
-        data=[],
+        data=[
+            module_to_clk(module_id.repo, module_id),
+        ],
     )
 
 
-def as_cc_binary(cpp_mod: CppModuleChunks, name: str, package: Path, current_repo: str) -> CcBinary:
+def as_cc_binary(cpp_mod: CppModuleChunks, name: str, package: Path, module_id: ModuleID) -> CcBinary:
     """Generate a CcBinary target."""
     # A cc_binary is pretty much a cc_library without headers.
     # Construct a cc_library and shove the hdrs into srcs.
-    cc_library = as_cc_library(cpp_mod, name, package, current_repo)
+    cc_library = as_cc_library(cpp_mod, name, package, module_id)
+
+    clk_target = module_to_clk(module_id.repo, module_id)
+    data = [*cc_library.data]
+    data.remove(clk_target)
 
     return CcBinary(
         name=cc_library.name,
         srcs=[*cc_library.hdrs, *cc_library.srcs],
         deps=cc_library.deps,
-        data=cc_library.data,
+        # The library adds an extra dependency on the clockwork file target
+        data=data,
     )
 
 
 def as_cc_binary_with_embedded_py(
-    cpp_mod: CppModuleChunks, name: str, package: Path, py_deps: list[Label], current_repo: str
+    cpp_mod: CppModuleChunks, name: str, package: Path, py_deps: list[Label], module_id: ModuleID
 ) -> CcBinaryWithEmbeddedPy:
     """Generate a CcBinary target."""
-    # A cc_binary_with_embedded_py is pretty much  a cc_binary without py_deps.
+    # A cc_binary_with_embedded_py is pretty much  a cc_binary with py_deps.
     # Construct a cc_binary and add py_deps.
-    cc_binary = as_cc_binary(cpp_mod, name, package, current_repo)
+    cc_binary = as_cc_binary(cpp_mod, name, package, module_id)
 
     return CcBinaryWithEmbeddedPy(
         name=cc_binary.name,

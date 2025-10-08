@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/logging/channel_type.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/log_writer_config.hh"
@@ -46,19 +47,19 @@ TEST_CASE("Read deterministic logging config from files")
   constexpr auto publisher_channel_name = "publisher_channel";
   constexpr auto writer_channel_name = "writer_channel";
 
-  const std::shared_ptr<clockwork_logging::LogWriterConfigTap> log_publisher_config =
-    std::make_shared<clockwork_logging::LogWriterConfigTap>();
+  const std::shared_ptr<clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config =
+    std::make_shared<clockwork_logging::ChannelPublisherConfigTap>();
   const std::shared_ptr<clockwork_logging::LogWriterConfigTap> log_writer_config =
     std::make_shared<clockwork_logging::LogWriterConfigTap>();
 
-  log_publisher_config->get_underlying_channels().resize(1);
-  log_publisher_config->get_underlying_channels().at(0).get_underlying_channel_name().set_truncate(
+  channel_publisher_config->get_underlying_channels().resize(1);
+  channel_publisher_config->get_underlying_channels().at(0).get_underlying_channel_name().set_truncate(
     publisher_channel_name);
 
   log_writer_config->get_underlying_channels().resize(1);
   log_writer_config->get_underlying_channels().at(0).get_underlying_channel_name().set_truncate(writer_channel_name);
 
-  const auto publisher_bytes = std::as_bytes(jewels::as_single_item_span(*log_publisher_config));
+  const auto publisher_bytes = std::as_bytes(jewels::as_single_item_span(*channel_publisher_config));
   const jewels::filesystem::File publisher_file{publisher_config_path.native(), O_CREAT | O_WRONLY};
   REQUIRE(
     ::write(publisher_file.descriptor(), publisher_bytes.data(), publisher_bytes.size()) ==
@@ -74,23 +75,25 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::deterministic,
-      .log_publisher_config_path = publisher_config_path,
+      .channel_publisher_config_path = publisher_config_path,
       .log_writer_config_path = writer_config_path};
 
     auto logging_config = get_deterministic_logging_config(params);
     REQUIRE(logging_config);
-    REQUIRE(logging_config->log_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
+    REQUIRE(
+      logging_config->channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
     REQUIRE(logging_config->log_writer_config->get_channels().begin()->get_channel_name() == writer_channel_name);
   }
   SECTION("Publisher specified, not writer")
   {
     auto params = ExecutionParams{
-      .execution_mode = ExecutionMode::deterministic, .log_publisher_config_path = publisher_config_path};
+      .execution_mode = ExecutionMode::deterministic, .channel_publisher_config_path = publisher_config_path};
 
     auto logging_config = get_deterministic_logging_config(params);
 
     REQUIRE(logging_config);
-    REQUIRE(logging_config->log_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
+    REQUIRE(
+      logging_config->channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
     REQUIRE(!logging_config->log_writer_config);
   }
 
@@ -98,7 +101,7 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::deterministic,
-      .log_publisher_config_path = publisher_config_path,
+      .channel_publisher_config_path = publisher_config_path,
       .log_writer_config_path = "/dsajf"};
 
     auto logging_config = get_deterministic_logging_config(params);
@@ -110,13 +113,13 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::online,
-      .log_publisher_config_path = publisher_config_path,
+      .channel_publisher_config_path = publisher_config_path,
       .log_writer_config_path = writer_config_path};
 
     auto logging_config = get_deterministic_logging_config(params);
 
     REQUIRE(logging_config);
-    REQUIRE(!logging_config->log_publisher_config);
+    REQUIRE(!logging_config->channel_publisher_config);
     REQUIRE(!logging_config->log_writer_config);
   }
 }
@@ -145,11 +148,12 @@ TEST_CASE("populate_start_and_end_times")
   clockwork_logging::offboard::Writer writer{memres};
   REQUIRE(writer.open(expected_log_path));
 
-  REQUIRE(writer.create_channel(clockwork_logging::offboard::LoggedChannelMetadata{
-    .channel_name = channel_name,
-    .message_encoding = clockwork_logging::MessageEncoding::tachyon,
-    .channel_type = clockwork_logging::ChannelType::regular,
-  }));
+  REQUIRE(writer.create_channel(
+    clockwork_logging::offboard::LoggedChannelMetadata{
+      .channel_name = channel_name,
+      .message_encoding = clockwork_logging::MessageEncoding::tachyon,
+      .channel_type = clockwork_logging::ChannelType::regular,
+    }));
 
   // Write a log file with the first message being our start time and last with the end time.
   auto logged_message = clockwork_logging::offboard::LoggedMessage{
@@ -167,7 +171,7 @@ TEST_CASE("populate_start_and_end_times")
      "--deterministic-runner",
      "--input-log-uri",
      expected_log_path.c_str(),
-     "--log-publisher-config",
+     "--channel-publisher-config",
      "some_path/another"}};
 
   cmd.parse(args.size(), args.data());

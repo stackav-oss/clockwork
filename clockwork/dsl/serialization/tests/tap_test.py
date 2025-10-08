@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pod module."""
 
@@ -138,60 +139,63 @@ def test_pod(tap_msg_cpp_target: cpp_target.CppTarget) -> None:
     assert dial_cpp_mod is None
     implementation_str = cpp_mod.implementation_chunk.render_str(render_includes=False)
     expected_tachyon_checks = """
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), array_of_primitives) == 0);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().array_of_primitives) == 48);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), array_of_array) == 48);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().array_of_array) == 40);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), array_of_schema) == 88);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().array_of_schema) == 24);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), uuid) == 112);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().uuid) == 16);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), uuid_different_namespace) == 128);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().uuid_different_namespace) == 16);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), var_string) == 144);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().var_string) == 16);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), integer) == 160);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().integer) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), nested_schema) == 168);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().nested_schema) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), duration) == 176);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().duration) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), sync_time) == 184);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().sync_time) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), strong_type) == 192);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().strong_type) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), optional) == 200);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().optional) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), fixed_array) == 208);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().fixed_array) == 8);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), floating_point) == 216);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().floating_point) == 4);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), external_strong_type) == 220);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().external_strong_type) == 4);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), boolean) == 224);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().boolean) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), default_enum) == 225);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().default_enum) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), enum_with_init) == 226);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().enum_with_init) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), bool_with_init) == 227);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().bool_with_init) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), default_flags) == 228);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().default_flags) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), flags_with_init) == 229);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().flags_with_init) == 1);
-static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg>{}), padding_0_) == 230);
-static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg>>().padding_0_) == 2);
-static_assert(sizeof(::clockwork::Tachyon<::clockwork::testing::TapMsg>) == 232);
-static_assert(alignof(::clockwork::Tachyon<::clockwork::testing::TapMsg>) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), array_of_primitives) == 0);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().array_of_primitives) == 48);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), array_of_array) == 48);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().array_of_array) == 40);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), array_of_schema) == 88);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().array_of_schema) == 24);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), uuid) == 112);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().uuid) == 16);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), uuid_different_namespace) == 128);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().uuid_different_namespace) == 16);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), var_string) == 144);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().var_string) == 16);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), integer) == 160);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().integer) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), nested_schema) == 168);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().nested_schema) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), duration) == 176);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().duration) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), sync_time) == 184);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().sync_time) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), strong_type) == 192);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().strong_type) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), optional) == 200);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().optional) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), fixed_array) == 208);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().fixed_array) == 8);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), floating_point) == 216);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().floating_point) == 4);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), external_strong_type) == 220);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().external_strong_type) == 4);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), integer_with_init) == 224);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().integer_with_init) == 4);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), boolean) == 228);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().boolean) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), default_enum) == 229);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().default_enum) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), enum_with_init) == 230);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().enum_with_init) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), bool_with_init) == 231);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().bool_with_init) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), default_flags) == 232);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().default_flags) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), flags_with_init) == 233);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().flags_with_init) == 1);
+static_assert(offsetof(decltype(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>{}), padding_0_) == 234);
+static_assert(sizeof(::std::declval<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>().padding_0_) == 6);
+static_assert(sizeof(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>) == 240);
+static_assert(alignof(::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>) == 8);
+static_assert(::jewels::meta::ImplicitLifetimeType<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>);
 """.strip()
     assert expected_tachyon_checks in implementation_str
 
     expected_tap_checks = """
-static_assert(sizeof(::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg>>) == 232);
-static_assert(alignof(::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg>>) == 8);
-static_assert(::jewels::meta::ImplicitLifetimeType<::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg>>>);
-static_assert(::std::is_same<::clockwork::Tappy<::clockwork::testing::TapMsg>,::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg>>>::value);
+static_assert(sizeof(::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>) == 240);
+static_assert(alignof(::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>) == 8);
+static_assert(::jewels::meta::ImplicitLifetimeType<::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>>);
+static_assert(::std::is_same<::clockwork::Tappy<::clockwork::testing::TapMsg<234>>,::clockwork::Tap<::clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>>::value);
     """.strip()
     assert expected_tap_checks in implementation_str
 
@@ -203,6 +207,7 @@ def test_to_schema_from_representation(tap_msg_cpp_target: cpp_target.CppTarget)
         "ConstructorContainer",
         "PaddedMsg",
         "TapMsg",
+        "TapMsg2",
         "SubMsg",
         "GenericSubMsg",
         "GenericMsg",
@@ -229,6 +234,7 @@ def test_to_schema_from_interface(tap_msg_cpp_target: cpp_target.CppTarget) -> N
         "ConstructorContainer",
         "PaddedMsg",
         "TapMsg",
+        "TapMsg2",
         "SubMsg",
         "GenericSubMsg",
         "GenericMsg",
@@ -302,7 +308,11 @@ def test_to_cpp_struct_non_generic(tapmsg_module: node.Module) -> None:
     assert uuid.named_type.argument_type.arguments == [
         typereg.get_cpp_type(tapmsg_module.context, clkbuiltins.SCHEMA_TAG_TYPE)
     ]
-    assert not struct.template_param
+    assert len(struct.template_param) == 1
+    assert struct.template_param[0].argument_name == "signed_value"
+    arg_type = struct.template_param[0].argument_type
+    assert isinstance(arg_type, types.CppType)
+    assert arg_type.type_name == "int32_t"
 
 
 def test_to_cpp_fields_non_generic(fs_importer: importer.FilesystemImporter) -> None:
@@ -435,7 +445,7 @@ def test_to_class_local_defs() -> None:
     args = {
         "some_type": clkbuiltins.UINT8,
         "some_value": primitive.DecimalLiteral(
-            value=Decimal("123"),
+            value=Decimal(123),
             type_info=clkbuiltins.INT64,
             module=MagicMock(),
             cst_node=None,

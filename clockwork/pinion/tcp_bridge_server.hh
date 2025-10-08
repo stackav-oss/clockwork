@@ -15,12 +15,14 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <array>
+#include <wise_enum.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <memory_resource>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,15 +30,31 @@
 namespace clockwork::pinion
 {
 
+WISE_ENUM_CLASS(
+  (TcpBridgeServerMode, uint8_t),
+  production,  // Production mode
+  overrun_test // Overrun test mode, ignore notifies from the channel observer
+)
+
 ///
 /// A simple TCP server that exports messages from an ShmSubscriber to a remote
 /// TCP client.
+///
+/// @param[in] memres Memmory resource
+/// @param[in] epoll EPoll manager
+/// @param[in] channel_name Channel name
+/// @param[in] subscriber Pinion channel subscriber
+/// @param[in] listen_socket Socket used to listen for new connections
+/// @param[in] listen_port Port used to listen for new connections
+/// @param[in] max_clients Maximum number of client connections
+/// @param[in] diagnostics_counters Diagnostics counters
+/// @param[in] mode Bridge server mode (production or unit test)
 ///
 // NOLINTNEXTLINE(fuchsia-multiple-inheritance) Required to implement these interfaces.
 struct TcpBridgeServer : public AbstractEPollCallback, public Observer
 {
 public:
-  explicit TcpBridgeServer(
+  TcpBridgeServer(
     jewels::memory::MemoryResource memres,
     jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
     std::string_view channel_name,
@@ -44,7 +62,8 @@ public:
     TcpSocket&& listen_socket,
     uint16_t listen_port,
     size_t max_clients,
-    std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters);
+    std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters,
+    TcpBridgeServerMode mode = TcpBridgeServerMode::production);
 
   ~TcpBridgeServer() override = default;
 
@@ -62,12 +81,14 @@ public:
   /// @param[in] epoll EPoll manager pointer
   /// @param[in] diagnostics_counters TCP bridge diagnostics counters
   /// @return Shared pointer to the server or a null pointer on error
+  /// @param[in] mode Bridge server mode (production or unit test)
   [[nodiscard]] static std::shared_ptr<TcpBridgeServer> make(
     jewels::memory::MemoryResource memres,
     const TcpBridgeServerConfigTap& config,
     SubscriberHandle&& subscriber,
     jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
-    const std::shared_ptr<TcpBridgeDiagnosticsCounters>& diagnostics_counters);
+    const std::shared_ptr<TcpBridgeDiagnosticsCounters>& diagnostics_counters,
+    TcpBridgeServerMode mode = TcpBridgeServerMode::production);
 
   /// Returns the file descriptor of the TCP socket.
   [[nodiscard]] int listen_fd() const;
@@ -91,6 +112,10 @@ public:
   /// last data segment in a message was dropped.
   void send_null_header_if_waiting_for_ack();
 
+  /// Test whether the the server is waiting for an acknowledgement on any socket
+  /// @return True if any socket is waiting for an acknowledsgement
+  [[nodiscard]] bool is_waiting_for_ack() const;
+
   /// Get the TCP port number that the server is listening on.
   /// Used in unit tests.
   /// @return TCP port number
@@ -106,14 +131,19 @@ private:
   struct Client : AbstractEPollCallback
   {
   public:
-    Client(
-      const jewels::memory::MemoryResource& memres,
-      jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
-      std::string_view channel_name,
-      jewels::filesystem::FileDescriptor client_fd,
-      jewels::memory::ObjectPtr<SubscriberHandle> subscriber,
-      std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters,
-      std::shared_ptr<TcpBridgeClientServerCounters> server_counters);
+    /// Client constructor arguments
+    struct ClientArgs
+    {
+      jewels::memory::MemoryResource memres;
+      jewels::memory::ObjectPtr<AbstractEPollManager> epoll;
+      std::string_view channel_name;
+      jewels::filesystem::FileDescriptor client_fd;
+      jewels::memory::ObjectPtr<SubscriberHandle> subscriber;
+      std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters;
+      std::shared_ptr<TcpBridgeClientServerCounters> server_counters;
+    };
+
+    explicit Client(ClientArgs args);
 
     ~Client() noexcept override = default;
 
@@ -134,10 +164,14 @@ private:
     /// Receive any acknowledgement messages from the receiver
     void receive_acknowledgements();
 
-    /// Send a null header on any idle sockets that have not received an acknowledgement
+    /// Send a null header if the socket is idle and has not received an acknowledgement
     /// for the last message sent to avoid relying on tail loss recovery to detect that the
     /// last data segment in a message was dropped.
     void send_null_header_if_waiting_for_ack();
+
+    /// Test whether the the socket is idle and waiting for an acknowledgement
+    /// @return True if the socket is waiting for an acknowledsgement
+    [[nodiscard]] bool is_waiting_for_ack() const;
 
   private:
     /// Flush the pending payload.
@@ -148,23 +182,17 @@ private:
     jewels::filesystem::FileDescriptor client_fd_;
     jewels::memory::ObjectPtr<SubscriberHandle> subscriber_;
 
-    /// Message header
-    TcpMessageHeader header_{};
-
     /// Null message header for kicking the receiver
     TcpMessageHeader null_header_{};
 
-    /// Message tail
-    TcpMessageTail tail_{};
-
     /// Last message received on the channel
-    BufferIterator last_message_;
+    BufferIterator last_message_{};
 
     // If a prior call to sendmsg() only partially sent its payload, this member
     // will hold the remainder so it can be sent later. In this case
     // last_message_ will also refer to the slot that contains the unfinished
-    // message. In the common case, this should hold std::nullopt.
-    std::optional<std::array<struct iovec, 3>> payload_{};
+    // message. In the common case, this should hold be empty
+    std::span<std::byte> payload_;
 
     /// Bridge diagnostics counters
     std::shared_ptr<TcpBridgeDiagnosticsCounters> diagnostics_counters_;
@@ -177,6 +205,9 @@ private:
 
     /// Send buffer
     std::pmr::vector<std::byte> send_buffer_;
+
+    /// Current message source commit timestamp
+    int64_t current_source_commit_timestamp_{};
 
     /// Current message receive time
     jewels::time::SyncTime current_receive_time_;
@@ -209,6 +240,9 @@ private:
 
   /// Bridge server counters
   std::shared_ptr<TcpBridgeClientServerCounters> server_counters_;
+
+  /// Bridge server mode (unit test or production)
+  TcpBridgeServerMode mode_;
 };
 
 } // namespace clockwork::pinion

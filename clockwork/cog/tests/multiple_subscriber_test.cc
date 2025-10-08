@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_conditions.hh"
-#include "clockwork/cog/cog_configs.hh"
-#include "clockwork/cog/cog_diagnostics.hh"
 #include "clockwork/cog/cog_inputs.hh"
-#include "clockwork/cog/cog_memory_resources.hh"
 #include "clockwork/cog/cog_publishers.hh"
 #include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/cog_states.hh"
@@ -14,6 +11,7 @@
 #include "clockwork/cog/detail.hh"
 #include "clockwork/cog/input_condition.hh"
 #include "clockwork/cog/simple_cog.hh"
+#include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/dial/cond_messages_present.hh"
@@ -40,7 +38,6 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
@@ -48,9 +45,11 @@
 #include <cstdint>
 #include <memory>
 #include <memory_resource>
+#include <optional>
 #include <ranges>
 #include <string_view>
 #include <sys/epoll.h>
+#include <sys/types.h>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -81,18 +80,11 @@ struct PublisherCogDial
 };
 
 /// An periodic publisher cog for testing multiple subscribers
-struct PublisherCogPolicy
+struct PublisherCogPolicy : testing::FakeCogPolicy<0, 1>
 {
   static constexpr auto cog_id =
     jewels::Uuid<common::EndpointClassId>::from_string("798d020b-40e2-4482-9b9a-e18d9d410697").value();
   static constexpr auto name = "clockwork::PublisherCogPolicy";
-  static constexpr auto simulated_execution_duration = std::chrono::milliseconds(0);
-
-  using MemoryResourcesType = CogMemoryResources<>;
-  using ConfigsType = CogConfigs<>;
-  using InputsType = CogInputs<>;
-  using ConditionsType = CogConditions<>;
-  using DiagnosticsType = CogDiagnostics<>;
 
   struct StatePolicy
   {
@@ -119,6 +111,7 @@ struct PublisherCogPolicy
     [[maybe_unused]] static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("64386888-7392-45a0-a45f-28696f3d3c22").value();
     static constexpr std::string_view name = "PublisherPolicy";
+    static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
   };
   using PublishersType = CogPublishers<OutputPolicy>;
 
@@ -142,6 +135,7 @@ struct PublisherCogPolicy
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
     typename DiagnosticsType::ReporterType& /*diagnostics*/)
   {
+    // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return PublisherCogDial{
       .start_time = params.start_time,
       .state = jewels::memory::make_non_null_from_ref(*std::get<0>(states)),
@@ -173,18 +167,11 @@ struct SubscriberCogDial
 };
 
 /// An periodic publisher cog for testing multiple subscribers
-struct SubscriberCogPolicy
+struct SubscriberCogPolicy : testing::FakeCogPolicy<1, 0>
 {
   static constexpr auto cog_id =
     jewels::Uuid<common::EndpointClassId>::from_string("4475c83e-9318-424b-a5df-0026cf9e9496").value();
   static constexpr auto name = "clockwork::SubscriberCogPolicy";
-  static constexpr auto simulated_execution_duration = std::chrono::milliseconds(0);
-
-  using MemoryResourcesType = CogMemoryResources<>;
-  using ConfigsType = CogConfigs<>;
-  using DiagnosticsType = CogDiagnostics<>;
-  using TimersType = CogTimers<>;
-  using PublishersType = CogPublishers<>;
 
   struct StatePolicy
   {
@@ -217,6 +204,8 @@ struct SubscriberCogPolicy
       jewels::Uuid<common::EndpointClassId>::from_string("ac2c14ce-b909-4793-af02-7d2dbe27a2b1").value();
     static constexpr std::string_view name = "InputPolicy";
     static constexpr auto max_view_size = 1U;
+    static constexpr std::optional<::ssize_t> safety_margin{};
+    static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
   };
@@ -243,6 +232,7 @@ struct SubscriberCogPolicy
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
     typename DiagnosticsType::ReporterType& /*diagnostics*/)
   {
+    // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return SubscriberCogDial{
       .start_time = params.start_time,
       .state = jewels::memory::make_non_null_from_ref(*std::get<0>(states)),
@@ -305,7 +295,7 @@ TEST_CASE("multiple subscribers", "[simple_cog]")
   REQUIRE(subscriber1_observer);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(**subscriber1_observer)));
 
-  REQUIRE(publisher_cog->set_handle(PublisherCogPolicy::OutputPolicy::endpoint_id, std::move(publisher)));
+  REQUIRE(publisher_cog->set_handle(PublisherCogPolicy::OutputPolicy::endpoint_id, std::move(publisher), true));
 
   REQUIRE(publisher_cog->validate());
   REQUIRE(subscriber0_cog->validate());

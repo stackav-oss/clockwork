@@ -29,7 +29,7 @@ jewels::memory::ObjectPtr<Type> start_lifetime_as(std::span<Byte, sizeof(Type)> 
   // change the values.  Otherwise this wouldn't be able to be used
   // for const inputs.
   return jewels::memory::ObjectPtr<Type>{
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast) Not modifying underlying ptr.
     std::launder(static_cast<Type*>(std::memmove(const_cast<void*>(ptr), ptr, sizeof(Type))))};
 }
 

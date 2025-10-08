@@ -3,6 +3,7 @@
 
 #include "jewels/container/circular_buffer.hh"
 
+#include "jewels/container/circular_buffer_state_clk_cc.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 
@@ -10,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -152,22 +152,38 @@ CircularBuffer<Policy, Container>::CircularBuffer(CircularBuffer&& other) noexce
 }
 
 template <class Policy, class Container>
-jewels::expected<CircularBuffer<Policy, Container>, std::string_view>
+jewels::expected<CircularBuffer<Policy, Container>, CircularBufferConstructError>
 CircularBuffer<Policy, Container>::try_make(size_t n, jewels::memory::MemoryResource resource)
 {
   return try_make(std::pmr::vector<typename Policy::storage_type>(n, resource));
 }
 
 template <class Policy, class Container>
-jewels::expected<CircularBuffer<Policy, Container>, std::string_view>
+jewels::expected<CircularBuffer<Policy, Container>, CircularBufferConstructError>
 CircularBuffer<Policy, Container>::try_make(Container&& storage)
+{
+  return try_make(
+    std::move(storage),
+    TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{.offset = 0, .size = 0}});
+}
+
+template <class Policy, class Container>
+jewels::expected<CircularBuffer<Policy, Container>, CircularBufferConstructError>
+CircularBuffer<Policy, Container>::try_make(Container&& storage, TappyCircularBufferState state)
 {
   if (storage.empty())
   {
-    static constexpr std::string_view zero_size_error{"Cannot make a circular buffer with size 0."};
-    return jewels::unexpected{zero_size_error};
+    return jewels::unexpected{CircularBufferConstructError::empty_storage};
   }
-  return CircularBuffer{std::move(storage)};
+  if (state.get_offset() >= storage.size())
+  {
+    return jewels::unexpected{CircularBufferConstructError::invalid_state_offset};
+  }
+  if (state.get_size() > storage.size())
+  {
+    return jewels::unexpected{CircularBufferConstructError::invalid_state_size};
+  }
+  return CircularBuffer{std::move(storage), state};
 }
 
 template <class Policy, class Container>
@@ -180,12 +196,12 @@ CircularBuffer<Policy, Container>::CircularBuffer(std::in_place_t /*unused*/, Ar
 
 template <class Policy, class Container>
 template <class... Args>
-auto CircularBuffer<Policy, Container>::emplace_back(Args&&... args) -> jewels::expected<iterator, std::string_view>
+auto CircularBuffer<Policy, Container>::emplace_back(Args&&... args)
+  -> jewels::expected<iterator, CircularBufferEmplaceError>
 {
   if (full())
   {
-    constexpr std::string_view error{"Cannot emplace back element.  Buffer is full."};
-    return jewels::unexpected(error);
+    return jewels::unexpected{CircularBufferEmplaceError::buffer_full};
   }
   return emplace_back_impl(std::forward<Args>(args)...);
 }
@@ -214,12 +230,12 @@ auto CircularBuffer<Policy, Container>::emplace_back_impl(Args&&... args) -> ite
 
 template <class Policy, class Container>
 template <class... Args>
-auto CircularBuffer<Policy, Container>::emplace_front(Args&&... args) -> jewels::expected<iterator, std::string_view>
+auto CircularBuffer<Policy, Container>::emplace_front(Args&&... args)
+  -> jewels::expected<iterator, CircularBufferEmplaceError>
 {
   if (full())
   {
-    constexpr std::string_view error{"Cannot emplace back element.  Buffer is full."};
-    return jewels::unexpected(error);
+    return jewels::unexpected{CircularBufferEmplaceError::buffer_full};
   }
   return emplace_front_impl(std::forward<Args>(args)...);
 }
@@ -333,15 +349,27 @@ bool CircularBuffer<Policy, Container>::full() const
 }
 
 template <class Policy, class Container>
+TappyCircularBufferState CircularBuffer<Policy, Container>::state() const
+{
+  return TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+    .offset = static_cast<size_t>(begin_.position()),
+    .size = size(),
+  }};
+}
+
+template <class Policy, class Container>
 CircularBuffer<Policy, Container>::~CircularBuffer()
 {
   clear();
 }
 
 template <class Policy, class Container>
-CircularBuffer<Policy, Container>::CircularBuffer(Container&& storage)
-  : storage_{std::move(storage)}
+CircularBuffer<Policy, Container>::CircularBuffer(Container&& storage, TappyCircularBufferState state)
+  : storage_{std::move(storage)},
+    begin_{static_cast<int64_t>(state.get_offset()), 0U},
+    end_{static_cast<int64_t>(state.get_offset()), 0U}
 {
+  end_.increment(static_cast<std::ptrdiff_t>(state.get_size()), static_cast<std::ptrdiff_t>(storage_.size()));
 }
 
 } // namespace jewels::container

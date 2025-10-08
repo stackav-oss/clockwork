@@ -6,6 +6,7 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/meta/concepts.hh"
 
+#include <cstddef>
 #include <span>
 #include <type_traits>
 

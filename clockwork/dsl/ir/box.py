@@ -30,6 +30,7 @@ from clockwork.dsl.ir import (
     udp,
 )
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -89,10 +90,11 @@ class BoxTemplate(
             cst_node=cst_node,
         )
 
+    @override
     def make_instance(
         self,
         *,
-        cst_node: cst.NewStmt | None,  # noqa: ARG002 (Required for the interface, box is an unresolved syntax tree)
+        cst_node: cst.NewStmt | None,
         module: node.Module,
         scope: node.Scope,
         name: str,
@@ -118,6 +120,7 @@ class BoxTemplate(
         result.resolve()
         return result
 
+    @override
     def produce_casing_entities(self) -> cpp_executable.CasingEntities:
         """Produce a set of casing entities."""
         instance = self.make_instance(cst_node=None, module=self.module, scope=self.scope, name="__auto__", doc=None)
@@ -149,7 +152,7 @@ class ResolvedBox(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttrib
                 result.cogs[instance.cog_class.value_key()] = cpp_cog
                 _add_casing_cog_members(result, instance)
                 if instance.cog_class.python_options:
-                    assert isinstance(instance.cst_node, cst.NewStmt)  # noqa: S101 (for mypy)
+                    assert isinstance(instance.cst_node, cst.NewStmt)
                     result.python_cogs[instance.cog_class.value_key()] = cpp_executable.CppPythonCog(
                         cst_node=instance.cst_node, module=instance.module, cpp_cog=cpp_cog
                     )
@@ -163,12 +166,12 @@ class ResolvedBox(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttrib
                 if instance.socket.options:
                     cpp_udp_socket.options = cpp_executable.CppSocketOptions(instance.socket.options.options)
                 result.udp_sockets[instance.socket.value_key()] = cpp_udp_socket
-                assert isinstance(instance.socket.message_type, typesys.Instantiation)  # noqa: S101 (for mypy)
+                assert isinstance(instance.socket.message_type, typesys.Instantiation)
                 result.add_representation(self.module.context, instance.socket.message_type, self)
             elif isinstance(instance, audio.AudioSourceInstance):
                 cpp_audio_source = cpp_executable.CppAudioSource(audio_source_ir=instance.source)
                 result.audio_sources[instance.source.value_key()] = cpp_audio_source
-                assert isinstance(instance.source.message_type, typesys.Instantiation)  # noqa: S101 (for mypy)
+                assert isinstance(instance.source.message_type, typesys.Instantiation)
                 result.add_representation(self.module.context, instance.source.message_type, self)
             elif isinstance(instance, MemoryResourceInstance | ProcessInstance):
                 # These do not require instantiation in a casing
@@ -187,10 +190,13 @@ def _add_casing_cog_members(entities: cpp_executable.CasingEntities, instance: c
                 entities.interfaces[iface_info] = iface_info
             else:
                 entities.externs[iface_info.value_key()] = iface_info
-        elif isinstance(member.member, cog.InputDef | cog.OutputDef):
+        elif isinstance(member.member, cog.InputDef | cog.OutputDef | cog.MetricsOutputDef):
             iface_info = member.member.get_interface_info()
             entities.interfaces[iface_info] = iface_info
-        elif isinstance(member.member, cog.ConditionDef | diagnostics.DiagnosticsDef | cog.ResourceDef):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        elif isinstance(
+            member.member,
+            cog.ConditionDef | diagnostics.DiagnosticsDef | diagnostics.InfraDiagnosticsDef | cog.ResourceDef,
+        ):  # pyright: ignore[reportUnnecessaryIsInstance]: Keep this explicit so that if other members are added we can fail the check below.
             # These don't have any casing entities associated with them
             pass
         else:
@@ -272,7 +278,7 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
                 msg = self.append_error_line(f"Attempt to resolve Box twice: {self}")
                 raise RuntimeError(msg)  # noqa: TRY004 (Resolving twice is a runtime error)
             instance.resolve()
-            assert isinstance(instance.typespec, typesys.InstantiatableEntity)  # noqa: S101  (ensured by resolve())
+            assert isinstance(instance.typespec, typesys.InstantiatableEntity)
             new_instance = instance.typespec.make_instance(
                 cst_node=instance.cst_node,
                 module=self.module,
@@ -345,9 +351,10 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
             if isinstance(instance, Box):
                 instance._apply_policy_recursive(system_module, policy_data)  # noqa: SLF001 (target is also a Box instance)
             else:
-                assert isinstance(instance, typesys.Value)  # noqa: S101 (for mypy)
+                assert isinstance(instance, typesys.Value)
                 policy.try_bind_policy_data(system_module, policy_data, instance)
 
+    @override
     def attribute(self, name: str) -> typesys.Value | None:
         """Look up a definition in the membership entity.
 
@@ -356,7 +363,7 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
         """
         member = self.inner_scope.lookup(name)
         if member is not None:
-            assert isinstance(member, typesys.Value)  # noqa: S101  (invariant)
+            assert isinstance(member, typesys.Value)
             return member
         return None
 
@@ -390,9 +397,14 @@ class Connection(node.CstNode[cst.ConnectStmt], node.DocableEntity):
             isinstance(self.source, pubsub.Channel)
             and isinstance(self.target, cog.CogInstanceMember)
             and isinstance(self.target.member, cog.InputDef)
-            and _input_needs_safety_margin(self.target)
         ):
-            _validate_safety_margin(self.target, self.source)
+            if _input_needs_safety_margin(self.target):
+
+                _validate_safety_margin(self.target, self.source, self.module)
+
+
+            _validate_emergency_margin(self.target, self.source)
+            _validate_skip_threshold(self.target, self.source)
 
 
 def _input_needs_safety_margin(target: cog.CogInstanceMember[cog.InputDef]) -> bool:
@@ -411,22 +423,70 @@ def _input_needs_safety_margin(target: cog.CogInstanceMember[cog.InputDef]) -> b
 def _get_safety_margin(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> int:
     """Return the the safety margin required by a cog input."""
     view_params = target.member.view_params
-    assert isinstance(view_params.safety_margin, int)  # noqa: S101 (invariant. ensured by input view resolution)
-    assert isinstance(view_params.max_msgs, int)  # noqa: S101 (invariant. ensured by input view resolution)
-    if view_params.safety_margin == view_params.max_msgs:
+    assert isinstance(view_params.safety_margin, int)
+    assert isinstance(view_params.max_msgs, int)
+    if view_params.safety_margin == -1:
         # The user didn't specify a margin. Use the default.
         return max(int(channel.num_slots.value) // 2, view_params.max_msgs)
 
     return view_params.safety_margin
 
 
-def _validate_safety_margin(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> None:
+
+def _validate_safety_margin(
+    target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel, module: node.Module
+) -> None:
     """Raises a ValueError if the safety margin requested by a user is unsatisfiable for the given channel."""
     view_params = target.member.view_params
-    assert isinstance(view_params.max_msgs, int)  # noqa: S101 (invariant. the view would have failed to resolve otherwise)
+    assert isinstance(view_params.max_msgs, int)
     margin = _get_safety_margin(target, channel)
     if view_params.max_msgs + margin > channel.num_slots.value:
-        msg = f"Channel {channel.name} is not large enough ({channel.num_slots.value} messages) to accommodate safety margin ({margin} messages) for {target.cog_instance.name}.{target.member.name} ({view_params.max_msgs} messages)."
+        msg = node.append_error_line(
+            view_params.cst_node,
+            module,
+            f"Channel {channel.name} is not large enough ({channel.num_slots.value} messages) to accommodate safety margin ({margin} messages) for {target.cog_instance.name}.{target.member.name} ({view_params.max_msgs} messages).",
+        )
+        raise ValueError(msg)
+
+    emergency_margin = int(max(2, 0.1 * int(channel.num_slots.value)))
+    if margin < emergency_margin:
+        msg = node.append_error_line(
+            view_params.cst_node,
+            module,
+            f"Safety margin ({margin} messages) for {target.cog_instance.name}.{target.member.name} is less than the emergency margin for {channel.name} ({emergency_margin} messages).",
+        )
+        raise ValueError(msg)
+
+
+
+def _validate_emergency_margin(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> None:
+    """Raises a ValueError if the emergency margin requested by a user is unsatisfiable for the given channel."""
+    view_params = target.member.view_params
+    assert isinstance(view_params.max_msgs, int)
+
+    emergency_margin = int(max(2, 0.1 * int(channel.num_slots.value)))
+    if view_params.max_msgs + emergency_margin >= channel.num_slots.value:
+        msg = node.append_error_line(
+            view_params.cst_node,
+            view_params.module,
+            f"Channel {channel.name} is not large enough ({channel.num_slots.value} messages) to accommodate emergency margin ({emergency_margin} messages) for {target.cog_instance.name}.{target.member.name} ({view_params.max_msgs} messages).",
+        )
+        raise ValueError(msg)
+
+
+def _validate_skip_threshold(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> None:
+    """Raises a ValueError if the preemptive skip threshold requested by a user is too large for the given channel."""
+    view_params = target.member.view_params
+    if not isinstance(view_params.skip_threshold, int):
+        return
+
+    assert isinstance(view_params.max_msgs, int)
+    if view_params.max_msgs + view_params.skip_threshold > channel.num_slots.value:
+        msg = node.append_error_line(
+            view_params.cst_node,
+            view_params.module,
+            f"Skip treshold ({view_params.skip_threshold} messages) and view for {target.cog_instance.name}.{target.member.name} ({view_params.max_msgs} messages) sum to more than the capacity of {channel.name} ({channel.num_slots.value} messages).",
+        )
         raise ValueError(msg)
 
 
@@ -474,7 +534,7 @@ class PolicyApplicationStmt(node.CstNode[cst.PolicyApplyStmt], node.DocableEntit
         if self.resolved_value:
             return self.resolved_value
         policy_data = self.policy_data.evaluate()
-        assert isinstance(policy_data, policy.UnboundPolicyData)  # noqa: S101 (ensured by evaluate)
+        assert isinstance(policy_data, policy.UnboundPolicyData)
         target = self.target.evaluate()
         self.resolved_value = PolicyApplication(
             doc=self.doc,
@@ -495,6 +555,7 @@ class SerializedDataFile(typesys.InstantiatableEntity, typesys.ObjectIdentityVal
     repr_typespec: typesys.Instantiation
     file_path: Path
 
+    @override
     def make_instance(
         self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
     ) -> node.NamedEntity:
@@ -523,7 +584,8 @@ class SerializedDataFileInstance(node.CstNode[cst.NewStmt], node.DocableEntity, 
 class SerializedDataFileFactory(node.NamedEntity, typesys.CallableEntity, typesys.ObjectIdentityValue):
     """A factory supporting DSL Call syntax for creating textproto file references."""
 
-    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
         self,
         ir_node: node.CstNode[cst.Expr] | None,
         module: node.Module,
@@ -573,6 +635,7 @@ class State(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     init_cog_endpoint: cog.CogInstanceMember[cog.StateDef] | None
     memory_resource: MemoryResourceInstance | None
 
+    @override
     def make_instance(
         self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
     ) -> node.NamedEntity:
@@ -603,7 +666,8 @@ class StateInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.Named
 class StateFactory(node.NamedEntity, typesys.CallableEntity, typesys.ObjectIdentityValue):
     """A factory supporting DSL Call syntax for creating state instances."""
 
-    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
         self,
         ir_node: node.CstNode[cst.Expr] | None,
         module: node.Module,
@@ -658,8 +722,8 @@ class StateFactory(node.NamedEntity, typesys.CallableEntity, typesys.ObjectIdent
                 raise TypeError(msg)
         else:
             memres = None
-        assert memres is None or isinstance(memres, MemoryResourceInstance)  # noqa: S101  (for mypy)
-        assert isinstance(repr_typespec, typesys.Instantiation | extern_type.ExternType)  # noqa: S101  (for mypy)
+        assert memres is None or isinstance(memres, MemoryResourceInstance)
+        assert isinstance(repr_typespec, typesys.Instantiation | extern_type.ExternType)
         return State(
             type_info=clkbuiltins.TYPE_TYPE,
             repr_typespec=repr_typespec,
@@ -688,6 +752,7 @@ class MemoryResource(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     resource_type: MemResourceType
     max_size: int
 
+    @override
     def make_instance(
         self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
     ) -> node.NamedEntity:
@@ -718,7 +783,8 @@ class MemoryResourceFactory(node.NamedEntity, typesys.CallableEntity, typesys.Ob
 
     resource_type: MemResourceType
 
-    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
         self,
         ir_node: node.CstNode[cst.Expr] | None,
         module: node.Module,
@@ -764,6 +830,7 @@ class Process(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
 
     executable: cpp_executable.CppExecutable
 
+    @override
     def make_instance(
         self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
     ) -> node.NamedEntity:
@@ -790,7 +857,8 @@ class ProcessInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.Nam
 class ProcessFactory(typesys.CallableEntity, typesys.TypeDef):
     """A factory supporting DSL Call syntax for creating process instances."""
 
-    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
         self,
         ir_node: node.CstNode[cst.Expr] | None,
         module: node.Module,

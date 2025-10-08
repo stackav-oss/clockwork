@@ -44,19 +44,19 @@ class NanobindBinding(node.CstNode[cst.NanobindBinding]):
         """Construct a NanobindBinding IR node from a CST node."""
         child_typespec = cst_node.child_typespec()
         alias_name_cst = cst_node.maybe_name()
-        assert module.terminals is not None  # noqa: S101 (sanity check)
+        assert module.terminals is not None
         alias_name = get_span(alias_name_cst.child_value(), module.terminals) if alias_name_cst else None
         typespec: expr.Expr | node.DeferredLookup[typesys.Instantiation | clkenum.ClkEnum] | None = None
         if (identifier := child_typespec.maybe_identifier()) is not None:
             typespec = node.DeferredLookup.make(
-                expected_type=InterfaceAlias | clkenum.ClkEnum,  # type: ignore[arg-type]
+                expected_type=InterfaceAlias | clkenum.ClkEnum,  # pyright: ignore[reportArgumentType]
                 cst_identifier=identifier,
                 terminals=module.terminals,
             )
         else:
             typespec = expr.Expr.from_cst(child_typespec, module)
 
-        assert typespec is not None  # noqa: S101  (invariant, sanity check)
+        assert typespec is not None
 
         return cls(
             module=module,
@@ -75,11 +75,11 @@ class NanobindBinding(node.CstNode[cst.NanobindBinding]):
         original_type: typesys.Instantiation | clkenum.ResolvedEnum | None = None
         if isinstance(self.typespec, expr.Expr):
             typespec = self.typespec.evaluate()
-            assert isinstance(typespec, typesys.Instantiation)  # noqa: S101 (sanity check)
+            assert isinstance(typespec, typesys.Instantiation)
 
             # convert Tappy<> to Tap<Tachyon<>>
             interface_reference = InterfaceReference.from_typespec(typespec)
-            assert not isinstance(interface_reference, str)  # noqa: S101 (sanity check)
+            assert not isinstance(interface_reference, str)
             original_type = interface_reference.typespec
 
             repr_schema = to_schema_instantiation(original_type)
@@ -94,7 +94,7 @@ class NanobindBinding(node.CstNode[cst.NanobindBinding]):
             msg = self.append_error_line(f"Cannot generate nanobind bindings for {type(self.typespec)}.")
             raise TypeError(msg)
 
-        assert isinstance(original_type, typesys.Instantiation | clkenum.ResolvedEnum)  # noqa: S101 (sanity check)
+        assert isinstance(original_type, typesys.Instantiation | clkenum.ResolvedEnum)
 
         self.resolved = ResolvedNanobindBinding(
             module=self.module,

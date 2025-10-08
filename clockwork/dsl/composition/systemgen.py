@@ -20,6 +20,7 @@ from clockwork.dsl.composition import (
     gen_channel_spy_configs,
     gen_diagnostics_configs,
     gen_logger_configs,
+    gen_metrics_channel_metadata_configs,
     gen_multi_subscriber_configs,
     genpd,
     launchgen,
@@ -31,6 +32,7 @@ from clockwork.dsl.ir.module_id import CLK_REPO
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.serialization.py.protocol import write_tachyon_to_file
 from jewels.simplelaunch.v1.config_pb2 import Config
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -49,10 +51,12 @@ class GeneratedSystemFiles:
     bridge_config_files: list[Path]
     simplelaunch_config_files: list[Path]
     multi_subscriber_config_files: list[Path]
-    log_reader_config_files: list[Path]
+    channel_publisher_config_files: list[Path]
     channel_allocation_report_files: list[Path]
     channel_spy_config_files: list[Path]
     diagnostics_database_config_files: list[Path]
+    logged_channel_metadata_files: list[Path]
+    metrics_channel_metadata_files: list[Path]
 
     def all_files(self) -> Iterator[Path]:
         """Yield all files of all types."""
@@ -62,10 +66,12 @@ class GeneratedSystemFiles:
         yield from self.bridge_config_files
         yield from self.simplelaunch_config_files
         yield from self.multi_subscriber_config_files
-        yield from self.log_reader_config_files
+        yield from self.channel_publisher_config_files
         yield from self.channel_allocation_report_files
         yield from self.channel_spy_config_files
         yield from self.diagnostics_database_config_files
+        yield from self.logged_channel_metadata_files
+        yield from self.metrics_channel_metadata_files
 
 
 @dataclass
@@ -95,33 +101,38 @@ def make_filename_from_value_key(value_key: str) -> str:
 class PdfJsonEncoder(json.JSONEncoder):
     """Encoder for non-JSON types in PDF."""
 
-    def default(self, obj: Any) -> Any:  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: ANN401 (required for polymorphism)
+    @override
+    def default(self, o: Any) -> Any:
         """Default encoder."""
-        if isinstance(obj, UUID):
+        enum_types = (
+            pdf.MemoryResourceType,
+            logger_config.MessageEncoding,
+            logger_config.SchemaEncoding,
+            logger_config.ChannelType,
+            pdf.NotConnectedEndpointType,
+        )
+        if isinstance(o, UUID):
             # if the obj is uuid, we simply return the value of uuid
-            return obj.hex
-        if isinstance(obj, pdf.MemoryResourceType):
-            return obj.value  # type: ignore[attr-defined]
-        if isinstance(obj, logger_config.MessageEncoding):
-            return obj.value  # type: ignore[attr-defined]
-        if isinstance(obj, logger_config.SchemaEncoding):
-            return obj.value  # type: ignore[attr-defined]
-        if isinstance(obj, logger_config.ChannelType):
-            return obj.value  # type: ignore[attr-defined]
-        return json.JSONEncoder.default(self, obj)
+            return o.hex
+        if isinstance(o, enum_types):
+            return o.value  # pyright: ignore[reportAttributeAccessIssue] False positive
+        return json.JSONEncoder.default(self, o)
 
 
 def gen_system(
-    root_dir: Path, system_target_ir: system_target.SystemTarget, write_files: bool
+    root_dir: Path, system_target_ir: system_target.SystemTarget, write_files: bool, write_json_files: bool
 ) -> tuple[GeneratedSystemFiles, OutputTargetsByDomain, system.PhysicalSystem]:
     """Generate system description files for a system target."""
     include_dir = BazelPathResolver().to_buildtime_path(system_target_ir.module.module_id).parent
-    logical_system = system.make_system([system_target_ir.box_instance], system_target_ir.module)
+    logical_system = system.make_system(
+        [system_target_ir.box_instance], system_target_ir.module, system_target_ir.require_logging_policies
+    )
     return gen_system_from_logical_system(
         include_dir=include_dir,
         root_dir=root_dir,
         logical_system=logical_system,
         write_files=write_files,
+        write_json_files=write_json_files,
         system_fqn=system_target_ir.fqn,
         system_key=system_target_ir.value_key(),
     )
@@ -145,7 +156,7 @@ def _initialize_output_targets(
             Label(f"@{CLK_REPO}//clockwork/launch:clockwork_prelaunch.textproto"),
         ]
         for label in domain.simplelaunch_srcs:
-            assert isinstance(label, str)  # noqa: S101 (for mypy)
+            assert isinstance(label, str)
             domain_srcs.append(Label(label))
         output_targets[domain_uuid] = DomainOutputTargets(
             domain,
@@ -168,6 +179,7 @@ def _generate_process_descriptions(  # noqa: PLR0913 (mitigated by kwonly args)
     simplelaunch_configs: dict[UUID, Config],
     system_fqn: str,
     write_files: bool,
+    write_json_files: bool,
 ) -> list[Path]:
     """Generate process description files."""
     result_paths: list[Path] = []
@@ -205,9 +217,10 @@ def _generate_process_descriptions(  # noqa: PLR0913 (mitigated by kwonly args)
 
         if write_files:
             write_tachyon_to_file(process_desc, pd_path)
-            json_path = pd_path.with_suffix(".json")
-            with json_path.open("w", encoding="utf-8") as json_file:
-                json.dump(asdict(process_desc), json_file, indent=2, cls=PdfJsonEncoder)
+            if write_json_files:
+                json_path = pd_path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(process_desc), json_file, indent=2, cls=PdfJsonEncoder)
 
     return result_paths
 
@@ -220,11 +233,13 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     output_targets: OutputTargetsByDomain,
     system_key: str,
     write_files: bool,
-) -> tuple[list[Path], list[Path], list[Path]]:
+    write_json_files: bool,
+) -> tuple[list[Path], list[Path], list[Path], list[Path]]:
     """Generate logger configuration files."""
     event_logger_files: list[Path] = []
     telemetry_logger_files: list[Path] = []
     log_reader_files: list[Path] = []
+    logged_channel_metadata_files: list[Path] = []
 
     # Generate logger configs
     logger_configs_by_domain = gen_logger_configs.gen_logger_configs(physical_system)
@@ -255,20 +270,34 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
                 obj=logger_configs.telemetry_config,
                 filename=telemetry_path,
             )
-            event_json_path = event_path.with_suffix(".json")
-            with event_json_path.open("w", encoding="utf-8") as event_json_file:
-                json.dump(asdict(obj=logger_configs.events_config), event_json_file, indent=2, cls=PdfJsonEncoder)
-            telemetry_json_path = telemetry_path.with_suffix(".json")
-            with telemetry_json_path.open("w", encoding="utf-8") as telemetry_json_file:
-                json.dump(
-                    asdict(obj=logger_configs.telemetry_config), telemetry_json_file, indent=2, cls=PdfJsonEncoder
-                )
+            if write_json_files:
+                event_json_path = event_path.with_suffix(".json")
+                with event_json_path.open("w", encoding="utf-8") as event_json_file:
+                    json.dump(asdict(obj=logger_configs.events_config), event_json_file, indent=2, cls=PdfJsonEncoder)
+                telemetry_json_path = telemetry_path.with_suffix(".json")
+                with telemetry_json_path.open("w", encoding="utf-8") as telemetry_json_file:
+                    json.dump(
+                        asdict(obj=logger_configs.telemetry_config), telemetry_json_file, indent=2, cls=PdfJsonEncoder
+                    )
 
-    # Generate log reader configs
-    for domain_uuid, log_reader_config in gen_logger_configs.gen_log_reader_configs(physical_system).items():
+    # Generate logged channel metadata
+    logged_channel_metadata = gen_logger_configs.gen_logged_channel_metadata(physical_system)
+    _, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)
+    logged_channel_metadata_file_name = f"{target_prefix}.{target_name}.logged_channel_metadata.pbbin"
+    logged_channel_metadata_local_path = include_dir / logged_channel_metadata_file_name
+    logged_channel_metadata_path = root_dir / logged_channel_metadata_local_path
+    logged_channel_metadata_files.append(logged_channel_metadata_path)
+    if write_files:
+        with logged_channel_metadata_path.open("wb") as logged_channel_metadata_file:
+            logged_channel_metadata_file.write(logged_channel_metadata.SerializeToString())
+
+    # Generate channel publisher configs
+    for domain_uuid, channel_publisher_config in gen_logger_configs.gen_channel_publisher_configs(
+        physical_system
+    ).items():
         phys_domain = physical_system.cpu_domains[domain_uuid]
         name = _get_name_from_system_key(system_key, phys_domain.logical.name)
-        file_name = Path(f"{name}_log_reader_config.tachyon")
+        file_name = Path(f"{name}_channel_publisher_config.tachyon")
         local_path = include_dir / file_name
         path = root_dir / local_path
         log_reader_files.append(path)
@@ -277,14 +306,15 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
 
         if write_files:
             write_tachyon_to_file(
-                obj=log_reader_config,
+                obj=channel_publisher_config,
                 filename=path,
             )
-            json_path = path.with_suffix(".json")
-            with json_path.open("w", encoding="utf-8") as json_file:
-                json.dump(asdict(obj=log_reader_config), json_file, indent=2, cls=PdfJsonEncoder)
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(obj=channel_publisher_config), json_file, indent=2, cls=PdfJsonEncoder)
 
-    return event_logger_files, telemetry_logger_files, log_reader_files
+    return event_logger_files, telemetry_logger_files, log_reader_files, logged_channel_metadata_files
 
 
 def _generate_bridge_configs(  # noqa: PLR0913 (mitigated by kwonly args)
@@ -297,6 +327,7 @@ def _generate_bridge_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     system_fqn: str,
     system_key: str,
     write_files: bool,
+    write_json_files: bool,
 ) -> list[Path]:
     """Generate bridge configuration files."""
     bridge_files: list[Path] = []
@@ -319,9 +350,10 @@ def _generate_bridge_configs(  # noqa: PLR0913 (mitigated by kwonly args)
 
         if write_files:
             write_tachyon_to_file(obj=bridge_config, filename=path)
-            json_path = path.with_suffix(".json")
-            with json_path.open("w", encoding="utf-8") as json_file:
-                json.dump(asdict(obj=bridge_config), json_file, indent=2, cls=PdfJsonEncoder)
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(obj=bridge_config), json_file, indent=2, cls=PdfJsonEncoder)
 
     return bridge_files
 
@@ -363,6 +395,7 @@ def _generate_multi_subscriber_configs(  # noqa: PLR0913 (mitigated by kwonly ar
     output_targets: OutputTargetsByDomain,
     system_key: str,
     write_files: bool,
+    write_json_files: bool,
 ) -> list[Path]:
     """Generate multi-subscriber configuration files."""
     multi_subscriber_files: list[Path] = []
@@ -382,9 +415,10 @@ def _generate_multi_subscriber_configs(  # noqa: PLR0913 (mitigated by kwonly ar
 
             if write_files:
                 write_tachyon_to_file(obj=multi_subscriber_config, filename=path)
-                json_path = root_dir / include_dir / f"{name}_config.json"
-                with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(obj=multi_subscriber_config), json_file, indent=2, cls=PdfJsonEncoder)
+                if write_json_files:
+                    json_path = root_dir / include_dir / f"{name}_config.json"
+                    with json_path.open("w", encoding="utf-8") as json_file:
+                        json.dump(asdict(obj=multi_subscriber_config), json_file, indent=2, cls=PdfJsonEncoder)
 
     return multi_subscriber_files
 
@@ -397,6 +431,7 @@ def _generate_diagnostics_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     output_targets: OutputTargetsByDomain,
     system_key: str,
     write_files: bool,
+    write_json_files: bool,
 ) -> list[Path]:
     """Generate diagnostics configuration files."""
     diagnostics_files: list[Path] = []
@@ -413,9 +448,10 @@ def _generate_diagnostics_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             cast("list[Path | Label]", output_targets[cpu_uuid].simple_launch_config.data).append(file_name)
         if write_files:
             write_tachyon_to_file(obj=diagnostics_config, filename=path)
-            json_path = path.with_suffix(".json")
-            with json_path.open("w", encoding="utf-8") as json_file:
-                json.dump(asdict(diagnostics_config), json_file, indent=2, cls=PdfJsonEncoder)
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(diagnostics_config), json_file, indent=2, cls=PdfJsonEncoder)
 
     return diagnostics_files
 
@@ -429,6 +465,7 @@ def _generate_channel_spy_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     output_targets: OutputTargetsByDomain,
     system_key: str,
     write_files: bool,
+    write_json_files: bool,
 ) -> list[Path]:
     """Generate channel spy configuration files."""
     channel_spy_files: list[Path] = []
@@ -451,11 +488,51 @@ def _generate_channel_spy_configs(  # noqa: PLR0913 (mitigated by kwonly args)
                 obj=channel_spy_config,
                 filename=path,
             )
-            json_path = path.with_suffix(".json")
-            with json_path.open("w", encoding="utf-8") as json_file:
-                json.dump(asdict(obj=channel_spy_config), json_file, indent=2, cls=PdfJsonEncoder)
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(obj=channel_spy_config), json_file, indent=2, cls=PdfJsonEncoder)
 
     return channel_spy_files
+
+
+def _generate_metrics_channel_metadata_configs(  # noqa: PLR0913 (mitigated by kwonly args)
+    *,
+    include_dir: Path,
+    root_dir: Path,
+    physical_system: system.PhysicalSystem,
+    output_targets: OutputTargetsByDomain,
+    system_key: str,
+    write_files: bool,
+    write_json_files: bool,
+) -> list[Path]:
+    """Generate channel spy configuration files."""
+    metrics_channel_metadata_files: list[Path] = []
+
+    metrics_channel_metadata_config_by_domain = (
+        gen_metrics_channel_metadata_configs.gen_metrics_channel_metadata_configs(physical_system)
+    )
+    for domain_uuid, metrics_channel_metadata_config in metrics_channel_metadata_config_by_domain.items():
+        phys_domain = physical_system.cpu_domains[domain_uuid]
+        name = _get_name_from_system_key(system_key, phys_domain.logical.name)
+        file_name = Path(f"{name}_metrics_channel_metadata_config.tachyon")
+        local_path = include_dir / file_name
+        path = root_dir / local_path
+        metrics_channel_metadata_files.append(path)
+
+        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.data).append(file_name)
+
+        if write_files:
+            write_tachyon_to_file(
+                obj=metrics_channel_metadata_config,
+                filename=path,
+            )
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(asdict(obj=metrics_channel_metadata_config), json_file, indent=2, cls=PdfJsonEncoder)
+
+    return metrics_channel_metadata_files
 
 
 def _generate_channel_allocation_reports(  # noqa: PLR0913 (mitigated by kwonly args)
@@ -494,15 +571,15 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
     root_dir: Path,
     logical_system: system.LogicalSystem,
     write_files: bool,
+    write_json_files: bool,
     system_fqn: str,
     system_key: str,
 ) -> tuple[GeneratedSystemFiles, OutputTargetsByDomain, system.PhysicalSystem]:
     """Generate system description files for a logical system."""
     physical_system = system.make_physical_system(logical_system)
-    system.add_logging_observers(physical_system)
-
+    system.add_metrics_logging_observers(physical_system)
     simplelaunch_configs: dict[UUID, Config] = {domain_uuid: Config() for domain_uuid in logical_system.cpu_domains}
-    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [])
+    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [], [], [])
     process_descs = genpd.gen_pd_sys(physical_system)
 
     # Initialize output targets
@@ -518,18 +595,23 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         simplelaunch_configs=simplelaunch_configs,
         system_fqn=system_fqn,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate logger configurations
-    result.event_logger_config_files, result.telemetry_logger_config_files, result.log_reader_config_files = (
-        _generate_logger_configs(
-            include_dir=include_dir,
-            root_dir=root_dir,
-            physical_system=physical_system,
-            output_targets=output_targets,
-            system_key=system_key,
-            write_files=write_files,
-        )
+    (
+        result.event_logger_config_files,
+        result.telemetry_logger_config_files,
+        result.channel_publisher_config_files,
+        result.logged_channel_metadata_files,
+    ) = _generate_logger_configs(
+        include_dir=include_dir,
+        root_dir=root_dir,
+        physical_system=physical_system,
+        output_targets=output_targets,
+        system_key=system_key,
+        write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate bridge configurations
@@ -542,6 +624,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         system_fqn=system_fqn,
         system_key=system_key,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate simplelaunch configurations
@@ -563,6 +646,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         output_targets=output_targets,
         system_key=system_key,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate diagnostics configurations
@@ -573,6 +657,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         output_targets=output_targets,
         system_key=system_key,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate channel spy configurations
@@ -584,6 +669,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         output_targets=output_targets,
         system_key=system_key,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate channel allocation reports
@@ -594,6 +680,17 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         output_targets=output_targets,
         system_key=system_key,
         write_files=write_files,
+    )
+
+    # Generate metrics channel metadata configurations
+    result.metrics_channel_metadata_files = _generate_metrics_channel_metadata_configs(
+        include_dir=include_dir,
+        root_dir=root_dir,
+        physical_system=physical_system,
+        output_targets=output_targets,
+        system_key=system_key,
+        write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     return result, output_targets, physical_system

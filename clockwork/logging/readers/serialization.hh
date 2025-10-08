@@ -3,36 +3,36 @@
 
 #pragma once
 
-#include "clockwork/logging/message_encoding.hh"
 #include "clockwork/repr_iface.hh"
 
 #include <boost/core/demangle.hpp>
-#include <fmt10/core.h>
+#include <fmt10/format.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
-#include <memory>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <type_traits> // IWYU pragma: keep
 #include <typeinfo>
 
 namespace clockwork_logging
 {
 
-template <typename T, typename LoggedMessageType>
-void deserialize_tachyon(T& output, const LoggedMessageType& msg)
+template <typename T>
+void deserialize_tachyon(T& output, std::span<const std::byte> data)
   requires clockwork::TappyType<T>
 {
-  if (sizeof(T) != msg.data.size_bytes())
+  if (sizeof(T) != data.size_bytes())
   {
-    throw std::runtime_error(fmt::format(
-      "Message size ({}) doesn't match output size ({}). {}",
-      msg.data.size_bytes(),
-      sizeof(T),
-      boost::core::demangle(typeid(T).name())));
+    throw std::runtime_error(
+      fmt::format(
+        "Message size ({}) doesn't match output size ({}). {}",
+        data.size_bytes(),
+        sizeof(T),
+        boost::core::demangle(typeid(T).name())));
   }
-  std::memcpy(&output, msg.data.data(), sizeof(T));
+  std::memcpy(&output, data.data(), sizeof(T));
 }
 
 } // namespace clockwork_logging

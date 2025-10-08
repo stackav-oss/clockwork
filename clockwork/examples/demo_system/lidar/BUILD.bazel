@@ -45,6 +45,8 @@ clk(
         ":lidar_channels_clk",
         ":lidar_message_clk",
         ":lidar_state_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/examples/demo_system:cpu_domain_clk",
         "//clockwork/examples/demo_system/localization:localization_channels_clk",
         "//clockwork/examples/demo_system/localization:pose_message_clk",
@@ -58,10 +60,22 @@ cc_library(
         "lidar_cog.inl",
     ],
     hdrs = ["lidar_cog.hh"],
+    data = [":lidar_clk"],
     deps = [
         ":lidar_cog_dial",
         ":lidar_cog_impl",
+        ":lidar_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/examples/demo_system/localization:pose_message",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -72,6 +86,7 @@ cc_library(
         "lidar_cog_dial.inl",
     ],
     hdrs = ["lidar_cog_dial.hh"],
+    data = [":lidar_clk"],
     deps = [
         ":lidar_message",
         ":lidar_state",
@@ -94,7 +109,6 @@ cc_library(
         "//jewels/container/tap:var_array",
         "//jewels/math:constants",
         "//jewels/memory:memory_resource",
-        "@boost//:iterator",
     ],
 )
 
@@ -127,6 +141,7 @@ cc_library(
         "lidar_message.inl",
     ],
     hdrs = ["lidar_message.hh"],
+    data = [":lidar_message_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -156,6 +171,7 @@ cc_library(
         "lidar_state.inl",
     ],
     hdrs = ["lidar_state.hh"],
+    data = [":lidar_state_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",

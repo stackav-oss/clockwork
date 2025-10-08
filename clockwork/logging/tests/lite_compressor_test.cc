@@ -3,10 +3,13 @@
 
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
+#include "clockwork/logging/xxh3_checksum.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
@@ -41,8 +44,9 @@ TEST_CASE("Lite compressor")
 
   SECTION("Empty message")
   {
-    const auto compressed_spans = compressor.compress(std::span<const std::byte>{});
+    auto compressed_spans = compressor.compress(std::span<const std::byte>{});
     REQUIRE(spans_size(compressed_spans) == 8U);
+    REQUIRE(compressed_spans.size() == 1U);
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == 0U);
     const auto decompress_result = decompressor.decompress(compressed_spans);
     REQUIRE(decompress_result);
@@ -50,6 +54,87 @@ TEST_CASE("Lite compressor")
     const auto zero_copy_decompress_result = decompressor.zero_copy_decompress(compressed_spans);
     REQUIRE(zero_copy_decompress_result);
     REQUIRE(zero_copy_decompress_result->empty());
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans},
+        jewels::Out{counts_checksum},
+        jewels::Out{data_checksum},
+        std::span<const std::byte>{});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer;
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
+  }
+
+  SECTION("Small message misaligned")
+  {
+    constexpr auto buffer_size = 1U + sizeof(uint64_t);
+    const auto fill_byte = GENERATE(std::byte{0U}, std::byte{1U});
+    alignas(sizeof(uint64_t)) const std::array<std::byte, buffer_size> buffer{fill_byte};
+    const auto misalignment = GENERATE(0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U);
+    const auto misaligned_buffer = std::span{buffer}.subspan(misalignment, 2U);
+    const auto compressed_spans = compressor.compress(misaligned_buffer);
+    REQUIRE(compressed_spans.size() == 2U);
+    REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == misaligned_buffer.size());
+    REQUIRE(spans_size(compressed_spans) == (3U * sizeof(int32_t)) + misaligned_buffer.size());
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {misaligned_buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(misaligned_buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(misaligned_buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
+
+    SECTION("Decompress into internal buffer")
+    {
+      const auto decompress_result = decompressor.decompress(compressed_spans);
+      REQUIRE(decompress_result);
+      REQUIRE(decompress_result->size() == misaligned_buffer.size());
+      REQUIRE(std::memcmp(misaligned_buffer.data(), decompress_result->data(), misaligned_buffer.size()) == 0);
+    }
+
+    SECTION("Zero copy decompress")
+    {
+      const auto decompress_result = decompressor.zero_copy_decompress(compressed_spans);
+      REQUIRE(decompress_result);
+      REQUIRE(spans_size(decompress_result.value()) == misaligned_buffer.size());
+      REQUIRE(std::ranges::equal(decompress_result.value() | std::views::join, misaligned_buffer));
+    }
   }
 
   SECTION("All zeros")
@@ -57,8 +142,34 @@ TEST_CASE("Lite compressor")
     constexpr auto buffer_size = 128U;
     alignas(sizeof(uint64_t)) const std::array<std::byte, buffer_size> buffer{};
     const auto compressed_spans = compressor.compress({buffer});
-    REQUIRE(spans_size(compressed_spans) == 12U);
+    REQUIRE(compressed_spans.size() == 1U);
+    REQUIRE(spans_size(compressed_spans) == 3U * sizeof(uint32_t));
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == buffer_size);
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -66,16 +177,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == buffer_size);
       REQUIRE(std::memcmp(buffer.data(), decompress_result->data(), buffer_size) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(buffer.size());
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -93,8 +194,34 @@ TEST_CASE("Lite compressor")
     alignas(sizeof(uint64_t)) const std::array<std::byte, buffer_size> buffer{};
     const std::span misaligned_buffer{&buffer.at(1U), buffer_size - 2U};
     const auto compressed_spans = compressor.compress(misaligned_buffer);
-    REQUIRE(spans_size(compressed_spans) == 20U + 2U * (sizeof(uint64_t) - 1U));
+    REQUIRE(compressed_spans.size() == 3U);
+    REQUIRE(spans_size(compressed_spans) == 20U + (2U * (sizeof(uint64_t) - 1U)));
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == misaligned_buffer.size());
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {misaligned_buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(misaligned_buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -102,16 +229,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == misaligned_buffer.size());
       REQUIRE(std::memcmp(misaligned_buffer.data(), decompress_result->data(), misaligned_buffer.size()) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(misaligned_buffer.size());
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -129,8 +246,34 @@ TEST_CASE("Lite compressor")
     alignas(sizeof(uint64_t)) std::array<std::byte, buffer_size> buffer{};
     std::memset(buffer.data(), 1, buffer_size);
     const auto compressed_spans = compressor.compress({buffer});
-    REQUIRE(spans_size(compressed_spans) == buffer_size + 12U);
+    REQUIRE(compressed_spans.size() == 2U);
+    REQUIRE(spans_size(compressed_spans) == buffer_size + (3U * sizeof(uint32_t)));
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == buffer_size);
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -138,16 +281,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == buffer_size);
       REQUIRE(std::memcmp(buffer.data(), decompress_result->data(), buffer_size) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(buffer_size);
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -166,8 +299,34 @@ TEST_CASE("Lite compressor")
     std::memset(buffer.data(), 1, buffer_size);
     const std::span misaligned_buffer{&buffer.at(1U), buffer_size - 2U};
     const auto compressed_spans = compressor.compress(misaligned_buffer);
-    REQUIRE(spans_size(compressed_spans) == buffer_size + 18U);
+    REQUIRE(compressed_spans.size() == 4U);
+    REQUIRE(spans_size(compressed_spans) == misaligned_buffer.size() + LiteCompressor::max_compression_overhead_bytes);
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == misaligned_buffer.size());
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {misaligned_buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(misaligned_buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -175,16 +334,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == misaligned_buffer.size());
       REQUIRE(std::memcmp(misaligned_buffer.data(), decompress_result->data(), misaligned_buffer.size()) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(misaligned_buffer.size());
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -202,8 +351,34 @@ TEST_CASE("Lite compressor")
     alignas(sizeof(uint64_t)) std::array<std::byte, buffer_size> buffer{};
     std::memset(buffer.data(), 1, buffer_size / 2U);
     const auto compressed_spans = compressor.compress({buffer});
+    REQUIRE(compressed_spans.size() == 2U);
     REQUIRE(spans_size(compressed_spans) == (buffer_size / 2U) + 16U);
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == buffer_size);
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -211,16 +386,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == buffer_size);
       REQUIRE(std::memcmp(buffer.data(), decompress_result->data(), buffer_size) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(buffer_size);
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -238,8 +403,34 @@ TEST_CASE("Lite compressor")
     alignas(sizeof(uint64_t)) std::array<std::byte, buffer_size> buffer{};
     std::memset(&buffer.at(15U), 1, buffer_size - 30U);
     const auto compressed_spans = compressor.compress({buffer});
-    REQUIRE(spans_size(compressed_spans) == buffer_size + 12U);
+    REQUIRE(compressed_spans.size() == 2U);
+    REQUIRE(spans_size(compressed_spans) == buffer_size + (3U * sizeof(uint32_t)));
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == buffer_size);
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -247,16 +438,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == buffer_size);
       REQUIRE(std::memcmp(buffer.data(), decompress_result->data(), buffer_size) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(buffer_size);
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")
@@ -274,8 +455,34 @@ TEST_CASE("Lite compressor")
     alignas(sizeof(uint64_t)) std::array<std::byte, buffer_size> buffer{};
     std::memset(&buffer.at(buffer_size / 2U), 1, buffer_size / 2U);
     const auto compressed_spans = compressor.compress({buffer});
+    REQUIRE(compressed_spans.size() == 2U);
     REQUIRE(spans_size(compressed_spans) == (buffer_size / 2U) + 16U);
     REQUIRE(LiteCompressor::get_decompressed_size(compressed_spans) == buffer_size);
+
+    SECTION("With checksum")
+    {
+      std::span<const std::span<const std::byte>> checksum_spans;
+      uint64_t counts_checksum{};
+      uint64_t data_checksum{};
+      compressor.compress(
+        jewels::Out{checksum_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, {buffer});
+      const auto checksum_view = checksum_spans | std::views::join;
+      REQUIRE(std::ranges::equal(compressed_spans | std::views::join, checksum_view));
+      REQUIRE(counts_checksum == compute_xxh3_checksum(compressed_spans.first(1U)));
+      REQUIRE(data_checksum == compute_xxh3_checksum(compressed_spans.subspan(1U)));
+      std::vector<std::byte> compressed_buffer(checksum_view.begin(), checksum_view.end());
+      std::vector<std::byte> dest_buffer(buffer.size());
+      const auto decompress_outcome =
+        decompressor.decompress(counts_checksum, data_checksum, compressed_buffer, dest_buffer);
+      REQUIRE(decompress_outcome.get() == LogError::success);
+      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), buffer_size) == 0);
+      REQUIRE(
+        decompressor.decompress(counts_checksum + 1U, data_checksum, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+      REQUIRE(
+        decompressor.decompress(counts_checksum, data_checksum + 1U, compressed_buffer, dest_buffer).get() ==
+        LogError::bad_checksum);
+    }
 
     SECTION("Decompress into internal buffer")
     {
@@ -283,16 +490,6 @@ TEST_CASE("Lite compressor")
       REQUIRE(decompress_result);
       REQUIRE(decompress_result->size() == buffer_size);
       REQUIRE(std::memcmp(buffer.data(), decompress_result->data(), buffer_size) == 0);
-    }
-
-    SECTION("Decompress into dest buffer")
-    {
-      std::vector<std::byte> dest_buffer(buffer_size);
-      const auto decompress_result = decompressor.decompress(compressed_spans, dest_buffer);
-      REQUIRE(decompress_result);
-      REQUIRE(decompress_result->data() == dest_buffer.data());
-      REQUIRE(decompress_result->size() == dest_buffer.size());
-      REQUIRE(std::memcmp(buffer.data(), dest_buffer.data(), dest_buffer.size()) == 0);
     }
 
     SECTION("Zero copy decompress")

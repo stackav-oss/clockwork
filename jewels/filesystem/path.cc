@@ -82,6 +82,11 @@ Path& Path::operator=(const Path& other)
   return !extension_view().empty();
 }
 
+[[nodiscard]] bool Path::is_absolute() const noexcept
+{
+  return !path_.empty() && path_.front() == '/';
+}
+
 [[nodiscard]] Path Path::parent_path() const
 {
   return {parent_path_view(), memory_resource_};

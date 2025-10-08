@@ -26,14 +26,14 @@ TEST_CASE("AsyncWorQueue")
     async_work_queue.schedule_work_item(
       [&mutex, &condvar, &test_counter]()
       {
-        const std::lock_guard guard{mutex};
+        const std::scoped_lock guard{mutex};
         ++test_counter;
         condvar.notify_one();
       });
     async_work_queue.schedule_work_item(
       [&mutex, &condvar, &test_counter]()
       {
-        const std::lock_guard guard{mutex};
+        const std::scoped_lock guard{mutex};
         ++test_counter;
         condvar.notify_one();
       });
@@ -47,14 +47,14 @@ TEST_CASE("AsyncWorQueue")
     async_work_queue.schedule_work_item_no_wait(
       [&mutex, &condvar, &test_counter]()
       {
-        const std::lock_guard guard{mutex};
+        const std::scoped_lock guard{mutex};
         ++test_counter;
         condvar.notify_one();
       });
     async_work_queue.schedule_work_item_no_wait(
       [&mutex, &condvar, &test_counter]()
       {
-        const std::lock_guard guard{mutex};
+        const std::scoped_lock guard{mutex};
         ++test_counter;
         condvar.notify_one();
       });

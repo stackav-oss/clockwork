@@ -20,6 +20,7 @@ from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, stro
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 from clockwork.serialization.metadata import tachyon_model
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.serialization.py.protocol import Tachyon
@@ -39,7 +40,7 @@ class ScopeLookup:
 
 
 @dataclass(eq=True, frozen=True)
-class SerDes(Generic[T]):
+class SerDes(Generic[T]):  # noqa: PLW1641 __hash__ function not needed.
     """Holds a serializer and deserializer for type T."""
 
     type_: type[T] = field(repr=False)
@@ -48,6 +49,7 @@ class SerDes(Generic[T]):
     deserializer: Deserializer[T] = field(repr=False)
     clk_type: typesys.TypeVal
 
+    @override
     def __eq__(self, other: object) -> bool:
         """Equality comparison."""
         return (
@@ -73,7 +75,7 @@ TypeKey: TypeAlias = str
 class TachyonDynRegistry(Context):
     """Registry for Tachyon Python serializers."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty Tachyon serializer registry."""
         self.name = name
         self.type_registry: dict[TypeKey, tuple[SerDes[Any], str | None]] = {}
@@ -81,6 +83,7 @@ class TachyonDynRegistry(Context):
             TypeKey, Callable[[CompilerContext, typesys.Instantiation], SerDes[Any] | None]
         ] = {}
 
+    @override
     def import_from(self, other: TachyonDynRegistry) -> None:
         """Combine this context with items from another.
 
@@ -238,6 +241,7 @@ def register_generic_type(
 class TachyonDynRegistryKey(ContextKey[TachyonDynRegistry]):
     """Compiler context key for Tachyon Python serializer registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> TachyonDynRegistry:
         """Create a default instance of the registry with built-in types."""
         registry = TachyonDynRegistry(compiler_context.name)
@@ -259,7 +263,7 @@ TACHYON_DYN_REGISTRY_KEY: Final = TachyonDynRegistryKey("TachyonDynRegistry")
 class PrimitiveSerDes(Generic[T]):
     """SerDes for primitive types."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self, compiler_context: CompilerContext, clk_type: typesys.TypeVal, py_type: type[T], fmt: str
     ) -> None:
         """Create a SerDes for primitive types."""
@@ -273,7 +277,7 @@ class PrimitiveSerDes(Generic[T]):
         """Serializer for type T."""
         self.struct.pack_into(buffer, 0, obj)
 
-    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401
+    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
         """Deserializer for type T."""
         return self.struct.unpack_from(buffer, 0)[0]
 
@@ -317,10 +321,10 @@ def _uuid_factory(compiler_context: CompilerContext, typ: typesys.Instantiation)
     return UUID_SERDES
 
 
-class EnumSerDes:
+class EnumSerDes:  # noqa: PLW1641 Intentionally leaving out __hash__ because this is a mutable type.
     """SerDes for an enum type."""
 
-    def __init__(self, compiler_context: CompilerContext, clk_type: clkenum.ResolvedEnum) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, compiler_context: CompilerContext, clk_type: clkenum.ResolvedEnum) -> None:
         """Create a SerDes for array types."""
         self.compiler_context = compiler_context
         self.clk_type = clk_type
@@ -332,6 +336,7 @@ class EnumSerDes:
         self.underlying_serializer = underlying_serdes.serializer
         self.underlying_deserializer = underlying_serdes.deserializer
 
+    @override
     def __eq__(self, other: object) -> bool:
         """Equality comparison."""
         return (
@@ -344,7 +349,7 @@ class EnumSerDes:
         """Serializer for enums."""
         self.underlying_serializer(obj.value, buffer)
 
-    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401
+    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
         """Deserializer for enums."""
         underlying_int = self.underlying_deserializer(buffer)
         return self.py_type(underlying_int)
@@ -377,7 +382,7 @@ def _strong_type_factory(compiler_context: CompilerContext, strong_type: strongt
 class FixedArraySerDes(Generic[T]):
     """SerDes for a fixed-size array of T type."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         size: int,
@@ -428,7 +433,7 @@ class FixedArraySerDes(Generic[T]):
 class VarArraySerDes(Generic[T]):
     """SerDes for a variable array of T type."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         max_size: int,
@@ -531,7 +536,7 @@ def _var_string_factory(compiler_context: CompilerContext, typ: typesys.Instanti
         msg = f"Expected VarString but got {typ.instantiates}"
         raise RuntimeError(msg)
     size_arg = typ.arguments["max_size"]
-    underlying_type, max_size, serdes, constraint = _array_type_checker(  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    underlying_type, max_size, serdes, constraint = _array_type_checker(  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         compiler_context, typ, clkbuiltins.BYTE, size_arg
     )
     array_serdes = cast(
@@ -552,7 +557,7 @@ def _var_string_factory(compiler_context: CompilerContext, typ: typesys.Instanti
 class OptionalSerDes(Generic[T]):
     """SerDes for Optional<T>."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         constraint: tachyon_reg.FieldConstraint,
@@ -587,7 +592,7 @@ class OptionalSerDes(Generic[T]):
     def make_serdes(self) -> SerDes[T | None]:
         """Construct a SerDes for the registry."""
         return SerDes(
-            type_=self.underlying_py_type | None,  # type: ignore[arg-type]
+            type_=self.underlying_py_type | None,  # pyright: ignore[reportArgumentType] Type not known ahead of time
             constraint=self.constraint,
             serializer=self.serialize,
             deserializer=self.deserialize,
@@ -617,12 +622,16 @@ class SchemaSerDes(Generic[T]):
     py_class: type[T] = field(repr=False)
     field_serdeses: list[tuple[str, slice, SerDes[Any]]]
 
-    def serialize(self, obj: Any, buffer: memoryview) -> None:  # noqa: ANN401
+    def serialize(self, obj: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
         """Serializer for schema type."""
         for fld_name, slice_, serdes in self.field_serdeses:
-            serdes.serializer(getattr(obj, fld_name), buffer[slice_])
+            try:
+                serdes.serializer(getattr(obj, fld_name), buffer[slice_])
+            except Exception as e:
+                msg = f"Object {type(obj)} failed to serialize {fld_name}"
+                raise type(e)(msg) from e
 
-    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401
+    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
         """Deserializer for type T."""
         return self.py_class(
             **{fld_name: serdes.deserializer(buffer[slice_]) for fld_name, slice_, serdes in self.field_serdeses}
@@ -647,10 +656,20 @@ class SchemaSerDes(Generic[T]):
             )
 
             # Handle init_value conversion
-            has_default, default_value = _get_default_for_field(compiler_context, fld_def, serdes.type_)
+            has_default, default_value = _get_default_for_field(compiler_context, schema_ir, fld_def, serdes.type_)
             if has_default:
                 if isinstance(default_value, list):
-                    dataclass_fields.append((fld_def.cur_name, serdes.type_, field(default_factory=list)))
+
+                    def _default_factory(default: list[Any] = default_value) -> list[Any]:
+                        return default
+
+                    dataclass_fields.append(
+                        (
+                            fld_def.cur_name,
+                            serdes.type_,
+                            field(default_factory=_default_factory),
+                        )
+                    )
                 else:
                     dataclass_fields.append((fld_def.cur_name, serdes.type_, field(default=default_value)))
             else:
@@ -659,7 +678,7 @@ class SchemaSerDes(Generic[T]):
         return field_serdeses, dataclass_fields
 
     @classmethod
-    def _add_tachyon_methods(
+    def _add_tachyon_methods(  # noqa: C901 (we inherintly have a branch each method in the Tachyon interface)
         cls,
         py_class: type[Any],
         schema_serdes: SchemaSerDes[Any],
@@ -668,14 +687,14 @@ class SchemaSerDes(Generic[T]):
     ) -> None:
         """Add Tachyon serialization methods to the dataclass."""
 
-        def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401
+        def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
             schema_serdes.serialize(self, buffer)
 
-        @classmethod  # type: ignore[misc]
-        def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401
+        @classmethod
+        def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
             return schema_serdes.deserialize(buffer)
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_constraint(_: type) -> tachyon_reg.FieldConstraint:
             return constraint
 
@@ -684,19 +703,31 @@ class SchemaSerDes(Generic[T]):
         except ValueError:
             py_class_metadata = None
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_metadata_name(_: type) -> str | None:
             return schema_ir.value_key()
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_metadata(_: type) -> tachyon_model.TachyonMetadata | None:
             return py_class_metadata
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
+        def get_tachyon_module_name(_: type) -> str:
+            return schema_ir.schema.module.module_id.repo
+
+        @classmethod
+        def get_tachyon_source_file_name(_: type) -> str:
+            return str(schema_ir.schema.module.module_id.get_base_path())
+
+        @classmethod
+        def get_tachyon_class_name(_: type) -> str:
+            return schema_ir.schema_name
+
+        @classmethod
         def get_tachyon_schema_ir(_: type) -> schema.InstantiatedSchema:
             return schema_ir
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_compiler_context(_: type) -> CompilerContext:
             return schema_serdes.compiler_context
 
@@ -707,6 +738,9 @@ class SchemaSerDes(Generic[T]):
         py_class.get_tachyon_metadata = get_tachyon_metadata
         py_class.get_tachyon_schema_ir = get_tachyon_schema_ir
         py_class.get_tachyon_compiler_context = get_tachyon_compiler_context
+        py_class.get_tachyon_module_name = get_tachyon_module_name
+        py_class.get_tachyon_source_file_name = get_tachyon_source_file_name
+        py_class.get_tachyon_class_name = get_tachyon_class_name
 
     @classmethod
     def make(
@@ -746,11 +780,20 @@ class SchemaSerDes(Generic[T]):
         )
 
 
-# PLR0911 (too many return statements) suppressed because we need to handle all these cases
-def _convert_init_value_to_python(  # noqa: PLR0911
-    compiler_context: CompilerContext, init_value: typesys.Value, py_type: type[Any]
+# PLR0911 and C901 (too many return statements, too complex) suppressed because we need to handle all these cases
+def _convert_init_value_to_python(  # noqa: PLR0911, C901
+    compiler_context: CompilerContext,
+    schema_ir: schema.InstantiatedSchema,
+    init_value: typesys.Value,
+    py_type: type[Any],
 ) -> float | str | bool | enum.Enum | None:
     """Convert a typesys.Value to a Python value of the appropriate type."""
+    if isinstance(init_value, schema.ParameterRef):
+        if not schema_ir.arguments or init_value.name not in schema_ir.arguments:
+            msg = f"Unknown schema parameter {init_value.name} in field initial value"
+            raise TypeError(msg)
+        init_value = schema_ir.arguments[init_value.name]
+
     if isinstance(init_value, primitive.DecimalValue):
         if py_type is int:
             return int(init_value.value)
@@ -763,7 +806,7 @@ def _convert_init_value_to_python(  # noqa: PLR0911
         # For enums, we need to return the enum member
         # Create a default registry for initialization
         enum_serdes = serdes_for_type(compiler_context, init_value.value_def.enum.get_resolved())
-        assert isinstance(enum_serdes.type_, type(enum.Enum))  # noqa: S101  (module invariant)
+        assert isinstance(enum_serdes.type_, type(enum.Enum))
         return enum_serdes.type_(init_value.value_def.integer_value)
 
     if isinstance(init_value, primitive.StringValue) and py_type is str:
@@ -781,7 +824,10 @@ def _convert_init_value_to_python(  # noqa: PLR0911
 
 
 def _get_default_for_field(
-    compiler_context: CompilerContext, field_def: schema.InstantiatedFieldDef, py_type: type[T]
+    compiler_context: CompilerContext,
+    schema_ir: schema.InstantiatedSchema,
+    field_def: schema.InstantiatedFieldDef,
+    py_type: type[T],
 ) -> tuple[bool, T]:
     """Get the default value for a field based on its init_value or type.
 
@@ -790,8 +836,8 @@ def _get_default_for_field(
     """
     # If there's an explicit init_value, convert it
     if field_def.init_value is not None:
-        result = _convert_init_value_to_python(compiler_context, field_def.init_value, py_type)
-        assert isinstance(result, py_type)  # noqa: S101 (module invariant)
+        result = _convert_init_value_to_python(compiler_context, schema_ir, field_def.init_value, py_type)
+        assert isinstance(result, py_type)
         return (True, result)
 
     # No init_value or conversion failed, get default based on type
@@ -826,7 +872,7 @@ def _get_default_for_enum(compiler_context: CompilerContext, type_info: clkenum.
     enum_serdes = serdes_for_type(compiler_context, type_info)
     default_value_def = type_info.values[type_info.default_field_num]
     result = enum_serdes.type_(default_value_def.integer_value)
-    assert isinstance(result, enum.Enum)  # noqa: S101 (module invariant)
+    assert isinstance(result, enum.Enum)
     return result
 
 
@@ -840,9 +886,9 @@ def _get_default_for_container(
     """
     if type_info.instantiates is clkbuiltins.FIXED_ARRAY:
         element_type = type_info.arguments["type"]
-        assert isinstance(element_type, typesys.TypeVal)  # noqa: S101 (DSL compiler invariant)
+        assert isinstance(element_type, typesys.TypeVal)
         size_arg = type_info.arguments["size"]
-        assert isinstance(size_arg, primitive.DecimalValue)  # noqa: S101 (DSL compiler invariant)
+        assert isinstance(size_arg, primitive.DecimalValue)
         size = int(size_arg.value)
         has_default, element_default = _get_default_for_type(compiler_context, element_type)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
         return (True, [element_default] * size)
@@ -876,7 +922,9 @@ def _get_default_for_schema(
         return (False, None)
 
 
-def _get_default_for_type(compiler_context: CompilerContext, type_info: typesys.TypeVal) -> tuple[bool, Any]:
+def _get_default_for_type(  # noqa: PLR0911 (need to handle all of the types)
+    compiler_context: CompilerContext, type_info: typesys.TypeVal
+) -> tuple[bool, Any]:
     """Generate a default value for a given type.
 
     Returns:
@@ -888,6 +936,9 @@ def _get_default_for_type(compiler_context: CompilerContext, type_info: typesys.
 
     if type_info is clkbuiltins.DURATION or type_info is clkbuiltins.SYNC_TIME:
         return (True, 0)
+
+    if isinstance(type_info, typesys.Instantiation) and type_info.instantiates is clkbuiltins.UUID:
+        return (True, uuid.UUID(int=0))
 
     if isinstance(type_info, strongtypes.StrongType):
         if not isinstance(type_info.typespec, clkbuiltins.PrimitiveType):
@@ -996,7 +1047,7 @@ def get_schema_field_serdes(
         else:
             msg = f"No such field {field} in {schema_ir.name}"
             raise KeyError(msg)
-    assert isinstance(fld_def.type_info, typesys.TypeVal)  # noqa: S101  (for mypy)
+    assert isinstance(fld_def.type_info, typesys.TypeVal)
     return serdes_for_type(compiler_context, fld_def.type_info).type_, fld_def.type_info
 
 
@@ -1214,13 +1265,17 @@ def _create_type_converter(  # noqa: PLR0913 (too many params mitigated by kwonl
     # Try each conversion handler in sequence
     handlers = [
         _handle_primitive_to_primitive_conversion,
+        _handle_primitive_to_varstring_conversion,
+        _handle_primitive_to_enum_conversion,
         _handle_enum_to_enum_conversion,
         _handle_varstring_to_varstring_conversion,
+        _handle_varstring_to_optional_conversion,
         _handle_optional_to_optional_conversion,
         _handle_schema_to_schema_conversion,
         _handle_type_to_container_conversion,
         _handle_array_to_array_conversion,
         _handle_optional_to_array_conversion,
+        _handle_optional_to_varstring_conversion,
         _handle_array_to_optional_conversion,
         _handle_array_to_string_conversion,
         _handle_string_to_array_conversion,
@@ -1323,6 +1378,95 @@ def _handle_primitive_to_primitive_conversion(  # noqa: PLR0913 (too many params
     return False, None
 
 
+def _handle_primitive_to_varstring_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],  # noqa: ARG001 (need to match handler signature)
+    error_node: node.CstNode[Any],  # noqa: ARG001 (need to match handler signature)
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from primitive types to strings."""
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn in (clkbuiltins.INT8.fqn, clkbuiltins.UINT8.fqn, clkbuiltins.BYTE.fqn)
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates is clkbuiltins.VAR_STRING
+    ):
+        return False, None
+
+    def primitive_converter(val: int) -> str:
+        return bytes([val]).decode("utf-8")
+
+    return True, primitive_converter
+
+
+def _handle_primitive_to_enum_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],  # noqa: ARG001 (need to match handler signature)
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from primitive integer to enum types."""
+    old_type = old_types[old_type_id]
+    if old_type.fqn not in (
+        clkbuiltins.INT8.fqn,
+        clkbuiltins.INT16.fqn,
+        clkbuiltins.INT32.fqn,
+        clkbuiltins.INT64.fqn,
+        clkbuiltins.UINT8.fqn,
+        clkbuiltins.UINT16.fqn,
+        clkbuiltins.UINT32.fqn,
+        clkbuiltins.UINT64.fqn,
+    ):
+        return False, None
+
+    if not isinstance(new_type_info, clkenum.ResolvedEnum):
+        return False, None
+
+    try:
+        return True, _create_primitive_to_enum_converter(compiler_context, new_type_info, error_node)
+    except ValueError as e:
+        msg = error_node.append_error_line(f"Failed to convert {old_type.fqn} to enum: {e}")
+        raise ValueError(msg) from e
+
+
+def _create_primitive_to_enum_converter(
+    compiler_context: CompilerContext, new_enum: clkenum.ResolvedEnum, error_node: node.CstNode[Any]
+) -> Callable[[int], enum.Enum]:
+    """Create a converter function between two versions of the same enum.
+
+    Args:
+        compiler_context: Compiler context containing serializers registry
+        old_enum: The source enum version
+        new_enum: The target enum version
+        error_node: CST node used to generate error messages
+
+    Returns:
+        A function that converts enum values from old version to new version
+    """
+    new_enum_serdes = serdes_for_type(compiler_context, new_enum)
+
+    conversion_map: dict[int, enum.Enum] = {}
+
+    for new_value_def in new_enum.values.values():
+        new_py_value = new_enum_serdes.type_(new_value_def.integer_value)
+        conversion_map[new_value_def.integer_value] = new_py_value
+
+    def converter(old_value: int, error_node: node.CstNode[Any] = error_node) -> enum.Enum:
+        if old_value not in conversion_map:
+            msg = error_node.append_error_line(f"Invalid enum value {old_value}")
+            raise ValueError(msg)
+        return conversion_map[old_value]
+
+    return converter
+
+
 def _handle_enum_to_enum_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
     *,
     compiler_context: CompilerContext,
@@ -1348,13 +1492,13 @@ def _handle_enum_to_enum_conversion(  # noqa: PLR0913 (too many params mitigated
 
     try:
         old_enum_version = new_type_info.get_enum_at_version(old_type.version)
-        return True, _create_enum_converter(compiler_context, old_enum_version, new_type_info)
+        return True, _create_enum_to_enum_converter(compiler_context, old_enum_version, new_type_info)
     except ValueError as e:
         msg = f"Failed to convert enum {old_type.fqn} from version {old_type.version} to {new_type_info.cur_version()}: {e}"
         raise ValueError(msg) from e
 
 
-def _create_enum_converter(
+def _create_enum_to_enum_converter(
     compiler_context: CompilerContext, old_enum: clkenum.ResolvedEnum, new_enum: clkenum.ResolvedEnum
 ) -> Callable[[enum.Enum], enum.Enum]:
     """Create a converter function between two versions of the same enum.
@@ -1540,6 +1684,14 @@ def _handle_array_to_array_conversion(  # noqa: PLR0913 (too many params mitigat
         msg = error_node.append_error_line(f"Invalid array type arguments: {new_type_info}")
         raise TypeError(msg)
 
+    if old_type.fqn == clkbuiltins.FIXED_ARRAY.fqn and new_type_info.instantiates is clkbuiltins.FIXED_ARRAY:
+        old_array_size = int(old_type.arguments[1])
+        new_size_arg = new_type_info.arguments["size"]
+        assert isinstance(new_size_arg, primitive.DecimalLiteral)
+        new_array_size = int(new_size_arg.value)
+        if old_array_size != new_array_size:
+            return False, None
+
     can_convert, element_converter = _create_type_converter(
         compiler_context=compiler_context,
         old_type_id=old_element_type_id,
@@ -1613,6 +1765,46 @@ def _handle_optional_to_array_conversion(  # noqa: PLR0913 (too many params miti
         return [converted]  # Single value becomes a one-element list
 
     return True, optional_to_array
+
+
+def _handle_optional_to_varstring_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],  # noqa: ARG001 (need to match handler signature)
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from Optional to VarString."""
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn == clkbuiltins.OPTIONAL.fqn
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates is clkbuiltins.VAR_STRING
+    ):
+        return False, None
+
+    # Get element types for the source arrays
+    if len(old_type.arguments) < 1 or not isinstance(old_type.arguments[0], int):
+        msg = error_node.append_error_line(f"Invalid optional type arguments: {old_type}")
+        raise ValueError(msg)
+
+    old_element_type_id = int(old_type.arguments[0])
+    old_element_type = old_types[old_element_type_id]
+    if not isinstance(old_element_type, tachyon_model.BuiltInType):
+        return False, None
+
+    if old_element_type.fqn not in (clkbuiltins.INT8.fqn, clkbuiltins.UINT8.fqn, clkbuiltins.BYTE.fqn):
+        return False, None
+
+    def optional_converter(val: int | None) -> str:
+        if val is None:
+            return ""
+        return bytes([val]).decode("utf-8")
+
+    return True, optional_converter
 
 
 def _handle_array_to_optional_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
@@ -1697,7 +1889,11 @@ def _handle_array_to_string_conversion(  # noqa: PLR0913 (too many params mitiga
     element_type_id = int(old_type.arguments[0])
     element_type = old_types[element_type_id]
 
-    if isinstance(element_type, tachyon_model.BuiltInType) and element_type.fqn == clkbuiltins.BYTE.fqn:
+    if isinstance(element_type, tachyon_model.BuiltInType) and element_type.fqn in (
+        clkbuiltins.BYTE.fqn,
+        clkbuiltins.INT8.fqn,
+        clkbuiltins.UINT8.fqn,
+    ):
 
         def bytes_to_string(val: list[int]) -> str:
             if not val:
@@ -1766,6 +1962,46 @@ def _handle_varstring_to_varstring_conversion(  # noqa: PLR0913 (too many params
         and isinstance(new_type_info, typesys.Instantiation)
         and new_type_info.instantiates is clkbuiltins.VAR_STRING
     ), None
+
+
+def _handle_varstring_to_optional_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],  # noqa: ARG001 (need to match handler signature)
+    error_node: node.CstNode[Any],  # noqa: ARG001 (need to match handler signature)
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from string to byte array."""
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn == clkbuiltins.VAR_STRING.fqn
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates is clkbuiltins.OPTIONAL
+    ):
+        return False, None
+
+    element_type_arg = new_type_info.arguments["type"]
+    if isinstance(element_type_arg, clkbuiltins.PrimitiveType) and element_type_arg in [
+        clkbuiltins.BYTE,
+        clkbuiltins.UINT8,
+        clkbuiltins.INT8,
+    ]:
+
+        def string_to_optional(val: str) -> int | None:
+            if not val:
+                return None
+            if len(val) > 1:
+                msg = f"Source string size ({len(val)} is greater than 1"
+                raise ValueError(msg)
+            # Convert string to list of bytes using UTF-8
+            return ord(val[0])
+
+        return True, string_to_optional
+
+    return False, None
 
 
 def _handle_optional_to_optional_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
@@ -1849,7 +2085,7 @@ def _trace_field_forward(
             return (None, path)
 
         # If field became another field, continue tracing
-        assert hist_field.became_field_num is not None  # noqa: S101 (invariant if removed_in_version is None)
+        assert hist_field.became_field_num is not None
         current = hist_field.became_field_num
         path.append(current)
 

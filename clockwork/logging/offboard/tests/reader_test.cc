@@ -152,28 +152,30 @@ TEST_CASE("Reader")
     auto transmit_time = start_time;
     for (uint32_t i = 0U; i < message_count; ++i)
     {
-      REQUIRE(writer.write(LoggedMessage{
-        .channel_name = channel_name1,
-        .sequence_number = i * 2U,
-        .log_time = transmit_time + std::chrono::nanoseconds(1),
-        .transmit_time = transmit_time,
-        .header = header1,
-        .data = data1,
-        .is_repeated_persistent = false,
-        .is_lite_compressed = false,
-      }));
+      REQUIRE(writer.write(
+        LoggedMessage{
+          .channel_name = channel_name1,
+          .sequence_number = i * 2U,
+          .log_time = transmit_time + std::chrono::nanoseconds(1),
+          .transmit_time = transmit_time,
+          .header = header1,
+          .data = data1,
+          .is_repeated_persistent = false,
+          .is_lite_compressed = false,
+        }));
       transmit_time -= message_interval;
 
-      REQUIRE(writer.write(LoggedMessage{
-        .channel_name = channel_name2,
-        .sequence_number = (i * 2U) + 1U,
-        .log_time = transmit_time + std::chrono::nanoseconds(1),
-        .transmit_time = transmit_time,
-        .header = header2,
-        .data = compressed_data2,
-        .is_repeated_persistent = false,
-        .is_lite_compressed = true,
-      }));
+      REQUIRE(writer.write(
+        LoggedMessage{
+          .channel_name = channel_name2,
+          .sequence_number = (i * 2U) + 1U,
+          .log_time = transmit_time + std::chrono::nanoseconds(1),
+          .transmit_time = transmit_time,
+          .header = header2,
+          .data = compressed_data2,
+          .is_repeated_persistent = false,
+          .is_lite_compressed = true,
+        }));
       transmit_time -= message_interval;
     }
     const auto end_time = transmit_time + message_interval;
@@ -478,49 +480,53 @@ TEST_CASE("Reader is deterministic")
   auto transmit_time = start_time;
   for (uint32_t i = 0U; i < message_count; ++i)
   {
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name4,
-      .sequence_number = message_count - i - 1,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header4,
-      .data = data4,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name4,
+        .sequence_number = message_count - i - 1,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header4,
+        .data = data4,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = message_count - i - 1,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header2,
-      .data = data2,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = message_count - i - 1,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header2,
+        .data = data2,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name3,
-      .sequence_number = message_count - i - 1,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header3,
-      .data = data3,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name3,
+        .sequence_number = message_count - i - 1,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header3,
+        .data = data3,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
 
-    REQUIRE(writer.write(LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = message_count - i - 1,
-      .log_time = transmit_time + std::chrono::nanoseconds(1),
-      .transmit_time = transmit_time,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = false,
-      .is_lite_compressed = false,
-    }));
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = message_count - i - 1,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
 
     transmit_time -= message_interval;
   }
@@ -591,6 +597,177 @@ TEST_CASE("Reader is deterministic")
     expected_time += message_interval;
   }
 
+  REQUIRE_FALSE(reader);
+  REQUIRE(reader.read_next() == jewels::unexpected(LogError::end_of_log));
+}
+
+TEST_CASE("Duplicate messages are filtered")
+{
+  constexpr auto test_log_name = "test_log";
+
+  // Configure writer to put each channel in a separate file
+  constexpr auto writer_config_text = R"(
+    # proto-file: clockwork/logging/offboard/v1/writer_config.proto
+    # proto-message: WriterConfig
+    rule {
+      regex: ".*"
+    }
+  )";
+
+  const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
+  CAPTURE(message_chunk_index_format);
+
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  LiteCompressor lite_compressor{memory_resource};
+  const jewels::testing::TmpDirectoryGuard test_dir;
+  const auto test_log_path = test_dir.get_path() / test_log_name;
+  Writer writer{memory_resource, message_chunk_index_format};
+
+  constexpr auto channel_name1 = "channel1";
+  constexpr auto metadata1 = LoggedChannelMetadata{
+    .channel_name = channel_name1,
+    .message_encoding = MessageEncoding::unspecified,
+    .channel_type = ChannelType::regular,
+    .schema_name = "schema1",
+    .schema_encoding = SchemaEncoding::undefined,
+    .schema_definition = "Schema definition 1",
+  };
+  constexpr auto header1_size = 123U;
+  std::vector<std::byte> header1(header1_size);
+  onboard::tests::fill_with_random_bytes(header1);
+  constexpr auto data1_size = 1234U;
+  std::vector<std::byte> data1(data1_size);
+  onboard::tests::fill_with_random_bytes(data1);
+
+  constexpr auto channel_name2 = "channel2";
+  constexpr auto metadata2 = LoggedChannelMetadata{
+    .channel_name = channel_name2,
+    .message_encoding = MessageEncoding::unspecified,
+    .channel_type = ChannelType::persistent,
+    .schema_name = "schema2",
+    .schema_encoding = SchemaEncoding::undefined,
+    .schema_definition = "Schema definition 2",
+  };
+  constexpr auto header2_size = 234U;
+  std::vector<std::byte> header2(header2_size);
+  onboard::tests::fill_with_random_bytes(header2);
+  constexpr auto data2_size = 2345U;
+  std::vector<std::byte> data2(data2_size);
+  onboard::tests::fill_with_random_bytes(data2);
+  const auto compressed_data2 = offboard::tests::lite_compress(data2, lite_compressor);
+
+  REQUIRE(writer.open(test_log_path.string(), writer_config_text));
+  REQUIRE(writer.create_channel(metadata1));
+  REQUIRE(writer.create_channel(metadata2));
+
+  const uint32_t message_count = 20000U;
+  const LogTimestamp start_time{std::chrono::seconds{1'000'000}};
+  const std::chrono::seconds message_interval{1};
+  auto transmit_time = start_time;
+  for (uint32_t i = 0U; i < message_count; ++i)
+  {
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = i * 2U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
+    transmit_time -= message_interval;
+
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = (i * 2U) + 1U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header2,
+        .data = compressed_data2,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = true,
+      }));
+    transmit_time -= message_interval;
+  }
+  transmit_time = start_time;
+  for (uint32_t i = 0U; i < message_count; ++i)
+  {
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name1,
+        .sequence_number = i * 2U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header1,
+        .data = data1,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = false,
+      }));
+    transmit_time -= message_interval;
+
+    REQUIRE(writer.write(
+      LoggedMessage{
+        .channel_name = channel_name2,
+        .sequence_number = (i * 2U) + 1U,
+        .log_time = transmit_time + std::chrono::nanoseconds(1),
+        .transmit_time = transmit_time,
+        .header = header2,
+        .data = compressed_data2,
+        .is_repeated_persistent = false,
+        .is_lite_compressed = true,
+      }));
+    transmit_time -= message_interval;
+  }
+  const auto end_time = transmit_time + message_interval;
+
+  REQUIRE(writer.close());
+
+  Reader reader{memory_resource, test_log_path.string()};
+
+  REQUIRE(reader.open());
+  REQUIRE(reader);
+
+  auto expected_sequence_number = message_count * 2U;
+  auto expected_time = end_time;
+  for (size_t i = 0U; i < message_count; ++i)
+  {
+    CAPTURE(i);
+
+    --expected_sequence_number;
+    auto read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name2);
+    REQUIRE(read_result->sequence_number == expected_sequence_number);
+    REQUIRE(read_result->log_time == expected_time + std::chrono::nanoseconds(1));
+    REQUIRE(read_result->transmit_time == expected_time);
+    REQUIRE(read_result->header.size() == header2.size());
+    REQUIRE(std::memcmp(read_result->header.data(), header2.data(), header2.size()) == 0);
+    REQUIRE(read_result->data.size() == data2.size());
+    REQUIRE(std::memcmp(read_result->data.data(), data2.data(), data2.size()) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+    REQUIRE_FALSE(read_result->is_lite_compressed);
+    expected_time += message_interval;
+
+    --expected_sequence_number;
+    read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name1);
+    REQUIRE(read_result->sequence_number == expected_sequence_number);
+    REQUIRE(read_result->log_time == expected_time + std::chrono::nanoseconds(1));
+    REQUIRE(read_result->transmit_time == expected_time);
+    REQUIRE(read_result->header.size() == header1.size());
+    REQUIRE(std::memcmp(read_result->header.data(), header1.data(), header1.size()) == 0);
+    REQUIRE(read_result->data.size() == data1.size());
+    REQUIRE(std::memcmp(read_result->data.data(), data1.data(), data1.size()) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+    REQUIRE_FALSE(read_result->is_lite_compressed);
+    expected_time += message_interval;
+  }
+
+  REQUIRE_FALSE(reader.read_next());
   REQUIRE_FALSE(reader);
   REQUIRE(reader.read_next() == jewels::unexpected(LogError::end_of_log));
 }

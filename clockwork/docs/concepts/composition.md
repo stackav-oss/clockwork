@@ -165,6 +165,43 @@ You make the connections when you're at the level of composition where you know 
 Don't fuss too much about this decision; it's easy to change this stuff later.
 The worst consequence of doing it wrong is that you might have to copy/paste your Box definitions to adapt them to a different system configuration, if you've made the connections prematurely.
 
+### Optional Cog Inputs and Outputs
+
+By default, all inputs and outputs to a cog are "required".
+Meaning that they must be connected to a channel or the Clockwork compiler will flag an error.
+If you want to define a cog with an input or output that is optionally connected to a channel you can declare it as such in the cog definition as shown below.
+When an input is declared as `connect_optional`, the input view on the dial will always be empty if the input is not connected to a channel.
+When an output is declared `connect_optional`, and the output is not connected to a channel, marking the output for publish and setting the output message fields will have no affect.
+You can determine whether a cog input or output is connected at runtime via the `connected` method provided by the dial API.
+
+```clockwork
+cog HelloWorld
+{
+    inputs
+    {
+        hello_in: Tappy<HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+
+    outputs
+    {
+        hello_out: Tappy<HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+}
+```
+
+And to check at runtime if these are connected:
+
+```c++
+bool is_hello_in_connected = dial.get_inputs().get_hello_in().connected();
+bool is_hello_out_connected = dial.get_outputs().get_hello_out().connected();
+```
+
 ### Note about definition location
 
 Channels must be defined in a `.clk` file other than the one which contains the schema definition of the associated message type.

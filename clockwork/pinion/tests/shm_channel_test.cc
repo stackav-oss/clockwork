@@ -3,7 +3,6 @@
 
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/detail/mmap_region.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
@@ -17,6 +16,7 @@
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/mmap_region.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -63,12 +63,12 @@ public:
   static auto open_buffer(
     jewels::memory::MemoryResource memres,
     const jewels::filesystem::Directory& shm_dir,
-    std::string_view name,
+    std::string_view channel_uuid_str,
     const pinion::BufferLayout& layout,
     Role role,
     ResumeBehavior resume_behavior)
   {
-    return ShmChannel::open_buffer(memres, shm_dir, name, layout, role, resume_behavior);
+    return ShmChannel::open_buffer(memres, shm_dir, channel_uuid_str, layout, role, resume_behavior);
   }
 
 protected:
@@ -139,7 +139,8 @@ TEST_CASE("ShmChannel main")
     .message_size = message_size,
   };
 
-  const std::string channel_name = jewels::Uuid<Tag>::random_uuid().to_string();
+  const std::string channel_uuid_str = jewels::Uuid<Tag>::random_uuid().to_string();
+  constexpr auto channel_name = "/test/channel";
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
 
   const support::TmpShmNamespace tmp_namespace;
@@ -149,26 +150,26 @@ TEST_CASE("ShmChannel main")
 
   SECTION("file tests")
   {
-    auto open = [&](const std::string& name, const BufferLayout& layout, ShmChannel::Role role)
-    { return ShmChannelOpenHack::open_buffer(memres, *channel_root, name, layout, role, resume_behavior); };
+    auto open = [&](std::string_view channel_uuid_str, const BufferLayout& layout, ShmChannel::Role role)
+    { return ShmChannelOpenHack::open_buffer(memres, *channel_root, channel_uuid_str, layout, role, resume_behavior); };
 
     SECTION("basic creation")
     {
       // Sanity check file doesn't exist
-      CHECK(!File::open(channel_root->descriptor(), channel_name));
+      CHECK(!File::open(channel_root->descriptor(), channel_uuid_str));
 
       { // Attempting to open the buffer file as a subscriber should fail
-        auto result = open(channel_name, buffer_layout, ShmChannel::Role::subscriber);
+        auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::subscriber);
         REQUIRE(!result);
         CHECK(result.error() == ShmChannel::Error::missing);
       }
       { // Opening as a publisher should succeed
-        auto result = open(channel_name, buffer_layout, ShmChannel::Role::publisher);
+        auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::publisher);
         REQUIRE(result);
-        CHECK(File::open(channel_root->descriptor(), channel_name));
+        CHECK(File::open(channel_root->descriptor(), channel_uuid_str));
       }
       // Opening as a subscriber should also be okay
-      CHECK(open(channel_name, buffer_layout, ShmChannel::Role::subscriber));
+      CHECK(open(channel_uuid_str, buffer_layout, ShmChannel::Role::subscriber));
       // Re-opening with a different layout shouldn't work for either role
       for (auto role : {ShmChannel::Role::publisher, ShmChannel::Role::subscriber})
       {
@@ -176,7 +177,7 @@ TEST_CASE("ShmChannel main")
           .num_slots = num_slots - 1,
           .message_size = message_size,
         };
-        auto result = open(channel_name, bad_layout, role);
+        auto result = open(channel_uuid_str, bad_layout, role);
         REQUIRE(!result);
         CHECK(result.error() == ShmChannel::Error::dirty);
       }
@@ -184,8 +185,8 @@ TEST_CASE("ShmChannel main")
 
     SECTION("error - exists as link")
     {
-      CHECK(::symlinkat("/proc/self/fd/0", channel_root->descriptor(), channel_name.c_str()) == 0);
-      auto result = open(channel_name, buffer_layout, ShmChannel::Role::publisher);
+      CHECK(::symlinkat("/proc/self/fd/0", channel_root->descriptor(), channel_uuid_str.c_str()) == 0);
+      auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::publisher);
       REQUIRE(!result);
       CHECK(result.error() == ShmChannel::Error::dirty);
     }
@@ -194,7 +195,7 @@ TEST_CASE("ShmChannel main")
     {
       const std::array<char, 2 * message_size> ref{"123abc"};
       // Open the buffer and write to the mmap
-      auto result = open(channel_name, buffer_layout, ShmChannel::Role::publisher);
+      auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::publisher);
       REQUIRE(result);
       auto bytes = std::get<0>(result.value()).to_span();
       REQUIRE(bytes.size() > ref.size());
@@ -202,7 +203,7 @@ TEST_CASE("ShmChannel main")
       // Flush
       CHECK(::msync(bytes.data(), ref.size(), MS_SYNC) == 0);
       // Read the file directly to confirm data was written
-      auto file = File::open(channel_root->descriptor(), channel_name);
+      auto file = File::open(channel_root->descriptor(), channel_uuid_str);
       REQUIRE(file);
       std::array<char, ref.size()> out{};
       auto read = file->pread_str(out);
@@ -213,7 +214,7 @@ TEST_CASE("ShmChannel main")
 
     SECTION("bespoke pubsub")
     {
-      auto result = open(channel_name, buffer_layout, ShmChannel::Role::publisher);
+      auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::publisher);
       REQUIRE(result);
 
       Buffer& buffer = *std::get<1>(result.value());
@@ -236,6 +237,7 @@ TEST_CASE("ShmChannel main")
         memres,
         *channel_root,
         socket_ns,
+        channel_uuid_str,
         channel_name,
         buffer_layout,
         max_observer,
@@ -249,7 +251,15 @@ TEST_CASE("ShmChannel main")
 
     // Create publisher
     auto publisher_result = ShmPublisher::open(
-      memres, *channel_root, socket_ns, channel_name, buffer_layout, max_observer, max_connections, resume_behavior);
+      memres,
+      *channel_root,
+      socket_ns,
+      channel_uuid_str,
+      channel_name,
+      buffer_layout,
+      max_observer,
+      max_connections,
+      resume_behavior);
     REQUIRE(publisher_result);
     auto publisher_channel = std::make_shared<ShmPublisher>(*std::move(publisher_result));
     REQUIRE(epoll.add(publisher_channel->socket(), EPOLLIN, publisher_channel));
@@ -288,6 +298,7 @@ TEST_CASE("ShmChannel main")
         memres,
         *channel_root,
         socket_ns,
+        channel_uuid_str,
         channel_name,
         buffer_layout,
         max_observer,
@@ -340,7 +351,15 @@ TEST_CASE("ShmChannel main")
 
     // Create publisher
     auto publisher_channel = ShmPublisher::open(
-      memres, *channel_root, socket_ns, channel_name, buffer_layout, max_observer, max_connections, resume_behavior);
+      memres,
+      *channel_root,
+      socket_ns,
+      channel_uuid_str,
+      channel_name,
+      buffer_layout,
+      max_observer,
+      max_connections,
+      resume_behavior);
     REQUIRE(publisher_channel);
     CHECK(publisher_channel->buffer()->layout().num_slots == buffer_layout.num_slots);
     CHECK(publisher_channel->buffer()->layout().message_size == buffer_layout.message_size);
@@ -350,6 +369,7 @@ TEST_CASE("ShmChannel main")
       memres,
       *channel_root,
       socket_ns,
+      channel_uuid_str,
       channel_name,
       buffer_layout,
       max_observer,
@@ -369,7 +389,8 @@ TEST_CASE("ShmChannel main")
   SECTION("factory")
   {
     ShmChannelFactory factory(memres, std::move(*channel_root), tmp_namespace.get_namespace(), resume_behavior);
-    auto opener = [&](auto role) { return factory.open(role, channel_name, buffer_layout, max_observer); };
+    auto opener = [&](auto role)
+    { return factory.open(role, channel_uuid_str, channel_name, buffer_layout, max_observer); };
 
     auto shm_publisher = opener(ShmChannel::Role::publisher);
     auto shm_subscriber = opener(ShmChannel::Role::subscriber);
@@ -398,20 +419,26 @@ TEST_CASE("ShmChannel main")
     const support::TmpShmNamespace ns1;
     auto ns1_factory = ShmChannelFactory::make(memres, ns1.get_namespace(), ns1.get_full_path().native());
     REQUIRE(ns1_factory);
-    auto ns1_publisher = ns1_factory->open_publisher(channel_name, buffer_layout, max_observer).value();
-    auto ns1_subscriber = ns1_factory->open_subscriber(channel_name, buffer_layout, max_observer).value();
+    auto ns1_publisher =
+      ns1_factory->open_publisher(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
+    auto ns1_subscriber =
+      ns1_factory->open_subscriber(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     CHECK(ns1_factory->socket_ns() == std::pmr::string("/clockwork/" + ns1.get_namespace() + "/pinion/pub"));
     CHECK(
-      std::filesystem::exists(ns1.get_full_path() / "clockwork" / ns1.get_namespace() / "pinion/pub" / channel_name));
+      std::filesystem::exists(
+        ns1.get_full_path() / "clockwork" / ns1.get_namespace() / "pinion/pub" / channel_uuid_str));
 
     const support::TmpShmNamespace ns2;
     auto ns2_factory = ShmChannelFactory::make(memres, ns2.get_namespace(), ns2.get_full_path().native());
     REQUIRE(ns2_factory);
-    auto ns2_publisher = ns2_factory->open(Role::publisher, channel_name, buffer_layout, max_observer).value();
-    auto ns2_subscriber = ns2_factory->open(Role::subscriber, channel_name, buffer_layout, max_observer).value();
+    auto ns2_publisher =
+      ns2_factory->open(Role::publisher, channel_uuid_str, channel_name, buffer_layout, max_observer).value();
+    auto ns2_subscriber =
+      ns2_factory->open(Role::subscriber, channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     CHECK(ns2_factory->socket_ns() == std::pmr::string("/clockwork/" + ns2.get_namespace() + "/pinion/pub"));
     CHECK(
-      std::filesystem::exists(ns2.get_full_path() / "clockwork" / ns2.get_namespace() / "pinion/pub" / channel_name));
+      std::filesystem::exists(
+        ns2.get_full_path() / "clockwork" / ns2.get_namespace() / "pinion/pub" / channel_uuid_str));
 
     TestObserver ns1_events;
     CHECK(ns1_publisher->add_observer(jewels::memory::make_non_null_from_ref(ns1_events)));
@@ -462,7 +489,8 @@ TEST_CASE("Reconnect when resume is allowed")
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
   const jewels::testing::TmpDirectoryGuard shm_dir;
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto name = jewels::Uuid<void>::random_uuid().to_string();
+  const auto channel_uuid_str = jewels::Uuid<void>::random_uuid().to_string();
+  constexpr auto channel_name = "/test/channel";
 
   EPollSnooper epoll;
 
@@ -470,12 +498,12 @@ TEST_CASE("Reconnect when resume is allowed")
     ShmChannelFactory::make(memres, socket_ns, shm_dir.get_path().string(), ShmChannel::ResumeBehavior::dirty_resume);
   REQUIRE(factory_result);
 
-  auto publisher_result = factory_result->open_publisher(name, layout, 1U);
+  auto publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   auto publisher = *std::move(publisher_result);
   REQUIRE(epoll.add(publisher->socket(), EPOLLIN, publisher));
 
-  auto subscriber_result = factory_result->open_subscriber(name, layout, 1U);
+  auto subscriber_result = factory_result->open_subscriber(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(subscriber_result);
   const auto subscriber = *std::move(subscriber_result);
   auto subscriber_handle = subscriber->make_subscriber();
@@ -520,7 +548,7 @@ TEST_CASE("Reconnect when resume is allowed")
   REQUIRE(subscriber->socket() == -1);
   REQUIRE_FALSE(subscriber->timer_descriptor() == -1);
 
-  publisher_result = factory_result->open_publisher(name, layout, 1U);
+  publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   publisher = *std::move(publisher_result);
   REQUIRE(epoll.add(publisher->socket(), EPOLLIN, publisher));
@@ -561,15 +589,16 @@ TEST_CASE("Reconnect fails when resume is disallowed")
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
   const jewels::testing::TmpDirectoryGuard shm_dir;
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto name = jewels::Uuid<void>::random_uuid().to_string();
+  const auto channel_uuid_str = jewels::Uuid<void>::random_uuid().to_string();
+  constexpr auto channel_name = "/test/channel";
 
   auto factory_result =
     ShmChannelFactory::make(memres, socket_ns, shm_dir.get_path().string(), ShmChannel::ResumeBehavior::no_resume);
-  auto publisher_result = factory_result->open_publisher(name, layout, 1U);
+  auto publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   auto publisher = *std::move(publisher_result);
   publisher.reset();
-  publisher_result = factory_result->open_publisher(name, layout, 1U);
+  publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result.error() == ShmChannel::Error::dirty);
 }
 } // namespace clockwork::pinion

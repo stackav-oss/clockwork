@@ -20,6 +20,7 @@ from clockwork.dsl.ir import clkbuiltins, typesys
 from clockwork.dsl.serialization import tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
 from clockwork.serialization.metadata import tachyon_model
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.serialization.py import protocol
@@ -176,7 +177,7 @@ BUILTIN_SERDES: Final[dict[str, SerDes[Any]]] = {
 class TachyonDynMetadataRegistry(Context):
     """Registry for Tachyon Python serializers from metadata."""
 
-    def __init__(self) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self) -> None:
         """Create a new, empty Tachyon serializer registry."""
         self.type_registry: dict[str, SerDes[Any]] = {}
         self.generic_type_registry: dict[
@@ -186,6 +187,7 @@ class TachyonDynMetadataRegistry(Context):
             ],
         ] = {}
 
+    @override
     def import_from(self, other: TachyonDynMetadataRegistry) -> None:
         """Combine this context with items from another.
 
@@ -208,7 +210,8 @@ class TachyonDynMetadataRegistry(Context):
 class TachyonDynMetadataRegistryKey(ContextKey[TachyonDynMetadataRegistry]):
     """Compiler context key for Tachyon Python serializer registry from metadata."""
 
-    def make_default(self, compiler_context: CompilerContext) -> TachyonDynMetadataRegistry:  # noqa: ARG002 (match supertype)
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> TachyonDynMetadataRegistry:
         """Create a default instance of the registry with built-in types."""
         registry = TachyonDynMetadataRegistry()
 
@@ -406,7 +409,7 @@ def _get_constraint(compiler_context: CompilerContext, clk_type: typesys.TypeVal
 class PrimitiveSerDes(Generic[T]):
     """SerDes for primitive types."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self, compiler_context: CompilerContext, clk_type: typesys.TypeVal, py_type: type[T], fmt: str
     ) -> None:
         """Create a SerDes for primitive types."""
@@ -472,7 +475,7 @@ def _uuid_factory(
 class EnumSerDes:
     """SerDes for an enum type."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         typ: tachyon_model.ClkEnumType,
@@ -482,7 +485,7 @@ class EnumSerDes:
         """Create a SerDes for array types."""
         self.model_type = typ
         underlying_type = types[typ.underlying_type_id]
-        assert isinstance(underlying_type, tachyon_model.BuiltInType)  # noqa: S101 (invariant)
+        assert isinstance(underlying_type, tachyon_model.BuiltInType)
         self.underlying_type = underlying_type
         values = [
             (value_def.name, value_def.value) for value_def in sorted(self.model_type.values, key=lambda x: x.num)
@@ -555,7 +558,7 @@ class FixedArraySerDes(Generic[T]):
     """SerDes for a fixed-size array of T type."""
 
     # Suppressing PLR0913 (too many args) because this can't really be split. Args are kwonly to mitigate confusion.
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: PLR0913
+    def __init__(  # noqa: PLR0913
         self,
         *,
         compiler_context: CompilerContext,
@@ -612,7 +615,7 @@ class VarArraySerDes(Generic[T]):
     """SerDes for a variable array of T type."""
 
     # Suppressing PLR0913 (too many args) because this can't really be split. Args are kwonly to mitigate confusion.
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: PLR0913
+    def __init__(  # noqa: PLR0913
         self,
         *,
         compiler_context: CompilerContext,
@@ -687,10 +690,10 @@ def _fixed_array_factory(
     if typ.fqn != clkbuiltins.FIXED_ARRAY.fqn:
         msg = f"Expected FixedArray but got {typ.fqn}"
         raise RuntimeError(msg)
-    assert isinstance(typ, tachyon_model.BuiltInType)  # noqa: S101  (invariant)
+    assert isinstance(typ, tachyon_model.BuiltInType)
     element_type_id, size_str = typ.arguments
-    assert isinstance(element_type_id, int)  # noqa: S101  (invariant)
-    assert isinstance(size_str, str)  # noqa: S101  (invariant)
+    assert isinstance(element_type_id, int)
+    assert isinstance(size_str, str)
     size = int(size_str)
     constraint = tachyon_reg.FieldConstraint(size=typ.size, alignment=typ.alignment)
     return FixedArraySerDes(
@@ -714,10 +717,10 @@ def _var_array_factory(
     if typ.fqn != clkbuiltins.VAR_ARRAY.fqn:
         msg = f"Expected VarArray but got {typ.fqn}"
         raise RuntimeError(msg)
-    assert isinstance(typ, tachyon_model.BuiltInType)  # noqa: S101  (invariant)
+    assert isinstance(typ, tachyon_model.BuiltInType)
     element_type_id, size_str = typ.arguments
-    assert isinstance(element_type_id, int)  # noqa: S101  (invariant)
-    assert isinstance(size_str, str)  # noqa: S101  (invariant)
+    assert isinstance(element_type_id, int)
+    assert isinstance(size_str, str)
     size = int(size_str)
     constraint = tachyon_reg.FieldConstraint(size=typ.size, alignment=typ.alignment)
     return VarArraySerDes(
@@ -741,9 +744,9 @@ def _var_string_factory(
     if typ.fqn != clkbuiltins.VAR_STRING.fqn:
         msg = f"Expected VarString but got {typ.fqn}"
         raise RuntimeError(msg)
-    assert isinstance(typ, tachyon_model.BuiltInType)  # noqa: S101  (invariant)
+    assert isinstance(typ, tachyon_model.BuiltInType)
     (size_str,) = typ.arguments
-    assert isinstance(size_str, str)  # noqa: S101  (invariant)
+    assert isinstance(size_str, str)
     size = int(size_str)
     constraint = tachyon_reg.FieldConstraint(size=typ.size, alignment=typ.alignment)
 
@@ -759,7 +762,7 @@ def _var_string_factory(
             serdeses=serdeses,
         ).make_serdes(),
     )
-    assert array_serdes.constraint == constraint  # noqa: S101  (sanity check)
+    assert array_serdes.constraint == constraint
 
     def _serialize(obj: str, buffer: memoryview) -> None:
         array_serdes.serializer([ord(x) for x in obj], buffer)
@@ -773,7 +776,7 @@ def _var_string_factory(
 class OptionalSerDes(Generic[T]):
     """SerDes for Optional<T>."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         type_id: int,
@@ -782,10 +785,10 @@ class OptionalSerDes(Generic[T]):
     ) -> None:
         """Create a SerDes for array types."""
         self.model_type = types[type_id]
-        assert isinstance(self.model_type, tachyon_model.BuiltInType)  # noqa: S101
+        assert isinstance(self.model_type, tachyon_model.BuiltInType)
         self.constraint = tachyon_reg.FieldConstraint(size=self.model_type.size, alignment=self.model_type.alignment)
         (self.element_type_id,) = self.model_type.arguments
-        assert isinstance(self.element_type_id, int)  # noqa: S101
+        assert isinstance(self.element_type_id, int)
         self.element_type = types[self.element_type_id]
         underlying_serdes = _serdes_for_type(
             compiler_context=compiler_context,
@@ -822,7 +825,7 @@ class OptionalSerDes(Generic[T]):
     def make_serdes(self) -> SerDes[T | None]:
         """Construct a SerDes for the registry."""
         return SerDes(
-            type_=self.underlying_py_type | None,  # type: ignore[arg-type]
+            type_=self.underlying_py_type | None,  # pyright: ignore[reportArgumentType] Type not known ahead of time
             fqn="",
             constraint=self.constraint,
             serializer=self.serialize,
@@ -852,12 +855,12 @@ class SchemaSerDes(Generic[T]):
     py_class: type[T]
     field_serdeses: list[tuple[str, slice, SerDes[Any]]]
 
-    def serialize(self, obj: Any, buffer: memoryview) -> None:  # noqa: ANN401
+    def serialize(self, obj: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
         """Serializer for schema type."""
         for fld_name, slice_, serdes in self.field_serdeses:
             serdes.serializer(getattr(obj, fld_name), buffer[slice_])
 
-    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401
+    def deserialize(self, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
         """Deserializer for type T."""
         return self.py_class(
             **{fld_name: serdes.deserializer(buffer[slice_]) for fld_name, slice_, serdes in self.field_serdeses}
@@ -895,20 +898,20 @@ class SchemaSerDes(Generic[T]):
             model_type=schema, py_class=py_class, field_serdeses=field_serdeses
         )
 
-        def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401
+        def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
             schema_serdes.serialize(self, buffer)
 
-        @classmethod  # type: ignore[misc]
-        def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401
+        @classmethod
+        def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
             return schema_serdes.deserialize(buffer)
 
         constraint = tachyon_reg.FieldConstraint(size=schema.size, alignment=schema.alignment)
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_constraint(_: type) -> tachyon_reg.FieldConstraint:
             return constraint
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_metadata_name(_: type) -> str:
             if metadata_name is None:
                 msg = "Tachyon metadata name is undefined for inner generated types"
@@ -917,7 +920,7 @@ class SchemaSerDes(Generic[T]):
 
         py_class_metadata = tachyon_model.TachyonMetadata(outer_type_id=type_id, types=types)
 
-        @classmethod  # type: ignore[misc]
+        @classmethod
         def get_tachyon_metadata(_: type) -> tachyon_model.TachyonMetadata:
             return py_class_metadata
 

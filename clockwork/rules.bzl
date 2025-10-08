@@ -9,7 +9,7 @@
 
 load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_file")
 
-ClkInfo = provider("Collects Clockwork source files", fields = ["src", "srcs"])
+ClkInfo = provider("Collects Clockwork source files", fields = ["src", "srcs", "cache"])
 
 def _clk_impl(ctx):
     if len(ctx.files.srcs) != 1:
@@ -18,41 +18,54 @@ def _clk_impl(ctx):
     src = ctx.files.srcs[0]
     srcs = depset([src], transitive = [dep[ClkInfo].srcs for dep in ctx.attr.deps if ClkInfo in dep])
 
-    if len(ctx.attr.outs) > 0:
+    input_dep_cache = depset([], transitive = [dep[ClkInfo].cache for dep in ctx.attr.deps if ClkInfo in dep])
+    cache_files = []
+    if ctx.attr.compile:
+        pkl_file = ctx.actions.declare_file(src.basename + "_pkl")
+        cache_files.append(pkl_file)
+
         args = ctx.actions.args()
         args.add("compile-module")
         args.add("--input")
         args.add(src.path)
         args.add("--root")
-        args.add(ctx.outputs.outs[0].root.path)
+        args.add(pkl_file.root.path)
 
         args.add("--repo")
         args.add(ctx.attr.repo)
 
+        if ctx.attr.write_json_files:
+            args.add("--write-json-files")
+
         ctx.actions.run(
-            inputs = depset(transitive = [srcs, ctx.attr._clkc[DefaultInfo].default_runfiles.files]),
-            outputs = ctx.outputs.outs,
+            inputs = depset(transitive = [srcs, ctx.attr._clkc[DefaultInfo].default_runfiles.files, input_dep_cache]),
+            outputs = ctx.outputs.outs + [pkl_file],
             arguments = [args],
             progress_message = "Compiling Clockwork module %s" % ctx.files.srcs[0].short_path,
             mnemonic = "CompileClockworkModule",
             executable = ctx.executable._clkc,
+            env = ctx.attr._clkc[RunEnvironmentInfo].environment,
         )
 
-    files = depset(direct = ctx.outputs.outs + [src], transitive = [srcs, ctx.attr._clkc[DefaultInfo].files])
-    runfiles = ctx.runfiles(files = ctx.outputs.outs)
+    new_cache = depset(cache_files, transitive = [input_dep_cache])
+
+    files = depset(direct = ctx.outputs.outs + [src] + cache_files, transitive = [srcs, ctx.attr._clkc[DefaultInfo].files])
+    runfiles = ctx.runfiles(files = ctx.outputs.outs + [src] + cache_files).merge_all([dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps])
     return [
         DefaultInfo(files = files, runfiles = runfiles),
-        ClkInfo(src = src, srcs = srcs),
+        ClkInfo(src = src, srcs = srcs, cache = new_cache),
         OutputGroupInfo(clk_files = srcs),
     ]
 
 _clk = rule(
     implementation = _clk_impl,
     attrs = {
+        "compile": attr.bool(default = True),
         "deps": attr.label_list(),
         "outs": attr.output_list(),
         "repo": attr.string(mandatory = True),
         "srcs": attr.label_list(allow_files = [".clk"]),
+        "write_json_files": attr.bool(default = False),
         "_clkc": attr.label(
             cfg = "exec",
             default = Label("//clockwork/dsl:clkc"),
@@ -103,17 +116,19 @@ def _update_clk_targets(name, srcs):
         diff_test = True,
     )
 
-def clk(name, srcs, **kwargs):
+def clk(name, srcs, compile = True, write_json_files = False, **kwargs):
     """Compile a clk file.
 
     Args:
         name: The name of the clk target.
         srcs: A list containing a single .clk file.
+        compile: Whether to run the compiler or not (False essentially turns this into a filegroup).
+        write_json_files: Whether to write JSON versions of the config or not.
         **kwargs: Additional arguments passed through to the underlying clk rule.
     """
 
-    _clk(name = name, srcs = srcs, repo = native.module_name(), **kwargs)
+    _clk(name = name, srcs = srcs, repo = native.module_name(), compile = compile, write_json_files = write_json_files, **kwargs)
 
     # Skip this step for externals.
-    if native.repo_name() == "":
+    if native.repo_name() == "" and compile:
         _update_clk_targets(name, srcs)

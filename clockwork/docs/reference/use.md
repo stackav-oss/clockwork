@@ -114,6 +114,6 @@ Cross repositories would provide a prefix of `@<repo name>` to the identifier.
 
 For example, if module `use a::b::c` is from an external repository `ext_repo`, the use statement would look like `use @ext_repo::a::b::c`.
 
-The repository prefix is part of all fully qualified symbol names and is used by the compiler to augment search paths for clockwork module files.
+The repository prefix is part of all fully qualified symbol names and is used by the compiler to augment search paths for Clockwork module files.
 
 Even if a repository prefix is not specified, internally the compiler adds the prefix for the current repository to any symbol name.

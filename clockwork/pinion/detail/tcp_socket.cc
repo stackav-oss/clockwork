@@ -89,6 +89,11 @@ int TcpSocket::descriptor() const noexcept
   return *socket_;
 }
 
+jewels::filesystem::FileDescriptor TcpSocket::release_descriptor()
+{
+  return std::move(socket_);
+}
+
 [[nodiscard]] jewels::expected<jewels::networking::SocketAddress, std::errc>
 TcpSocket::get_bound_address() const noexcept
 {

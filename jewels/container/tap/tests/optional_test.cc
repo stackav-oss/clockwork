@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <type_traits>
 
@@ -116,15 +117,17 @@ TEST_CASE("Construction")
     STATIC_REQUIRE(std::is_constructible_v<WrappedUInt32, Sentinel>);
     SECTION("Invalid")
     {
-      const Optional<Sentinel> other{};
+      Optional<Sentinel> other{};
       REQUIRE(!Opt{other});
-      REQUIRE(!Opt{std::move(other)}); // NOLINT(performance-move-const-arg)
+      // NOLINTNEXTLINE(performance-move-const-arg) Intentionally testing move behavior
+      REQUIRE(!Opt{std::move(other)});
     }
     SECTION("Valid")
     {
-      const Optional<Sentinel> other{Sentinel{}};
+      Optional<Sentinel> other{Sentinel{}};
       REQUIRE(Opt{other} == WrappedUInt32{Sentinel{}});
-      REQUIRE(Opt{std::move(other)} == WrappedUInt32{Sentinel{}}); // NOLINT(performance-move-const-arg)
+      // NOLINTNEXTLINE(performance-move-const-arg) Intentionally testing move behavior
+      REQUIRE(Opt{std::move(other)} == WrappedUInt32{Sentinel{}});
     }
   }
   SECTION("In place")
@@ -391,6 +394,81 @@ TEST_CASE("Comparison")
     REQUIRE(std::nullopt != opt);
     REQUIRE(!(opt == std::nullopt));
     REQUIRE(!(std::nullopt == opt));
+  }
+}
+
+// Helper classes for make_optional.
+class NoArgClass
+{
+public:
+  NoArgClass() = default;
+};
+
+class OneArgClass
+{
+public:
+  explicit OneArgClass(NoArgClass /* arg */) {};
+};
+
+class TwoArgClass
+{
+public:
+  TwoArgClass(NoArgClass /* arg1 */, int32_t /* arg2 */) {};
+};
+
+TEST_CASE("make_optional")
+{
+  SECTION("rvalue int")
+  {
+    const Optional<int32_t> opt = make_optional(32);
+    REQUIRE(opt.has_value());
+    REQUIRE(opt.value() == 32);
+  }
+
+  SECTION("lvalue int")
+  {
+    const int32_t lvalue_int = 32;
+    const Optional<int32_t> lvalue_opt = make_optional(lvalue_int);
+    REQUIRE(lvalue_opt.has_value());
+    REQUIRE(lvalue_opt.value() == 32);
+  }
+
+  SECTION("rvalue class")
+  {
+    const Optional<NoArgClass> opt = make_optional(NoArgClass());
+    REQUIRE(opt.has_value());
+  }
+
+  SECTION("lvalue class")
+  {
+    const NoArgClass obj;
+    const Optional<NoArgClass> opt = make_optional(obj);
+    REQUIRE(opt.has_value());
+  }
+
+  SECTION("move-only type")
+  {
+    auto opt = make_optional(std::make_unique<int32_t>(42));
+    REQUIRE(opt.has_value());
+    REQUIRE(*opt.value() == 42);
+  }
+
+  SECTION("NoArgClass via in_place")
+  {
+    auto opt = make_optional<NoArgClass>(std::in_place);
+    REQUIRE(opt.has_value());
+  }
+
+  SECTION("OneArgClass via in_place")
+  {
+    auto opt = make_optional<OneArgClass>(std::in_place, NoArgClass{});
+    REQUIRE(opt.has_value());
+  }
+
+  SECTION("TwoArgClass via in_place")
+  {
+    auto opt = make_optional<TwoArgClass>(std::in_place, NoArgClass{}, 42);
+    REQUIRE(opt.has_value());
   }
 }
 

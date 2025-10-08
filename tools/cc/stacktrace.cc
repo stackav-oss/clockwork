@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <execinfo.h>
-#include <features.h>
 
 #include <array>
 #include <csignal>
@@ -32,15 +31,11 @@ void signal_handler(int sig)
   // strsignal isn't thread safe and sigdescr_np wasn't added until glibc 2.32 so we need to access the signals list
   // directly.
   std::string_view signal_name = "unknown";
-#if defined __GLIBC__ && __GLIBC__ == 2 && __GLIBC_MINOR__ < 32
   if (sig > 0 && sig < NSIG)
   {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index) - This access is bounds checked
     signal_name = std::string_view{sys_siglist[sig]};
   }
-#else
-  signal_name = std::string_view{sigdescr_np(sig)};
-#endif
 
   strstr << "Caught signal " << sig << " (" << signal_name << ")\n";
   write(STDERR_FILENO, strstr.str().c_str(), strlen(strstr.str().c_str()));

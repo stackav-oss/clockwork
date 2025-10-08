@@ -11,7 +11,6 @@
 
 #include <algorithm>
 #include <compare>
-#include <ratio>
 #include <utility>
 
 namespace clockwork
@@ -31,7 +30,7 @@ void OnlineCogQueue::notify()
 
 void OnlineCogQueue::push(CogEnvelope envelope)
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   if (std::ranges::none_of(queue_, [&](const auto& element) { return envelope.cog == element.cog; }))
   {
     queue_.push_back(envelope);
@@ -67,8 +66,13 @@ auto OnlineCogQueue::pop(std::chrono::nanoseconds timeout) -> PopResult
 
 CogQueueStats OnlineCogQueue::stats() const
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   return CogQueueStats{.size = queue_.size()};
+}
+
+bool OnlineCogQueue::is_offline() const
+{
+  return false;
 }
 
 } // namespace clockwork

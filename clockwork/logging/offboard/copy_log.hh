@@ -22,15 +22,19 @@ namespace clockwork_logging::offboard
 /// @param[in] source_uri Source log URI
 /// @param[in] dest_uri Destination log URI
 /// @param[in] maybe_desired_channels Optional set of desired channels
+/// @param[in] maybe_excluded_channels Optional set of excluded channels
 /// @param[in] maybe_log_interval Optional relative log interval
 /// @param[in] writer_config_str Writer config protobuf string
+/// @param[in] no_deep_copy Don't deep copy log unions, just copy the log_union.pbtxt file
 /// @return LogError on failure
 [[nodiscard]] LogExpected<void> copy_log(
   jewels::memory::MemoryResource memory_resource,
   std::string_view source_uri,
   std::string_view dest_uri,
   const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels = std::nullopt,
+  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_excluded_channels = std::nullopt,
   const std::optional<RelativeInterval>& maybe_log_interval = std::nullopt,
-  std::string_view writer_config_str = {});
+  std::string_view writer_config_str = {},
+  bool no_deep_copy = false);
 
 } // namespace clockwork_logging::offboard

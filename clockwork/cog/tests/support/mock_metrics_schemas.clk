@@ -1,0 +1,113 @@
+// This file contains mock metrics schemas that would be generated for a cog
+// with the TestCogPolicy from simple_cog_test.cc. The cog is assumed to be named TestCog.
+// The generation logic is based on clockwork/dsl/ir/cog.py.
+
+use clockwork::dsl::cog::common_cog_event_metrics::{CogEventMetrics, InputChannelEventMetrics};
+use clockwork::dsl::cog::common_cog_telemetry_metrics::{CogTelemetryMetrics, InputChannelTelemetryMetrics, MinMaxMean};
+
+// Telemetry metrics schema for TestCog
+schema TestCogTelemetryMetrics
+{
+  uuid: 587155c2-681e-4b45-bab7-b991447b5881;
+
+  fields
+  {
+    // Input channel telemetry metrics
+    #0 test_input: InputChannelTelemetryMetrics;
+    // No condition input channel telemetry metrics
+    #1 no_cond_input: InputChannelTelemetryMetrics;
+    // Test output message count metrics
+    #2 test_output_num_messages: MinMaxMean<UInt16>;
+    // Trigger values for conditions
+    #3 test_condition_trigger_vals: MinMaxMean<UInt16>;
+    // Common telemetry metrics
+    #4 common_telemetry_metrics: CogTelemetryMetrics;
+  }
+}
+
+// Conditions mask for TestCog
+enum TestCogConditionsMask
+{
+  uuid: aa90e45b-5765-47fd-b95c-a2db010cfff7;
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+
+  values
+  {
+    // No conditions active
+    #0 no_conditions_active default {underlying_value: 0;}
+
+    // Test condition active
+    #1 test_condition {underlying_value: 1;}
+  }
+}
+// Event metrics schema for TestCog
+schema TestCogEventMetrics
+{
+  uuid: 822aacd3-4774-40bf-98c2-793126931b75;
+
+  fields
+  {
+    // Input channel event metrics
+    #0 test_input: InputChannelEventMetrics;
+
+    // No condition input channel event metrics
+    #1 no_cond_input: InputChannelEventMetrics;
+
+    // Test output message count
+    #2 test_output_num_messages: UInt16;
+
+    // Trigger flags
+    #3 trigger_flags: TestCogConditionsMask;
+
+    // Common event metrics
+    #4 common_event_metrics: CogEventMetrics;
+  }
+}
+
+// Batch of event metrics for TestCog
+schema TestCogEventMetricsBatch
+{
+  uuid: 5f708beb-a488-4ed5-9202-855f4ca20551;
+
+  fields
+  {
+    // Batch of event metrics for TestCog
+    #0 event_metrics: VarArray<TestCogEventMetrics, 10>;
+  }
+}
+
+// Cpp target for test cog telemetry metrics
+cpp_target test_cog_telemetry_metrics_cpp
+{
+  options
+  {
+    namespace clockwork::cog::metrics::test;
+  }
+  schema TestCogTelemetryMetrics;
+
+  representation Tachyon<TestCogTelemetryMetrics>;
+
+  interface Tappy<TestCogTelemetryMetrics>;
+}
+
+// Cpp target for test cog event metrics
+cpp_target test_cog_event_metrics_cpp
+{
+  options
+  {
+    namespace clockwork::cog::metrics::test;
+  }
+  enum TestCogConditionsMask;
+  schema TestCogEventMetrics;
+  schema TestCogEventMetricsBatch;
+
+  representation Tachyon<TestCogEventMetrics>;
+  representation Tachyon<TestCogEventMetricsBatch>;
+
+  interface Tappy<TestCogEventMetrics>;
+  interface Tappy<TestCogEventMetricsBatch>;
+}

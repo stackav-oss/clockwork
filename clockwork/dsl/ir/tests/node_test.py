@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test the Node IR module."""
 
@@ -14,6 +15,7 @@ import pytest
 from clockwork.dsl import compiler_context
 from clockwork.dsl.ir import clkbuiltins, node, parse
 from clockwork.dsl.ir.module_id import ModuleID
+from typing_extensions import override
 
 
 @dataclass
@@ -66,11 +68,13 @@ class MockImporter(node.Importer):
     import_specs: dict[node.Module.UseResult, node.ImportSpec] = field(default_factory=dict)
     result_entities: dict[str, node.NamedEntity | node.Module] = field(default_factory=dict)
 
-    def resolve_import(self, _: node.Module, use_result: node.Module.UseResult) -> node.ImportSpec:  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def resolve_import(self, _: node.Module, use_result: node.Module.UseResult) -> node.ImportSpec:  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors # fmt: skip
         """Mock."""
         return self.import_specs[use_result]
 
-    def execute_import(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    @override
+    def execute_import(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
         self, spec: node.ImportSpec, _module: node.Module, _use_result: node.Module.UseResult
     ) -> tuple[node.Module, node.NamedEntity | None]:
         """Mock."""
@@ -91,11 +95,13 @@ class MockImporter(node.Importer):
             self.result_entities[spec.import_name] = module
         return module, entity
 
-    def try_cached_load(self, module_id: ModuleID) -> node.Module | None:  # noqa: ARG002
+    @override
+    def try_cached_load(self, module_id: ModuleID) -> node.Module | None:
         """Mock."""
         return None
 
-    def cache_module(self, module_id: ModuleID, module: node.Module) -> None:  # noqa: ARG002
+    @override
+    def cache_module(self, module_id: ModuleID, module: node.Module) -> None:
         """Mock."""
         return
 

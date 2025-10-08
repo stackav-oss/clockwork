@@ -1,0 +1,11 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+no-cache = true
+
+[pip]
+python-version = "3.10"
+generate-hashes = true
+no-build = true
+emit-build-options = true
+custom-compile-command = "bazel run @clockwork//tools/language_support:update_requirements && bazel run @clockwork//tools/language_support:update_gazelle"

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from clockwork.dsl.ir.module_id import CLK_REPO
 from pydantic.alias_generators import to_snake
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -75,6 +76,7 @@ class Target:
         """Get the rule kind of this target."""
         return to_snake(self.__class__.__name__)
 
+    @override
     def __str__(self) -> str:
         """Create a string representation of the object."""
         string = f"{self.kind}(\n"
@@ -107,6 +109,7 @@ class Label:
             return self
         return Label(value=self.value[loc + 1 :])
 
+    @override
     def __str__(self) -> str:
         """Create a string representation of the object."""
         return self.value

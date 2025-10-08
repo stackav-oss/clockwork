@@ -18,6 +18,7 @@ enum class TestEnum32 : uint32_t
 {
 };
 
+// NOLINTNEXTLINE(cppcoreguidelines-use-enum-class) This is intentionally a classic enum for testing purposes.
 enum ClassicEnum
 {
 };

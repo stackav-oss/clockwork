@@ -10,7 +10,7 @@ cc_test(
     srcs = ["channel_publisher_test.cc"],
     deps = [
         "//clockwork/common:process_description",
-        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/logging/writers/tests/support:test_log_writer_config",
         "//clockwork/logging/writers/tests/support:test_publisher",
         "//clockwork/pinion:observer",

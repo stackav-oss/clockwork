@@ -3,14 +3,13 @@
 
 #include "jewels/container/tap/protobuf_to_tap.hh"
 
+#include "jewels/container/at.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/meta/concepts.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
-
-#include <gsl/util>
 
 #include <algorithm>
 #include <cstddef>
@@ -38,8 +37,8 @@ ConversionStatusExpected protobuf_to_tap(jewels::Uuid<Tag>& output, std::string_
 template <size_t capacity>
 ConversionStatusExpected protobuf_to_tap(tap::VarString<capacity>& output, std::string_view input)
 {
-  const bool success = output.try_set(input);
-  if (!success)
+  const bool is_success = output.try_set(input);
+  if (!is_success)
   {
     jewels::log_cerr_error("Attempted to set a var string with a capacity of {}, with {}", capacity, input);
     return jewels::unexpected(jewels::MonoError{});
@@ -80,7 +79,7 @@ ConversionStatusExpected protobuf_to_tap(std::span<std::byte, size> output, std:
   }
   for (size_t i = 0; i < input.size(); ++i)
   {
-    gsl::at(output, static_cast<int64_t>(i)) = static_cast<std::byte>(input.at(i));
+    at(output, static_cast<int64_t>(i)) = static_cast<std::byte>(input.at(i));
   }
   return ConversionStatusExpected{};
 }

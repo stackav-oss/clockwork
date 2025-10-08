@@ -58,12 +58,24 @@ class MessageTypeMixin:
             RuntimeError if self is not yet resolved.
         """
         interface_inst = self.get_interface()
-        if not isinstance(interface_inst.representation, representation.RepresentationReference) or not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        if not isinstance(interface_inst.representation, representation.RepresentationReference) or not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             typespec := interface_inst.representation.typespec, typesys.Instantiation
         ):
             msg = f"Attempt to get representation for unresolved entity: {self}"
             raise RuntimeError(msg)  # noqa: TRY004 (Accessing unresolved entity is a runtime error)
         return typespec
+
+    def get_representation_reference(self) -> representation.RepresentationReference:
+        """Retrieve the underlying representation reference.
+
+        Raises:
+            RuntimeError if self is not yet resolved.
+        """
+        interface_inst = self.get_interface()
+        if not isinstance(interface_inst.representation, representation.RepresentationReference):
+            msg = f"Attempt to get representation for unresolved entity: {self}"
+            raise RuntimeError(msg)  # noqa: TRY004 (Accessing unresolved entity is a runtime error)
+        return interface_inst.representation
 
 
 def resolve_schema_interface(

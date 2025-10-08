@@ -87,8 +87,9 @@ void maybe_bind_numpy_array(::nanobind::class_<Vector>& vec_binding)
       },
       nb::arg("dtype").none() = nb::none(),
       nb::arg("copy").none() = nb::none(),
-      nb::sig("def __array__(self, dtype: numpy.dtype | None = None, copy: bool | None = None) -> "
-              "numpy.typing.NDArray[typing.Any]"));
+      nb::sig(
+        "def __array__(self, dtype: numpy.dtype | None = None, copy: bool | None = None) -> "
+        "numpy.typing.NDArray[typing.Any]"));
   }
 }
 

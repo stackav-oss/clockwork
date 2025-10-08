@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
@@ -117,10 +118,10 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/tapmsg.clk")), fs_importer
     )
-    TapMsg, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "TapMsg")  # noqa: N806
-    SomeEnum, _ = tachyon_dyn.get_enum(module.context, module, "SomeEnum")  # noqa: N806
-    SomeFlags, _ = tachyon_dyn.get_enum(module.context, module, "SomeFlags")  # noqa: N806
-    SubMsg, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "SubMsg")  # noqa: N806
+    TapMsg, _TapMsgTap = tachyon_dyn.get_instantiation_dataclass(module.context, module, "TapMsg", signed_value=234)  # noqa: N806 Represents a type and should be camel case
+    SomeEnum, _ = tachyon_dyn.get_enum(module.context, module, "SomeEnum")  # noqa: N806 Represents a type and should be camel case
+    SomeFlags, _ = tachyon_dyn.get_enum(module.context, module, "SomeFlags")  # noqa: N806 Represents a type and should be camel case
+    SubMsg, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "SubMsg")  # noqa: N806 Represents a type and should be camel case
     msg = TapMsg(
         integer=1,
         floating_point=2.0,
@@ -144,7 +145,10 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
         fixed_array=list(range(2)),
         var_string="a",
     )
-    assert TapMsg.get_tachyon_metadata_name() == f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg"
+    assert (
+        TapMsg.get_tachyon_metadata_name()
+        == f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::TapMsg<signed_value=234>"
+    )
     buffer = bytearray(TapMsg.get_tachyon_constraint().size)
     msg.serialize_tachyon(memoryview(buffer))
     msg2 = TapMsg.deserialize_tachyon(memoryview(bytes(buffer)))
@@ -157,5 +161,7 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     assert msg2 == msg
 
     msg.array_of_schema.append(SubMsg(field=3))
-    with pytest.raises(ValueError, match=re.escape("Attempt to serialize array of length 3, max 2")):
+    with pytest.raises(
+        ValueError, match=re.escape("Object <class 'types.TapMsg'> failed to serialize array_of_schema")
+    ):
         msg.serialize_tachyon(memoryview(buffer))

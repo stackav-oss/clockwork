@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cpp_target."""
 
@@ -105,10 +106,11 @@ def test_cpp_target_cogs(fs_importer: FilesystemImporter) -> None:
     cpp_target_ir = module.inner_scope.lookup("hellocog", recursive=False)
     assert cpp_target_ir is not None
     assert isinstance(cpp_target_ir, cpp_target.CppTarget)
-    assert len(cpp_target_ir.cogs) == 3
+    assert len(cpp_target_ir.cogs) == 4
     assert cpp_target_ir.cogs[0].cog_ir is module.inner_scope.lookup("HelloCog")
-    assert cpp_target_ir.cogs[1].cog_ir is module.inner_scope.lookup("HelloInit")
-    assert cpp_target_ir.cogs[2].cog_ir is module.inner_scope.lookup("HelloInit2")
+    assert cpp_target_ir.cogs[1].cog_ir is module.inner_scope.lookup("HelloCogWithMetrics")
+    assert cpp_target_ir.cogs[2].cog_ir is module.inner_scope.lookup("HelloInit")
+    assert cpp_target_ir.cogs[3].cog_ir is module.inner_scope.lookup("HelloInit2")
 
 
 def test_cpp_target_converters(fs_importer: FilesystemImporter) -> None:
@@ -190,14 +192,14 @@ template <class data_type>
 struct Holder
 {
 };
-[[nodiscard]] ::jewels::ConversionStatusExpected protobuf_to_tap(::clockwork::Tap<::clockwork::Tachyon<Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>>>& output, const holder& input);
+[[nodiscard]] ::jewels::ConversionStatusExpected protobuf_to_tap(::clockwork::Tap<::clockwork::Tachyon<Holder<::clockwork::demo::ProtoTester>>>& output, const holder& input);
 [[nodiscard]] bool validate_protobuf([[maybe_unused]] const holder& input);
 } // namespace clockwork::foo
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpacked-non-pod"
 /// Tachyon layout for Holder.
 template <>
-struct __attribute__((__packed__)) alignas(8) ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>>
+struct __attribute__((__packed__)) alignas(8) ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::demo::ProtoTester>>
 {
 public:
     /// Parameter: data_type
@@ -207,12 +209,12 @@ public:
     /// data: data member.
     ::jewels::tap::VarArray<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>, 10U> data{};
     /// Equality operator.
-    [[nodiscard]] inline bool operator==(const ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>>& other) const;
+    [[nodiscard]] inline bool operator==(const ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::demo::ProtoTester>>& other) const;
 };
 #pragma clang diagnostic pop
 /// Tap interface for the Tachyon representation of Holder.
 template <>
-struct ::clockwork::Tap<::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>>>
+struct ::clockwork::Tap<::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::demo::ProtoTester>>>
 {
 public:
     /// Parameter: data_type
@@ -227,11 +229,13 @@ public:
     [[nodiscard]] inline const ::jewels::tap::VarArray<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>, 10U>& get_underlying_data() const &;
     /// data: An explicitly mutable get method.
     [[nodiscard]] inline ::jewels::tap::VarArray<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>, 10U>& get_underlying_data() &;
+    /// data: Try set from a span.
+    [[nodiscard]] inline bool try_set_data(::std::span<const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>> input_span) &;
     /// Equality operator.
-    [[nodiscard]] inline bool operator==(const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>>>& other) const;
+    [[nodiscard]] inline bool operator==(const ::clockwork::Tap<::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::demo::ProtoTester>>>& other) const;
 private:
     /// Data member layout struct.
-    ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::ProtoTester>>>> fields_{};
+    ::clockwork::Tachyon<::clockwork::foo::Holder<::clockwork::demo::ProtoTester>> fields_{};
 };
 namespace clockwork::foo
 {
@@ -476,7 +480,7 @@ namespace clockwork::scaffolding
 {
 ::std::shared_ptr<AbstractCasing> make_casing(::jewels::memory::MemoryResource memory_resource)
 {
-    using Casing = CasingImpl<::std::tuple<::clockwork::testing::cogs::HelloCogFactory, ::clockwork::testing::cogs::HelloInit2Factory, ::clockwork::testing::cogs::HelloInitFactory>, ::std::tuple<CxxSchema<::clockwork::testing::CxxState, ::jewels::Uuid<::clockwork::RepresentationTag>{::std::array<uint8_t, 16U>{0x83, 0xc8, 0x5e, 0x31, 0x5b, 0x74, 0x52, 0x62, 0xb3, 0x20, 0x11, 0xe4, 0xfa, 0x27, 0xbc, 0xfd}}>, ProtoSchema<::hello_msg::HelloMsg, ::jewels::Uuid<::clockwork::RepresentationTag>{::std::array<uint8_t, 16U>{0xfa, 0xb4, 0x4a, 0x52, 0x49, 0xd4, 0x57, 0x67, 0x83, 0xff, 0x98, 0xce, 0x7e, 0x3b, 0x63, 0x21}}, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>>, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::io::VarPacket<4U>>>>, ::std::tuple<::clockwork::testing::IncomingUdpSocket, ::clockwork::testing::OutgoingUdpSocket>>;
+    using Casing = CasingImpl<::std::tuple<::clockwork::testing::cogs::HelloCogWithMetricsFactory, ::clockwork::testing::cogs::HelloInit2Factory, ::clockwork::testing::cogs::HelloInitFactory>, ::std::tuple<CxxSchema<::clockwork::testing::CxxState, ::jewels::Uuid<::clockwork::RepresentationTag>{::std::array<uint8_t, 16U>{0x83, 0xc8, 0x5e, 0x31, 0x5b, 0x74, 0x52, 0x62, 0xb3, 0x20, 0x11, 0xe4, 0xfa, 0x27, 0xbc, 0xfd}}>, ProtoSchema<::hello_msg::HelloMsg, ::jewels::Uuid<::clockwork::RepresentationTag>{::std::array<uint8_t, 16U>{0xfa, 0xb4, 0x4a, 0x52, 0x49, 0xd4, 0x57, 0x67, 0x83, 0xff, 0x98, 0xce, 0x7e, 0x3b, 0x63, 0x21}}, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>>, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>, ::clockwork::Tap<::clockwork::Tachyon<::clockwork::io::VarPacket<4U>>>>, ::std::tuple<::clockwork::testing::IncomingUdpSocket, ::clockwork::testing::OutgoingUdpSocket>>;
     return ::jewels::memory::make_pmr_shared<Casing>(memory_resource, memory_resource);
 }
 } // namespace clockwork::scaffolding
@@ -570,7 +574,7 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
         hdrs=[Path("base.hh")],
         srcs=[Path("base.inl"), Path("base.cc")],
         deps=minimal_deps,
-        data=[],
+        data=[Label("//a/b/c:cc_target_test_clk")],
     )
 
     remove_whitespace = str.maketrans("", "", " \t\n")
@@ -590,6 +594,9 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
                 '//jewels/meta:concepts',
                 '//jewels/uuid:uuid'
             ],
+            data = [
+                '//a/b/c:cc_target_test_clk'
+            ],
         )""".translate(remove_whitespace)
     )
 
@@ -602,7 +609,7 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
         hdrs=[Path("derived.hh")],
         srcs=[Path("derived.inl"), Path("derived.cc")],
         deps=[Label("//a/b/c:base"), *minimal_deps],
-        data=[],
+        data=[Label("//a/b/c:cc_target_test_clk")],
     )
 
 

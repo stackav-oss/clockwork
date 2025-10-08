@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
@@ -33,7 +34,10 @@ def test_logsim_system(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
     (tmp_path / BazelPathResolver().to_buildtime_path(module.module_id)).mkdir(parents=True)
 
     generated_files, output_targets, physical_system = systemgen.gen_system(
-        root_dir=tmp_path, system_target_ir=system_ir, write_files=True
+        root_dir=tmp_path,
+        system_target_ir=system_ir,
+        write_files=True,
+        write_json_files=True,
     )
     assert {x.name for x in generated_files.process_description_files} == {
         "clockwork.clockwork.dsl.composition.tests.support.logsimsys.logsim_system1.proc1.tachyon",
@@ -74,13 +78,14 @@ def test_logsim_system(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
             Label(value="//clockwork/dsl/composition/tests/support:logsim_exe"),
             Path("logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon"),
             Path("logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon"),
-            Path("logsimsys.logsim_system1.LogSimCpu_log_reader_config.tachyon"),
+            Path("logsimsys.logsim_system1.LogSimCpu_channel_publisher_config.tachyon"),
             Path(
                 "logsimsys.logsim_system1.LogSimCpu.clockwork.clockwork.dsl.composition.tests.support.logsimsys.MultiChan2_config.tachyon"
             ),
             Path("logsimsys.logsim_system1.diagnostics_database_config.tachyon"),
             Path("logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon"),
             Path("logsimsys.logsim_system1.LogSimCpu_channel_allocations.csv"),
+            Path("logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon"),
         ],
     )
     assert output_targets == {

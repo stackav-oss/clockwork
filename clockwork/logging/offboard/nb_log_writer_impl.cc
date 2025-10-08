@@ -29,11 +29,14 @@ using clockwork_logging::ChannelType;
 using clockwork_logging::LogTimestamp;
 using clockwork_logging::MessageEncoding;
 using clockwork_logging::SchemaEncoding;
+using clockwork_logging::offboard::LoggedChannelMetadata;
+using clockwork_logging::offboard::LoggedMessage;
 using clockwork_logging::offboard::Writer;
 
 NB_MODULE(nb_log_writer_impl, mod)
 {
   nanobind::module_::import_("clockwork.logging.readers.nb_types");
+  nanobind::module_::import_("clockwork.logging.offboard.nb_types");
 
   mod.doc() = "Log writer";
 
@@ -103,10 +106,23 @@ NB_MODULE(nb_log_writer_impl, mod)
       nanobind::arg("schema_definition"),
       "Create a logged channel.")
     .def(
+      "create_channel_from_metadata",
+      [](Writer& obj, const LoggedChannelMetadata& channel_metadata)
+      {
+        if (const auto create_result = obj.create_channel(channel_metadata); !create_result)
+        {
+          const auto err =
+            fmt::format("Failed to create channel {}: {}", channel_metadata.channel_name, create_result.error());
+          throw std::runtime_error(err);
+        }
+      },
+      nanobind::arg("channel_metadata"),
+      "Create a logged channel from channel metadata.")
+    .def(
       "write",
       [](
         Writer& obj,
-        const std::string& channel_name,
+        std::string_view channel_name,
         uint32_t sequence_number,
         LogTimestamp log_time,
         LogTimestamp transmit_time,
@@ -133,5 +149,17 @@ NB_MODULE(nb_log_writer_impl, mod)
       nanobind::arg("transmit_time"),
       nanobind::arg("header"),
       nanobind::arg("data"),
-      "Write a message to the log.");
+      "Write a message to the log.")
+    .def(
+      "write_logged_message",
+      [](Writer& obj, const LoggedMessage& logged_message)
+      {
+        if (const auto write_result = obj.write(logged_message); !write_result)
+        {
+          const auto err = fmt::format("Failed to write output log: {}", write_result.error());
+          throw std::runtime_error(err);
+        }
+      },
+      nanobind::arg("logged_message"),
+      "Write a logged message to the log.");
 }

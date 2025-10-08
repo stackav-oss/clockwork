@@ -27,6 +27,7 @@ cc_library(
         "//clockwork/runners:online_runner",
         "//clockwork/runners:thread_pool",
         "//jewels/cli:exit_condition",
+        "//jewels/container:compare",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
@@ -99,7 +100,7 @@ cc_library(
         ":abstract_casing",
         "//clockwork/common:abstract_epoll_manager",
         "//clockwork/common:process_description",
-        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/pinion:buffer",
         "//clockwork/pinion:observer",
         "//clockwork/pinion:publisher_handle",
@@ -166,12 +167,14 @@ cc_library(
     hdrs = ["deterministic_logging_config.hh"],
     deps = [
         "//clockwork/common:exec_tools",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
         "//clockwork/logging:log_writer_config",
         "//clockwork/logging/readers:log_reader",
         "//clockwork/logging/readers:types",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config",
         "//jewels/container:compare",
         "//jewels/log_cerr",
         "//jewels/std:expected",
@@ -208,10 +211,17 @@ cc_library(
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
         "//jewels/uuid:uuid_hasher",
         "@xxhash",
     ],
+)
+
+cc_library(
+    name = "end_process_exception",
+    srcs = ["end_process_exception.cc"],
+    hdrs = ["end_process_exception.hh"],
 )
 
 cc_library(
@@ -237,6 +247,7 @@ cc_library(
     hdrs = ["main_impl.hh"],
     deps = [
         ":abstract_casing",
+        ":end_process_exception",
         ":scaffolding",
         "//clockwork/common:exec_tools",
         "//clockwork/common:process_description",
@@ -322,6 +333,28 @@ cc_library(
 )
 
 cc_library(
+    name = "python_offline_main",
+    srcs = ["python_offline_main.cc"],
+    deps = [
+        ":main_impl",
+        ":offline_scaffolding",
+        "//clockwork/python:python_init",
+        "//jewels/cli:exit_condition_signal",
+    ],
+)
+
+cc_library(
+    name = "python_online_main",
+    srcs = ["python_online_main.cc"],
+    deps = [
+        ":main_impl",
+        ":online_scaffolding",
+        "//clockwork/python:python_init",
+        "//jewels/cli:exit_condition_signal",
+    ],
+)
+
+cc_library(
     name = "scaffolding_offline_impl",
     srcs = ["scaffolding_offline_impl.inl"],
     hdrs = ["scaffolding_offline_impl.hh"],
@@ -339,11 +372,12 @@ cc_library(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:exec_tools",
         "//clockwork/common:process_description",
-        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/pinion:shm_channel_factory",
         "//clockwork/runners:deterministic_cog_queue",
         "//clockwork/runners:deterministic_runner",
         "//jewels/cli:exit_condition",
+        "//jewels/container:compare",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",

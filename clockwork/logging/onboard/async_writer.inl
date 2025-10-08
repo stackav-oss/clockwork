@@ -429,7 +429,7 @@ template <typename Policy>
   {
     const auto sequence_str =
       std::pmr::string{file_name.string_view().substr(log_file_prefix_.size()), runtime_memory_resource_};
-    char* end_ptr = nullptr;
+    char* end_ptr = nullptr; // NOLINT(misc-const-correctness) This is a false positive. This pointer cannot be const.
     constexpr auto base_10 = 10;
     const auto sequence_number = strtoul(sequence_str.c_str(), &end_ptr, base_10);
     if (
@@ -548,7 +548,7 @@ void AsyncWriter<Policy>::process_completed_async_operations()
   }
   uint32_t request_count = 0U;
   uint32_t head = 0U;
-  io_uring_cqe* cqe_ptr = nullptr;
+  const io_uring_cqe* cqe_ptr = nullptr;
   io_uring_for_each_cqe(&ring_, head, cqe_ptr)
   {
     typename jewels::SharedObjectPool<AsyncRequestHandle>::SharedReference request_reference{

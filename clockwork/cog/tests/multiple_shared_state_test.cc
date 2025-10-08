@@ -1,23 +1,17 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/cog/cog_conditions.hh"
-#include "clockwork/cog/cog_configs.hh"
-#include "clockwork/cog/cog_diagnostics.hh"
-#include "clockwork/cog/cog_inputs.hh"
-#include "clockwork/cog/cog_memory_resources.hh"
-#include "clockwork/cog/cog_publishers.hh"
 #include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/cog_states.hh"
-#include "clockwork/cog/cog_statistics.hh"
-#include "clockwork/cog/cog_timers.hh"
 #include "clockwork/cog/detail.hh"
 #include "clockwork/cog/simple_cog.hh"
+#include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
 #include "clockwork/runners/thread_pool.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -63,19 +57,11 @@ struct MultiStateCogDial
 
 /// An always ready test cog for testing state locking.
 template <size_t index>
-struct MultiStateCogPolicy
+struct MultiStateCogPolicy : testing::FakeCogPolicy<0, 0>
 {
   static constexpr auto cog_id =
     jewels::Uuid<common::EndpointClassId>::from_string("09280d25-d7a4-4270-b7e8-3219db436485").value();
   static constexpr auto name = "clockwork::MultiStateCogPolicy";
-  static constexpr auto simulated_execution_duration = std::chrono::milliseconds(0);
-  using MemoryResourcesType = CogMemoryResources<>;
-  using ConfigsType = CogConfigs<>;
-  using TimersType = CogTimers<>;
-  using InputsType = CogInputs<>;
-  using ConditionsType = CogConditions<>;
-  using PublishersType = CogPublishers<>;
-  using DiagnosticsType = CogDiagnostics<>;
 
   struct State1Policy
   {
@@ -96,14 +82,6 @@ struct MultiStateCogPolicy
   };
 
   using StatesType = CogStates<State1Policy, State2Policy>;
-
-  [[nodiscard]] static bool is_ready(
-    CogStatistics& /*statistics*/,
-    typename TimersType::ConditionsTuple& /*timers*/,
-    typename ConditionsType::ConditionsTuple& /*conditions*/)
-  {
-    return true;
-  }
 
   // NOLINTNEXTLINE(readability-function-size) needs to match the signature of the make_dial function
   [[nodiscard]] static MultiStateCogDial make_dial(
@@ -143,17 +121,19 @@ TEST_CASE("multiple shared states", "[simple_cog]")
   auto state2 = std::make_shared<CogStateDataImpl<TestState>>(resource);
   auto cogs = [&resource, &queue]<size_t... idx>(std::index_sequence<idx...>)
   {
-    return std::make_tuple(std::make_unique<SimpleCog<MultiStateCogPolicy<idx>>>(
-      resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue))...);
+    return std::make_tuple(
+      std::make_unique<SimpleCog<MultiStateCogPolicy<idx>>>(
+        resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue))...);
   }(std::make_index_sequence<thread_count>{});
-  REQUIRE(std::apply(
-    [&state1, &state2](auto&... cog)
-    {
-      auto set1 = (cog->set_handle(MultiStateCogPolicy<0>::State1Policy::endpoint_id, state1, true) && ...);
-      auto set2 = (cog->set_handle(MultiStateCogPolicy<0>::State2Policy::endpoint_id, state2, true) && ...);
-      return (set1 && set2);
-    },
-    cogs));
+  REQUIRE(
+    std::apply(
+      [&state1, &state2](auto&... cog)
+      {
+        auto set1 = (cog->set_handle(MultiStateCogPolicy<0>::State1Policy::endpoint_id, state1, true) && ...);
+        auto set2 = (cog->set_handle(MultiStateCogPolicy<0>::State2Policy::endpoint_id, state2, true) && ...);
+        return (set1 && set2);
+      },
+      cogs));
 
   REQUIRE(std::apply([](const auto&... cog) { return (cog->validate() && ...); }, cogs));
 
@@ -191,15 +171,17 @@ TEST_CASE("multiple shared states", "[simple_cog]")
 
   // Verify no cogs were starved.
 
-  REQUIRE(std::all_of(
-    state1->state.counts.begin(),
-    state1->state.counts.end(),
-    [&min_exe_count](const auto& count) { return count > min_exe_count; }));
+  REQUIRE(
+    std::all_of(
+      state1->state.counts.begin(),
+      state1->state.counts.end(),
+      [&min_exe_count](const auto& count) { return count > min_exe_count; }));
 
-  REQUIRE(std::all_of(
-    state2->state.counts.begin(),
-    state2->state.counts.end(),
-    [&min_exe_count](const auto& count) { return count > min_exe_count; }));
+  REQUIRE(
+    std::all_of(
+      state2->state.counts.begin(),
+      state2->state.counts.end(),
+      [&min_exe_count](const auto& count) { return count > min_exe_count; }));
 }
 
 } // namespace

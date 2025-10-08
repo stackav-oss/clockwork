@@ -69,6 +69,12 @@ public:
   ///
   [[nodiscard]] CogQueueStats stats() const override;
 
+  ///
+  /// Check if this cog queue is offline.
+  /// @returns true if this cog queue is running offline.
+  ///
+  [[nodiscard]] bool is_offline() const override;
+
 private:
   std::pmr::list<CogEnvelope> queue_;
 };

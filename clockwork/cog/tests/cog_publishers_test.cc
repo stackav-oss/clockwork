@@ -94,6 +94,7 @@ struct PublisherPolicy1
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("b6e2b628-62ba-4c73-b07e-b2ce77a742b4").value();
   static constexpr std::string_view name = "PublisherPolicy1";
+  static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
 };
 
 struct PublisherPolicy2
@@ -102,6 +103,7 @@ struct PublisherPolicy2
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("789e340c-556f-4cf0-a3b9-73632ba75a7c").value();
   static constexpr std::string_view name = "PublisherPolicy2";
+  static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
 };
 
 using PublisherPolicyFixture = CogPublishersFixture<PublisherPolicy1, PublisherPolicy2>;
@@ -162,6 +164,27 @@ TEST_CASE_METHOD(PublisherPolicyFixture, "make_publishables", "[publisher]")
   }
 }
 
+TEST_CASE_METHOD(PublisherPolicyFixture, "make connected and not connected publishables", "[publisher]")
+{
+  REQUIRE(publisher.set_handle(PublisherPolicy1::endpoint_id, std::get<0>(channels).make_publisher(1), false));
+  REQUIRE(publisher.set_handle(PublisherPolicy2::endpoint_id, std::get<1>(channels).make_publisher(1), true));
+  REQUIRE(publisher.validate());
+  // The third publisher has the same endpoint ID as the first but has not been
+  // connected.
+  REQUIRE(publisher.validate());
+
+  auto slots = publisher.reserve_slots();
+  REQUIRE(slots);
+
+  auto publishables = publisher.make_publishables(*slots);
+  REQUIRE(publishables);
+
+  auto publishable1 = std::get<0>(*publishables);
+  REQUIRE_FALSE(publishable1.connected());
+
+  auto publishable2 = std::get<1>(*publishables);
+  REQUIRE(publishable2.connected());
+}
 using ZeroPublishersPolicyFixture = CogPublishersFixture<>;
 
 TEST_CASE_METHOD(ZeroPublishersPolicyFixture, "zero publishers", "[publisher]")
@@ -175,8 +198,110 @@ TEST_CASE_METHOD(ZeroPublishersPolicyFixture, "zero publishers", "[publisher]")
   auto publishables = publisher.make_publishables(*slots);
   REQUIRE(publishables);
   REQUIRE(0 == std::tuple_size<std::decay_t<decltype(*publishables)>>());
-  REQUIRE(std::apply(
-    [](auto&... each_slot) { return (static_cast<bool>(each_slot.commit(fake_publish_time)) && ...); }, *slots));
+  REQUIRE(
+    std::apply(
+      [](auto&... each_slot) { return (static_cast<bool>(each_slot.commit(fake_publish_time)) && ...); }, *slots));
+}
+
+struct UnlimitedPublisherPolicy
+{
+  using MsgType = TestMsg1;
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("b6e2b628-62ba-4c73-b07e-b2ce77a742b4").value();
+  static constexpr std::string_view name = "PublisherPolicy1";
+  static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
+};
+
+struct LimitedPublisherPolicy
+{
+  using MsgType = TestMsg2;
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("789e340c-556f-4cf0-a3b9-73632ba75a7c").value();
+  static constexpr std::string_view name = "PublisherPolicy2";
+  static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{
+    {.limit = 1U, .period = std::chrono::seconds{1}}};
+};
+
+struct LimitedPublisherPolicy2
+{
+  using MsgType = TestMsg2;
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("ae548e3b-eca7-489d-a3d0-5d36cb8c5df7").value();
+  static constexpr std::string_view name = "PublisherPolicy3";
+  static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{
+    {.limit = 2U, .period = std::chrono::seconds{1}}};
+};
+
+using RateLimitPublisherPolicyFixture =
+  CogPublishersFixture<UnlimitedPublisherPolicy, LimitedPublisherPolicy, LimitedPublisherPolicy2>;
+
+TEST_CASE_METHOD(RateLimitPublisherPolicyFixture, "rate limit state", "[publisher]")
+{
+  REQUIRE(publisher.set_handle(UnlimitedPublisherPolicy::endpoint_id, std::get<0>(channels).make_publisher(1)));
+  REQUIRE(publisher.set_handle(LimitedPublisherPolicy::endpoint_id, std::get<1>(channels).make_publisher(1)));
+  REQUIRE(publisher.set_handle(LimitedPublisherPolicy2::endpoint_id, std::get<2>(channels).make_publisher(1)));
+  REQUIRE(publisher.validate());
+
+  // We should be able to publish on the unlimited output without getting
+  // throttled.
+  jewels::time::SyncTime now{std::chrono::seconds{0}};
+  publisher.update_rate_limiters(now);
+  REQUIRE_FALSE(publisher.any_throttled());
+  {
+    auto slots = publisher.reserve_slots();
+    REQUIRE(slots);
+    auto publishables = publisher.make_publishables(*slots);
+    REQUIRE(publishables);
+    std::get<0>(*publishables).mark_for_publish();
+    publisher.update_throttle_status(*slots);
+    REQUIRE(std::get<0>(*slots).commit(fake_publish_time));
+  }
+  for (auto i = 0; i < 10; i++)
+  {
+    now += std::chrono::nanoseconds{1};
+    publisher.update_rate_limiters(now);
+    REQUIRE_FALSE(publisher.any_throttled());
+  }
+
+  // But, if we exceed the limit on the limited publisher, the whole cog should get throttled.
+  now += std::chrono::milliseconds{1};
+  publisher.update_rate_limiters(now);
+  REQUIRE_FALSE(publisher.any_throttled());
+  {
+    auto slots = publisher.reserve_slots();
+    REQUIRE(slots);
+    auto publishables = publisher.make_publishables(*slots);
+    REQUIRE(publishables);
+    std::get<1>(*publishables).mark_for_publish();
+    publisher.update_throttle_status(*slots);
+    REQUIRE(std::get<1>(*slots).commit(fake_publish_time));
+  }
+  now += std::chrono::milliseconds{1};
+  publisher.update_rate_limiters(now);
+  REQUIRE(publisher.any_throttled());
+
+  // If we wait long enough, we should be clear to execute.
+  now += std::chrono::milliseconds{999};
+  publisher.update_rate_limiters(now);
+  REQUIRE_FALSE(publisher.any_throttled());
+
+  // We should also get throttled if the rate of other limited publisher is
+  // exceeded.  However, an entire limit window has elapsed since the first
+  // token was issued for that publisher and it has accumulated a new one.
+  for (auto i = 0; i < 3; i++)
+  {
+    publisher.update_rate_limiters(now);
+    REQUIRE_FALSE(publisher.any_throttled());
+    auto slots = publisher.reserve_slots();
+    REQUIRE(slots);
+    auto publishables = publisher.make_publishables(*slots);
+    REQUIRE(publishables);
+    std::get<2>(*publishables).mark_for_publish();
+    publisher.update_throttle_status(*slots);
+    REQUIRE(std::get<2>(*slots).commit(fake_publish_time));
+    now += std::chrono::milliseconds{1};
+  }
+  REQUIRE(publisher.any_throttled());
 }
 
 } // namespace

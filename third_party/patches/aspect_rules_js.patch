@@ -1,3 +1,91 @@
+diff --git npm/extensions.bzl npm/extensions.bzl
+index 0f9199e3..1cd4f434 100644
+--- npm/extensions.bzl
++++ npm/extensions.bzl
+@@ -92,7 +92,7 @@ def _npm_lock_imports_bzlmod(module_ctx, attr):
+     npm_auth = {}
+     if attr.npmrc:
+         npmrc = parse_npmrc(module_ctx.read(attr.npmrc))
+-        (registries, npm_auth) = npm_translate_lock_helpers.get_npm_auth(npmrc, module_ctx.path(attr.npmrc), module_ctx.os.environ)
++        (registries, npm_auth) = npm_translate_lock_helpers.get_npm_auth(module_ctx, npmrc, module_ctx.path(attr.npmrc), module_ctx.os.environ)
+ 
+     if attr.use_home_npmrc:
+         home_directory = repo_utils.get_home_directory(module_ctx)
+@@ -100,7 +100,7 @@ def _npm_lock_imports_bzlmod(module_ctx, attr):
+             home_npmrc_path = "{}/{}".format(home_directory, ".npmrc")
+             home_npmrc = parse_npmrc(module_ctx.read(home_npmrc_path))
+ 
+-            (registries2, npm_auth2) = npm_translate_lock_helpers.get_npm_auth(home_npmrc, home_npmrc_path, module_ctx.os.environ)
++            (registries2, npm_auth2) = npm_translate_lock_helpers.get_npm_auth(module_ctx, home_npmrc, home_npmrc_path, module_ctx.os.environ)
+             registries.update(registries2)
+             npm_auth.update(npm_auth2)
+         else:
+diff --git npm/private/npm_translate_lock_helpers.bzl npm/private/npm_translate_lock_helpers.bzl
+index 29c61e35..17357a76 100644
+--- npm/private/npm_translate_lock_helpers.bzl
++++ npm/private/npm_translate_lock_helpers.bzl
+@@ -4,6 +4,7 @@ load("@aspect_bazel_lib//lib:base64.bzl", "base64")
+ load("@bazel_skylib//lib:dicts.bzl", "dicts")
+ load("@bazel_skylib//lib:new_sets.bzl", "sets")
+ load("@bazel_skylib//lib:paths.bzl", "paths")
++load("@bazel_tools//tools/build_defs/repo:utils.bzl", "read_user_netrc")
+ load(":utils.bzl", "utils")
+ 
+ ################################################################################
+@@ -93,7 +94,7 @@ def _gather_values_from_matching_names(additive, keyed_lists, *names):
+     return (result, keys)
+ 
+ ################################################################################
+-def _get_npm_auth(npmrc, npmrc_path, environ):
++def _get_npm_auth(ctx, npmrc, npmrc_path, environ):
+     """Parses npm tokens, registries and scopes from `.npmrc`.
+ 
+     - creates a token by registry dict: {registry: token}
+@@ -115,7 +116,7 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
+         //somewhere-else.com/basic/:_password=aHVudGVyMg==
+         ```
+ 
+-        `get_npm_auth(npmrc, npmrc_path, environ)` creates the following dict:
++        `get_npm_auth(ctx, npmrc, npmrc_path, environ)` creates the following dict:
+ 
+         ```starlark
+         registries = {
+@@ -138,6 +139,7 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
+         ```
+ 
+     Args:
++        ctx: The repo or module context.
+         npmrc: The `.npmrc` file.
+         npmrc_path: The file path to `.npmrc`.
+         environ: A map of environment variables with their values.
+@@ -217,6 +219,14 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
+ 
+             auth[registry]["password"] = base64.decode(v)
+ 
++    for registry, auth_dict in read_user_netrc(ctx).items():
++        if registry not in auth:
++            auth[registry] = {}
++
++        auth[registry]["username"] = auth_dict.get("login")
++        auth[registry]["password"] = auth_dict.get("password")
++
++
+     return (registries, auth)
+ 
+ ################################################################################
+diff --git npm/private/npm_translate_lock_state.bzl npm/private/npm_translate_lock_state.bzl
+index 755776cb..8372b377 100644
+--- npm/private/npm_translate_lock_state.bzl
++++ npm/private/npm_translate_lock_state.bzl
+@@ -458,7 +458,7 @@ def _load_npmrc(priv, rctx, npmrc_path):
+     if "registry" in contents:
+         priv["default_registry"] = utils.to_registry_url(contents["registry"])
+ 
+-    (registries, auth) = helpers.get_npm_auth(contents, npmrc_path, rctx.os.environ)
++    (registries, auth) = helpers.get_npm_auth(rctx, contents, npmrc_path, rctx.os.environ)
+     priv["npm_registries"] = dicts.add(priv["npm_registries"], registries)
+     priv["npm_auth"] = dicts.add(priv["npm_auth"], auth)
+ 
 diff --git npm/private/pnpm_repository.bzl npm/private/pnpm_repository.bzl
 index bb028820..b59060bf 100644
 --- npm/private/pnpm_repository.bzl

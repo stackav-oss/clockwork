@@ -1,6 +1,7 @@
 use clockwork::examples::log_runner::example_cogs::ExampleCogPublisher;
 use clockwork::examples::log_runner::example_cogs::ExampleCogSubscriber;
 use clockwork::examples::log_runner::test_message::TestMessage;
+use clockwork::logging::log_playback::end_of_log_channel::EndOfLogChannel;
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
 // A channel
 channel Chan1
@@ -47,12 +48,19 @@ policy ChannelLoggingPolicy for Chan3
     log_type = LogType::telemetry;
 }
 
+// Record the end of log channel so we can verify it was published.
+policy ChannelLoggingPolicy for EndOfLogChannel
+{
+    log_type = LogType::telemetry;
+}
+
 box LogRunnerExampleBox
 {
     new example_cog_subscriber: ExampleCogSubscriber;
     new example_cog_publisher: ExampleCogPublisher;
     connect Chan1 to example_cog_subscriber.test_message_input;
     connect example_cog_publisher.test_message_output to Chan2;
+    connect EndOfLogChannel to example_cog_subscriber.end_of_log;
 }
 
 cpu_domain SimCpu;
@@ -71,6 +79,7 @@ cpp_executable log_runner_example_exe
     {
         box LogRunnerExampleBox;
     }
+    offline: true;
 }
 
 system_target log_runner_example_system

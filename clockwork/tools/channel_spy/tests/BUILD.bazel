@@ -78,5 +78,6 @@ py_test(
         "//clockwork/tools/channel_spy/tests/support:nb_test_helper",
         "//clockwork/tools/channel_spy/tests/support:test_message_clk_nb",
         "//jewels/testing:nb_tmp_directory_guard",
+        "@clockwork_pip//numpy",
     ],
 )

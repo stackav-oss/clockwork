@@ -20,5 +20,6 @@ py_library(
         "//clockwork/serialization/py:tachyon_dyn",
         "//clockwork/serialization/py:tachyon_dyn_from_metadata",
         "@clockwork_pip//numpy",  # keep
+        "@clockwork_pip//typing_extensions",
     ],
 )

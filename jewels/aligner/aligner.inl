@@ -120,7 +120,7 @@ template <typename T>
 [[nodiscard]] bool Aligner<alignment>::ptr_is_aligned(const T* ptr)
   requires(sizeof(T) == 1U)
 {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Alignment check requires integral pointer value
   return is_aligned(reinterpret_cast<ptrdiff_t>(ptr));
 }
 
@@ -129,7 +129,7 @@ template <typename T>
 [[nodiscard]] ptrdiff_t Aligner<alignment>::ptr_aligned_offset(const T* ptr)
   requires(sizeof(T) == 1U)
 {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Alignment check requires integral pointer value
   return aligned_offset(reinterpret_cast<ptrdiff_t>(ptr));
 }
 
@@ -138,7 +138,7 @@ template <typename T>
 [[nodiscard]] ptrdiff_t Aligner<alignment>::ptr_aligned_remainder(const T* ptr)
   requires(sizeof(T) == 1U)
 {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Alignment check requires integral pointer value
   return aligned_remainder(reinterpret_cast<ptrdiff_t>(ptr));
 }
 

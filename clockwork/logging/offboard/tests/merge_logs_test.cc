@@ -97,25 +97,27 @@ TEST_CASE("merge_logs")
   REQUIRE(writer1.create_channel(metadata1));
   REQUIRE(writer1.create_channel(metadata2));
 
-  REQUIRE(writer1.write(LoggedMessage{
-    .channel_name = channel_name1,
-    .sequence_number = 1U,
-    .log_time = time1,
-    .transmit_time = time1,
-    .header = header1,
-    .data = data1,
-    .is_repeated_persistent = false,
-  }));
+  REQUIRE(writer1.write(
+    LoggedMessage{
+      .channel_name = channel_name1,
+      .sequence_number = 1U,
+      .log_time = time1,
+      .transmit_time = time1,
+      .header = header1,
+      .data = data1,
+      .is_repeated_persistent = false,
+    }));
 
-  REQUIRE(writer1.write(LoggedMessage{
-    .channel_name = channel_name2,
-    .sequence_number = 2U,
-    .log_time = time3,
-    .transmit_time = time3,
-    .header = header2,
-    .data = data2,
-    .is_repeated_persistent = false,
-  }));
+  REQUIRE(writer1.write(
+    LoggedMessage{
+      .channel_name = channel_name2,
+      .sequence_number = 2U,
+      .log_time = time3,
+      .transmit_time = time3,
+      .header = header2,
+      .data = data2,
+      .is_repeated_persistent = false,
+    }));
 
   REQUIRE(writer1.close());
 
@@ -155,25 +157,27 @@ TEST_CASE("merge_logs")
   REQUIRE(writer2.create_channel(metadata3));
   REQUIRE(writer2.create_channel(metadata4));
 
-  REQUIRE(writer2.write(LoggedMessage{
-    .channel_name = channel_name3,
-    .sequence_number = 3U,
-    .log_time = time2,
-    .transmit_time = time2,
-    .header = header3,
-    .data = data3,
-    .is_repeated_persistent = false,
-  }));
+  REQUIRE(writer2.write(
+    LoggedMessage{
+      .channel_name = channel_name3,
+      .sequence_number = 3U,
+      .log_time = time2,
+      .transmit_time = time2,
+      .header = header3,
+      .data = data3,
+      .is_repeated_persistent = false,
+    }));
 
-  REQUIRE(writer2.write(LoggedMessage{
-    .channel_name = channel_name4,
-    .sequence_number = 4U,
-    .log_time = time4,
-    .transmit_time = time4,
-    .header = header4,
-    .data = data4,
-    .is_repeated_persistent = false,
-  }));
+  REQUIRE(writer2.write(
+    LoggedMessage{
+      .channel_name = channel_name4,
+      .sequence_number = 4U,
+      .log_time = time4,
+      .transmit_time = time4,
+      .header = header4,
+      .data = data4,
+      .is_repeated_persistent = false,
+    }));
 
   REQUIRE(writer2.close());
 

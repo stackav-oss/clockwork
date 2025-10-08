@@ -97,15 +97,15 @@ class Converter(node.NamedEntity, node.CstNode[cst.Converter]):
             raise TypeError(msg)
 
         if self.typespec.instantiates is clkbuiltins.PROTOBUF_TO_TAP:
-            assert isinstance(self.source_reference, RepresentationReference)  # noqa: S101 Checked in the call to _validate_converter
-            assert isinstance(self.destination_reference, InterfaceReference)  # noqa: S101 Checked in the call to _validate_converter
+            assert isinstance(self.source_reference, RepresentationReference)
+            assert isinstance(self.destination_reference, InterfaceReference)
             return proto_to_tap.render_protobuf_to_tachyon_converter(
                 compiler_context, self.source_reference, self.destination_reference, namespace
             )
 
         if self.typespec.instantiates is clkbuiltins.TAP_TO_PROTOBUF:
-            assert isinstance(self.source_reference, InterfaceReference)  # noqa: S101 Checked in the call to _validate_converter
-            assert isinstance(self.destination_reference, RepresentationReference)  # noqa: S101 Checked in the call to _validate_converter
+            assert isinstance(self.source_reference, InterfaceReference)
+            assert isinstance(self.destination_reference, RepresentationReference)
             return tap_to_proto.render_tachyon_to_protobuf_converter(
                 compiler_context, self.source_reference, self.destination_reference, namespace
             )
@@ -152,7 +152,9 @@ def _get_reference_from_typespec(typespec: typesys.Value) -> RepresentationRefer
     return InterfaceReference.from_typespec(typespec)
 
 
-def register_schema_conversion(converter: Converter, conversion_info: ConversionRegistration) -> None:
+def register_schema_conversion(
+    converter: Converter, conversion_info: ConversionRegistration, compiler_context: CompilerContext
+) -> None:
     """Register a converter in the registry.
 
     This allows other converters to know that a conversion exists for a specific schema and to obtain its namespace.
@@ -162,22 +164,31 @@ def register_schema_conversion(converter: Converter, conversion_info: Conversion
         raise TypeError(msg)
 
     if converter.typespec.instantiates is clkbuiltins.PROTOBUF_TO_TAP:
-        assert isinstance(converter.source_reference, RepresentationReference)  # noqa: S101 Checked in the call to _validate_converter
-        assert isinstance(converter.destination_reference, InterfaceReference)  # noqa: S101 Checked in the call to _validate_converter
+        assert isinstance(converter.source_reference, RepresentationReference)
+        assert isinstance(converter.destination_reference, InterfaceReference)
 
         if converter.source_reference.schema_ir.schema.parameters:
+            schema_arg = converter.source_reference.typespec.arguments["schema"]
+            assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
+            schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
+            proto_to_tap.register_schema_conversion(schema_ir, conversion_info, compiler_context)
+        else:
             proto_to_tap.register_schema_conversion(
-                converter.source_reference.typespec.arguments["schema"], conversion_info
+                converter.source_reference.schema_ir, conversion_info, compiler_context
             )
-        else:
-            proto_to_tap.register_schema_conversion(converter.source_reference.schema_ir, conversion_info)
     elif converter.typespec.instantiates is clkbuiltins.TAP_TO_PROTOBUF:
-        assert isinstance(converter.source_reference, InterfaceReference)  # noqa: S101 Checked in the call to _validate_converter
-        assert isinstance(converter.destination_reference, RepresentationReference)  # noqa: S101 Checked in the call to _validate_converter
+        assert isinstance(converter.source_reference, InterfaceReference)
+        assert isinstance(converter.destination_reference, RepresentationReference)
 
-        if converter.destination_reference.schema_ir.schema.parameters:
-            tap_to_proto.register_schema_conversion(
-                converter.destination_reference.typespec.arguments["schema"], conversion_info
-            )
+        if (
+            converter.destination_reference.schema_ir.schema.parameters
+            and "schema" in converter.source_reference.typespec.arguments
+        ):
+            schema_arg = converter.source_reference.typespec.arguments["schema"]
+            assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
+            schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
+            proto_to_tap.register_schema_conversion(schema_ir, conversion_info, compiler_context)
         else:
-            tap_to_proto.register_schema_conversion(converter.destination_reference.schema_ir, conversion_info)
+            tap_to_proto.register_schema_conversion(
+                converter.destination_reference.schema_ir, conversion_info, compiler_context
+            )

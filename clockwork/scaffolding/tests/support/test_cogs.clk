@@ -28,6 +28,10 @@ cog InitCog1
     {
         execute when: init;
     }
+    metrics_options
+    {
+        enabled: false;
+    }
 }
 
 //
@@ -66,6 +70,10 @@ cog TestCog1
     diagnostics
     {
         group_id: "fault_injector_a";
+    }
+    metrics_options
+    {
+        enabled: false;
     }
 }
 
@@ -106,6 +114,10 @@ cog TestCog2
     {
         group_id: "fault_injector_b";
         instance_id: "a";
+    }
+    metrics_options
+    {
+        enabled: false;
     }
 }
 

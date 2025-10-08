@@ -101,7 +101,23 @@ py_library(
     deps = [
         ":logger_config",
         ":logger_config_proto",
+        ":publisher_config",
+        ":publisher_config_proto",
         ":system",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model_py_library",
+    ],
+)
+
+py_library(
+    name = "gen_metrics_channel_metadata_configs",
+    srcs = ["gen_metrics_channel_metadata_configs.py"],
+    deps = [
+        ":metrics_channel_metadata_config",
+        ":metrics_channel_metadata_config_proto",
+        ":system",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:representation",
         "//clockwork/serialization/metadata:tachyon",
     ],
 )
@@ -126,8 +142,10 @@ py_library(
         ":system",
         "//clockwork/dsl/ir:box",
         "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_components",
         "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:extern_type",
+        "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:representation",
         "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
@@ -141,8 +159,10 @@ py_library(
     name = "graphir",
     srcs = ["graphir.py"],
     deps = [
+        "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:audio",
         "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:cog",
         "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:extern_type",
@@ -153,6 +173,8 @@ py_library(
         "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:udp",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -191,6 +213,30 @@ py_library(
 py_library(
     name = "logger_config_proto",
     srcs = ["logger_config_proto.py"],
+    deps = ["//clockwork/serialization/py:protocol"],
+)
+
+py_library(
+    name = "metrics_channel_metadata_config",
+    srcs = ["metrics_channel_metadata_config.py"],
+    data = [
+        "//clockwork/common:process_description.clk",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config.clk",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":metrics_channel_metadata_config_proto",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+py_library(
+    name = "metrics_channel_metadata_config_proto",
+    srcs = ["metrics_channel_metadata_config_proto.py"],
+    visibility = ["//visibility:public"],
     deps = ["//clockwork/serialization/py:protocol"],
 )
 
@@ -260,6 +306,25 @@ py_library(
 )
 
 py_library(
+    name = "publisher_config",
+    srcs = ["publisher_config.py"],
+    data = ["//clockwork/logging:channel_publisher_config.clk"],
+    deps = [
+        ":publisher_config_proto",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
+py_library(
+    name = "publisher_config_proto",
+    srcs = ["publisher_config_proto.py"],
+    deps = ["//clockwork/serialization/py:protocol"],
+)
+
+py_library(
     name = "str_manip",
     srcs = ["str_manip.py"],
     visibility = ["//visibility:public"],
@@ -285,6 +350,7 @@ py_library(
         "//clockwork/dsl/ir:policy",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:udp",
         "//clockwork/dsl/ir:uuid_reg",
@@ -300,6 +366,7 @@ py_library(
         ":gen_channel_spy_configs",
         ":gen_diagnostics_configs",
         ":gen_logger_configs",
+        ":gen_metrics_channel_metadata_configs",
         ":gen_multi_subscriber_configs",
         ":genpd",
         ":launchgen",
@@ -314,13 +381,17 @@ py_library(
         "//clockwork/dsl/ir:system_target",
         "//clockwork/serialization/py:protocol",
         "//jewels/simplelaunch/v1:config_py_library",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
 py_library(
     name = "tcp_bridge_config",
     srcs = ["tcp_bridge_config.py"],
-    data = ["//clockwork/pinion:tcp_bridge_config.clk"],
+    data = [
+        "//clockwork/common:process_description.clk",
+        "//clockwork/pinion:tcp_bridge_config.clk",
+    ],
     deps = [
         ":tcp_bridge_config_proto",
         "//clockwork/dsl/ir:compiler",

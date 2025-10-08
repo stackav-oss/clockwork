@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for default value and init_value handling in tachyon_dyn."""
 
@@ -11,7 +12,7 @@ from decimal import Decimal
 
 import pytest
 from clockwork.dsl.compiler_context import CompilerContext
-from clockwork.dsl.ir import clkbuiltins, compiler, primitive, typesys
+from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema, typesys
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.py import tachyon_dyn
@@ -26,11 +27,11 @@ def test_primitive_default_values() -> None:
     """Test that primitive types get correct default values."""
     # Test primitive type defaults
     context = CompilerContext()
-    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.BOOL) == (True, False)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.INT8) == (True, 0)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.UINT64) == (True, 0)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.FLOAT32) == (True, 0.0)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.DURATION) == (True, 0)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.BOOL) == (True, False)
+    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.INT8) == (True, 0)
+    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.UINT64) == (True, 0)
+    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.FLOAT32) == (True, 0.0)
+    assert tachyon_dyn._get_default_for_type(context, clkbuiltins.DURATION) == (True, 0)
 
 
 def test_container_default_values() -> None:
@@ -45,7 +46,7 @@ def test_container_default_values() -> None:
             "size": primitive.DecimalValue(clkbuiltins.INT64, Decimal(3)),
         },
     )
-    assert tachyon_dyn._get_default_for_type(context, fixed_array) == (True, [0, 0, 0])  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert tachyon_dyn._get_default_for_type(context, fixed_array) == (True, [0, 0, 0])
 
     # Var array of FLOAT64s
     var_array = typesys.Instantiation(
@@ -56,7 +57,7 @@ def test_container_default_values() -> None:
             "max_size": primitive.DecimalValue(clkbuiltins.INT64, Decimal(10)),
         },
     )
-    assert tachyon_dyn._get_default_for_type(context, var_array) == (True, [])  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert tachyon_dyn._get_default_for_type(context, var_array) == (True, [])
 
     # Var string
     var_string = typesys.Instantiation(
@@ -64,7 +65,7 @@ def test_container_default_values() -> None:
         instantiates=clkbuiltins.VAR_STRING,
         arguments={"max_size": primitive.DecimalValue(clkbuiltins.INT64, Decimal(10))},
     )
-    assert tachyon_dyn._get_default_for_type(context, var_string) == (True, "")  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert tachyon_dyn._get_default_for_type(context, var_string) == (True, "")
 
     # Optional INT64
     optional = typesys.Instantiation(
@@ -72,7 +73,7 @@ def test_container_default_values() -> None:
         instantiates=clkbuiltins.OPTIONAL,
         arguments={"type": clkbuiltins.INT64},
     )
-    assert tachyon_dyn._get_default_for_type(context, optional) == (True, None)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert tachyon_dyn._get_default_for_type(context, optional) == (True, None)
 
 
 def test_schema_with_init_values(fs_importer: FilesystemImporter) -> None:
@@ -262,7 +263,7 @@ def test_container_with_defaults(fs_importer: FilesystemImporter) -> None:
     instance = with_containers_class()
 
     # Verify container defaults
-    assert instance.fixed_array == []
+    assert instance.fixed_array == [0, 0, 0]
     assert instance.var_array == []
     assert instance.var_string == ""
     assert instance.maybe_int is None
@@ -280,8 +281,29 @@ def test_container_with_defaults(fs_importer: FilesystemImporter) -> None:
     assert custom.maybe_int == 42
 
 
-def test_conversion_errors() -> None:
+def test_conversion_errors(fs_importer: FilesystemImporter) -> None:
     """Test that appropriate errors are raised for invalid conversions."""
+    source_content = """
+    // Simple schema
+    schema SimpleSchema {
+        fields {
+            // Integer
+            #1 integer: Int32;
+        }
+    }
+
+    cpp_target test_target {
+        options { namespace test; }
+        representation Tachyon<SimpleSchema>;
+    }
+    """
+
+    # Compile the test schema directly from source
+    module = compiler.compile_source_text(source_content, ModuleID(CLK_REPO, "containers_test"), importer=fs_importer)
+
+    # Get the dataclass
+    _, schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "SimpleSchema")
+
     # Try to convert string to int
     string_val = primitive.StringValue(clkbuiltins.STRING, "test")
     with pytest.raises(
@@ -290,7 +312,9 @@ def test_conversion_errors() -> None:
             "Unsupported init_value type: <class 'clockwork.dsl.ir.primitive.StringValue'> for Python type <class 'int'>"
         ),
     ):
-        tachyon_dyn._convert_init_value_to_python(CompilerContext(), string_val, int)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        tachyon_dyn._convert_init_value_to_python(
+            CompilerContext(), schema.InstantiatedSchema.from_typespec(schema_ir), string_val, int
+        )
 
 
 def test_complex_schema_with_all_types(fs_importer: FilesystemImporter) -> None:

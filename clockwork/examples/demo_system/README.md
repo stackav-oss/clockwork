@@ -149,6 +149,11 @@ cog GpsDriverCog
 }
 ```
 
+## Logged metadata validation test
+
+The demo system has a `validate_logged_channel_metadata` test that checks that schema changes for logged channels don't break backward compability against the schema stored in `resources/demo_system.demo_system_sys.logged_channel_metadata.pbbin`.
+This test will fail if a change to any logged schema breaks backward compability with the previous schema.
+
 ## IMU
 
 The demo IMU driver defined in `imu/imu.clk` mirrors the code in the gps directory.
@@ -198,7 +203,7 @@ cog ImuDriverCog
 Localization is implemented in three cogs: LocalizationInitCog, LocalizationGpsCog and LocalizationImuCog.
 The localization cogs consume messages from the IMU and GPS drivers and do some localization like stuff to publish a simulated pose message that contains the vehicle position at a given time.
 
-Localization maintains the estimated position and estimated velocity in state defined in a clockwork schema that gets updated each time a GPS or IMU message is received.
+Localization maintains the estimated position and estimated velocity in state defined in a Clockwork schema that gets updated each time a GPS or IMU message is received.
 The sole purpose of the LocalizationInitCog is to initialize the localization state at startup.
 An init cog is not really necessary for this example because the default constructor does the same thing, and if you want to let the default constructor handle initialization then an init Cog is not needed.
 

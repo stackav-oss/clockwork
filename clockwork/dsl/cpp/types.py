@@ -391,7 +391,11 @@ class CppMethod:
             ]
 
             # If "inline", then append to inline_chunk, else to impelmentation_chunk
-            target_chunk = cpp_mod.inline_chunk if "inline" in self.leading_qualifiers else cpp_mod.implementation_chunk
+            target_chunk = (
+                cpp_mod.inline_chunk
+                if "inline" in self.leading_qualifiers or "constexpr" in self.leading_qualifiers
+                else cpp_mod.implementation_chunk
+            )
 
             target_chunk.append(
                 [
@@ -699,3 +703,16 @@ CXX_SCHEMA_SCHEMA = CppTemplate(
 BOOLEAN: Final = CppType([], "bool", None)
 
 NB_BYTES: Final = CppType([SystemHeader("nanobind/nanobind.h")], "bytes", "nanobind")
+
+ARRAY: Final = CppTemplate(
+    includes=[SystemHeader("array")],
+    template_name="array",
+    cpp_namespace="std",
+)
+
+UINT8: Final = CppType([SystemHeader("cstdint")], "uint8_t", None)
+UUID: Final = CppTemplate(
+    includes=[Header(JEWELS_REPO, "jewels/uuid/uuid.hh")],
+    cpp_namespace="jewels",
+    template_name="Uuid",
+)

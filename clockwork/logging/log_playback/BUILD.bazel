@@ -1,7 +1,46 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "end_of_log",
+    srcs = [
+        "end_of_log.cc",
+        "end_of_log.inl",
+    ],
+    hdrs = ["end_of_log.hh"],
+    data = [":end_of_log_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "end_of_log_channel_clk",
+    srcs = ["end_of_log_channel.clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":end_of_log_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "end_of_log_clk",
+    srcs = ["end_of_log.clk"],
+    outs = [
+        "end_of_log.cc",
+        "end_of_log.hh",
+        "end_of_log.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 cc_library(
     name = "log_message_fetcher",
@@ -9,23 +48,44 @@ cc_library(
     hdrs = ["log_message_fetcher.hh"],
     visibility = ["//visibility:public"],
     deps = [
+        ":end_of_log",
+        ":tachyon_upgrader",
+        "//clockwork:repr_iface",
         "//clockwork/common:process_description",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
-        "//clockwork/logging:log_writer_config",
         "//clockwork/logging:message_encoding",
         "//clockwork/logging/readers:abstract_log_reader",
         "//clockwork/logging/readers:log_reader_factory",
         "//clockwork/logging/readers:types",
         "//clockwork/pinion:shm_publisher",
         "//clockwork/runners:channel_publisher",
+        "//jewels/container:compare",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
         "//jewels/uuid",
         "//jewels/uuid:uuid_hasher",
         "@fmt",
+    ],
+)
+
+cc_library(
+    name = "tachyon_upgrader",
+    srcs = ["tachyon_upgrader.cc"],
+    hdrs = ["tachyon_upgrader.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/logging:channel_publisher_config",
+        "//clockwork/logging:message_encoding",
+        "//clockwork/logging/readers:types",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
     ],
 )

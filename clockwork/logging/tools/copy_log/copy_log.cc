@@ -12,11 +12,13 @@
 
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
+#include <tclap/SwitchArg.h>
 #include <tclap/UnlabeledValueArg.h>
 #include <tclap/ValueArg.h>
 
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
@@ -65,7 +67,9 @@ int main(int32_t argc, char* argv[])
   try
   {
     TCLAP::CmdLine cmd("Copy log", ' ', "1.0", true);
-    const TCLAP::MultiArg<std::string> topic_arg("t", "topic", "Topic ", false, "name", cmd);
+    const TCLAP::MultiArg<std::string> topic_arg("t", "topic", "Topic to copy", false, "name", cmd);
+    const TCLAP::MultiArg<std::string> excluded_topic_arg(
+      "x", "exclude", "Topic to exclude from the copy", false, "name", cmd);
     const TCLAP::ValueArg<double> start_offset_arg(
       "s", "start-offset", "Start time relative offset ", false, 0, "seconds", cmd);
     const TCLAP::ValueArg<double> end_offset_arg(
@@ -75,6 +79,8 @@ int main(int32_t argc, char* argv[])
     const TCLAP::UnlabeledValueArg<std::string> source_uri_arg("source", "Source log URI", true, "", "uri", cmd);
     const TCLAP::UnlabeledValueArg<std::string> dest_uri_arg(
       "destination", "Destination log URI", true, "", "uri", cmd);
+    const TCLAP::SwitchArg no_deep_copy_arg(
+      "n", "no-deep-copy-log-unions", "Just copy the union metadata file for overlapping logs", cmd);
 
     cmd.parse(argc, argv);
 
@@ -82,17 +88,20 @@ int main(int32_t argc, char* argv[])
     const auto& dest_uri = dest_uri_arg.getValue();
     const auto& writer_config_path = writer_config_path_arg.getValue();
     const auto& topics = topic_arg.getValue();
+    const auto& excluded_topics = excluded_topic_arg.getValue();
     const auto& start_offset_s = start_offset_arg.getValue();
     const auto& end_offset_s = end_offset_arg.getValue();
+    const auto no_deep_copy = no_deep_copy_arg.getValue();
 
     const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
 
     std::optional<clockwork_logging::RelativeInterval> maybe_log_interval;
     if (start_offset_s != 0 || end_offset_s != 0)
     {
-      maybe_log_interval.emplace(clockwork_logging::RelativeInterval{
-        .start_offset = std::chrono::round<std::chrono::nanoseconds>(std::chrono::duration<double>(start_offset_s)),
-      });
+      maybe_log_interval.emplace(
+        clockwork_logging::RelativeInterval{
+          .start_offset = std::chrono::round<std::chrono::nanoseconds>(std::chrono::duration<double>(start_offset_s)),
+        });
       if (end_offset_s != 0)
       {
         maybe_log_interval->end_offset =
@@ -110,6 +119,16 @@ int main(int32_t argc, char* argv[])
       }
     }
 
+    std::optional<std::pmr::unordered_set<std::pmr::string>> maybe_excluded_channels;
+    if (!excluded_topics.empty())
+    {
+      maybe_excluded_channels.emplace(memory_resource);
+      for (const auto& excluded_topic : excluded_topics)
+      {
+        maybe_excluded_channels->insert(std::pmr::string{excluded_topic, memory_resource});
+      }
+    }
+
     std::pmr::string writer_config_str{memory_resource};
     if (!writer_config_path.empty())
     {
@@ -117,24 +136,31 @@ int main(int32_t argc, char* argv[])
       if (!load_result)
       {
         jewels::log_cerr_error("Failed to load writer config from {}: {}", writer_config_path, load_result.error());
-        return 1;
+        return EXIT_FAILURE;
       }
       writer_config_str = std::move(load_result).value();
     }
 
     if (const auto copy_result = clockwork_logging::offboard::copy_log(
-          memory_resource, source_uri, dest_uri, maybe_desired_channels, maybe_log_interval, writer_config_str);
+          /*memory_resource=*/memory_resource,
+          /*source_uri=*/source_uri,
+          /*dest_uri=*/dest_uri,
+          /*maybe_desired_channels=*/maybe_desired_channels,
+          /*maybe_excluded_channels=*/maybe_excluded_channels,
+          /*maybe_log_interval=*/maybe_log_interval,
+          /*writer_config_str=*/writer_config_str,
+          /*no_deep_copy=*/no_deep_copy);
         !copy_result)
     {
       jewels::log_cerr_error("Failed to copy log: {}", copy_result.error());
-      return 1;
+      return EXIT_FAILURE;
     }
     std::cout << "Success\n";
-    return 0;
+    return EXIT_SUCCESS;
   }
   catch (const std::exception& exc)
   {
     std::cerr << "Caught unexpected exception: " << exc.what() << '\n';
-    return 1;
+    return EXIT_FAILURE;
   }
 }

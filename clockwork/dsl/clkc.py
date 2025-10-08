@@ -14,23 +14,25 @@ from clockwork.dsl.ir import compiler, cpp_executable, importer, node, system_ta
 from clockwork.dsl.ir.cpp_target import CppTarget
 from clockwork.dsl.ir.module_id import ModuleID
 from clockwork.dsl.ir.nanobind_target import NanobindTarget
+from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.dsl.ir.proto_target import ProtoTarget
 from clockwork.dsl.ir.py_target import PyTarget
 
 
-def export_language_targets(root_dir: Path, module: node.Module) -> None:
+def export_language_targets(root_dir: Path, module: node.Module, write_json_files: bool) -> None:
     """Produce gen code from each language target in the Clockwork module.
 
     Args:
         root_dir: Prefix needed to write to the right spot for bazel.
         include_dir: The include path for the generated cpp files.
         module: The compiled Clockwork module.
+        write_json_files: Flag to write JSON versions of the generated configuration files.
     """
     for obj in module.inner_scope.names.values():
         if isinstance(obj, CppTarget | cpp_executable.CppExecutable | NanobindTarget | ProtoTarget | PyTarget):
             obj.render_and_write(root_dir)
         elif isinstance(obj, system_target.UnresolvedSystemTarget):
-            systemgen.gen_system(root_dir, obj.get_resolved(), True)
+            systemgen.gen_system(root_dir, obj.get_resolved(), True, write_json_files)
 
 
 @click.group()
@@ -66,18 +68,28 @@ def clkc(ctx: click.core.Context) -> None:
     type=str,
     help="Repository for this clockwork file.",
 )
-def compile_module(input_file: Path, root_dir: Path, repo: str) -> None:
+@click.option(
+    "--write-json-files",
+    is_flag=True,
+    help="Enable writing configuration files in JSON format.",
+)
+def compile_module(input_file: Path, root_dir: Path, repo: str, write_json_files: bool) -> None:
     """Compile the clockwork file."""
     try:
         relative_path = input_file.relative_to(root_dir)
     except ValueError:
         relative_path = input_file
+
+    module_id = ModuleID.from_path(repo, relative_path)
+    out_dir = root_dir / BazelPathResolver().to_buildtime_path(module_id).parent
+    out_cache_file = (out_dir / input_file.name).with_suffix(".clk_pkl")
     module = compiler.compile_source_file(
-        ModuleID.from_path(repo, relative_path),
+        module_id,
         importer=importer.FilesystemImporter(compile_fn=compiler.compile_source_file),
+        out_cache_file=out_cache_file,
     )
 
-    export_language_targets(root_dir, module)
+    export_language_targets(root_dir, module, write_json_files)
 
 
 @clkc.command()

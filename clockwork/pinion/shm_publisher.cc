@@ -28,7 +28,8 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
   jewels::memory::MemoryResource memres,
   const jewels::filesystem::Directory& shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view filename,
+  std::string_view channel_name,
   const BufferLayout& layout,
   size_t max_observers,
   size_t max_clients,
@@ -36,12 +37,12 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
 {
   // Create socket first.  Because this (uniquely) binds the listener, it should fail if another publisher exists which
   // will avoid potential awkwardness with the shm buffer
-  auto socket = ShmChannel::open_socket(socket_ns, name, Role::publisher);
+  auto socket = ShmChannel::open_socket(socket_ns, filename, Role::publisher);
   if (!socket)
   {
     return jewels::unexpected(socket.error());
   }
-  auto buffer_map = ShmChannel::open_buffer(memres, shm_dir, name, layout, Role::publisher, resume_behavior);
+  auto buffer_map = ShmChannel::open_buffer(memres, shm_dir, filename, layout, Role::publisher, resume_behavior);
   if (!buffer_map)
   {
     return jewels::unexpected(buffer_map.error());
@@ -57,9 +58,11 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
   }
   return ShmPublisher(
     memres,
-    name,
+    socket_ns,
+    filename,
+    channel_name,
     std::move(std::get<BufferPtr>(*buffer_map)),
-    std::move(std::get<MMapRegion>(*buffer_map)),
+    std::move(std::get<jewels::filesystem::MMapRegion>(*buffer_map)),
     std::move(*socket),
     std::move(publisher_handle),
     max_clients,
@@ -69,19 +72,21 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
 // NOLINTNEXTLINE(readability-function-size) TODO OI-2956 Refactor ShmChannel
 ShmPublisher::ShmPublisher(
   jewels::memory::MemoryResource memres,
-  std::string_view name,
+  std::string_view socket_ns,
+  std::string_view filename,
+  std::string_view channel_name,
   BufferPtr buffer,
-  MMapRegion map,
+  jewels::filesystem::MMapRegion map,
   UnixSocket socket,
   PublisherHandle publisher,
   size_t max_clients,
   ResumeBehavior resume_behavior)
-  : ShmChannel(std::move(buffer), std::move(map), std::move(socket), resume_behavior),
-    name_(name, memres),
+  : ShmChannel(
+      memres, std::move(buffer), std::move(map), std::move(socket), socket_ns, filename, channel_name, resume_behavior),
     publisher_(std::move(publisher)),
     log_cerr_throttle_(jewels::memory::make_pmr_shared<jewels::LogCerrThrottle>(memres, min_log_cerr_interval)),
     socket_clients_(
-      jewels::memory::make_pmr_unique<SocketClients>(memres, memres, name_, max_clients, log_cerr_throttle_))
+      jewels::memory::make_pmr_unique<SocketClients>(memres, memres, channel_name, max_clients, log_cerr_throttle_))
 {
   if (!publisher_->add_observer(jewels::memory::make_non_null_from_ref(*socket_clients_)))
   {
@@ -139,7 +144,7 @@ bool ShmPublisher::on_connect_pending()
       // handling options other than log and retry. By retrying, this will flush the pending network errors
       // and any accept() problems will persist.
       jewels::log_cerr_error(
-        "ShmPublisher failed to accept connection for {}: {}", name_, jewels::filesystem::ErrorCode(errno));
+        "ShmPublisher failed to accept connection for {}: {}", channel_name(), jewels::filesystem::ErrorCode(errno));
       retry++;
       continue;
     }
@@ -147,7 +152,7 @@ bool ShmPublisher::on_connect_pending()
     {
       discard = true;
     }
-    jewels::log_cerr_info("ShmPublisher accepted connection for {}", name_);
+    jewels::log_cerr_info("ShmPublisher accepted connection for {}", channel_name());
   }
   // This means accept() kept returning errors through the retries
   return false;
@@ -166,23 +171,23 @@ void ShmPublisher::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
 
 ShmPublisher::SocketClients::SocketClients(
   jewels::memory::MemoryResource resource,
-  std::string_view name,
+  std::string_view channel_name,
   size_t max_clients,
   std::shared_ptr<jewels::LogCerrThrottle> log_cerr_throttle)
-  : name_(name, resource), clients_(resource), log_cerr_throttle_(std::move(log_cerr_throttle))
+  : channel_name_(channel_name, resource), clients_(resource), log_cerr_throttle_(std::move(log_cerr_throttle))
 {
   clients_.reserve(max_clients);
 }
 
 size_t ShmPublisher::SocketClients::count() const noexcept
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   return clients_.size();
 }
 
 bool ShmPublisher::SocketClients::add(UnixSocket client)
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   if (clients_.size() >= clients_.capacity())
   {
     return false;
@@ -207,7 +212,7 @@ ShmPublisher::SocketClients::notify_client(const Event& event, std::pmr::vector<
     // If the connection is gone remove the dead socket
     if (errno == ECONNRESET || errno == EPIPE)
     {
-      jewels::log_cerr_info("ShmPublisher removed subscriber for {}", name_);
+      jewels::log_cerr_info("ShmPublisher removed subscriber for {}", channel_name_);
       return clients_.erase(iter);
     }
     // If this given a retry it means that the kernel buffer has filled up with 100+ pending messages.  Since those
@@ -220,14 +225,16 @@ ShmPublisher::SocketClients::notify_client(const Event& event, std::pmr::vector<
         return clients_.erase(iter);
       }
       jewels::log_cerr_warn_throttled(
-        *log_cerr_throttle_, "ShmPublisher failed to send notification for {} because send buffer is full", name_);
+        *log_cerr_throttle_,
+        "ShmPublisher failed to send notification for {} because send buffer is full",
+        channel_name_);
     }
     else
     {
       // The client notifications are blocking since there isn't an easy way to retry a notification if the socket
       // buffer is full (which it should never be)
       jewels::log_cerr_error(
-        "ShmPublisher failed to send notification for {}: {}", name_, jewels::filesystem::ErrorCode(errno));
+        "ShmPublisher failed to send notification for {}: {}", channel_name_, jewels::filesystem::ErrorCode(errno));
     }
   }
   return std::next(iter);
@@ -235,7 +242,7 @@ ShmPublisher::SocketClients::notify_client(const Event& event, std::pmr::vector<
 
 void ShmPublisher::SocketClients::notify(const Event& event)
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   for (auto iter = clients_.begin(); iter != clients_.end();)
   {
     iter = notify_client(event, iter);
@@ -250,20 +257,20 @@ bool ShmPublisher::SocketClients::close_socket_if_disconnected(UnixSocket& socke
   if (result == 0)
   {
     socket.close();
-    jewels::log_cerr_error("Closing connection to inactive subscriber for {}", name_);
+    jewels::log_cerr_error("Closing connection to inactive subscriber for {}", channel_name_);
     return true;
   }
   if (result != -1)
   {
     socket.close();
-    jewels::log_cerr_error("Internal error, received message from subscriber for {}", name_);
+    jewels::log_cerr_error("Internal error, received message from subscriber for {}", channel_name_);
     return true;
   }
   if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
   {
     socket.close();
     jewels::log_cerr_info(
-      "Closing connection to inactive subscriber for {}: {}", name_, jewels::filesystem::ErrorCode(errno));
+      "Closing connection to inactive subscriber for {}: {}", channel_name_, jewels::filesystem::ErrorCode(errno));
     return true;
   }
   return false;
@@ -271,7 +278,7 @@ bool ShmPublisher::SocketClients::close_socket_if_disconnected(UnixSocket& socke
 
 void ShmPublisher::SocketClients::close_disconnected_sockets()
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   for (auto iter = clients_.begin(); iter != clients_.end();)
   {
     if (close_socket_if_disconnected(*iter))

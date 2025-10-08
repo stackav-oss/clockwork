@@ -38,6 +38,14 @@ def _list(host: str) -> None:  # pyright: ignore[reportUnusedFunction] # TODO(DX
             rich.print(f"[red]Pre-launch task {pre_launch_task.name} failed")
 
 
+@cli.command("quit")
+@_HOST_FLAG
+def quit_cmd(host: str) -> None:
+    """Stop all processes and exit."""
+    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client.quit()
+
+
 @cli.command()
 @_HOST_FLAG
 @click.argument("name")

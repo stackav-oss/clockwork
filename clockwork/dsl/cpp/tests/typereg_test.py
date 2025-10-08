@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for typereg."""
 
@@ -12,7 +13,7 @@ from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header, SystemHeader
 from clockwork.dsl.cpp.typereg import (
-    _CPP_INT64_TYPE,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    _CPP_INT64_TYPE,
     CPP_TYPE_REGISTRY_KEY,
     get_cpp_template,
     get_cpp_type,
@@ -280,14 +281,14 @@ def test_get_cpp_type_decimal_literal_template_argument(
     """Test the instantiation with a DecimalLiteral as an argument."""
     # Prepare a mock DecimalLiteral
     decimal_literal = primitive.DecimalLiteral(
-        value=Decimal("42"),
+        value=Decimal(42),
         module=MagicMock(),
         cst_node=None,
         type_info=clkbuiltins.INT32,
     )
 
     # Mock the argument to include a DecimalLiteral
-    mock_instantiated_type.arguments["T"] = decimal_literal  # type: ignore[index]
+    mock_instantiated_type.arguments["T"] = decimal_literal  # pyright: ignore[reportIndexIssue]
 
     # Use a patch to control the return value of literal_to_cpp
     result = get_cpp_type(context, mock_instantiated_type)
@@ -304,7 +305,7 @@ def test_get_cpp_type_unhandled_template_argument_error(
     mock_unhandled_type = MagicMock(name="UnhandledArgumentType")
 
     # Mock the argument to include the unhandled type
-    mock_instantiated_type.arguments["T"] = mock_unhandled_type  # type: ignore[index]
+    mock_instantiated_type.arguments["T"] = mock_unhandled_type  # pyright: ignore[reportIndexIssue]
 
     with pytest.raises(NotImplementedError, match=r"Cannot construct C\+\+ template argument for"):
         get_cpp_type(context, mock_instantiated_type)

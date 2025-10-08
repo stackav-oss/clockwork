@@ -24,7 +24,7 @@ AsyncWorkQueue::AsyncWorkQueue(size_t num_worker_threads)
 AsyncWorkQueue::~AsyncWorkQueue()
 {
   {
-    const std::lock_guard guard(work_queue_mutex_);
+    const std::scoped_lock guard(work_queue_mutex_);
     shutdown_flag_ = true;
     worker_condvar_.notify_all();
   }
@@ -44,7 +44,7 @@ void AsyncWorkQueue::schedule_work_item(std::function<void()> work_item)
 
 void AsyncWorkQueue::schedule_work_item_no_wait(std::function<void()> work_item)
 {
-  const std::lock_guard guard(work_queue_mutex_);
+  const std::scoped_lock guard(work_queue_mutex_);
   work_queue_.emplace_back(std::move(work_item));
   worker_condvar_.notify_one();
 }

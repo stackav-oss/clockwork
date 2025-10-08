@@ -4,6 +4,8 @@
 #include "clockwork/dsl/tests/support/better_than_inheritance.pb.h"
 #include "clockwork/dsl/tests/support/better_than_inheritance_cpp.hh"
 #include "clockwork/dsl/tests/support/convert_hello_msg.hh"
+#include "clockwork/dsl/tests/support/dependency_tester_cpp.hh"
+#include "clockwork/dsl/tests/support/dependency_tester_proto.pb.h"
 #include "clockwork/dsl/tests/support/msg_with_au.hh"
 #include "clockwork/dsl/tests/support/msg_with_au_proto.pb.h"
 #include "clockwork/dsl/tests/support/proto_tester_onboard.pb.h"
@@ -100,6 +102,14 @@ TEST_CASE("Validate Conversion")
   auto* second_proto_tester_fixed = better_than_inheritance_source.add_fixed_composition();
   *second_proto_tester_fixed = proto_tester_source2;
 
+  better_than_inheritance_source.add_var_array_of_small_int(10);
+  better_than_inheritance_source.add_var_array_of_small_int(20);
+  better_than_inheritance_source.add_var_array_of_small_int(-30);
+
+  better_than_inheritance_source.add_fixed_array_of_small_int(5);
+  better_than_inheritance_source.add_fixed_array_of_small_int(-10);
+  better_than_inheritance_source.add_fixed_array_of_small_int(127);
+
   SECTION("Fail validation - incomplete")
   {
     auto status = demo::protobuf_to_tap(better_than_inheritance_destination, better_than_inheritance_source);
@@ -113,7 +123,8 @@ TEST_CASE("Validate Conversion")
 
   auto* another_generic = better_than_inheritance_source.mutable_another_generic();
   another_generic->set_my_hello(my_proto::ni_hao);
-
+  auto* opt_dependency = better_than_inheritance_source.mutable_opt_dependency();
+  opt_dependency->set_an_optional(funny_number);
   SECTION("Pass validation")
   {
     auto status = demo::protobuf_to_tap(better_than_inheritance_destination, better_than_inheritance_source);
@@ -146,6 +157,16 @@ TEST_CASE("Validate Conversion")
     CHECK(better_than_inheritance_destination.value_opt_uuid() == my_uuid);
     CHECK(better_than_inheritance_destination.get_my_generic().has_my_hello());
     CHECK(better_than_inheritance_destination.get_my_generic().value_my_hello() == demo::HelloEnum::hola);
+    CHECK(better_than_inheritance_destination.value_opt_dependency().value_an_optional() == funny_number);
+    CHECK(better_than_inheritance_destination.get_var_array_of_small_int().size() == 3);
+    CHECK(better_than_inheritance_destination.get_var_array_of_small_int()[0] == 10);
+    CHECK(better_than_inheritance_destination.get_var_array_of_small_int()[1] == 20);
+    CHECK(better_than_inheritance_destination.get_var_array_of_small_int()[2] == -30);
+
+    CHECK(better_than_inheritance_destination.get_fixed_array_of_small_int().size() == 3);
+    CHECK(better_than_inheritance_destination.get_fixed_array_of_small_int()[0] == 5);
+    CHECK(better_than_inheritance_destination.get_fixed_array_of_small_int()[1] == -10);
+    CHECK(better_than_inheritance_destination.get_fixed_array_of_small_int()[2] == 127);
   }
 
   SECTION("bad uuid")

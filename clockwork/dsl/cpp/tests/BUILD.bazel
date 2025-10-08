@@ -23,6 +23,7 @@ py_test(
         "//clockwork/dsl/bazel:cc_targets",
         "//clockwork/dsl/bazel:targets",
         "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:module_id",
         "@clockwork_pip//pytest",
     ],
 )

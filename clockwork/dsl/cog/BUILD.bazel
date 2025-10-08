@@ -7,10 +7,22 @@ load("//tools/rules:python.bzl", "py_library")
 
 package(default_visibility = ["//clockwork:__subpackages__"])
 
+exports_files(
+    [
+        "common_cog_event_metrics.clk",
+        "common_cog_telemetry_metrics.clk",
+        "ten_nanosecond.clk",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 py_library(
     name = "clk_cog_metrics",
     srcs = ["clk_cog_metrics.py"],
-    deps = ["//clockwork/dsl/ir:cog"],
+    deps = [
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+    ],
 )
 
 cc_library(
@@ -20,6 +32,8 @@ cc_library(
         "cog_event_metrics_cpp.inl",
     ],
     hdrs = ["cog_event_metrics_cpp.hh"],
+    data = [":common_cog_event_metrics_clk"],
+    visibility = ["//visibility:public"],
     deps = [
         ":ten_nanoseconds",
         "//clockwork:repr_iface",
@@ -36,6 +50,8 @@ cc_library(
         "cog_telemetry_metrics_cpp.inl",
     ],
     hdrs = ["cog_telemetry_metrics_cpp.hh"],
+    data = [":common_cog_telemetry_metrics_clk"],
+    visibility = ["//visibility:public"],
     deps = [
         ":min_max_mean_cpp",
         ":ten_nanoseconds",
@@ -96,6 +112,8 @@ py_library(
         "//clockwork/dsl/cpp:types",
         "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_metrics_schema_generation",
+        "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:extern_type",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:primitive",
@@ -114,6 +132,7 @@ py_library(
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:types",
         "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:module_id",
     ],
 )
@@ -125,6 +144,8 @@ cc_library(
         "min_max_mean_cpp.inl",
     ],
     hdrs = ["min_max_mean_cpp.hh"],
+    data = [":common_cog_telemetry_metrics_clk"],
+    visibility = ["//visibility:public"],
     deps = [
         ":ten_nanoseconds",
         "//clockwork:repr_iface",
@@ -145,6 +166,7 @@ py_library(
         "//clockwork/dsl/cpp:types",
         "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_components",
         "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:expr",
         "//clockwork/dsl/ir:extern_type",
@@ -171,6 +193,7 @@ cc_library(
     name = "ten_nanosecond_type",
     srcs = ["ten_nanosecond_type.cc"],
     hdrs = ["ten_nanosecond_type.hh"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -180,5 +203,7 @@ cc_library(
         "ten_nanoseconds.inl",
     ],
     hdrs = ["ten_nanoseconds.hh"],
+    data = [":ten_nanosecond_clk"],
+    visibility = ["//visibility:public"],
     deps = [":ten_nanosecond_type"],
 )

@@ -1,0 +1,17 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+cc_library(
+    name = "outcome",
+    hdrs = ["outcome.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "outparam",
+    hdrs = ["outparam.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["//jewels/memory:pointers"],
+)

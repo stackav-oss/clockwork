@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for tachyon_dyn_from_metadata."""
 
@@ -7,11 +8,12 @@ from __future__ import annotations
 
 import re
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
-from clockwork.dsl.ir import compiler, schema
+from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
@@ -27,21 +29,26 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/tapmsg.clk")), fs_importer
     )
-    tap_msg_ir = module.inner_scope.lookup("TapMsg")
-    assert isinstance(tap_msg_ir, schema.Schema)
-    TapMsgMeta: Any  # noqa: N806
-    TapMsgMeta, py_types = tachyon_dyn_from_metadata.py_type_from_metadata(  # noqa: N806
+    tap_msg = module.inner_scope.lookup("TapMsg")
+    assert isinstance(tap_msg, schema.Schema)
+    tap_msg_ir = schema.InstantiatedSchema.make(
+        tap_msg.get_resolved(),
+        {"signed_value": primitive.DecimalValue(value=Decimal(234), type_info=clkbuiltins.INT64)},
+    )
+
+    TapMsgMeta: Any  # noqa: N806 Represents a type and should be camel case
+    TapMsgMeta, py_types = tachyon_dyn_from_metadata.py_type_from_metadata(  # noqa: N806  Represents a type and should be camel case
         module.context,
         tap_msg_ir.value_key(),
-        tachyon_metadata.get_metadata(module.context, schema.InstantiatedSchema.from_typespec(tap_msg_ir)),
+        tachyon_metadata.get_metadata(module.context, tap_msg_ir),
     )
-    SomeEnumMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum"]  # noqa: N806
-    SomeFlagsMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags"]  # noqa: N806
-    SubMsgMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SubMsg"]  # noqa: N806
-    TapMsgDyn, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "TapMsg")  # noqa: N806
-    SomeEnumDyn, _ = tachyon_dyn.get_enum(module.context, module, "SomeEnum")  # noqa: N806
-    SomeFlagsDyn, _ = tachyon_dyn.get_enum(module.context, module, "SomeFlags")  # noqa: N806
-    SubMsgDyn, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "SubMsg")  # noqa: N806
+    SomeEnumMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeEnum"]  # noqa: N806 Represents a type and should be camel case
+    SomeFlagsMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SomeFlags"]  # noqa: N806 Represents a type and should be camel case
+    SubMsgMeta = py_types[f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg::SubMsg"]  # noqa: N806 Represents a type and should be camel case
+    TapMsgDyn, _ = tachyon_dyn.get_instantiation_dataclass(module.context, module, "TapMsg", signed_value=234)  # noqa: N806 Represents a type and should be camel case
+    SomeEnumDyn, _ = tachyon_dyn.get_enum(module.context, module, "SomeEnum")  # noqa: N806 Represents a type and should be camel case
+    SomeFlagsDyn, _ = tachyon_dyn.get_enum(module.context, module, "SomeFlags")  # noqa: N806 Represents a type and should be camel case
+    SubMsgDyn, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "SubMsg")  # noqa: N806 Represents a type and should be camel case
     uuid1 = uuid.uuid4()
     uuid2 = uuid.uuid4()
     msg_meta = TapMsgMeta(
@@ -66,6 +73,7 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
         external_strong_type=4,
         fixed_array=list(range(2)),
         var_string="a",
+        integer_with_init=456,
     )
     msg_dyn = TapMsgDyn(
         integer=1,
@@ -89,6 +97,7 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
         external_strong_type=4,
         fixed_array=list(range(2)),
         var_string="a",
+        integer_with_init=456,
     )
     assert TapMsgDyn.get_tachyon_constraint() == TapMsgMeta.get_tachyon_constraint()
     assert TapMsgDyn.get_tachyon_metadata() == TapMsgMeta.get_tachyon_metadata()

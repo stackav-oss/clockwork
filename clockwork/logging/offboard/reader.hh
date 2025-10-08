@@ -5,6 +5,7 @@
 
 #include "clockwork/logging/channel_type.hh"
 #include "clockwork/logging/decompress_option.hh"
+#include "clockwork/logging/duplicate_message_filter.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
@@ -22,6 +23,7 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -251,6 +253,12 @@ public:
   /// Number of worker threads in the async thread pool
   static constexpr size_t num_worker_threads = 16U;
 
+  /// Maximum number of messages in the duplicate message filter
+  static constexpr size_t duplicate_message_filter_size = 262144U;
+
+  /// Maximum time to keep a message in the duplicate message filter
+  static constexpr auto duplicate_message_filter_expiration_interval = std::chrono::seconds(1);
+
   /// Constructor
   /// @param[in] memory_resource Memory resource
   /// @param[in] uri_str Log URI
@@ -352,6 +360,9 @@ private:
 
   /// Log metadata protobuf
   ::clockwork::logging::offboard::v1::LogMetadata log_metadata_protobuf_;
+
+  /// Duplicate message filter
+  std::shared_ptr<DuplicateMessageFilter> duplicate_message_filter_;
 };
 
 } // namespace clockwork_logging::offboard

@@ -4,7 +4,7 @@
 #include "clockwork/scaffolding/channels.hh"
 
 #include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
@@ -64,8 +64,8 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
         .message_size = config.get_buffer_layout().get_message_size(),
       };
       auto role = (config.get_process_id() == process_id ? Role::publisher : Role::subscriber);
-      auto name = config.get_publisher_id().to_string(memres);
-      auto channel = factory.open(role, name, layout, config.get_num_subscribers());
+      auto uuid_str = config.get_publisher_id().to_string(memres);
+      auto channel = factory.open(role, uuid_str, config.get_channel_name(), layout, config.get_num_subscribers());
       if (channel)
       {
         channels.emplace(config.get_publisher_id(), std::move(channel.value()));
@@ -77,7 +77,8 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
       }
       else
       {
-        jewels::log_cerr_error("Could not create channel '{}': {}", name, wise_enum::to_string(channel.error()));
+        jewels::log_cerr_error(
+          "Could not create channel '{}': {}", config.get_channel_name(), wise_enum::to_string(channel.error()));
         return jewels::unexpected(jewels::MonoError());
       }
     }
@@ -93,7 +94,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
 
 jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   std::span<const common::PublishEndpointTap> descs,
-  std::span<const clockwork_logging::LoggedChannelConfigTap> logged_channels,
+  std::span<const clockwork_logging::PublishedChannelConfigTap> published_channels,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory)
 {
@@ -105,7 +106,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   auto config_it = descs.begin();
   auto next_config = [&]() -> const common::PublishEndpointTap*
   {
-    const std::lock_guard lock(mutex);
+    const std::scoped_lock lock(mutex);
     if (config_it != descs.end())
     {
       return &*(config_it++);
@@ -120,16 +121,18 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
         .num_slots = config->get_buffer_layout().get_num_slots(),
         .message_size = config->get_buffer_layout().get_message_size(),
       };
-      auto name = config->get_publisher_id().to_string(memres);
-      auto channel = factory.open(Role::publisher, name, layout, config->get_num_subscribers());
+      auto uuid_str = config->get_publisher_id().to_string(memres);
+      auto channel =
+        factory.open(Role::publisher, uuid_str, config->get_channel_name(), layout, config->get_num_subscribers());
       if (channel)
       {
-        const std::lock_guard lock(mutex);
+        const std::scoped_lock lock(mutex);
         channels.emplace(config->get_publisher_id(), std::move(channel.value()));
       }
       else
       {
-        jewels::log_cerr_error("Could not create channel '{}': {}", name, wise_enum::to_string(channel.error()));
+        jewels::log_cerr_error(
+          "Could not create channel '{}': {}", config->get_channel_name(), wise_enum::to_string(channel.error()));
         error = true;
       }
     }
@@ -151,27 +154,96 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   // This is to handle the case where a channel is meant to be published by the log publisher and consumed only by the
   // deterministic log writer. In that case the channel will not be described in the PublishEndpointTap so we add any
   // such channels below.
-  for (const auto& channel_config : logged_channels)
+  for (const auto& channel_config : published_channels)
   {
     auto channel_uuid = jewels::Uuid<::clockwork::common::EndpointInstanceId>(channel_config.get_uuid().uuid);
-    if (channels.find(channel_uuid) == channels.end())
+    if (!channels.contains(channel_uuid))
     {
       auto layout = pinion::BufferLayout{
         .num_slots = channel_config.get_num_slots(),
         .message_size = channel_config.get_message_size(),
       };
-      auto name = channel_config.get_uuid().to_string(memres);
+      auto uuid_str = channel_config.get_uuid().to_string(memres);
       // For this case the only subscriber should be the deterministic log writer.
-      auto channel = factory.open(Role::publisher, name, layout, 1);
+      auto channel = factory.open(Role::publisher, uuid_str, channel_config.get_channel_name(), layout, 1);
       if (channel)
       {
         channels.emplace(channel_uuid, std::move(channel.value()));
       }
       else
       {
-        jewels::log_cerr_error("Could not create channel '{}': {}", name, wise_enum::to_string(channel.error()));
+        jewels::log_cerr_error(
+          "Could not create channel '{}': {}",
+          channel_config.get_channel_name(),
+          wise_enum::to_string(channel.error()));
         return jewels::unexpected(jewels::MonoError());
       }
+    }
+  }
+  return channels;
+}
+
+jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
+  std::span<const common::NotConnectedEndpointTap> endpoints,
+  AbstractCasing& casing,
+  jewels::memory::MemoryResource memres,
+  pinion::ShmChannelFactory& factory)
+{
+  using Role = pinion::ShmChannel::Role;
+  ChannelMap channels(memres);
+  for (const auto& endpoint : endpoints)
+  {
+    auto layout = pinion::BufferLayout{
+      .num_slots = endpoint.get_buffer_layout().get_num_slots(),
+      .message_size = endpoint.get_buffer_layout().get_message_size(),
+    };
+    if (endpoint.get_endpoint_type() == common::NotConnectedEndpointType::subscriber)
+    {
+      auto subscriber_result = casing.set_subscriber(endpoint.get_endpoint_id());
+      if (!subscriber_result)
+      {
+        jewels::log_cerr_error(
+          "Could not create non-connected subscriber channel '{}': {}",
+          endpoint.get_endpoint_id(),
+          subscriber_result.error());
+        return jewels::unexpected(jewels::MonoError());
+      }
+      continue;
+    }
+    auto channel = factory.open(
+      Role::publisher,
+      endpoint.get_endpoint_id().to_string(memres),
+      endpoint.get_endpoint_id().to_string(memres),
+      layout,
+      0);
+    if (channel)
+    {
+      channels.emplace(endpoint.get_endpoint_id(), std::move(channel.value()));
+    }
+    else
+    {
+      jewels::log_cerr_error(
+        "Could not create channel '{}': {}", endpoint.get_endpoint_id(), wise_enum::to_string(channel.error()));
+      return jewels::unexpected(jewels::MonoError());
+    }
+
+    auto* publisher_ptr = dynamic_cast<pinion::ShmPublisher*>(channels[endpoint.get_endpoint_id()].get());
+    if (publisher_ptr == nullptr)
+    {
+      jewels::log_cerr_error("supposed publisher id '{}' is actually a subscriber", endpoint.get_endpoint_id());
+      return jewels::unexpected(jewels::MonoError());
+    }
+    auto publisher_handle = publisher_ptr->extract_publisher();
+    if (!publisher_handle)
+    {
+      jewels::log_cerr_error("publisher '{}' was already used", endpoint.get_endpoint_id());
+      return jewels::unexpected(jewels::MonoError());
+    }
+    auto result = casing.set_publisher_handle(endpoint.get_endpoint_id(), std::move(*publisher_handle));
+    if (!result)
+    {
+      jewels::log_cerr_error("set_publisher_handle '{}' failed: {}", endpoint.get_endpoint_id(), result.error());
+      return jewels::unexpected(jewels::MonoError());
     }
   }
   return channels;

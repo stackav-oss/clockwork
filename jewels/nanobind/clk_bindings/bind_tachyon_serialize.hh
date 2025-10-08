@@ -27,7 +27,10 @@ template <typename SchemaT>
 void bind_tachyon_constraint_and_metadata(
   ::nanobind::class_<clockwork::Tappy<SchemaT>>& cls,
   int64_t tachyon_constraint_size,
-  int64_t tachyon_constraint_alignment);
+  int64_t tachyon_constraint_alignment,
+  std::string_view tachyon_module_name,
+  std::string_view tachyon_source_file_name,
+  std::string_view tachyon_class_name);
 
 } // namespace jewels::nanobind
 

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final, cast
 from clockwork.dsl import compiler_context
 from clockwork.dsl.ir import node, typesys
 from clockwork.dsl.ir.module_id import ModuleID
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -77,6 +78,7 @@ class IntegerPrimitiveType(PrimitiveType):
 
     signed: bool
 
+    @override
     def satisfies(self, constraint: typesys.NumericType) -> bool:
         """Check if this type satisfies a constraint.
 
@@ -101,6 +103,7 @@ class IntegerPrimitiveBuiltinSerializable(IntegerPrimitiveType, SerializableBuil
 class FloatingPointPrimitiveType(PrimitiveType):
     """Floating point primitive type."""
 
+    @override
     def satisfies(self, constraint: typesys.NumericType) -> bool:
         """Check if this type satisfies a constraint.
 
@@ -358,7 +361,11 @@ COG_INPUT_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Inp
 COG_INPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Input", type_info=TYPE_TYPE)
 COG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="CogInstance", type_info=TYPE_TYPE)
 COG_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="OutputInstance", type_info=TYPE_TYPE)
+COG_METRICS_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="MetricsOutputInstance", type_info=TYPE_TYPE
+)
 COG_OUTPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Output", type_info=TYPE_TYPE)
+COG_METRICS_OUTPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="MetricsOutput", type_info=TYPE_TYPE)
 COG_DIAGNOSTICS_INSTANCE_TYPE: Final = typesys.TypeDef(
     scope=BUILTINS_SCOPE, name="CogDiagnosticsInstance", type_info=TYPE_TYPE
 )

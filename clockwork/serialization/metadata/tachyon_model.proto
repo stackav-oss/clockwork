@@ -9,6 +9,7 @@ message TachyonMetadata {
   int32 outer_type_id = 1;
   repeated TypeDesc types = 2;
   int32 version = 3;
+  bool python_required = 4;
 }
 
 message TypeDesc {
@@ -45,6 +46,7 @@ message SchemaType {
   int32 version = 5;
   repeated SchemaField fields = 6;
   bytes hash = 7;
+  History history = 8;
 }
 
 message SchemaField {
@@ -52,6 +54,7 @@ message SchemaField {
   int32 num = 2;
   string name = 3;
   int32 type_id = 4;
+  InitialValue init_value = 5;
 }
 
 message ClkEnumType {
@@ -62,6 +65,7 @@ message ClkEnumType {
   int32 version = 4;
   repeated EnumValue values = 5;
   bytes hash = 6;
+  History history = 8;
 }
 
 message EnumValue {
@@ -79,4 +83,23 @@ message StrongType {
   string fqn = 1;
   int32 underlying_type_id = 2;
   bytes hash = 3;
+}
+
+message History {
+  repeated int32 removed = 1;
+  map<int32, int32> became = 2;
+  repeated int32 versions = 3;
+}
+
+message InitialValue {
+  oneof value {
+    int64 signed_value = 1;
+    uint64 unsigned_value = 2;
+    string float_value = 3;
+    bool bool_value = 4;
+  }
+}
+
+message LoggedChannelMetadata {
+  map<string, TachyonMetadata> channel_metadata = 1;
 }

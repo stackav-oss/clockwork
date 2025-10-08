@@ -4,11 +4,15 @@
 #pragma once
 
 #include "clockwork/logging/log_error.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
+
+#include <xxh3.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory_resource>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -55,9 +59,15 @@ class LiteCompressor
     /// @return True if there is no data left to copy
     [[nodiscard]] bool empty() const;
 
+    /// @return Total data size in bytes
+    [[nodiscard]] size_t size() const;
+
   private:
     /// Data spans
     std::span<const std::span<const std::byte>> data_spans_;
+
+    /// Data size in bytes
+    size_t size_;
 
     /// Current span index
     size_t span_index_{0U};
@@ -67,6 +77,9 @@ class LiteCompressor
   };
 
 public:
+  /// Maximum increase in message size after lite compression (message size, chunk count, three chunks = 20 bytes)
+  static constexpr size_t max_compression_overhead_bytes = 20U;
+
   /// Constructor
   /// @param[in] memory_resource Memory resource
   explicit LiteCompressor(jewels::memory::MemoryResource memory_resource);
@@ -87,6 +100,21 @@ public:
   /// @return Span of spans containing the compressed data
   [[nodiscard]] std::span<const std::span<const std::byte>> compress(std::span<const std::byte> data);
 
+  /// Compress a buffer by removing blocks of zeros and generate checksums for the byte counts and compressed data
+  ///
+  /// The data in the result is backed by the input buffer.
+  /// The resulting span remains valid until the next call to compress or decompress.
+  ///
+  /// @param[out] compressed_data Span of spans containing the compressed data
+  /// @param[out] counts_checksum Compressed counts checksum
+  /// @param[out] data_checksum Compressed data checksum
+  /// @param[in] data Data to be compressed
+  void compress(
+    jewels::Out<std::span<const std::span<const std::byte>>> compressed_data,
+    jewels::Out<uint64_t> counts_checksum,
+    jewels::Out<uint64_t> data_checksum,
+    std::span<const std::byte> data);
+
   /// Decompress a buffer.
   ///
   /// The decompression result remains valid until the next call to decompress or decompress.
@@ -105,15 +133,17 @@ public:
   [[nodiscard]] LogExpected<std::span<const std::span<const std::byte>>>
   zero_copy_decompress(std::span<const std::span<const std::byte>> data_spans);
 
-  /// Decompress a buffer into a destination span
+  /// Decompress a buffer into a destination span and validate the checksums on the counts and data
   ///
   /// The destination span size must match the size of the decompressed data
   ///
-  /// @param[in] data_spans Data to be decompressed
-  /// @param[out] dest_span Decompressed data
+  /// @param[in] counts_checksum Compressed counts checksum
+  /// @param[in] data_checksum Compressed data checksum
+  /// @param[in] data_span Data to be decompressed
+  /// @param[in] dest_span Decompressed data span
   /// @return Decompressed data or MonoError on failure
-  [[nodiscard]] LogExpected<std::span<const std::byte>>
-  decompress(std::span<const std::span<const std::byte>> data_spans, std::span<std::byte> dest_span);
+  LogOutcome decompress(
+    uint64_t counts_checksum, uint64_t data_checksum, std::span<const std::byte> data, std::span<std::byte> dest_span);
 
   /// Decompress a buffer.
   ///
@@ -132,16 +162,6 @@ public:
   [[nodiscard]] LogExpected<std::span<const std::span<const std::byte>>>
   zero_copy_decompress(std::span<const std::byte> data);
 
-  /// Decompress a buffer into a destination span
-  ///
-  /// The destination span size must match the size of the decompressed data
-  ///
-  /// @param[in] data Data to be decompressed
-  /// @param[out] dest_span Decompressed data
-  /// @return Decompressed data or MonoError on failure
-  [[nodiscard]] LogExpected<std::span<const std::byte>>
-  decompress(std::span<const std::byte> data, std::span<std::byte> dest_span);
-
   /// Get the decompressed size of a compressed buffer
   /// @parm[in] data Span containing the compressed buffer
   /// @return Decompressed data size of LogError on failure
@@ -154,17 +174,23 @@ public:
   get_decompressed_size(std::span<const std::span<const std::byte>> data_spans);
 
 private:
-  /// Compress a buffer of uint64_t by removing blocks of zeros
+  /// Compress a buffer of uint64_t by removing blocks of zeros and updating the data checksum
+  /// @param[in,out] maybe_data_checksum_state Data checksum state
   /// @param[in] aligned_data Aligned data to be compressed
-  void compress_aligned_data(std::span<const uint64_t> aligned_data);
+  void
+  compress_aligned_data(std::optional<XXH3_state_t>& maybe_data_checksum_state, std::span<const uint64_t> aligned_data);
 
   /// Common decompression implementation
+  /// @param[in,out] maybe_data_checksum_state Optional data checksum state
   /// @param[in] cursor Source span cursor
   /// @param[in] byte_counts Message byte counts
-  /// @param[out] dest_span Destination data span
-  /// @return Decompressed data or MonoError on failure
-  [[nodiscard]] static LogExpected<std::span<const std::byte>>
-  decompress_common(SpanCursor cursor, std::span<const int32_t> byte_counts, std::span<std::byte> dest_span);
+  /// @param[in] dest_span Destination data span
+  /// @return Decompression outcome
+  static LogOutcome decompress_common(
+    std::optional<XXH3_state_t>& maybe_data_checksum_state,
+    SpanCursor cursor,
+    std::span<const int32_t> byte_counts,
+    std::span<std::byte> dest_span);
 
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;

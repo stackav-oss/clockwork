@@ -3,6 +3,8 @@
 
 """simplelaunch-related rules."""
 
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
 _CONFIG_TOOL = "@clockwork//jewels/simplelaunch:config_tool"
 _CONFIG_TEST = "@clockwork//jewels/simplelaunch:simplelaunch_config_test.sh"
 
@@ -14,7 +16,7 @@ def simplelaunch_config_test(name, config, **kwargs):
         config: The config file to validate.
         **kwargs: Extra arguments to pass to the generated py_test rule.
     """
-    native.sh_test(
+    sh_test(
         name = name,
         srcs = [_CONFIG_TEST],
         data = [_CONFIG_TOOL, config],
@@ -37,6 +39,7 @@ def _merge_simplelaunch_config_rule_impl(ctx):
         mnemonic = "SimpleLaunchConfig",
         arguments = args,
         progress_message = "Generating simple launch config " + str(ctx.label),
+        env = ctx.attr._tool[RunEnvironmentInfo].environment,
     )
 
     return [DefaultInfo(
@@ -63,6 +66,7 @@ def merge_simplelaunch_config(name, **kwargs):
     simplelaunch_config_test(
         name = name + ".test",
         config = name,
+        tags = kwargs.get("tags", None),
     )
 
 _SIMPLELAUNCH_WRAPPER = """\

@@ -131,10 +131,10 @@ index 27930c10..b6e71381 100644
 +	return nil, ""
  }
 diff --git gazelle/python/kinds.go gazelle/python/kinds.go
-index 7a0639ab..bdd72cc0 100644
+index 7a0639ab..6ad6234c 100644
 --- gazelle/python/kinds.go
 +++ gazelle/python/kinds.go
-@@ -19,9 +19,18 @@ import (
+@@ -19,9 +19,19 @@ import (
  )
  
  const (
@@ -153,10 +153,11 @@ index 7a0639ab..bdd72cc0 100644
 +	protoPyLibraryKind         = "proto_py_library"
 +	pyRos2InterfaceLibraryKind = "py_ros2_interface_library"
 +	ros2PyBinaryKind           = "ros2_py_binary"
++	pytestTestKind             = "pytest_test"
  )
  
  // Kinds returns a map that maps rule names (kinds) and information on how to
-@@ -30,40 +39,36 @@ func (*Python) Kinds() map[string]rule.KindInfo {
+@@ -30,42 +40,38 @@ func (*Python) Kinds() map[string]rule.KindInfo {
  	return pyKinds
  }
  
@@ -165,6 +166,20 @@ index 7a0639ab..bdd72cc0 100644
 +	MatchAttrs: []string{"srcs"},
 +	NonEmptyAttrs: map[string]bool{
 +		"deps":    true,
++		"srcs":    true,
++		"imports": true,
++	},
++	SubstituteAttrs: map[string]bool{},
++	ResolveAttrs: map[string]bool{
++		"deps": true,
++	},
++}
++
++var testKind = rule.KindInfo{
++	MatchAny: false,
++	NonEmptyAttrs: map[string]bool{
++		"deps":    true,
++		"main":    true,
 +		"srcs":    true,
 +		"imports": true,
 +	},
@@ -195,25 +210,25 @@ index 7a0639ab..bdd72cc0 100644
 -	pyLibraryKind: {
  		MatchAny:   false,
  		MatchAttrs: []string{"srcs"},
- 		NonEmptyAttrs: map[string]bool{
- 			"deps":    true,
-+			"main":    true,
- 			"srcs":    true,
- 			"imports": true,
- 		},
- 		SubstituteAttrs: map[string]bool{},
+-		NonEmptyAttrs: map[string]bool{
+-			"deps":    true,
+-			"srcs":    true,
+-			"imports": true,
+-		},
+-		SubstituteAttrs: map[string]bool{},
 -		MergeableAttrs: map[string]bool{
 -			"srcs": true,
 -		},
- 		ResolveAttrs: map[string]bool{
- 			"deps": true,
- 		},
- 	},
-+	pyLibraryKind: libraryKind,
- 	pyTestKind: {
- 		MatchAny: false,
+-		ResolveAttrs: map[string]bool{
+-			"deps": true,
+-		},
+-	},
+-	pyTestKind: {
+-		MatchAny: false,
  		NonEmptyAttrs: map[string]bool{
-@@ -73,9 +78,28 @@ var pyKinds = map[string]rule.KindInfo{
+ 			"deps":    true,
+ 			"main":    true,
+@@ -73,9 +79,31 @@ var pyKinds = map[string]rule.KindInfo{
  			"imports": true,
  		},
  		SubstituteAttrs: map[string]bool{},
@@ -223,6 +238,9 @@ index 7a0639ab..bdd72cc0 100644
 +			"deps": true,
  		},
 +	},
++	pyLibraryKind:              libraryKind,
++	pyTestKind:                 testKind,
++	pytestTestKind:             testKind,
 +	avtDutModuleKind:           libraryKind,
 +	avtPyTestKind:              libraryKind,
 +	avtTestSuiteKind:           libraryKind,
@@ -244,13 +262,17 @@ index 7a0639ab..bdd72cc0 100644
  		ResolveAttrs: map[string]bool{
  			"deps": true,
  		},
-@@ -98,4 +122,8 @@ var pyLoads = []rule.LoadInfo{
+@@ -98,4 +126,12 @@ var pyLoads = []rule.LoadInfo{
  			pyTestKind,
  		},
  	},
 +	{
 +		Name:    "@com_github_mvukov_rules_ros2//ros2:py_defs.bzl",
-+		Symbols: []string{"ros2_py_binary"},
++		Symbols: []string{ros2PyBinaryKind},
++	},
++	{
++		Name:    "//tools/rules:pytest.bzl",
++		Symbols: []string{pytestTestKind},
 +	},
  }
 diff --git gazelle/python/resolve.go gazelle/python/resolve.go

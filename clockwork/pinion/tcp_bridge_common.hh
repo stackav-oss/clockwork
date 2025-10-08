@@ -5,20 +5,38 @@
 #include "clockwork/pinion/bridge_status.hh"
 #include "clockwork/repr_iface.hh"
 
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <span>
 #include <string_view>
-#include <sys/socket.h>
 
 namespace clockwork::pinion
 {
 
+/// TCP bridge header magic nimber size
+static constexpr size_t tcp_message_header_magic_number_size = 8U;
+
+/// TCP bridge header magic number used to recover after receiving invalid message headers
+static constexpr std::array<std::byte, tcp_message_header_magic_number_size> tcp_message_header_magic_number = {
+  std::byte{'t'},
+  std::byte{'c'},
+  std::byte{'p'},
+  std::byte{'b'},
+  std::byte{'r'},
+  std::byte{'i'},
+  std::byte{'d'},
+  std::byte{'g'}};
+
 ///
-/// Header for channel messages sent on a TCP socket.
+/// Header body for channel messages sent on a TCP socket.
 ///
-struct TcpMessageHeader
+struct TcpMessageHeaderBody
 {
+  /// Magic number used for framing
+  std::array<std::byte, tcp_message_header_magic_number_size> magic_number{tcp_message_header_magic_number};
+
+  /// Sequence number
   uint64_t sequence_number{};
 
   /// Length of the payload, excluding this header.
@@ -32,20 +50,28 @@ struct TcpMessageHeader
 };
 
 ///
+/// Header for channel messages sent on a TCP socket.
+///
+struct TcpMessageHeader
+{
+  /// Message header body
+  TcpMessageHeaderBody body{};
+
+  /// Message header body checksum
+  uint64_t checksum{};
+};
+
+///
 /// Tail for channel messages sent on a TCP socket.
 ///
 struct TcpMessageTail
 {
-  /// True if the receiver can safely commit the message.
-  bool commit{};
-};
+  /// Lite compressor counts checksum
+  uint64_t counts_checksum{};
 
-/// Subtract bytes from a sequence of iovecs.
-/// @param iovecs the iovecs to modify
-/// @param amount the number of bytes to advance iovecs by
-/// @note This assumes that the amount being subtracted is less than or equal to
-/// the total length of the provided iovecs.
-void advance_iovecs(std::span<struct iovec> iovecs, size_t amount);
+  /// Lite compressor data checksum
+  uint64_t data_checksum{};
+};
 
 /// Struct used to store the counters for a bridge client or server
 struct TcpBridgeClientServerCounters
@@ -118,6 +144,9 @@ struct TcpBridgeDiagnosticsCounters
   uint64_t status_errors{};
   std::chrono::nanoseconds max_bridge_latency{};
   std::string_view max_latency_channel_name{};
+
+  /// Comparison operator
+  auto operator<=>(const TcpBridgeDiagnosticsCounters&) const = default;
 };
 
 } // namespace clockwork::pinion

@@ -1,0 +1,30 @@
+use clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_config::{MetricsChannelMetadataReport, MetricsChannelMetadataConfig};
+
+// Cog that publishes the metrics channel metadata as a persistent message
+cog MetricsChannelMetadataInitCog
+{
+  configs
+  {
+    metrics_config : Tappy<MetricsChannelMetadataConfig<>>;
+  }
+
+  outputs
+  {
+    metrics_channel_metadata : Tappy<MetricsChannelMetadataReport<>>;
+  }
+
+  execution
+  {
+      execute when: init;
+  }
+}
+
+cpp_target metrics_channel_metadata_init_cog
+{
+  options
+  {
+    namespace clockwork::tools;
+  }
+
+  cog MetricsChannelMetadataInitCog;
+}

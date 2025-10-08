@@ -85,5 +85,10 @@ TEST_CASE("Test converting gps time")
   constexpr auto gps_week{1472};
   constexpr auto time_in_week_ms = std::chrono::milliseconds(314158000);
   CHECK(gps_time_to_utc(gps_week, time_in_week_ms) == 1206544540_seconds);
+
+  constexpr auto gps_epoch_time = 1435068101000000000_nanoseconds;
+  constexpr auto leap_seconds = 18_seconds;
+  constexpr auto unix_time = 1751032883_seconds;
+  CHECK(gps_time_to_utc(gps_epoch_time, leap_seconds) == unix_time);
 }
 } // namespace au::testing

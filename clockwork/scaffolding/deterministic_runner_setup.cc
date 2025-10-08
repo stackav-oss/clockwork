@@ -9,6 +9,7 @@
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <xxh3.h>
@@ -19,7 +20,6 @@
 #include <regex>
 #include <span>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 namespace clockwork
@@ -34,8 +34,9 @@ jewels::expected<clockwork_logging::ChannelMap, jewels::MonoError> convert_chann
     auto publisher_channel = std::dynamic_pointer_cast<pinion::ShmPublisher>(channel_pair.second);
     if (!publisher_channel)
     {
-      jewels::log_cerr_error("Got a non-publisher channel when running with the deterministic runner. Please make sure "
-                             "your system is single process.");
+      jewels::log_cerr_error(
+        "Got a non-publisher channel when running with the deterministic runner. Please make sure "
+        "your system is single process.");
       return jewels::unexpected(jewels::MonoError{});
     }
     publisher_channel_map.emplace(channel_pair.first, std::move(publisher_channel));
@@ -48,7 +49,8 @@ jewels::expected<std::shared_ptr<DeterministicChannelHandler>, jewels::MonoError
   jewels::memory::MemoryResource memres,
   const ExecutionParams& execution_params,
   const DeterministicLoggingConfig& logging_config,
-  const scaffolding::ChannelMap& scaffolding_channel_map)
+  const scaffolding::ChannelMap& scaffolding_channel_map,
+  jewels::time::SyncTime init_time)
 {
   if (
     (!execution_params.output_log_uri || !logging_config.log_writer_config) &&
@@ -75,8 +77,10 @@ jewels::expected<std::shared_ptr<DeterministicChannelHandler>, jewels::MonoError
       memres,
       memres,
       jewels::memory::make_non_null_from_ref(*logging_config.log_writer_config),
+      logging_config.metrics_channel_metadata_config,
       *channel_map,
-      *execution_params.output_log_uri);
+      *execution_params.output_log_uri,
+      init_time);
   }
   auto log_writer =
     std::allocate_shared<DeterministicChannelHandler, std::pmr::polymorphic_allocator<DeterministicChannelHandler>>(

@@ -1,7 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
 load("@rules_python//python:py_library.bzl", "py_library")
 load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
 
@@ -41,11 +40,6 @@ load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest
 # gazelle:resolve py root_repo_py @root_repo//:root_repo_py
 # keep-sorted end
 
-gazelle_common_args = [
-    "-proto_configs=tools/gazelle/build_stack_rules_proto.yaml",
-    "-proto_plugin=tools/gazelle/plugins.star%protoc-gen-nolint",
-]
-
 # Top-level library to set module import path
 py_library(
     name = "clockwork",
@@ -53,22 +47,13 @@ py_library(
     visibility = ["//visibility:public"],
 )
 
-gazelle(
-    name = "gazelle",
-    args = gazelle_common_args + ["--third_party_file_map=tools/gazelle/cc_plugin/resources/third_party_mapping.json"],
-    gazelle = ":gazelle-binary",
-)
-
-gazelle_binary(
-    name = "gazelle-binary",
-    languages = [
-        "@gazelle//language/go",
-        "@gazelle//language/proto",
-        "@build_stack_rules_proto//language/protobuf",
-        "@bazel_skylib_gazelle_plugin//bzl",
-        "@rules_python_gazelle_plugin//python",
-        "//tools/gazelle/cc_plugin",
+filegroup(
+    name = "buildifier_config",
+    srcs = [
+        ".buildifier.json",
+        ".buildifier_tables.json",
     ],
+    visibility = ["//visibility:public"],
 )
 
 gazelle_python_manifest(

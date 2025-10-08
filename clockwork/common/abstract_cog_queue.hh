@@ -75,6 +75,12 @@ public:
   /// @returns Queue statistics
   ///
   [[nodiscard]] virtual CogQueueStats stats() const = 0;
+
+  ///
+  /// Check if this cog queue is offline.
+  /// @returns true if this cog queue is running offline.
+  ///
+  [[nodiscard]] virtual bool is_offline() const = 0;
 };
 
 } // namespace clockwork

@@ -22,8 +22,8 @@ def gen_diagnostics_configs(
     for inst_id, cog in sys.system.cogs.items():
         for member in cog.members:
             if isinstance(member.member, diagnostics.DiagnosticsDef):
-                assert isinstance(member.member.group_id, str)  # noqa: S101 (necessarily true at this point)
-                assert isinstance(member.member.instance_id, str | None)  # noqa: S101 (necessarily true at this point)
+                assert isinstance(member.member.group_id, str)
+                assert isinstance(member.member.instance_id, str | None)
                 database.reporters.append(
                     diagnostics_config.ReporterInfo(
                         id=uuid5(inst_id, member.member.name),
@@ -45,8 +45,8 @@ def gen_diagnostics_configs(
     entities_with_diags = sys.system.audio_sources.values()
     for entity in entities_with_diags:
         instance: diagnostics.DiagnosticsInstance = entity.diagnostics
-        assert isinstance(instance.diagnostics.group_id, str)  # noqa: S101
-        assert isinstance(instance.diagnostics.instance_id, str | None)  # noqa: S101
+        assert isinstance(instance.diagnostics.group_id, str)
+        assert isinstance(instance.diagnostics.instance_id, str | None)
         database.reporters.append(
             diagnostics_config.ReporterInfo(
                 id=lookup_uuid(sys.system.module.context, instance),

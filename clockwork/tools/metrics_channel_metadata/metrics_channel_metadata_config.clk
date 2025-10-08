@@ -1,0 +1,122 @@
+
+use clockwork::common::process_description;
+
+// Metrics channel metadata
+schema MetricsChannelMetadata
+{
+  uuid: 914fa7b8-1413-41b2-9798-6d4ff3337753;
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 300;
+
+  }
+
+  fields
+  {
+    // Channel name
+    #1 metrics_channel_name: VarString<max_channel_name_size>;
+
+    // Channel UUID
+    #2 metrics_channel_uuid: Uuid<process_description::EndpointInstanceId>;
+
+    // Cog Path
+    #3 cog_path: VarString<max_channel_name_size>;
+
+    // Cog Instance Path
+    #4 cog_instance_path: VarString<max_channel_name_size>;
+  }
+}
+
+// Metrics channel metadata report
+schema MetricsChannelMetadataReport
+{
+  uuid: 03d8a6f0-3574-4235-87b7-30d52b27abda;
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 300;
+
+    // Maximum channel name size
+    #1 max_num_channels = 2046;
+  }
+  fields
+  {
+    // Metrics channel metadata
+    #3 metrics_channels: VarArray<
+      MetricsChannelMetadata<max_channel_name_size>,
+      max_num_channels>;
+  }
+  history
+  {
+    versions: [2, 3];
+    fields
+    {
+      #2 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size=300>, 1023> -> became #3;
+    }
+  }
+}
+
+// Metrics channel metadata configuration
+schema MetricsChannelMetadataConfig
+{
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = 300;
+
+    // Maximum number of channels
+    #1 max_num_channels = 2046;
+
+    // Maximum schema name size
+    #4 max_schema_name_size = 511;
+
+    // Maximum schema definition size
+    #5 max_schema_definition_size = 20000;
+  }
+
+  fields
+  {
+
+    // Metrics channel metadata
+    #3 metrics_channels: VarArray<
+      MetricsChannelMetadata<
+        max_channel_name_size=max_channel_name_size>,
+      max_num_channels>;
+
+    // Schema name
+    #6 metrics_metadata_report_schema_name: VarString<max_schema_name_size>;
+
+    // Schema definition
+    #7 metrics_metadata_report_schema_definition: VarArray<Byte, max_schema_definition_size>;
+  }
+
+  history
+  {
+    versions: [2, 3, 7];
+    fields
+    {
+      #2 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size=300>, 1023> -> became #3;
+    }
+  }
+}
+
+cpp_target metrics_channel_metadata_config
+{
+  options
+  {
+    namespace clockwork::tools;
+  }
+
+  schema MetricsChannelMetadata;
+  representation Tachyon<MetricsChannelMetadata<>>;
+  interface MetricsChannelMetadataTap: Tap<Tachyon<MetricsChannelMetadata<>>>;
+
+  schema MetricsChannelMetadataReport;
+  representation MetricsChannelMetadataReportTach: Tachyon<MetricsChannelMetadataReport<>>;
+  interface MetricsChannelMetadataReportTap: Tap<Tachyon<MetricsChannelMetadataReport<>>>;
+
+  schema MetricsChannelMetadataConfig;
+  representation MetricsChannelMetadataConfigTach: Tachyon<MetricsChannelMetadataConfig<>>;
+  interface MetricsChannelMetadataConfigTap: Tap<Tachyon<MetricsChannelMetadataConfig<>>>;
+}

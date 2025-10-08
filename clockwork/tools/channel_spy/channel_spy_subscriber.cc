@@ -9,7 +9,6 @@
 #include "clockwork/pinion/slot.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
 #include <boost/iterator/iterator_facade.hpp>
@@ -23,7 +22,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 
 namespace clockwork::tools
@@ -32,7 +30,8 @@ namespace clockwork::tools
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
   std::string_view shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view uuid_str,
+  std::string_view channel_name,
   size_t num_slots,
   size_t message_size,
   GenericCallbackFunction callback_fn)
@@ -49,7 +48,7 @@ namespace clockwork::tools
     jewels::log_cerr_error("{}", msg);
     throw std::runtime_error(msg);
   }
-  auto open_result = factory_result->open_spy(name, buffer_layout, 1U);
+  auto open_result = factory_result->open_spy(uuid_str, channel_name, buffer_layout, 1U);
   if (!open_result)
   {
     const auto msg = fmt::format("Failed to open shared memory channel: {}", open_result.error());
@@ -64,7 +63,8 @@ namespace clockwork::tools
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
   std::string_view shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view uuid_str,
+  std::string_view channel_name,
   size_t num_slots,
   size_t message_size,
   RawMessageCallback callback_fn)
@@ -72,7 +72,8 @@ namespace clockwork::tools
   return make_subscriber(
     shm_dir,
     socket_ns,
-    name,
+    uuid_str,
+    channel_name,
     num_slots,
     message_size,
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here
@@ -94,7 +95,8 @@ namespace clockwork::tools
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
   std::string_view shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view uuid_str,
+  std::string_view channel_name,
   size_t num_slots,
   size_t message_size,
   PythonCallback callback_fn)
@@ -102,7 +104,8 @@ namespace clockwork::tools
   return make_subscriber(
     shm_dir,
     socket_ns,
-    name,
+    uuid_str,
+    channel_name,
     num_slots,
     message_size,
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here

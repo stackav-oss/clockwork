@@ -1,13 +1,14 @@
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
 load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@rules_proto_grpc//buf:defs.bzl", "buf_proto_lint_test")
+load("@rules_proto_grpc_buf//:defs.bzl", "buf_proto_lint_test")
 
 # gazelle:proto_language go enabled false
-# gazelle:proto_language py enabled false
 
 package(default_visibility = ["//visibility:public"])
 
@@ -47,6 +48,28 @@ proto_library(
     srcs = ["log_metadata.proto"],
 )
 
+proto_compile(
+    name = "log_metadata_py_compile",
+    outputs = [
+        "log_metadata_pb2.py",
+        "log_metadata_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "log_metadata_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "log_metadata_py_library",
+    srcs = ["log_metadata_pb2.py"],
+    data = ["log_metadata_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
 buf_proto_lint_test(
     name = "log_union_buf_lint",
     protos = [":log_union_proto"],
@@ -83,6 +106,28 @@ proto_library(
     srcs = ["log_union.proto"],
 )
 
+proto_compile(
+    name = "log_union_py_compile",
+    outputs = [
+        "log_union_pb2.py",
+        "log_union_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "log_union_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "log_union_py_library",
+    srcs = ["log_union_pb2.py"],
+    data = ["log_union_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
 buf_proto_lint_test(
     name = "writer_config_buf_lint",
     protos = [":writer_config_proto"],
@@ -117,4 +162,26 @@ proto_compile(
 proto_library(
     name = "writer_config_proto",
     srcs = ["writer_config.proto"],
+)
+
+proto_compile(
+    name = "writer_config_py_compile",
+    outputs = [
+        "writer_config_pb2.py",
+        "writer_config_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "writer_config_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "writer_config_py_library",
+    srcs = ["writer_config_pb2.py"],
+    data = ["writer_config_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
 )

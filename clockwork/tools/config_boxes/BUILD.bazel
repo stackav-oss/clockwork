@@ -1,0 +1,44 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+clk(
+    name = "config_init_boxes_clk",
+    srcs = ["config_init_boxes.clk"],
+    outs = [
+        "config_init_exe.cc",
+        "config_init_exe.hh",
+        "config_init_exe.inl",
+    ],
+    deps = [
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_init_clk",
+    ],
+)
+
+cc_binary(
+    name = "config_init_exe",
+    srcs = [
+        "config_init_exe.cc",
+        "config_init_exe.hh",
+        "config_init_exe.inl",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//clockwork/tools/channel_spy:channel_spy_config",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config",
+        "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_init_cog",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)

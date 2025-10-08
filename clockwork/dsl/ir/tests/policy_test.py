@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for policy."""
 
@@ -46,13 +47,13 @@ def test_policy(fs_importer: FilesystemImporter) -> None:
     assert call_result.data.data == policy_inst.data.data
 
     with pytest.raises(ValueError, match=re.escape("Only named arguments supported for policies")):
-        policy_class.evaluate_call(ir_node=None, module=module, args=[(None, None)])  # type: ignore[list-item]
+        policy_class.evaluate_call(ir_node=None, module=module, args=[(None, None)])  # pyright: ignore[reportArgumentType] Testing incorrect attribute
 
     with pytest.raises(
         AttributeError,
         match=re.escape("No such field wrong in schema TestPolicySchema, or field specified more than once"),
     ):
-        policy_class.evaluate_call(ir_node=None, module=module, args=[("wrong", None)])  # type: ignore[list-item]
+        policy_class.evaluate_call(ir_node=None, module=module, args=[("wrong", None)])  # pyright: ignore[reportArgumentType] Testing incorrect attribute
 
     with pytest.raises(ValueError, match=re.escape("Missing value for field do_stuff of schema TestPolicySchema")):
         policy_class.evaluate_call(ir_node=None, module=module, args=[])
@@ -248,6 +249,8 @@ def test_logging_policy(fs_importer: FilesystemImporter) -> None:
     assert isinstance(hello_chan, pubsub.Channel)
     another_chan = hellomod.inner_scope.lookup("AnotherChan")
     assert isinstance(another_chan, pubsub.Channel)
+    multi_publisher_chan = hellomod.inner_scope.lookup("MultiPublisherChannel")
+    assert isinstance(multi_publisher_chan, pubsub.Channel)
 
     policy_def = channel_policy.inner_scope.lookup("ChannelLoggingPolicy")
     assert isinstance(policy_def, policy.PolicyDef)
@@ -257,11 +260,15 @@ def test_logging_policy(fs_importer: FilesystemImporter) -> None:
 
     hello_policy = policy.lookup_policy(system_module, policy_class, hello_chan)
     assert isinstance(hello_policy, policy.PolicyData)
-    assert hello_policy.data.data["log_type"] is log_type.lookup("event")  # type: ignore[comparison-overlap]
+    assert hello_policy.data.data["log_type"] is log_type.lookup("event")
 
     another_policy = policy.lookup_policy(system_module, policy_class, another_chan)
     assert isinstance(another_policy, policy.PolicyData)
-    assert another_policy.data.data["log_type"] is log_type.lookup("telemetry")  # type: ignore[comparison-overlap]
+    assert another_policy.data.data["log_type"] is log_type.lookup("telemetry")
+
+    multi_publisher_policy = policy.lookup_policy(system_module, policy_class, multi_publisher_chan)
+    assert isinstance(multi_publisher_policy, policy.PolicyData)
+    assert multi_publisher_policy.data.data["log_type"] is log_type.lookup("redundant_telemetry")
 
 
 def test_log_reader_policy(fs_importer: FilesystemImporter) -> None:

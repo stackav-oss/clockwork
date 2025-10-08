@@ -13,15 +13,20 @@ namespace clockwork::diagnostics
 {
 
 template <auto group_id_v>
-class ClockworkReporter
+struct GroupProxy
+{
+};
+
+template <typename Group>
+class ClockworkReporterImpl
 {
 public:
-  ClockworkReporter() = default;
-  ClockworkReporter(const ClockworkReporter&) = delete;
-  ClockworkReporter& operator=(const ClockworkReporter&) = delete;
-  ClockworkReporter& operator=(ClockworkReporter&&) = delete;
-  ClockworkReporter(ClockworkReporter&& other) noexcept = default;
-  ~ClockworkReporter() = default;
+  ClockworkReporterImpl() = default;
+  ClockworkReporterImpl(const ClockworkReporterImpl&) = delete;
+  ClockworkReporterImpl& operator=(const ClockworkReporterImpl&) = delete;
+  ClockworkReporterImpl& operator=(ClockworkReporterImpl&&) = delete;
+  ClockworkReporterImpl(ClockworkReporterImpl&& other) noexcept = default;
+  ~ClockworkReporterImpl() = default;
 
   template <auto id, typename Type>
   void set(Type /*value*/)
@@ -47,26 +52,26 @@ struct ClockworkPublisher
   }
 };
 
-template <auto group_id_v>
-class ClockworkManager
+template <typename Group>
+class ClockworkManagerImpl
 {
 public:
-  using Reporter = ClockworkReporter<group_id_v>;
+  using Reporter = ClockworkReporterImpl<Group>;
 
-  static constexpr auto group_id = group_id_v;
+  static constexpr auto group_id = 1;
 
   template <typename ReporterId>
-  explicit ClockworkManager(const ReporterId& /*reporter_id*/)
+  explicit ClockworkManagerImpl(const ReporterId& /*reporter_id*/)
   {
   }
 
   template <typename InstanceType, typename ReporterId>
-  explicit ClockworkManager(InstanceType /*inst*/, const ReporterId& /*reporter_id*/)
+  explicit ClockworkManagerImpl(InstanceType /*inst*/, const ReporterId& /*reporter_id*/)
   {
   }
 
   template <typename ReporterId>
-  explicit ClockworkManager(std::string_view /*inst*/, const ReporterId& /*reporter_id*/)
+  explicit ClockworkManagerImpl(std::string_view /*inst*/, const ReporterId& /*reporter_id*/)
   {
   }
 
@@ -81,5 +86,14 @@ public:
     return {};
   }
 };
+
+template <auto group_id_v>
+using ClockworkManager = ClockworkManagerImpl<GroupProxy<group_id_v>>;
+template <typename Group>
+using ClockworkManagerStruct = ClockworkManagerImpl<Group>;
+template <auto group_id_v>
+using ClockworkReporter = typename ClockworkManagerImpl<GroupProxy<group_id_v>>::Reporter;
+template <typename Group>
+using ClockworkReporterStruct = typename ClockworkManagerImpl<Group>::Reporter;
 
 } // namespace clockwork::diagnostics

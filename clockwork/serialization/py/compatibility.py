@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from clockwork.serialization.cpp.nb_tachyon_upgrader import TachyonCppUpgrader
+from clockwork.serialization.metadata import tachyon as tachyon_metadata
 from clockwork.serialization.metadata import tachyon_model
+from clockwork.serialization.py.common import validate_tachyon_types_compatibility
 from clockwork.serialization.py.protocol import Tachyon
 from clockwork.serialization.py.tachyon_dyn import create_upgrade_plan, upgrade_schema
 from clockwork.serialization.py.tachyon_dyn_from_metadata import py_type_from_metadata
@@ -21,47 +24,47 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound=Tachyon[Any])
 
 
-def validate_tachyon_types_compatibility(
-    *,
-    expected: tachyon_model.TachyonMetadata,
-    incoming: tachyon_model.TachyonMetadata,
-) -> bool:
-    """Validate compatibility of tachyon metadata between log and message type.
+def create_deserializer_with_cpp_upgrader(
+    expected_class: type[Tachyon[T]],
+    incoming_metadata: tachyon_model.TachyonMetadata,
+) -> tuple[bool, Callable[[memoryview], Tachyon[T]]]:
+    """Create a deserializer function for that uses the C++ tachyon upgrader to handle schema version compatibility.
+
+    This function creates a deserializer that takes a memoryview containing serialized data
+    matching the incoming_metadata format, and returns an instance of the expected class.
+    If the incoming data is from an older schema version, it automatically upgrades
+    the data to the current version.
 
     Args:
-        expected: Expected TachyonMetadata to validate against
-        incoming: TachyonMetadata from the incoming data
+        expected_class: The target class that should be produced (must be tachyon_dyn compatible)
+        incoming_metadata: The metadata describing the format of the incoming data
+        incoming_metadata_name: The type name recorded for the incoming metadata
 
     Returns:
-        True if an upgrade is required, False otherwise
+        (needs_upgrade, deserializer) where needs_upgrade is a boolean indicating if an upgrade is required
 
     Raises:
-        TypeError: If the outer type is not a schema
-        ValueError: If the metadata does not match the expected
+        ValueError: If the schemas are incompatible or can't be upgraded
     """
-    expected_outer_type = expected.types[expected.outer_type_id]
-    incoming_outer_type = incoming.types[incoming.outer_type_id]
+    expected_metadata = expected_class.get_tachyon_metadata()
+    assert expected_metadata is not None  # Validated in create_deserializer
 
-    if not isinstance(incoming_outer_type, tachyon_model.SchemaType):
-        msg = "Expected outer type to be a schema"
-        raise TypeError(msg)
+    upgrader = TachyonCppUpgrader(
+        expected_class.get_tachyon_class_name(),
+        tachyon_metadata.to_protobuf(expected_metadata).SerializeToString(),
+        tachyon_metadata.to_protobuf(incoming_metadata).SerializeToString(),
+    )
 
-    if not isinstance(expected_outer_type, tachyon_model.SchemaType):
-        msg = "Expected outer type to be a schema"
-        raise TypeError(msg)
+    if not upgrader.upgrade_required:
+        return False, expected_class.deserialize_tachyon
 
-    if incoming_outer_type.schema_uuid != expected_outer_type.schema_uuid:
-        msg = f"Tachyon metadata UUID mismatch: {incoming_outer_type.schema_uuid} != {expected_outer_type.schema_uuid}"
-        raise ValueError(msg)
+    def deserialize_and_upgrade(buffer: memoryview) -> Tachyon[T]:
+        upgraded_buffer = bytearray(expected_class.get_tachyon_constraint().size)
+        upgrader.upgrade(buffer, memoryview(upgraded_buffer))
+        upgraded_instance = expected_class.deserialize_tachyon(memoryview(upgraded_buffer))
+        return cast("Tachyon[T]", upgraded_instance)
 
-    if incoming_outer_type.version > expected_outer_type.version:
-        msg = f"Incoming version is beyond expected version: {incoming_outer_type.version} > {expected_outer_type.version}"
-        raise ValueError(msg)
-
-    if incoming_outer_type.version < expected_outer_type.version:
-        return True
-
-    return not incoming.is_wire_compatible(expected)
+    return upgrader.upgrade_required, deserialize_and_upgrade
 
 
 def create_deserializer(
@@ -78,7 +81,7 @@ def create_deserializer(
     the data to the current version.
 
     Note: To support upgrade, the expected class must be a pure-Python tachyon class with
-    access to the Schema IR, not a nanobind class or a class generated from metadata.
+    access to the Schema IR or a nanobind class, not a class generated from metadata.
 
     Args:
         compiler_context: The compiler context for serialization operations
@@ -98,17 +101,21 @@ def create_deserializer(
         msg = f"No metadata available for expected class: {expected_class.__name__}"
         raise ValueError(msg)
 
-    needs_upgrade = validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
+    if not expected_metadata.python_required or not hasattr(expected_class, "get_tachyon_schema_ir"):
+        if hasattr(expected_class, "get_tachyon_source_file_name"):
+            return create_deserializer_with_cpp_upgrader(expected_class, incoming_metadata)
 
-    if not needs_upgrade:
-        return False, expected_class.deserialize_tachyon
-
-    if not hasattr(expected_class, "get_tachyon_schema_ir"):
         msg = (
             f"Expected class {expected_class.__name__} is missing get_tachyon_schema_ir method\n"
             "Cannot upgrade incoming data to current version"
         )
         raise TypeError(msg)
+
+    needs_upgrade = validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
+
+    if not needs_upgrade:
+        return False, expected_class.deserialize_tachyon
+
     schema_ir: InstantiatedSchema = cast("Any", expected_class).get_tachyon_schema_ir()
 
     incoming_class, _ = py_type_from_metadata(compiler_context, incoming_metadata_name, incoming_metadata)

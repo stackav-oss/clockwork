@@ -41,8 +41,19 @@ auto MsgPolicy<T>::get(const storage_type& storage) -> const_reference
 
 template <class MsgViewType, size_t max_size>
 constexpr MessageInputDial<MsgViewType, max_size>::MessageInputDial(
-  ViewType buffer_view, IteratorType cursor, IteratorType first_new) noexcept
-  : buffer_view_(std::move(buffer_view)), cursor_(std::move(cursor)), first_new_(std::move(first_new))
+  ViewType buffer_view, IteratorType cursor, IteratorType first_new, bool connected) noexcept
+  : MessageInputDial<MsgViewType, max_size>::MessageInputDial(buffer_view, cursor, first_new, 0, connected)
+{
+}
+
+template <class MsgViewType, size_t max_size>
+constexpr MessageInputDial<MsgViewType, max_size>::MessageInputDial(
+  ViewType buffer_view, IteratorType cursor, IteratorType first_new, size_t skip_count, bool connected) noexcept
+  : buffer_view_(std::move(buffer_view)),
+    cursor_(std::move(cursor)),
+    first_new_(std::move(first_new)),
+    skip_count_(skip_count),
+    connected_(connected)
 {
 }
 
@@ -83,9 +94,21 @@ constexpr auto MessageInputDial<MsgViewType, max_size>::end() const noexcept -> 
 }
 
 template <class MsgViewType, size_t max_size>
+constexpr auto MessageInputDial<MsgViewType, max_size>::num_messages_skipped() const noexcept -> size_t
+{
+  return skip_count_;
+}
+
+template <class MsgViewType, size_t max_size>
 constexpr void MessageInputDial<MsgViewType, max_size>::set_cursor(IteratorType cursor) noexcept
 {
   cursor_ = cursor;
+}
+
+template <class MsgViewType, size_t max_size>
+constexpr bool MessageInputDial<MsgViewType, max_size>::connected() const noexcept
+{
+  return connected_;
 }
 
 } // namespace clockwork

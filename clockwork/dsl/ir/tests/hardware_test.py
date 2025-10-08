@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for hardware."""
 
@@ -25,9 +26,9 @@ def test_hardware(fs_importer: FilesystemImporter) -> None:
     hellocog = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellocog.clk")), fs_importer
     )
-    assert hardware._CPU_DOMAIN_CONNECTION_KEY not in hellocog.context._contexts  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert hardware._CPU_DOMAIN_CONNECTION_KEY in hellomod.context._contexts  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    lan_nodes = hellomod.context[hardware._CPU_DOMAIN_CONNECTION_KEY].lan_nodes  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert hardware._CPU_DOMAIN_CONNECTION_KEY not in hellocog.context._contexts
+    assert hardware._CPU_DOMAIN_CONNECTION_KEY in hellomod.context._contexts
+    lan_nodes = hellomod.context[hardware._CPU_DOMAIN_CONNECTION_KEY].lan_nodes
     assert len(lan_nodes) == 2
     host_a = hellomod.inner_scope.lookup("HostA", recursive=False)
     host_b = hellomod.inner_scope.lookup("HostB", recursive=False)

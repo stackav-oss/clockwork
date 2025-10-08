@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for proto_target."""
 
@@ -61,6 +62,9 @@ def test_proto_target(fs_importer: FilesystemImporter) -> None:
 
 def test_generic_with_no_alias(fs_importer: FilesystemImporter) -> None:
     source = """
+        // Array size
+        array_size: UInt64 = 10;
+
         // Hello templates
         schema GenericMsg
         {
@@ -92,7 +96,7 @@ def test_generic_with_no_alias(fs_importer: FilesystemImporter) -> None:
                 #4 a_field: Int64;
 
                 // A generic
-                #5 my_generic: GenericMsg<Float32, 32>;
+                #5 my_generic: GenericMsg<Float32, array_size>;
             }
         }
         proto_target foo
@@ -103,7 +107,7 @@ def test_generic_with_no_alias(fs_importer: FilesystemImporter) -> None:
           }
 
 
-          representation Protobuf<GenericMsg<Float32, 32>>;
+          representation Protobuf<GenericMsg<Float32, array_size>>;
           representation Protobuf<GenericUser>;
         }
         """
@@ -113,7 +117,69 @@ def test_generic_with_no_alias(fs_importer: FilesystemImporter) -> None:
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
 
-def test_options(fs_importer: FilesystemImporter) -> None:
+# test cases for validate_proto option
+@pytest.mark.parametrize(
+    ("validate_proto_text", "validate_proto_expected_value"),
+    [
+        ("validate_proto true;", True),
+        ("validate_proto false;", False),
+        # Default value when omitted
+        ("", True),
+    ],
+)
+# test cases for validate_proto option
+@pytest.mark.parametrize(
+    ("package_text", "package_expected_value"),
+    [
+        ("package foo;", "foo"),
+        ("package foo.bar;", "foo.bar"),
+        ("package foo.bar.baz;", "foo.bar.baz"),
+        # Default value when omitted
+        ("", f"{CLK_REPO}.package_test.package_test_target"),
+    ],
+)
+def test_options(
+    fs_importer: FilesystemImporter,
+    validate_proto_text: str,
+    validate_proto_expected_value: bool,
+    package_text: str,
+    package_expected_value: str,
+) -> None:
+    source = f"""
+
+        // Doc
+        schema NotGeneric
+        {{
+            fields
+            {{
+                // Hi
+                #3 hello: Int64;
+
+                // yet another field
+                #4 a_field: Int64;
+            }}
+        }}
+        proto_target package_test_target
+        {{
+            options
+            {{
+                {package_text}
+                go_package foo_bar;
+                {validate_proto_text}
+            }}
+
+            representation another_alias: Protobuf<NotGeneric>;
+        }}
+        """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "package_test"), fs_importer)
+    package_test_ir = module.inner_scope.lookup("package_test_target", recursive=False)
+    assert isinstance(package_test_ir, proto_target.ProtoTarget)
+    assert package_test_ir.options.package == package_expected_value
+    assert package_test_ir.options.go_package == "foo_bar"
+    assert package_test_ir.options.validate_proto == validate_proto_expected_value
+
+
+def test_empty_options(fs_importer: FilesystemImporter) -> None:
     source = """
 
         // Doc
@@ -128,25 +194,49 @@ def test_options(fs_importer: FilesystemImporter) -> None:
                 #4 a_field: Int64;
             }
         }
-        proto_target package_test
+        proto_target package_test_target
         {
-          options
-          {
-            package foo;
-            go_package foo_bar;
-            validate_proto true;
-          }
+            options
+            {
+            }
 
-
-          representation another_alias: Protobuf<NotGeneric>;
+            representation another_alias: Protobuf<NotGeneric>;
         }
         """
     module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "package_test"), fs_importer)
-    package_test_ir = module.inner_scope.lookup("package_test", recursive=False)
+    package_test_ir = module.inner_scope.lookup("package_test_target", recursive=False)
     assert isinstance(package_test_ir, proto_target.ProtoTarget)
-    assert package_test_ir.options.package == "foo"
-    assert package_test_ir.options.go_package == "foo_bar"
-    assert package_test_ir.options.validate_proto
+    assert package_test_ir.options.package == "clockwork.package_test.package_test_target"
+    assert package_test_ir.options.go_package is None
+    assert package_test_ir.options.validate_proto is True
+
+
+def test_omitted_options(fs_importer: FilesystemImporter) -> None:
+    source = """
+
+        // Doc
+        schema NotGeneric
+        {
+            fields
+            {
+                // Hi
+                #3 hello: Int64;
+
+                // yet another field
+                #4 a_field: Int64;
+            }
+        }
+        proto_target package_test_target
+        {
+            representation another_alias: Protobuf<NotGeneric>;
+        }
+        """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "package_test"), fs_importer)
+    package_test_ir = module.inner_scope.lookup("package_test_target", recursive=False)
+    assert isinstance(package_test_ir, proto_target.ProtoTarget)
+    assert package_test_ir.options.package == "clockwork.package_test.package_test_target"
+    assert package_test_ir.options.go_package is None
+    assert package_test_ir.options.validate_proto is True
 
 
 def test_non_generic_with_alias(fs_importer: FilesystemImporter) -> None:
@@ -246,13 +336,16 @@ def test_adding_messages() -> None:
 
 def test_output_targets(fs_importer: FilesystemImporter) -> None:
     source = """
+        // Array size
+        array_size: UInt64 = 10;
+
         // Doc
         schema Base
         {
             fields
             {
                 // Doc
-                #0 value: Int64;
+                #0 value: VarArray<Int64, max_size=array_size>;
             }
         }
 

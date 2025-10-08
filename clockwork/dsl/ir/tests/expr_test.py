@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for expr module."""
 
@@ -39,7 +40,7 @@ CstType = TypeVar("CstType")
 def _parse_as(
     source: str,
     cst_type: type[CstType],
-    parse_fn: Callable[[parser.Parser, int], memo.ApplyResult[int, CstType] | None],  # pyright: ignore[reportInvalidTypeArguments] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    parse_fn: Callable[[parser.Parser, int], memo.ApplyResult[int, CstType] | None],  # pyright: ignore[reportInvalidTypeArguments] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> tuple[CstType, terminalsrc.TerminalSource]:
     """Parse a source string as a particular CST node type."""
     terminals = terminalsrc.TerminalSource(source + "\n")

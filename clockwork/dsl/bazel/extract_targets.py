@@ -55,20 +55,16 @@ def extract_bazel_targets(
                     all_outs.extend(outs)
                 all_targets.append(output_target)
 
-            # Add metrics file to all_outs if it would be generated
-            if isinstance(obj, CppTarget):
-                metrics_file_path = obj.get_metrics_file_path()
-                if metrics_file_path is not None:
-                    all_outs.append(Path(metrics_file_path.name))
-                    all_targets.extend(extract_bazel_targets(current_repo, metrics_file_path))
         elif isinstance(obj, system_target.UnresolvedSystemTarget):
-            generated_files, output_targets, _ = systemgen.gen_system(Path(), obj.get_resolved(), False)
+            generated_files, output_targets, _ = systemgen.gen_system(Path(), obj.get_resolved(), False, False)
             for value in output_targets.values():
                 all_outs.extend(value.simple_launch_config.generated_files)
                 all_targets.append(value.simple_launch_config)
             all_outs.extend([Path(x.name) for x in generated_files.channel_allocation_report_files])
             all_outs.extend([Path(x.name) for x in generated_files.channel_spy_config_files])
             all_outs.extend([Path(x.name) for x in generated_files.diagnostics_database_config_files])
+            all_outs.extend([Path(x.name) for x in generated_files.logged_channel_metadata_files])
+            all_outs.extend([Path(x.name) for x in generated_files.metrics_channel_metadata_files])
 
     clk_target.outs = all_outs
 

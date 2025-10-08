@@ -7,6 +7,7 @@
 
 from typing import Annotated
 
+import clockwork.logging.offboard.nb_types
 import clockwork.logging.readers.nb_types
 from numpy.typing import ArrayLike
 
@@ -31,6 +32,12 @@ class LogWriter:
     ) -> None:
         """Create a logged channel."""  # noqa: PYI021 (Nanobind stubs need docstrings)
 
+    def create_channel_from_metadata(
+        self,
+        channel_metadata: clockwork.logging.offboard.nb_types.LoggedChannelMetadata,
+    ) -> None:
+        """Create a logged channel from channel metadata."""  # noqa: PYI021 (Nanobind stubs need docstrings)
+
     def write(
         self,
         channel_name: str,
@@ -41,3 +48,9 @@ class LogWriter:
         data: Annotated[ArrayLike, dict(dtype="uint8", shape=(None), writable=False)],  # noqa: C408 (false positive)
     ) -> None:
         """Write a message to the log."""  # noqa: PYI021 (Nanobind stubs need docstrings)
+
+    def write_logged_message(
+        self,
+        logged_message: clockwork.logging.offboard.nb_types.LoggedMessage,
+    ) -> None:
+        """Write a logged message to the log."""  # noqa: PYI021 (Nanobind stubs need docstrings)

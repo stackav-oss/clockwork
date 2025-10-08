@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <vector>

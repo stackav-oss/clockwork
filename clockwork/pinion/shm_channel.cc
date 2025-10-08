@@ -17,7 +17,6 @@
 #include <cerrno>
 #include <climits>
 #include <fcntl.h>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <sys/mman.h>
@@ -136,7 +135,7 @@ jewels::expected<jewels::filesystem::File, ShmChannel::Error> open_shm_file(
         jewels::log_cerr_error("Failed to open buffer '{}': exists but not a regular file", name);
         return jewels::unexpected(ShmChannel::Error::dirty);
       }
-      if (statbuf.st_size != static_cast<off_t>(size))
+      if (std::cmp_not_equal(statbuf.st_size, size))
       {
         // The on-disk file is an incorrect size which is an error in the overall system state
         jewels::log_cerr_error("Failed to open buffer '{}': on-disk size mismatch", name);
@@ -182,26 +181,27 @@ jewels::expected<jewels::filesystem::File, ShmChannel::Error> open_shm_file(
 
 } // namespace
 
-jewels::expected<std::tuple<MMapRegion, ShmChannel::BufferPtr>, ShmChannel::Error> ShmChannel::open_buffer(
+jewels::expected<std::tuple<jewels::filesystem::MMapRegion, ShmChannel::BufferPtr>, ShmChannel::Error>
+ShmChannel::open_buffer(
   jewels::memory::MemoryResource memres,
   const jewels::filesystem::Directory& shm_dir,
-  std::string_view name,
+  std::string_view filename,
   const BufferLayout& layout,
   Role role,
   ShmChannel::ResumeBehavior resume_behavior)
 {
   const size_t size = buffer_size(layout);
 
-  auto file = open_shm_file(shm_dir, name, size, role, resume_behavior);
+  auto file = open_shm_file(shm_dir, filename, size, role, resume_behavior);
   if (!file)
   {
     return jewels::unexpected(file.error());
   }
-  auto map = MMapRegion::create(
+  auto map = jewels::filesystem::MMapRegion::create(
     file->descriptor(), size, (role == Role::publisher ? PROT_WRITE | PROT_READ : PROT_READ), MAP_SHARED);
   if (!map)
   {
-    jewels::log_cerr_error("Failed to mmap buffer '{}': {}", name, jewels::filesystem::ErrorCode(map.error()));
+    jewels::log_cerr_error("Failed to mmap buffer '{}': {}", filename, jewels::filesystem::ErrorCode(map.error()));
     return jewels::unexpected(ShmChannel::Error::fatal);
   }
   auto expected_buffer = Buffer::try_make(map->to_span(), layout);
@@ -257,8 +257,23 @@ void ShmChannel::close_socket()
   socket_.close();
 }
 
-ShmChannel::ShmChannel(BufferPtr buffer, MMapRegion map, UnixSocket socket, ResumeBehavior resume_behavior)
-  : map_(std::move(map)), buffer_(std::move(buffer)), socket_(std::move(socket)), resume_behavior_(resume_behavior)
+// NOLINTNEXTLINE(readability-function-size): TODO OI-2956 Refactor ShmChannel into better interfaces and tools
+ShmChannel::ShmChannel(
+  jewels::memory::MemoryResource memres,
+  BufferPtr buffer,
+  jewels::filesystem::MMapRegion map,
+  UnixSocket socket,
+  std::string_view socket_ns,
+  std::string_view filename,
+  std::string_view channel_name,
+  ResumeBehavior resume_behavior)
+  : map_(std::move(map)),
+    buffer_(std::move(buffer)),
+    socket_(std::move(socket)),
+    socket_ns_(socket_ns, memres),
+    filename_(filename, memres),
+    channel_name_(channel_name, memres),
+    resume_behavior_(resume_behavior)
 {
   // Some internal functions need to misbehave for this to happen
   if (!buffer_)
@@ -287,6 +302,21 @@ void ShmChannel::set_socket(UnixSocket socket) noexcept
 jewels::memory::ObjectPtr<Buffer> ShmChannel::buffer() const noexcept
 {
   return jewels::memory::make_non_null_from_ref(*buffer_);
+}
+
+[[nodiscard]] const std::pmr::string& ShmChannel::socket_ns() const noexcept
+{
+  return socket_ns_;
+}
+
+[[nodiscard]] const std::pmr::string& ShmChannel::filename() const noexcept
+{
+  return filename_;
+}
+
+[[nodiscard]] const std::pmr::string& ShmChannel::channel_name() const noexcept
+{
+  return channel_name_;
 }
 
 ShmChannel::ResumeBehavior ShmChannel::resume_behavior() const noexcept

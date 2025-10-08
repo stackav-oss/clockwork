@@ -10,8 +10,7 @@ use_block := "{" , use_body , ((";"|",") , use_body)* , (";"|",")? , "}" ;
 
 entity := cog | schema | enum | representation | tag | channel | udp_socket | multicast_udp_socket | audio_source | cpp_executable | cpp_target | nanobind_target | py_target | proto_target | system_target | box | strong_type | policy_def | policy | extern_type | cpu_domain | ethernet | assignment_stmt;
 
-cog := doc . "cog" : identifier , "{" , resources_block? , configs_block? , states_block? , inputs_block? , outputs_block? , execution_block , diagnostics_block?, simulation_options_block? , python_options_block? , "}" , ;
-
+cog := doc . "cog" : identifier , "{" , resources_block? , configs_block? , states_block? , inputs_block? , outputs_block? , execution_block , diagnostics_block?, simulation_options_block? , python_options_block? , metrics_options_block? , "}" , ;
 resources_block := "resources", "{", resource_def+ , "}" , ;
 resource_def := doc? . resource_memory_def , ;
 resource_memory_def := identifier , ":" , "persistent", ";" , ;
@@ -30,7 +29,10 @@ input_block := "{" , input_block_param* , "}" ;
 input_block_param := doc? . param:identifier, ":" : value:expr , ";" , ;
 
 outputs_block := "outputs", "{", output_def+ , "}" , ;
-output_def := doc? . identifier , ":" , output_type:expr , ";" , ;
+output_def := doc? . identifier , ":" , output_type:expr , (output_block | ";") , ;
+output_block := "{" , output_block_param* , "}" ;
+output_block_param := connect_optional;
+connect_optional := "connect_optional", ":", boolean, ";", ;
 
 execution_block := "execution", "{" , execution_statement* , execute_when , "}", ;
 execution_statement := condition_def | rate_limit_spec ;
@@ -51,6 +53,10 @@ execution_duration := "execution_duration", ":", value:literal, ";", ;
 python_options_block := "python" , "{" , python_dial_option , python_impl_option , "}" , ;
 python_dial_option := "dial" , ":" : value:expr , ";" , ;
 python_impl_option := "impl" , ":" : value:expr , ";" , ;
+
+metrics_options_block := "metrics_options" , "{" , metrics_enabled_option? , metrics_batch_size_option? , "}" , ;
+metrics_enabled_option := "enabled", ":", boolean , ";" ;
+metrics_batch_size_option := "batch_size", ":", value:literal, ";" ;
 
 schema := doc . "schema" : identifier , "{" , uuid_spec? , schema_options?, schema_parameters_block? , schema_fields_block , schema_history_block? , "}", ;
 schema_parameters_block := "parameters", "{", (schema_field , ";" , )* , "}" , ;
@@ -120,12 +126,13 @@ repr_field_option := repr_option_align ;
 tag := doc . "tag" : identifier , ";" , ;
 
 channel := doc . "channel" : identifier , "{" , channel_name? , channel_message_type, channel_option_message_size?
-    , channel_option_num_slots, channel_option_publishers? , "}" , ;
+    , channel_option_num_slots, channel_option_publishers? , channel_option_enforce_backwards_compatibility? , "}" , ;
 channel_name := doc? . "name", ":", value:expr , ";" , ;
 channel_message_type := doc? . "message_type", ":", typespec:expr , ";" , ;
 channel_option_message_size := doc? . "message_size", ":", value:expr , ";" , ;
 channel_option_num_slots := doc? . "max_num_messages", ":", value:expr , ";" , ;
 channel_option_publishers := doc? . "publishers", ":", (single:"single" | multiple:"multiple" | diagnostics:"diagnostics" | bridge_status:"bridge_status") , ";" , ;
+channel_option_enforce_backwards_compatibility := doc? . "enforce_backwards_compatibility", ":" , boolean , ";" , ;
 
 udp_socket := doc . "udp_socket" : identifier , "{" , udp_socket_address, udp_socket_port , udp_socket_direction , udp_socket_message_type , udp_socket_remote_address? , udp_socket_remote_port? , udp_socket_batch_size? , udp_socket_options?, "}" , ;
 udp_socket_address := "address", ":", value:ipv4_address , ";" , ;
@@ -149,7 +156,8 @@ audio_source := doc . "audio_source" : identifier , ;
 
 target_constant := "constant", constant_name:identifier, ";", ;
 
-py_target := doc? . "py_target" : identifier , "{" , py_target_statement+ , "}", ;
+py_target := doc? . "py_target" : identifier , "{" , py_target_v2_flag?, py_target_statement+ , "}", ;
+py_target_v2_flag := flag:"use_v2_bindings" , ";" , ;
 py_target_statement := (cpp_representation | cpp_interface | cpp_enum | py_python_cog_dial | target_constant) ;
 py_python_cog_dial := "python_cog_dial" : typespec:expr , py_python_cog_dial_block , ;
 py_python_cog_dial_block := "{" , (py_python_cog_config_type | py_python_cog_state_type | py_python_cog_input_type | py_python_cog_output_type)* , "}" ;
@@ -197,22 +205,26 @@ connect_stmt := doc? . "connect" : source:expr : "to" : target:expr , ";" , ;
 policy_apply_stmt := doc? . "apply" : policy_data:expr : (to:"to" | in:"in") : target:expr , ";" , ;
 
 cpu_domain := doc? . "cpu_domain" : identifier , (cpu_domain_options | ";") , ;
-cpu_domain_options := "{" , simplelaunch_node? , simplelaunch_src+ , bridge_cpus? , default_cpus? , "}" ;
+cpu_domain_options := "{" , simplelaunch_node? , simplelaunch_src+ , bridge_cpus? , default_cpus? , logging_backup? , "}" ;
 simplelaunch_node := "simplelaunch_node" , ":" , node:expr , ";" , ;
 simplelaunch_src := "simplelaunch_src" , ":" , label:expr , ";" , ;
 bridge_cpus := "bridge_cpus" , ":" , cpu_set , ";" , ;
 default_cpus := "default_cpus" , ":" , cpu_set , ";" , ;
+logging_backup := "logging_backup" , ":" , cpu_domain:expr , ";" , ;
 
 cpu_set := start_cpu:nonnegative_integer , ("-" , end_cpu:nonnegative_integer)? , ;
 
-system_target := doc? . "system_target" : identifier , "{" , system_box , "}" , ;
+system_target := doc? . "system_target" : identifier , "{" , system_box , system_options_block? , "}" , ;
 system_box := doc? . "box" , ":" , typespec:expr , ";" , ;
+system_options_block := "system_options", "{", system_option* , "}" , ;
+system_option := require_logging_policies;
+require_logging_policies := "require_logging_policies", ":", boolean, ";", ;
 
 ethernet := doc? . "ethernet" : identifier , "{" , ethernet_ipv4+ , "}" , ;
 ethernet_ipv4 := doc? . "ipv4_address" : ipv4_address , ":" , cpu_domain:expr , "{" , bridge_ports , "}" , ;
 bridge_ports := doc? . "bridge_ports" , ":" , begin:nonnegative_integer , "-" , end:nonnegative_integer , ";" , ;
 
-proto_target := doc? . "proto_target" : identifier , "{" , proto_target_options , proto_target_statement+ , "}", ;
+proto_target := doc? . "proto_target" : identifier , "{" , proto_target_options? , proto_target_statement+ , "}", ;
 proto_target_options := "options", "{" , proto_package_option? , proto_go_package_option?, proto_validation_option? , "}" , ;
 proto_package_option := "package" : package_name , ";" ;
 proto_go_package_option:= "go_package" : go_package_name , ";" ;

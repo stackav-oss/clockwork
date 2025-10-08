@@ -346,7 +346,8 @@ FilesystemWrapper::get_space_information(std::string_view path)
   return wrapped_.touch(file_path);
 }
 
-[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> FilesystemWrapper::create_temporary_directory()
+[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode>
+FilesystemWrapper::create_temporary_directory(std::optional<filesystem::Path> parent_path)
 {
   if (const auto inject_result = check_error_injection_state(maybe_inject_create_temporary_directory_error_state_);
       !inject_result)
@@ -354,7 +355,19 @@ FilesystemWrapper::get_space_information(std::string_view path)
     jewels::log_cerr_error("Injecting error in create_temporary_directory: {}", inject_result.error().message());
     return jewels::unexpected(inject_result.error());
   }
-  return wrapped_.create_temporary_directory();
+  return wrapped_.create_temporary_directory(std::move(parent_path));
+}
+
+[[nodiscard]] jewels::expected<std::pair<filesystem::Path, filesystem::FileDescriptor>, ErrorCode>
+FilesystemWrapper::create_temporary_file(std::optional<filesystem::Path> parent_path)
+{
+  if (const auto inject_result = check_error_injection_state(maybe_inject_create_temporary_file_error_state_);
+      !inject_result)
+  {
+    jewels::log_cerr_error("Injecting error in create_temporary_file: {}", inject_result.error().message());
+    return jewels::unexpected(inject_result.error());
+  }
+  return wrapped_.create_temporary_file(std::move(parent_path));
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>

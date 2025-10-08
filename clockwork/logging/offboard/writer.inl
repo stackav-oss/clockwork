@@ -19,16 +19,17 @@ namespace clockwork_logging::offboard
 template <clockwork::TappyType T>
 [[nodiscard]] LogExpected<void> Writer::create_channel(std::string_view channel_name, ChannelType channel_type)
 {
-  return create_channel(LoggedChannelMetadata{
-    .channel_name = channel_name,
-    .message_encoding = clockwork::LoggingTraits<T>::message_encoding,
-    .channel_type = channel_type,
-    .schema_name = clockwork::LoggingTraits<T>::schema_name,
-    .schema_encoding = clockwork::LoggingTraits<T>::schema_encoding,
-    .schema_definition =
-      std::string_view{
-        clockwork::LoggingTraits<T>::schema_definition.data(), clockwork::LoggingTraits<T>::schema_definition.size()},
-  });
+  return create_channel(
+    LoggedChannelMetadata{
+      .channel_name = channel_name,
+      .message_encoding = clockwork::LoggingTraits<T>::message_encoding,
+      .channel_type = channel_type,
+      .schema_name = clockwork::LoggingTraits<T>::schema_name,
+      .schema_encoding = clockwork::LoggingTraits<T>::schema_encoding,
+      .schema_definition =
+        std::string_view{
+          clockwork::LoggingTraits<T>::schema_definition.data(), clockwork::LoggingTraits<T>::schema_definition.size()},
+    });
 }
 
 template <clockwork::TappyType T>
@@ -41,16 +42,18 @@ template <clockwork::TappyType T>
   bool is_repeated_persistent)
 {
   const auto data_span = std::as_bytes(std::span{&message, 1U});
-  return write(ZeroCopyLoggedMessage{
-    .channel_name = channel_name,
-    .sequence_number = sequence_number,
-    .log_time = log_time,
-    .transmit_time = transmit_time,
-    .header = {},
-    .data = {&data_span, 1U},
-    .is_repeated_persistent = is_repeated_persistent,
-    .message_encoding = clockwork::LoggingTraits<T>::message_encoding,
-  });
+  return write(
+    LoggedMessage{
+      .channel_name = channel_name,
+      .sequence_number = sequence_number,
+      .log_time = log_time,
+      .transmit_time = transmit_time,
+      .header = {},
+      .data = data_span,
+      .is_repeated_persistent = is_repeated_persistent,
+      .message_encoding = clockwork::LoggingTraits<T>::message_encoding,
+      .is_lite_compressed = false,
+    });
 }
 
 } // namespace clockwork_logging::offboard

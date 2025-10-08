@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pod module."""
 
@@ -18,7 +19,7 @@ def to_single_precision(value: float) -> float:
 
 
 def test_pytapmsg_default() -> None:
-    msg_from_py = pytapmsg.TapMsg(
+    msg_from_py = pytapmsg.TapMsgTap(
         integer=0,
         floating_point=to_single_precision(1.234),
         boolean=False,
@@ -40,21 +41,22 @@ def test_pytapmsg_default() -> None:
         external_strong_type=123,
         fixed_array=[0, 0],
         var_string="",
+        integer_with_init=234,
     )
-    bytes_from_py = bytearray(pytapmsg.TapMsg.get_tachyon_constraint().size)
+    bytes_from_py = bytearray(pytapmsg.TapMsgTap.get_tachyon_constraint().size)
     msg_from_py.serialize_tachyon(memoryview(bytes_from_py))
 
     path = fix_clockwork_path(Path("clockwork/dsl/serialization/tests/resources/tapmsg_default.bin"))
     with path.open("rb") as f:
         bytes_from_file = bytearray(f.read())
-        msg_from_file = pytapmsg.TapMsg.deserialize_tachyon(memoryview(bytes_from_file))
+        msg_from_file = pytapmsg.TapMsgTap.deserialize_tachyon(memoryview(bytes_from_file))
 
     assert msg_from_py == msg_from_file
     assert bytes_from_py == bytes_from_file
 
 
 def test_pytapmsg_full() -> None:
-    msg_from_py = pytapmsg.TapMsg(
+    msg_from_py = pytapmsg.TapMsgTap(
         integer=123,
         floating_point=to_single_precision(9.87),
         boolean=True,
@@ -76,14 +78,15 @@ def test_pytapmsg_full() -> None:
         external_strong_type=10101,
         fixed_array=[1, 9],
         var_string="+",
+        integer_with_init=234,
     )
-    bytes_from_py = bytearray(pytapmsg.TapMsg.get_tachyon_constraint().size)
+    bytes_from_py = bytearray(pytapmsg.TapMsgTap.get_tachyon_constraint().size)
     msg_from_py.serialize_tachyon(memoryview(bytes_from_py))
 
     path = fix_clockwork_path(Path("clockwork/dsl/serialization/tests/resources/tapmsg_full.bin"))
     with path.open("rb") as f:
         bytes_from_file = bytearray(f.read())
-        msg_from_file = pytapmsg.TapMsg.deserialize_tachyon(memoryview(bytes_from_file))
+        msg_from_file = pytapmsg.TapMsgTap.deserialize_tachyon(memoryview(bytes_from_file))
 
     assert msg_from_py == msg_from_file
     assert bytes_from_py == bytes_from_file

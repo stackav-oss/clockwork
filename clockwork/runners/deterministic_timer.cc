@@ -5,7 +5,6 @@
 
 #include <chrono>
 #include <compare>
-#include <ratio>
 
 using namespace std::chrono_literals;
 

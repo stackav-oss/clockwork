@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "jewels/callsig/outcome.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/std/expected.hh"
 
@@ -17,6 +18,8 @@ namespace clockwork_logging
 /// Errors returned by the logging code
 WISE_ENUM_CLASS(
   (LogError, uint8_t),
+  /// Success
+  success,
   /// Out of memory
   out_of_memory,
   /// Caught unhandled exception
@@ -258,12 +261,17 @@ WISE_ENUM_CLASS(
   // Log not found
   log_not_found,
   // RPC call failed
-  rpc_call_failed)
+  rpc_call_failed,
+  // Bad checksum
+  bad_checksum)
 
 /// Logging expected type
 /// @tparam T Expected return type
 template <typename T>
 using LogExpected = jewels::expected<T, LogError>;
+
+/// Logging outcome type
+using LogOutcome = jewels::Outcome<LogError, LogError::success>;
 
 /// Convert a system error code to a LogError
 /// @param[in] error_code System error code

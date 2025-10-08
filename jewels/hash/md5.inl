@@ -6,9 +6,9 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <iterator>
 #include <span>
 #include <string_view>
-#include <type_traits>
 
 namespace jewels::hash
 {
@@ -24,7 +24,7 @@ std::size_t Md5Hash::operator()(const std::array<std::byte, md5_byte_length>& md
   std::size_t first{};
   std::size_t second{};
   std::memcpy(&first, md5data.data(), sizeof(std::size_t));
-  std::memcpy(&second, md5data.data() + sizeof(std::size_t), sizeof(std::size_t));
+  std::memcpy(&second, std::next(md5data.data(), sizeof(std::size_t)), sizeof(std::size_t));
   return first ^ second;
 }
 

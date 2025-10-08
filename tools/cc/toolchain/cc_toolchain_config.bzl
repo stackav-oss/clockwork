@@ -43,6 +43,17 @@ codegen_compile_actions = [
     ACTION_NAMES.lto_backend,
 ]
 
+def _is_aarch64(ctx):
+    """Check if the target CPU is aarch64."""
+    return _get_arch(ctx) == "aarch64"
+
+def _is_x86_64(ctx):
+    """Check if the target CPU is aarch64."""
+    return _get_arch(ctx) == "x86_64"
+
+def _get_arch(ctx):
+    return ctx.attr.target.split("-")[0] if ctx.attr.target else "unknown"
+
 def _cc_toolchain_config_impl(ctx):
     tool_paths = [tool_path(name = name, path = path) for name, path in ctx.attr.tool_paths.items()]
 
@@ -209,6 +220,28 @@ def _cc_toolchain_config_impl(ctx):
                             "runtime_library_search_directories",
                     ),
                 ],
+            ),
+        ],
+    )
+
+    aarch64_link_flags = feature(
+        name = "aarch64_link_flags",
+        enabled = _is_aarch64(ctx),
+        flag_sets = [
+            flag_set(
+                actions = ALL_CC_LINK_ACTION_NAMES,
+                flag_groups = [flag_group(flags = ["-L%{sysroot}/usr/aarch64-linux-gnu/lib/"])],
+            ),
+        ],
+    )
+
+    x86_64_link_flags = feature(
+        name = "x86_64_link_flags",
+        enabled = _is_x86_64(ctx),
+        flag_sets = [
+            flag_set(
+                actions = ALL_CC_LINK_ACTION_NAMES,
+                flag_groups = [flag_group(flags = ["-L%{sysroot}/usr/lib/x86_64-linux-gnu/"])],
             ),
         ],
     )
@@ -812,6 +845,8 @@ def _cc_toolchain_config_impl(ctx):
         default_link_libraries_feature,
         final_flags_feature,
         coverage_feature,
+        aarch64_link_flags,
+        x86_64_link_flags,
     ]
 
     return cc_common.create_cc_toolchain_config_info(

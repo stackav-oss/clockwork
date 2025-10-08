@@ -44,6 +44,8 @@ clk(
     deps = [
         ":imu_channels_clk",
         ":imu_message_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/examples/demo_system:cpu_domain_clk",
     ],
 )
@@ -55,10 +57,21 @@ cc_library(
         "imu_cog.inl",
     ],
     hdrs = ["imu_cog.hh"],
+    data = [":imu_clk"],
     deps = [
         ":imu_cog_dial",
         ":imu_cog_impl",
+        ":imu_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -69,6 +82,7 @@ cc_library(
         "imu_cog_dial.inl",
     ],
     hdrs = ["imu_cog_dial.hh"],
+    data = [":imu_clk"],
     deps = [
         ":imu_message",
         "//clockwork/dial:include_common",
@@ -113,6 +127,7 @@ cc_library(
         "imu_message.inl",
     ],
     hdrs = ["imu_message.hh"],
+    data = [":imu_message_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",

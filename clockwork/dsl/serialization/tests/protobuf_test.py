@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for protobuf representations of IR."""
 
@@ -53,7 +54,7 @@ def test_proto_message_layout(fs_importer: FilesystemImporter) -> None:
     assert isinstance(proto_target_ir, proto_target.ProtoTarget)
     assert len(proto_target_ir.representations) == 1
     assert isinstance(proto_target_ir.representations[0].typespec, typesys.Instantiation)
-    message_layout = protobuf.render("", proto_target_ir.representations[0].typespec)
+    message_layout = protobuf.render("", proto_target_ir.representations[0].typespec, module.context)
 
     assert len(message_layout.fields) == 3
 
@@ -94,7 +95,7 @@ def test_proto_message_has_nested_vararray(fs_importer: FilesystemImporter) -> N
             "Cannot resolve the contained type in a VarArray. Note that protobuf generation does not support nested Arrays. Contained type was:"
         ),
     ):
-        protobuf.render("", proto_target_ir.representations[0].typespec)
+        protobuf.render("", proto_target_ir.representations[0].typespec, module.context)
 
 
 def test_proto_message_layout_generic(fs_importer: FilesystemImporter) -> None:
@@ -113,7 +114,7 @@ def test_proto_message_layout_generic(fs_importer: FilesystemImporter) -> None:
             found = True
             # For mypy
             assert isinstance(representation.typespec, typesys.Instantiation)
-            message_layout = protobuf.render("", representation.typespec)
+            message_layout = protobuf.render("", representation.typespec, module.context)
             assert len(message_layout.fields) == 2
 
     assert found
@@ -155,4 +156,4 @@ def test_proto_message_has_optional_vararray(fs_importer: FilesystemImporter) ->
             "Cannot resolve the contained type in an Optional note that protobuf generation does not support optional VarArrays. Contained type was:"
         ),
     ):
-        protobuf.render("", proto_target_ir.representations[0].typespec)
+        protobuf.render("", proto_target_ir.representations[0].typespec, module.context)

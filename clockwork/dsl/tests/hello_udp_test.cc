@@ -40,9 +40,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(IncomingUdpSocket::port == 0U);
     const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
     auto maybe_socket = IncomingUdpSocket::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_socket)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<io::VarPacket<4UL>>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_socket)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<io::VarPacket<4UL>>>>>);
     REQUIRE(maybe_socket);
     auto& socket = *maybe_socket;
 
@@ -57,9 +58,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(OutgoingUdpSocket::port == 0U);
     const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
     auto maybe_socket = OutgoingUdpSocket::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_socket)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<io::VarPacket<4UL>>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_socket)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<io::VarPacket<4UL>>>>>);
     REQUIRE(maybe_socket);
   }
   SECTION("Multicast")
@@ -72,9 +74,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(IncomingMulticast::port == 5000U);
     const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
     auto maybe_incoming = IncomingMulticast::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_incoming)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<io::VarPacket<4UL>>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_incoming)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::IncomingUdp<Tachyon<io::VarPacket<4UL>>>>>);
     REQUIRE(maybe_incoming);
     auto& incoming_socket = *maybe_incoming;
 
@@ -90,9 +93,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(OutgoingMulticast::host == "239.22.0.2");
     REQUIRE(OutgoingMulticast::port == 5000U);
     auto maybe_outgoing = OutgoingMulticast::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_outgoing)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<io::VarPacket<4UL>>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_outgoing)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::OutgoingUdp<Tachyon<io::VarPacket<4UL>>>>>);
     REQUIRE(maybe_outgoing);
     auto& outgoing_socket = *maybe_outgoing;
 
@@ -110,9 +114,10 @@ TEST_CASE("UDP Socket")
     REQUIRE(BidirectionalMulticast::remote_port == 5002U);
     REQUIRE(BidirectionalMulticast::remote_host == "239.22.0.2");
     auto maybe_bidirectional = BidirectionalMulticast::try_make(memres);
-    STATIC_REQUIRE(std::is_same_v<
-                   decltype(maybe_bidirectional)::value_type,
-                   jewels::memory::NonNullSharedPtr<pinion::BidirectionalUdp<Tachyon<io::VarPacket<4UL>>>>>);
+    STATIC_REQUIRE(
+      std::is_same_v<
+        decltype(maybe_bidirectional)::value_type,
+        jewels::memory::NonNullSharedPtr<pinion::BidirectionalUdp<Tachyon<io::VarPacket<4UL>>>>>);
     REQUIRE(maybe_bidirectional);
     auto& bidirectional_socket = *maybe_bidirectional;
 
@@ -129,7 +134,7 @@ TEST_CASE("UDP Socket")
     // Make sure we bound to the multicast address.
     ::sockaddr_in addr{};
     ::socklen_t addr_size{sizeof(::sockaddr_in)};
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Needed for C struct polymorphism
     REQUIRE(::getsockname(bidirectional_socket->fd(), reinterpret_cast<::sockaddr*>(&addr), &addr_size) == 0);
     REQUIRE(addr.sin_addr.s_addr == ::be32toh(0xef160002)); // 239.22.0.2
   }

@@ -18,6 +18,10 @@
 #include "clockwork/logging/writers/logger_status.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
+#include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -31,6 +35,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -210,17 +215,27 @@ TEST_CASE("Log messages")
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(metadata_result->schema_name == "TestType1");
+  REQUIRE(
+    metadata_result->schema_name ==
+    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
-  REQUIRE(metadata_result->schema_definition == "Schema definition 1");
+  REQUIRE(
+    std::ranges::equal(
+      metadata_result->schema_definition,
+      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_definition));
 
   metadata_result = reader.get_channel_metadata("channel2");
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(metadata_result->schema_name == "TestType2");
+  REQUIRE(
+    metadata_result->schema_name ==
+    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
-  REQUIRE(metadata_result->schema_definition == "Schema definition 2");
+  REQUIRE(
+    std::ranges::equal(
+      metadata_result->schema_definition,
+      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_definition));
 }
 
 } // namespace

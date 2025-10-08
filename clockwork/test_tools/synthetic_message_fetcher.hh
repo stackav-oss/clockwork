@@ -55,7 +55,7 @@ private:
 };
 
 const auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.time_to_publish < rhs.time_to_publish; };
-using MessageInfoSet = std::set<MultiMessageInfoData, decltype(cmp)>;
+using MessageInfoSet = std::multiset<MultiMessageInfoData, decltype(cmp)>;
 
 /// Implements the message fetcher interface. Used to inject messages into the clockwork system.
 class SyntheticMessageFetcher : public MessageFetcher

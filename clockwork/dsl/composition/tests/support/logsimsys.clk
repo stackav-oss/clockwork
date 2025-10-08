@@ -1,5 +1,6 @@
 use clockwork::dsl::tests::support::{hellocog, hellomsg};
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+use clockwork::diagnostics::channels::DiagnosticsChannel;
 
 // Channel for HelloMsg messages
 channel Chan1
@@ -84,6 +85,7 @@ box Box1
     connect cog1.out_multi2 to MultiChan1;
     connect Chan2 to cog1.history_of_hellos;
     connect MultiChan2 to cog1.multi_publisher_hello;
+    connect cog1.diagnostics to DiagnosticsChannel;
 }
 
 cpu_domain LogSimCpu;

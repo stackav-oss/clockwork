@@ -82,13 +82,14 @@ void deserialize_into_tappy_from_py(clockwork::Tappy<SchemaT>& tappy_value, cons
     // convert bytes to serialized message
     if (payload.size() != sizeof(tappy_value))
     {
-      throw std::runtime_error(fmt::format(
-        "Error deserializing tappy from python: python serialized bytes is wrong size, "
-        "sizeof(clockwork::Tappy<SchemaT>): "
-        "{}, "
-        "python buffer size {}",
-        sizeof(tappy_value),
-        payload.size()));
+      throw std::runtime_error(
+        fmt::format(
+          "Error deserializing tappy from python: python serialized bytes is wrong size, "
+          "sizeof(clockwork::Tappy<SchemaT>): "
+          "{}, "
+          "python buffer size {}",
+          sizeof(tappy_value),
+          payload.size()));
     }
 
     // copy the bytes

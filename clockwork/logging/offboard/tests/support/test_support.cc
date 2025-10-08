@@ -154,8 +154,9 @@ check_read_result(const std::vector<TestLoggedMessage>& expected_messages, Messa
 {
   const auto data_spans = lite_compressor.compress(data);
   std::vector<std::byte> compressed_data;
-  compressed_data.resize(std::accumulate(
-    data_spans.begin(), data_spans.end(), size_t{0U}, [](size_t lhs, auto& rhs) { return lhs + rhs.size(); }));
+  compressed_data.resize(
+    std::accumulate(
+      data_spans.begin(), data_spans.end(), size_t{0U}, [](size_t lhs, auto& rhs) { return lhs + rhs.size(); }));
   size_t bytes_copied = 0U;
   for (const auto data_span : data_spans)
   {

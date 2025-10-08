@@ -23,7 +23,7 @@ struct AlignedStorage
 };
 
 /// A policy that governs the lifetime of an object using the normal
-/// construtor and destructor.
+/// constructor and destructor.
 template <class T>
 struct ObjectPolicy
 {

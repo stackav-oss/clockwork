@@ -57,7 +57,7 @@ WriterConfig::WriterConfig(jewels::memory::MemoryResource memory_resource)
   /// Mutex to prevent data races in set_writer_config_proto
   /// TSAN fails because of data races deep in the regex code.
   static std::mutex set_config_proto_mutex;
-  const std::lock_guard guard{set_config_proto_mutex};
+  const std::scoped_lock guard{set_config_proto_mutex};
 
   const std::string proto_str{text_proto};
   clockwork::logging::offboard::v1::WriterConfig config_proto;
@@ -70,13 +70,14 @@ WriterConfig::WriterConfig(jewels::memory::MemoryResource memory_resource)
   for (const auto& rule : config_proto.rule())
   {
     std::pmr::string file_name_prefix{rule.file_name_prefix(), memory_resource_};
-    rules_.push_back(ConfigRule{
-      .compression_type = rule.compression_type() == clockwork::logging::offboard::v1::COMPRESSION_TYPE_NONE
-                            ? CompressionType::none
-                            : CompressionType::zstd,
-      .file_name_prefix = std::move(file_name_prefix),
-      .matchers = std::pmr::vector<std::regex>{memory_resource_},
-    });
+    rules_.push_back(
+      ConfigRule{
+        .compression_type = rule.compression_type() == clockwork::logging::offboard::v1::COMPRESSION_TYPE_NONE
+                              ? CompressionType::none
+                              : CompressionType::zstd,
+        .file_name_prefix = std::move(file_name_prefix),
+        .matchers = std::pmr::vector<std::regex>{memory_resource_},
+      });
     auto& matchers = rules_.back().matchers;
     matchers.reserve(static_cast<size_t>(rule.regex().size()));
     for (const auto& regex : rule.regex())

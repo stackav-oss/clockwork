@@ -77,12 +77,18 @@ std::optional<LoggedMessage> LogProcessor::next()
   if (!current_message_iterator_)
   {
     // Started reading
-    const auto topic_filter = augment_topic_filter(topic_filter_, std::views::keys(callbacks_));
+    const auto topic_filter =
+      callbacks_.empty() ? topic_filter_ : augment_topic_filter(topic_filter_, std::views::keys(callbacks_));
     if (const auto open_result = reader_->open(topic_filter); !open_result)
     {
       return {};
     }
     current_message_iterator_ = reader_->begin();
+
+    if (current_message_iterator_ == reader_->end())
+    {
+      return {};
+    }
 
     // Delay moving the iterator to the following call so that the data is not invalidated
     return **current_message_iterator_;

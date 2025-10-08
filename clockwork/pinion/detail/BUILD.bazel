@@ -6,17 +6,6 @@ load("//tools/rules:cc.bzl", "cc_library")
 package(default_visibility = ["//clockwork/pinion:__subpackages__"])
 
 cc_library(
-    name = "mmap_region",
-    srcs = ["mmap_region.cc"],
-    hdrs = ["mmap_region.hh"],
-    deps = [
-        "//jewels/filesystem:error_code",
-        "//jewels/log_cerr",
-        "//jewels/std:expected",
-    ],
-)
-
-cc_library(
     name = "socket_common",
     srcs = ["socket_common.cc"],
     hdrs = ["socket_common.hh"],
@@ -43,6 +32,7 @@ cc_library(
     name = "tcp_socket",
     srcs = ["tcp_socket.cc"],
     hdrs = ["tcp_socket.hh"],
+    visibility = ["//visibility:public"],
     deps = [
         ":socket_common",
         "//jewels/filesystem:file_descriptor",

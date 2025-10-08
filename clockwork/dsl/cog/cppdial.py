@@ -4,7 +4,7 @@
 """Facilities for generating C++ Dial structs."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from clockwork.dsl.cog.pycog import (
     ConditionBase,
@@ -24,6 +24,7 @@ from clockwork.dsl.cog.pycog import (
 )
 from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, Header
 from clockwork.dsl.cpp.types import (
+    BOOLEAN,
     CppConstructor,
     CppMethod,
     CppNamedType,
@@ -34,6 +35,7 @@ from clockwork.dsl.cpp.types import (
     Ref,
 )
 from clockwork.dsl.ir import cog
+from clockwork.dsl.ir.diagnostics import infra_defs_header_from_dial_header
 from clockwork.dsl.ir.module_id import CLK_REPO, JEWELS_REPO
 
 
@@ -92,7 +94,7 @@ class DialMember:
             return_type=return_type,
             arguments=[],
             leading_qualifiers=[],
-            trailing_qualifiers=["const"] if self.cpp_type.const else [],
+            trailing_qualifiers=["const"] if return_type.const else [],
             body=body,
             no_discard=True,
         )
@@ -159,6 +161,7 @@ class Dial:
     """Representation of a C++ Dial."""
 
     cog_ir: cog.Cog
+    dial_header: Header
     class_name: str
     cpp_namespace: str | None
 
@@ -201,7 +204,11 @@ class Dial:
             ),
             "outputs": make_struct(
                 name=f"{self.class_name}Outputs",
-                ir_fields=list(OutputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.outputs).outputs.values()),
+                ir_fields=list(
+                    OutputsStruct.from_ir(
+                        self.cog_ir.module.context, self.cog_ir.outputs, self.cog_ir.rate_limits
+                    ).outputs.values()
+                ),
             ),
         }
 
@@ -225,6 +232,24 @@ class Dial:
                 ir_fields=list(diagnostics.values()),
             )
             members.append(DialMember(name="diagnostics", cpp_type=substructs["diagnostics"].name))
+
+        infra_diag_header = infra_defs_header_from_dial_header(self.dial_header)
+        infra_diag_header = replace(infra_diag_header, iwyu_pragma="IWYU pragma: keep")
+        infra_diag_check = CppChunk()
+        infra_diag_check.append("return false;")
+        dial.public.append(
+            CppMethod(
+                name="has_infra_faults",
+                doc="Indicates if the infra fault thresholds header was found and thus if the cog is sending infra faults.",
+                return_type=BOOLEAN,
+                arguments=[],
+                leading_qualifiers=["constexpr"],
+                trailing_qualifiers=[],
+                body=infra_diag_check,
+                no_discard=True,
+                static=True,
+            )
+        )
 
         ctor_args = [member.ctor_arg() for member in members]
         ctor_init = [member.ctor_init() for member in members]

@@ -6,7 +6,6 @@
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/observer.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -35,15 +34,16 @@ struct TestIoConnection : public pinion::IoConnection
   static void reset();
 
   /// Connect publisher.  Succeeds the first time.
-  jewels::expected<void, pinion::IoConnection::Error> connect_publisher(pinion::PublisherHandle /*publisher*/) final;
+  jewels::expected<void, pinion::IoConnection::Error> connect_publisher(
+    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::PublisherHandle /*publisher*/) final;
 
   /// Connect diags.  Succeeds the first time.
   jewels::expected<void, pinion::IoConnection::Error> connect_diagnostics(
     jewels::Uuid<common::EndpointInstanceId> /*endpoint*/, pinion::PublisherHandle /*publisher*/) final;
 
   /// Connect subscriber.  Succeeds the first time.
-  jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, pinion::IoConnection::Error>
-    connect_subscriber(pinion::SubscriberHandle /*subscriber*/) final;
+  jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, pinion::IoConnection::Error> connect_subscriber(
+    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/) final;
 
   /// Whether or not the publisher is set.
   /// Needed to avoid changing the API just for a unit test.

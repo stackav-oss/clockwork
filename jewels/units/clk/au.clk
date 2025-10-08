@@ -10,6 +10,18 @@ strong_type DegreesD
   underlying_type: Float64;
 }
 
+// Degrees.
+strong_type DegreesU16
+{
+  underlying_type: UInt16;
+}
+
+// Centidegrees.
+strong_type CentiDegreesU16
+{
+  underlying_type: UInt16;
+}
+
 // Radians.
 strong_type RadiansF
 {
@@ -202,6 +214,30 @@ strong_type OnePerMeterPerSecondD
   underlying_type: Float64;
 }
 
+// Radians per meter.
+strong_type RadsPerMeterF
+{
+  underlying_type: Float32;
+}
+
+// One per meter.
+strong_type RadsPerMeterD
+{
+  underlying_type: Float64;
+}
+
+// Radians per meter per second.
+strong_type RadsPerMeterPerSecondF
+{
+  underlying_type: Float32;
+}
+
+// Radians per meter per second.
+strong_type RadsPerMeterPerSecondD
+{
+  underlying_type: Float64;
+}
+
 // Rads per second.
 strong_type RadsPerSecondF
 {
@@ -222,6 +258,18 @@ strong_type RadsPerSecondSquaredF
 
 // Rads per second squared.
 strong_type RadsPerSecondSquaredD
+{
+  underlying_type: Float64;
+}
+
+// Rads per second cubed.
+strong_type RadsPerSecondCubedF
+{
+  underlying_type: Float32;
+}
+
+// Rads per second cubed.
+strong_type RadsPerSecondCubedD
 {
   underlying_type: Float64;
 }
@@ -304,6 +352,7 @@ cpp_target au
   {
     namespace unused;
   }
+
   extern
   {
     header_file: "jewels/units/degrees.hh";
@@ -314,10 +363,23 @@ cpp_target au
       name: DegreesF;
       factory: degrees;
     }
+
     type
     {
       name: DegreesD;
       factory: degrees;
+    }
+
+    type
+    {
+      name: DegreesU16;
+      factory: degrees;
+    }
+
+    type
+    {
+      name: CentiDegreesU16;
+      factory: centidegrees;
     }
   }
 
@@ -331,6 +393,7 @@ cpp_target au
       name: RadiansF;
       factory: radians;
     }
+
     type
     {
       name: RadiansD;
@@ -348,6 +411,7 @@ cpp_target au
       name: GravityF;
       factory: earth_surface_gs;
     }
+
     type
     {
       name: GravityD;
@@ -365,6 +429,7 @@ cpp_target au
       name: HertzF;
       factory: hertz;
     }
+
     type
     {
       name: HertzD;
@@ -382,16 +447,19 @@ cpp_target au
       name: MetersF;
       factory: meters;
     }
+
     type
     {
       name: MetersD;
       factory: meters;
     }
+
     type
     {
       name: MetersSquaredF;
       factory: meters_squared;
     }
+
     type
     {
       name: MetersSquaredD;
@@ -409,6 +477,7 @@ cpp_target au
       name: FeetF;
       factory: feet;
     }
+
     type
     {
       name: FeetD;
@@ -426,16 +495,19 @@ cpp_target au
       name: SecondsF;
       factory: seconds;
     }
+
     type
     {
       name: SecondsD;
       factory: seconds;
     }
+
     type
     {
       name: OnePerSecondF;
       factory: one_per_second;
     }
+
     type
     {
       name: OnePerSecondD;
@@ -453,86 +525,139 @@ cpp_target au
       name: MetersPerSecondCubedF;
       factory: mpsss;
     }
+
     type
     {
       name: MetersPerSecondCubedD;
       factory: mpsss;
     }
+
     type
     {
       name: MetersPerSecondSquaredF;
       factory: mpss;
     }
+
     type
     {
       name: MetersPerSecondSquaredD;
       factory: mpss;
     }
+
     type
     {
       name: MetersPerSecondF;
       factory: mps;
     }
+
     type
     {
       name: MetersPerSecondD;
       factory: mps;
     }
+
     type
     {
       name: MilesPerHourF;
       factory: miles_per_hour;
     }
+
     type
     {
       name: MilesPerHourD;
       factory: miles_per_hour;
     }
+
     type
     {
       name: OnePerMeterF;
       factory: one_per_meter;
     }
+
     type
     {
       name: OnePerMeterD;
       factory: one_per_meter;
     }
+
     type
     {
       name: OnePerMeterPerSecondF;
       factory: one_per_meter_per_second;
     }
+
     type
     {
       name: OnePerMeterPerSecondD;
       factory: one_per_meter_per_second;
     }
+
+    type
+    {
+      name: RadsPerMeterF;
+      factory: rads_per_meter;
+    }
+
+    type
+    {
+      name: RadsPerMeterD;
+      factory: rads_per_meter;
+    }
+
+    type
+    {
+      name: RadsPerMeterPerSecondF;
+      factory: rads_per_meter_per_second;
+    }
+
+    type
+    {
+      name: RadsPerMeterPerSecondD;
+      factory: rads_per_meter_per_second;
+    }
+
     type
     {
       name: RadsPerSecondF;
       factory: rads_per_second;
     }
+
     type
     {
       name: RadsPerSecondD;
       factory: rads_per_second;
     }
+
     type
     {
       name: RadsPerSecondSquaredF;
       factory: rads_per_second_squared;
     }
+
     type
     {
       name: RadsPerSecondSquaredD;
       factory: rads_per_second_squared;
     }
+
+    type
+    {
+      name: RadsPerSecondCubedF;
+      factory: rads_per_second_cubed;
+    }
+
+    type
+    {
+      name: RadsPerSecondCubedD;
+      factory: rads_per_second_cubed;
+    }
+
     type
     {
       name: DegreesPerSecondF;
       factory: degps;
     }
+
     type
     {
       name: DegreesPerSecondD;
@@ -550,6 +675,7 @@ cpp_target au
       name: PoundsMassF;
       factory: pounds_mass;
     }
+
     type
     {
       name: PoundsMassD;
@@ -567,6 +693,7 @@ cpp_target au
       name: KilogramsF;
       factory: kilograms;
     }
+
     type
     {
       name: KilogramsD;
@@ -584,6 +711,7 @@ cpp_target au
       name: KilogramsPerMeterCubedF;
       factory: kg_per_m3;
     }
+
     type
     {
       name: KilogramsPerMeterCubedD;
@@ -601,16 +729,19 @@ cpp_target au
       name: NewtonsF;
       factory: newtons;
     }
+
     type
     {
       name: NewtonsD;
       factory: newtons;
     }
+
     type
     {
       name: NewtonMetersF;
       factory: newton_meters;
     }
+
     type
     {
       name: NewtonMetersD;

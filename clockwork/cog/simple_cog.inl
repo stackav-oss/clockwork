@@ -5,8 +5,8 @@
 #include "clockwork/cog/cog_statistics.hh"
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_cog.hh"
+#include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/cog_execution_error.hh"
-#include "clockwork/common/forward.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -18,23 +18,29 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h> // IWYU pragma: keep
+#include <fmt10/format.h>
 
 #include <algorithm>
 #include <chrono>
+#include <compare>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
-
 namespace clockwork
 {
+
+static constexpr auto metrics_send_interval = std::chrono::seconds{1};
 
 template <typename Policy>
 SimpleCog<Policy>::SimpleCog(
@@ -46,10 +52,12 @@ SimpleCog<Policy>::SimpleCog(
     instance_id_(instance_id),
     states_(memory_resource_),
     timers_(memory_resource_),
-    inputs_(memory_resource_),
+    inputs_(memory_resource_, queue->is_offline()),
     conditions_(memory_resource_),
     publishers_(memory_resource_),
-    diagnostics_(instance_id_)
+    diagnostics_(instance_id_),
+    infra_diagnostics_(instance_id_),
+    metrics_(memory_resource_, Policy::event_metrics_batch_size)
 {
 }
 
@@ -105,15 +113,29 @@ SimpleCog<Policy>::set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion
 }
 
 template <typename Policy>
-jewels::expected<void, jewels::MonoError>
-SimpleCog<Policy>::set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle)
+jewels::expected<void, jewels::MonoError> SimpleCog<Policy>::set_subscriber(jewels::Uuid<common::EndpointClassId> uuid)
+{
+  // Set up dummy condition and input for non-connected endpoint
+  // The condition will always report as not ready, and the input will return empty views
+  std::ignore = conditions_.set_condition(uuid);
+  return inputs_.template set_input<SimpleCog<Policy>>(uuid);
+}
+
+template <typename Policy>
+jewels::expected<void, jewels::MonoError> SimpleCog<Policy>::set_handle(
+  jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle, bool connected)
 {
   if (diagnostics_.set_handle(uuid, std::move(handle)))
   {
     return {};
   }
   // NOLINTNEXTLINE(bugprone-use-after-move) It wasn't moved here if the call didn't succeed.
-  return publishers_.set_handle(uuid, std::move(handle));
+  if (infra_diagnostics_.set_handle(uuid, std::move(handle)))
+  {
+    return {};
+  }
+  // NOLINTNEXTLINE(bugprone-use-after-move) It wasn't moved here if the call didn't succeed.
+  return publishers_.set_handle(uuid, std::move(handle), connected);
 }
 
 template <typename Policy>
@@ -150,7 +172,28 @@ void SimpleCog<Policy>::process_pending_notifies(std::unique_lock<std::mutex>& n
   {
     if (!reentry_mutex_.try_lock())
     {
-      // The holder of the reentry mutex is responsible for processing pending notifies after they unlock
+      // The cog is currently executing. Check if it's in danger of being
+      // overrun and terminate it if necessary.
+      // TODO(OI-3250): Consider less disruptive approach than process termination, such as only killing the thread
+      // that's currently executing the cog and blocking further executions of the cog by other threads.
+
+      if (inputs_.almost_overrun())
+      {
+        jewels::log_cerr_error("Cog '{}' is dangerously close to being overrun. Terminating.", get_name());
+        // In unit tests for this code, we override the terminate handler. So,
+        // instead of aborting the entire process we pass control back to the
+        // test harness.  If we hang onto this lock in that context, the cog
+        // execution thread can't make progress and the test hangs while trying
+        // to join it. To avoid this lock up we release the notification lock
+        // before terminating. This shouldn't be a problem outside of tests
+        // since the entire process is going down immediately after we unlock
+        // anyway.
+        notify_guard.unlock();
+        std::terminate();
+      }
+
+      // No risk of an overrun. The holder of the reentry mutex is responsible for processing pending notifies after
+      // they unlock
       return;
     }
     if (!maybe_pending_notify_time_)
@@ -166,7 +209,10 @@ void SimpleCog<Policy>::process_pending_notifies(std::unique_lock<std::mutex>& n
     auto input_conditions = conditions_.make_conditions();
 
     const bool is_ready = Policy::is_ready(statistics_, timer_conditions, input_conditions);
-
+    if (is_ready)
+    {
+      metrics_.cog_ready(jewels::time::SyncClock::now());
+    }
     reentry_mutex_.unlock();
 
     // Add ourselves to the ready queue if needed.
@@ -189,8 +235,10 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::prepare_for_executi
     return jewels::unexpected(CogExecutionError::reentry_lock_contention);
   }
 
-  // Attempt to acquire the state locks.
+  // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
+  std::ignore = metrics_.execution_attempted(jewels::time::SyncClock::now());
 
+  // Attempt to acquire the state locks.
   if (!states_.try_lock())
   {
     reentry_mutex_.unlock();
@@ -201,8 +249,9 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::prepare_for_executi
 
   auto timer_conditions = timers_.make_conditions(current_time);
   auto input_conditions = conditions_.make_conditions();
+  publishers_.update_rate_limiters(current_time);
 
-  if (!Policy::is_ready(statistics_, timer_conditions, input_conditions))
+  if (!Policy::is_ready(statistics_, timer_conditions, input_conditions) || publishers_.any_throttled())
   {
     states_.unlock();
     reentry_mutex_.unlock();
@@ -252,7 +301,7 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     return jewels::unexpected(CogExecutionError::not_ready);
   }
 
-  auto inputs = inputs_.template make_dial_inputs<ConditionsType>(*prepared_input_conditions_);
+  auto inputs = inputs_.template make_dial_inputs<ConditionsType>(*prepared_input_conditions_, params.start_time);
 
   if (!inputs)
   {
@@ -283,7 +332,7 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     configs,
     states,
     *inputs,
-    std::move(*publishables),
+    *publishables,
     *prepared_timer_conditions_,
     *prepared_input_conditions_,
     diagnostics);
@@ -295,15 +344,27 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     std::terminate();
   }
 
-  try
+  // NOLINTNEXTLINE(misc-const-correctness) Because the mask can be set in the constexpr below it throws off the linter.
+  uint64_t conditions_mask = 0;
+  if constexpr (Policy::publish_metrics)
   {
-    Policy::execute(dial);
+    conditions_mask = Policy::get_conditions_mask(*prepared_timer_conditions_, *prepared_input_conditions_);
   }
-  catch (...)
+
+  // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
+  std::ignore = metrics_.execution_started(jewels::time::SyncClock::now(), conditions_mask);
+
+  Policy::execute(dial);
+
+  publishers_.update_throttle_status(*slots);
+
+  // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
+  std::ignore = metrics_.execution_completed(jewels::time::SyncClock::now());
+
+  // Update output metrics for each publishable
+  if constexpr (Policy::publish_metrics)
   {
-    // Assume no outputs are trustworthy if an exception is thrown.
-    pinion::mark_slots_for_discard(std::span{*slots});
-    throw;
+    update_output_metrics(*publishables);
   }
 
   // For the online runner we need the actual time that this completed so this can't simply be passed in.
@@ -316,17 +377,18 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
 
   // Check for inputs overruns
 
+
   if (is_overrun)
   {
-    pinion::mark_slots_for_discard(std::span{*slots});
-    jewels::log_cerr_error("Execution overrun detected in cog '{}'", get_name());
+    jewels::log_cerr_error("Execution overrun detected in cog '{}'. Terminating.", get_name());
+    std::terminate();
   }
   else
   {
     conditions_.commit(inputs_.commit(*inputs));
     diagnostics_.commit(diagnostics, exec_complete_time);
 
-    // Process all the outputs.
+    publish_metrics(publishables, params.start_time);
 
     if (const auto result = pinion::process_slots(std::span{*slots}, exec_complete_time); !result)
     {
@@ -342,6 +404,81 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
   notify_ready_queue();
 
   return is_overrun ? jewels::unexpected(CogExecutionError::overrun) : jewels::expected<void, CogExecutionError>{};
+}
+
+template <typename Policy>
+template <typename PublishablesType>
+void SimpleCog<Policy>::publish_metrics(PublishablesType& publishables, jewels::time::SyncTime execution_start_time)
+{
+  if constexpr (Policy::publish_metrics)
+  {
+    // Use the start time passed in rather than the result of SyncTime::now() so this is published reliable in sim and
+    // testing.
+    if (should_send_telemetry_metrics(execution_start_time))
+    {
+      Policy::populate_telemetry_metrics(metrics_.telemetry_metrics(), inputs_.subscribers(), *publishables);
+      metrics_.reset_telemetry_metrics();
+    }
+    if (should_send_event_metrics(execution_start_time))
+    {
+      Policy::populate_event_metrics(metrics_.event_metrics(), inputs_.subscribers(), *publishables);
+      metrics_.reset_event_metrics();
+    }
+  }
+}
+
+template <typename Policy>
+bool SimpleCog<Policy>::should_send_telemetry_metrics(jewels::time::SyncTime current_time)
+{
+  if (!last_telemetry_sent_time_)
+  {
+    last_telemetry_sent_time_ = current_time;
+    return false;
+  }
+  auto time_since_last_telemetry = current_time - *last_telemetry_sent_time_;
+
+  if (time_since_last_telemetry >= metrics_send_interval)
+  {
+    last_telemetry_sent_time_ = current_time;
+    return true;
+  }
+  return false;
+}
+
+template <typename Policy>
+bool SimpleCog<Policy>::should_send_event_metrics(jewels::time::SyncTime current_time)
+{
+  if (!last_event_sent_time_)
+  {
+    last_event_sent_time_ = current_time;
+    return false;
+  }
+  auto time_since_last_event = current_time - *last_event_sent_time_;
+
+  if (metrics_.is_event_metrics_batch_full() || time_since_last_event >= metrics_send_interval)
+  {
+    last_event_sent_time_ = current_time;
+    return true;
+  }
+  return false;
+}
+
+template <typename Policy>
+template <typename PublishablesType>
+void SimpleCog<Policy>::update_output_metrics(PublishablesType& publishables)
+{
+  [this, &publishables]<size_t... indices>(std::index_sequence<indices...>)
+  {
+    ((
+       [this, &publishables]<size_t index>()
+       {
+         if constexpr (index != Policy::telemetry_metrics_index && index != Policy::event_metrics_index)
+         {
+           metrics_.update_output_metrics(index, std::get<index>(publishables).is_marked_for_publish() ? 1 : 0);
+         }
+       }.template operator()<indices>()),
+     ...);
+  }(std::make_index_sequence<std::tuple_size_v<std::remove_reference_t<PublishablesType>>>{});
 }
 
 } // namespace clockwork

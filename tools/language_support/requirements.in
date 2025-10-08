@@ -1,0 +1,17 @@
+# keep-sorted start
+bazel-runfiles>=1.6.1
+click>=8.2.1
+humanize>=4.13.0
+hypothesis>=6.140.2
+lz4>=4.4.4
+nanobind>=2.2.0
+numpy>=1.26.4
+protobuf>=6.31.1
+pydantic>=2.9.2
+pytest>=8.3.5
+requests>=2.32.5
+rich>=13.9.4
+typing-extensions>=4.15.0
+uv>=0.8.20
+zstandard>=0.24.0
+# keep-sorted end

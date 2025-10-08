@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 from typing import TYPE_CHECKING
 
+from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.cpp.context import Header
 from clockwork.dsl.cpp.types import CppType
 from clockwork.dsl.ir import clkbuiltins, expr, schema, schema_reg, typesys
@@ -145,14 +146,14 @@ def to_schema(typespec: typesys.Instantiation | schema.Schema) -> schema.Schema:
     raise TypeError(msg)
 
 
-def protobuf_repr_to_cpp_type(proto_rep: schema_reg.RepresentationInfo) -> CppType:
+def protobuf_repr_to_cpp_type(proto_rep: schema_reg.RepresentationInfo, compiler_context: CompilerContext) -> CppType:
     """Creates a CppType that corresponds to the provided Representation."""
     proto_ir = proto_rep.representation_ir
     if isinstance(proto_ir.typespec, expr.Expr):
         msg = "Attempted to render an unresolved converter"
         raise TypeError(msg)
     proto_name = proto_ir.name if proto_ir.name else proto_ir.schema_ir.schema_name
-    proto_type = proto_typereg.get_protobuf_type(to_schema_instantiation(proto_ir.typespec))
+    proto_type = proto_typereg.get_protobuf_type(proto_ir.schema_ir, compiler_context)
     schema_ir = to_schema_instantiation(proto_ir.typespec)
     if not isinstance(proto_type, proto_typereg.DefinedProtobufType):
         msg = "Expected a DefinedProtobufType for instantiation"

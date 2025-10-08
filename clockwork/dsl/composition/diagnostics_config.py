@@ -24,17 +24,18 @@ CLK_MODULE: Final = compiler.compile_source_file(
     _fs_importer,
 )
 
+max_reporter_name = 256
+
+max_reporters = 400
+
 ReporterInfo: Final[type[diagnostics_config_proto.ReporterInfo]] = tachyon_dyn.get_instantiation_dataclass(
     CLK_MODULE.context,
     CLK_MODULE,
     "ReporterInfo",
-    max_reporter_name=256,
 )[0]
 
 DatabaseInfo: Final[type[diagnostics_config_proto.DatabaseInfo]] = tachyon_dyn.get_instantiation_dataclass(
     CLK_MODULE.context,
     CLK_MODULE,
     "DatabaseInfo",
-    max_reporters=400,
-    max_reporter_name=256,
 )[0]

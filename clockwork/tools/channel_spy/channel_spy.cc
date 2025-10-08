@@ -68,13 +68,15 @@ void ChannelSpy::subscribe(std::string_view channel_name, const RawMessageCallba
   {
     if (channel.get_channel_name() == channel_name)
     {
-      subscribers_.emplace_back(ChannelSpySubscriber::make_subscriber(
-        shm_root_dir_,
-        socket_ns_,
-        channel.get_uuid().to_string(),
-        channel.get_num_slots(),
-        channel.get_message_size(),
-        callback_fn));
+      subscribers_.emplace_back(
+        ChannelSpySubscriber::make_subscriber(
+          shm_root_dir_,
+          socket_ns_,
+          channel.get_uuid().to_string(),
+          channel_name,
+          channel.get_num_slots(),
+          channel.get_message_size(),
+          callback_fn));
       subscribed = true;
     }
   }
@@ -94,13 +96,15 @@ void ChannelSpy::subscribe(std::string_view channel_name, const PythonCallback& 
   {
     if (channel.get_channel_name() == channel_name)
     {
-      subscribers_.emplace_back(ChannelSpySubscriber::make_subscriber(
-        shm_root_dir_,
-        socket_ns_,
-        channel.get_uuid().to_string(),
-        channel.get_num_slots(),
-        channel.get_message_size(),
-        callback_fn));
+      subscribers_.emplace_back(
+        ChannelSpySubscriber::make_subscriber(
+          shm_root_dir_,
+          socket_ns_,
+          channel.get_uuid().to_string(),
+          channel_name,
+          channel.get_num_slots(),
+          channel.get_message_size(),
+          callback_fn));
       subscribed = true;
     }
   }

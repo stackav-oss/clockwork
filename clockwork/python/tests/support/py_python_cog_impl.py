@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test implementation of a python cog."""
 
@@ -29,7 +30,8 @@ class PythonCogImpl:
         dial.outputs.output1.publish(output_msg1)
         output_msg2 = NbTestOutputMessage()
         output_msg2.time_of_validity = SyncTime(nanoseconds=dial.start_time + 1)
-        output_msg2.message_strings = [buffer.message.message_string for buffer in dial.inputs.input1.new_msgs_view] + [
-            buffer.message.message_string for buffer in dial.inputs.input2.new_msgs_view
-        ]
+        output_msg2.message_strings.from_iter(
+            [buffer.message.message_string for buffer in dial.inputs.input1.new_msgs_view]
+            + [buffer.message.message_string for buffer in dial.inputs.input2.new_msgs_view]
+        )
         dial.outputs.output2.publish(output_msg2)

@@ -1,0 +1,164 @@
+use clockwork::tests::support::test_messages_multi_node::{MultiNodeMessage, SinkMessage, SourceMessage};
+
+// Test source socket
+udp_socket TestSourceSocket
+{
+  address: 127.0.0.1;
+  port: 1234;
+  direction: incoming;
+  message_type: Tachyon<SourceMessage>;
+}
+
+// Test sink socket
+udp_socket TestSinkSocket
+{
+  address: 127.0.0.1;
+  port: 4321;
+  direction: outgoing;
+  message_type: Tachyon<SinkMessage>;
+}
+
+// Cog to receive data from a source socket
+cog TestSourceCog
+{
+  inputs
+  {
+    message_input: Tappy<SourceMessage>;
+  }
+
+  outputs
+  {
+    message_output: Tappy<MultiNodeMessage>;
+  }
+
+  execution
+  {
+    condition new_msg: new_message(message_input);
+    execute when: new_msg;
+  }
+}
+
+// Cog to receive data from another cog and send to a sink socket
+cog TestSinkCog
+{
+  inputs
+  {
+    message_input: Tappy<MultiNodeMessage>;
+  }
+
+  outputs
+  {
+    message_output: Tappy<SinkMessage>;
+  }
+
+  execution
+  {
+    condition new_msg: new_message(message_input);
+    execute when: new_msg;
+  }
+}
+
+// Init cog
+cog TestInitCog
+{
+  execution
+  {
+    execute when: init;
+  }
+}
+
+cpp_target test_system_multi_node_cogs
+{
+    options
+    {
+        namespace clockwork::tests;
+    }
+
+    cog TestInitCog;
+    cog TestSourceCog;
+    cog TestSinkCog;
+    udp_socket TestSourceSocket;
+    udp_socket TestSinkSocket;
+}
+
+// Channel from socket to cog.
+channel SourceChan
+{
+    message_type: Tachyon<SourceMessage>;
+    max_num_messages: 8;
+}
+
+// Channel between two cogs across nodes.
+channel MultiNodeChan
+{
+    message_type: Tachyon<MultiNodeMessage>;
+    max_num_messages: 8;
+}
+
+// Channel from cog to socket.
+channel SinkChan
+{
+    message_type: Tachyon<SinkMessage>;
+    max_num_messages: 8;
+}
+
+box TestSystemCogsBox1
+{
+    new source_socket: TestSourceSocket;
+    new source_cog: TestSourceCog;
+    connect source_socket to SourceChan;
+    connect SourceChan to source_cog.message_input;
+    connect source_cog.message_output to MultiNodeChan;
+}
+
+box TestSystemCogsBox2
+{
+    new sink_socket: TestSinkSocket;
+    new init_cog: TestInitCog;
+    new sink_cog: TestSinkCog;
+    connect MultiNodeChan to sink_cog.message_input;
+    connect sink_cog.message_output to SinkChan;
+    connect SinkChan to sink_socket;
+}
+
+cpu_domain TestSystemCpu1;
+cpu_domain TestSystemCpu2;
+
+ethernet LocalNetwork
+{
+    ipv4_address 1.2.3.4: TestSystemCpu1
+    {
+        bridge_ports: 1111-2222;
+    }
+    ipv4_address 5.6.7.8: TestSystemCpu2
+    {
+        bridge_ports: 1111-2222;
+    }
+}
+
+box TestSystemBox
+{
+    new test_cogs_box_1: TestSystemCogsBox1;
+    new test_process_1: Process(executable=test_system_multi_node_exe);
+    apply HostProcess(process=test_process_1) in test_cogs_box_1;
+    apply HostCpuDomain(cpu_domain=TestSystemCpu1) to test_process_1;
+
+    new test_cogs_box_2: TestSystemCogsBox2;
+    new test_process_2: Process(executable=test_system_multi_node_exe);
+    apply HostProcess(process=test_process_2) in test_cogs_box_2;
+    apply HostCpuDomain(cpu_domain=TestSystemCpu2) to test_process_2;
+}
+
+cpp_executable test_system_multi_node_exe
+{
+    casing
+    {
+        box TestSystemCogsBox1;
+        box TestSystemCogsBox2;
+    }
+}
+
+system_target test_system_multi_node
+{
+    box: TestSystemBox;
+}

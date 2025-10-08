@@ -49,9 +49,27 @@ Message& Publishable<Message>::message() const noexcept
 }
 
 template <class Message>
-void Publishable<Message>::mark_for_publish() const noexcept
+void Publishable<Message>::mark_for_publish() noexcept
 {
   reserved_slot_->mark_for_commit();
+}
+
+template <class Message>
+void Publishable<Message>::sim_only_mark_for_publish_with_fake_timestamp(jewels::time::SyncTime fake_time) noexcept
+{
+  reserved_slot_->sim_only_mark_for_commit_with_fake_timestamp(fake_time);
+}
+
+template <class Message>
+bool Publishable<Message>::is_marked_for_publish() const noexcept
+{
+  return reserved_slot_->state() == ReservationState::State::commit;
+}
+
+template <class Message>
+bool Publishable<Message>::connected() const noexcept
+{
+  return reserved_slot_->connected();
 }
 
 template <size_t num_slots>

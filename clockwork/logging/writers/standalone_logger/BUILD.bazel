@@ -1,6 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -26,6 +27,7 @@ merge_simplelaunch_config(
         "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
         "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
         "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
         ":standalone_logger_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
@@ -40,8 +42,10 @@ clk(
         "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
         "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
         "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "standalone_logger.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
         "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        "standalone_logger.standalone_logger_sys.logged_channel_metadata.pbbin",
         "standalone_logger_exe.cc",
         "standalone_logger_exe.hh",
         "standalone_logger_exe.inl",

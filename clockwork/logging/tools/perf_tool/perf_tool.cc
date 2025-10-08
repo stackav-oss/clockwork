@@ -313,9 +313,10 @@ LogPerfImpl<MessageHandleType>::LogPerfImpl(
     test_time_(test_time),
     message_size_(message_size),
     zero_size_(std::min(message_size, zero_size)),
-    write_interval_(std::chrono::duration<double, std::chrono::seconds::period>(
-      static_cast<double>(message_size) / static_cast<double>(write_mib_per_sec) /
-      jewels::math::constants::bytes_per_mib<double>)),
+    write_interval_(
+      std::chrono::duration<double, std::chrono::seconds::period>(
+        static_cast<double>(message_size) / static_cast<double>(write_mib_per_sec) /
+        jewels::math::constants::bytes_per_mib<double>)),
     buffer_layout_(make_buffer_layout(message_size, write_mib_per_sec)),
     buffer_storage_ptr_(make_aligned_buffer(
       memory_resource_, clockwork::pinion::buffer_size(buffer_layout_), clockwork::pinion::Slot::slot_alignment)),

@@ -6,6 +6,7 @@
 #include "clockwork/cog/cog_statistics.hh"
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_cog.hh"
+#include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/cog_execution_error.hh"
 #include "clockwork/common/forward.hh"
@@ -39,9 +40,10 @@ public:
   using ConditionsType = typename Policy::ConditionsType;
   using PublishersType = typename Policy::PublishersType;
   using DiagnosticsType = typename Policy::DiagnosticsType;
+  using InfraDiagnosticsType = typename Policy::InfraDiagnosticsType;
 
   static constexpr auto cog_id = Policy::cog_id;
-
+  static constexpr auto event_metrics_batch_size = Policy::event_metrics_batch_size;
   /// Constructor.
   /// @param[in] resource The memory resource
   /// @param[in] instance_id The uuid of this cog instance
@@ -105,10 +107,15 @@ public:
   /// Set the publisher
   /// @param[in] uuid The id of the publisher endpoint
   /// @param[in] handle The underlying publisher
+  /// @param[in] connected Whether the publisher is connected to a channel
   /// @return True on success
   [[nodiscard]] jewels::expected<void, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle) override;
+  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle, bool connected) override;
 
+  /// Set up a subscriber endpoint without a handle for non-connected endpoints
+  /// @param[in] uuid The id of the subscriber endpoint to set up
+  /// @return Success if endpoint was set up successfully, error otherwise
+  jewels::expected<void, jewels::MonoError> set_subscriber(jewels::Uuid<common::EndpointClassId> uuid) override;
   /// Validate that all the internal handles have been set.
   /// @return Unexpected if any required handles are unset
   [[nodiscard]] jewels::expected<void, jewels::MonoError> validate() override;
@@ -139,6 +146,29 @@ private:
   /// @param[in] notify_guard Unique lock holding notify_mutex_
   void process_pending_notifies(std::unique_lock<std::mutex>& notify_guard);
 
+  /// Check if telemetry metrics should be published
+  /// @param current_time The current time
+  /// @return true if telemetry metrics should be published, false otherwise
+  bool should_send_telemetry_metrics(jewels::time::SyncTime current_time);
+
+  /// Check if event metrics should be published
+  /// @param current_time The current time
+  /// @return true if event metrics should be published, false otherwise
+  bool should_send_event_metrics(jewels::time::SyncTime current_time);
+
+  /// Publish the metrics to the publishers
+  /// @param publishables The publishables to use for publishing metrics
+  /// @param execution_start_time The start time of the execution
+  /// @tparam PublishablesType The type of the publishables
+  template <typename PublishablesType>
+  void publish_metrics(PublishablesType& publishables, jewels::time::SyncTime execution_start_time);
+
+  /// Update the output metrics for the publishers
+  /// @param publishables The publishables to use for publishing metrics
+  /// @tparam PublishablesType The type of the publishables
+  template <typename PublishablesType>
+  void update_output_metrics(PublishablesType& publishables);
+
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
 
@@ -146,7 +176,7 @@ private:
   jewels::Uuid<common::CogInstanceId> instance_id_;
 
   /// Reentry mutex to protect against running the same instance concurrently.
-  /// Also protects the inputs and conditions members.
+  /// Also protects the conditions members.
   std::mutex reentry_mutex_;
 
   /// Mutex used to guard state for pending notifies
@@ -181,6 +211,18 @@ private:
 
   /// The cog diagnostics
   DiagnosticsType diagnostics_;
+
+  /// The cog infra diagnostics
+  InfraDiagnosticsType infra_diagnostics_;
+
+  /// The cog metrics
+  CogMetrics metrics_;
+
+  /// The last time telemetry metrics were sent
+  std::optional<jewels::time::SyncTime> last_telemetry_sent_time_;
+
+  /// The last time event metrics were sent
+  std::optional<jewels::time::SyncTime> last_event_sent_time_;
 
   /// Stored conditions from prepare execution.
   std::optional<typename TimersType::ConditionsTuple> prepared_timer_conditions_;

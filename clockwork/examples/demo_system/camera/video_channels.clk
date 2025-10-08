@@ -13,5 +13,5 @@ channel VideoChannel
 {
   name: "/video";
   message_type: Tachyon<video_message::Yuv444Image<video_message::image_size_bytes>>;
-  max_num_messages: 10;
+  max_num_messages: 12;
 }

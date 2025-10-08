@@ -7,7 +7,7 @@ Pinion is the underlying message-passing layer for Clockwork to enable communica
 The underlying storage for all data communicated on a channel.
 Each buffer contains multiple elements or "slots" that are contiguous in memory.
 A buffer's API is low level and provides all control over the underlying data.
-In general, nothing outside of the clockwork infrastructure should be holding a reference to the buffer itself.
+In general, nothing outside of the Clockwork infrastructure should be holding a reference to the buffer itself.
 Some exceptions may include the logger or a spy tool.
 All Cogs should be holding either a subscriber handle or a publisher handle that wraps the buffer API to expose only the necessary capabilities for that component.
 

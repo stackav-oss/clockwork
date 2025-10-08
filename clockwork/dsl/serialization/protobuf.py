@@ -20,6 +20,9 @@ from clockwork.dsl.proto.proto_typereg import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from clockwork.dsl.compiler_context import CompilerContext
+
+
 INDENT = "   "
 
 
@@ -80,11 +83,13 @@ class ProtobufMsgLayout:
         return "\n".join(line for line in itertools.chain(preamble, lines, postamble))
 
 
-def to_protobuf_layout(alias: str, typespec: schema.Schema | typesys.Instantiation) -> ProtobufMsgLayout:
+def to_protobuf_layout(
+    alias: str, typespec: schema.Schema | typesys.Instantiation, compiler_context: CompilerContext
+) -> ProtobufMsgLayout:
     """Convert from IR to a ProtobufMsgLayout."""
     schema_ir = schema.InstantiatedSchema.from_typespec(typespec)
     message_fields = [
-        ProtobufField(proto_typereg.get_protobuf_type(field.type_info), field.cur_name)
+        ProtobufField(proto_typereg.get_protobuf_type(field.type_info, compiler_context), field.cur_name)
         for field in schema_ir.fields.values()
     ]
     name = alias if (isinstance(typespec, typesys.Instantiation) or alias) else typespec.name
@@ -103,6 +108,6 @@ def to_schema_instantiation(typespec: typesys.Instantiation) -> schema.Schema | 
     raise TypeError(msg)
 
 
-def render(alias: str, typespec: typesys.Instantiation) -> ProtobufMsgLayout:
+def render(alias: str, typespec: typesys.Instantiation, compiler_context: CompilerContext) -> ProtobufMsgLayout:
     """Render a protobuf interface and instantiation."""
-    return to_protobuf_layout(alias, to_schema_instantiation(typespec))
+    return to_protobuf_layout(alias, to_schema_instantiation(typespec), compiler_context)

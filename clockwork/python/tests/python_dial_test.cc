@@ -31,7 +31,12 @@ TEST_CASE("Execute test cog through a generated dial")
 {
   const jewels::memory::MemoryResource memory_resource(std::pmr::new_delete_resource());
 
-  python_init_once();
+  REQUIRE_THROWS(throw_if_not_initialized());
+  python_init(InitializationMode::unit_test);
+  REQUIRE_THROWS(python_init(InitializationMode::production));
+  REQUIRE_NOTHROW(python_init(InitializationMode::unit_test));
+  REQUIRE_NOTHROW(throw_if_not_initialized());
+
   const GilLockGuard gil_guard;
 
   PythonState python_state{memory_resource};
@@ -57,9 +62,10 @@ TEST_CASE("Execute test cog through a generated dial")
   input1_1.get_underlying_message_string().set_truncate("Test string 1_1");
   Tappy<TestInputMessage> input1_2{};
   input1_2.get_underlying_message_string().set_truncate("Test string 1_2");
-  const auto input1_list = PythonObject::make_list(std::array{
-    PythonObject::make_read_only_memory_view(&input1_1, sizeof(input1_1)),
-    PythonObject::make_read_only_memory_view(&input1_2, sizeof(input1_2))});
+  const auto input1_list = PythonObject::make_list(
+    std::array{
+      PythonObject::make_read_only_memory_view(&input1_1, sizeof(input1_1)),
+      PythonObject::make_read_only_memory_view(&input1_2, sizeof(input1_2))});
   const auto cog_input1_class = dial_dict.get_dictionary_item("PythonCogDialInputsInput1");
   const auto cog_input1 = cog_input1_class.call_object(input1_list, PythonObject::make_integer(1));
 
@@ -67,9 +73,10 @@ TEST_CASE("Execute test cog through a generated dial")
   input2_1.get_underlying_message_string().set_truncate("Test string 2_1");
   Tappy<TestInputMessage> input2_2{};
   input2_2.get_underlying_message_string().set_truncate("Test string 2_2");
-  const auto input2_list = PythonObject::make_list(std::array{
-    PythonObject::make_read_only_memory_view(&input2_1, sizeof(input2_1)),
-    PythonObject::make_read_only_memory_view(&input2_2, sizeof(input2_2))});
+  const auto input2_list = PythonObject::make_list(
+    std::array{
+      PythonObject::make_read_only_memory_view(&input2_1, sizeof(input2_1)),
+      PythonObject::make_read_only_memory_view(&input2_2, sizeof(input2_2))});
   const auto cog_input2_class = dial_dict.get_dictionary_item("PythonCogDialInputsInput2");
   const auto cog_input2 = cog_input2_class.call_object(input2_list, PythonObject::make_integer(2));
 

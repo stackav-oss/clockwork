@@ -10,6 +10,7 @@
 #include "clockwork/logging/schema_encoding.hh"
 
 #include <Python.h>
+#include <fmt10/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h> // IWYU pragma: keep
 #include <nanobind/operators.h>
@@ -43,12 +44,16 @@ void add_log_timestamp_bindings(auto& mod)
       "nanoseconds",
       [](const clockwork_logging::LogTimestamp& obj) { return obj.get_nanoseconds(); },
       "Nanoseconds since start of epoch.")
-    .def(nanobind::self == nanobind::self)  // NOLINT(misc-redundant-expression) Shorthand nanobind operator
-    .def(nanobind::self != nanobind::self)  // NOLINT(misc-redundant-expression) Shorthand nanobind operator
-    .def(nanobind::self < nanobind::self)   // NOLINT(misc-redundant-expression) Shorthand nanobind operator
-    .def(nanobind::self > nanobind::self)   // NOLINT(misc-redundant-expression) Shorthand nanobind operator
-    .def(nanobind::self <= nanobind::self)  // NOLINT(misc-redundant-expression) Shorthand nanobind operator
-    .def(nanobind::self >= nanobind::self); // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self == nanobind::self) // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self != nanobind::self) // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self < nanobind::self)  // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self > nanobind::self)  // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self <= nanobind::self) // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(nanobind::self >= nanobind::self) // NOLINT(misc-redundant-expression) Shorthand nanobind operator
+    .def(
+      "__repr__",
+      [](const clockwork_logging::LogTimestamp& timestamp) -> std::string
+      { return fmt::format("LogTimestamp({}ns)", timestamp.get_nanoseconds()); });
 }
 
 /// Add the log interval bindings to the log reader types module

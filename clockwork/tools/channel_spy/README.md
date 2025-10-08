@@ -1,6 +1,6 @@
 # Channel Spy
 
-The channel spy provides an API in C++ and python to spy read messages from channels in a live clockwork system.
+The channel spy provides an API in C++ and python to spy read messages from channels in a live Clockwork system.
 The channel spy works by examining the pinion buffers in shared memory and uses the cursors to find new messages.
 The channel spy configuration is stored in the same shared memory directory as the pinion buffers.
 Because the spy is reading from shared memory, it is only able to see channels that are published on the local machine.
@@ -14,12 +14,12 @@ The interface also provides for subscribing to receive raw message data and to q
 ### C++
 
 The C++ API is implemented by the ChannelSpy class.
-Callers should use the default constructor to spy on a live clockwork system.
+Callers should use the default constructor to spy on a live Clockwork system.
 
 #### Channels
 
 The channels method returns the metadata for each channel that can be spied on the local machine.
-Channel metadata contains the name, type, and clockwork schema definition for each channel.
+Channel metadata contains the name, type, and Clockwork schema definition for each channel.
 
 ```cpp
 stack::clockwork::tools::ChannelSpy channel_spy{};
@@ -64,7 +64,7 @@ channel_spy.run();
 ### Python
 
 The python API is implemented by the ChannelSpy class in "py_channel_spy.py".
-Callers should use the default constructor to spy on a live clockwork system.
+Callers should use the default constructor to spy on a live Clockwork system.
 
 #### Channels
 
@@ -127,7 +127,7 @@ spy.run()
 ## Channel Spy CLI
 
 The channel spy CLI is a python script for spying on channels on the vehicle and on a local workstation.
-The channel spy CLI can spy on any running clockwork system including simulations running locally.
+The channel spy CLI can spy on any running Clockwork system including simulations running locally.
 On the vehicle the command to run channel is "./debug_tools/channel_spy".
 On a local workstation the command to run channel spy is "stack spy".
 
@@ -168,7 +168,7 @@ $ stack spy echo /log/gnss/position
 ## Channel Spy Configuration
 
 In order for the channel spy tool to work it needs to have the channel spy configuration file under the shared memory directory where the files for the pinion buffers are stored.
-The clockwork compiler generates a channel spy configuration file for each CPU domain found under the clockwork system target definition.
+The Clockwork compiler generates a channel spy configuration file for each CPU domain found under the Clockwork system target definition.
 A cog is provided to write the channel spy configuration file for each CPU domain at system startup.
 The following is an example of how to create a box that can be added to a system target to initialize the channel spy configuration file.
 

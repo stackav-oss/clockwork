@@ -118,7 +118,7 @@ public:
   pinion::PublisherHandle underlying_publisher;
 };
 // We're inheriting from pure interfaces.
-// NOLINTNEXTLINE(fuchsia-multiple-inheritance)
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance) Test code, inheriting abstract interfaces.
 class TestCog : public AbstractCog, public pinion::Observer
 {
 public:
@@ -250,21 +250,22 @@ TEST_CASE("execute", "[DeterministicRunner]")
 
   const std::pmr::unordered_map<jewels::memory::ObjectPtr<AbstractCog>, int16_t> cog_to_gpu_id;
 
-  DeterministicRunner runner(DeterministicRunnerConfig{
-    .resource = resource,
-    .cogs =
-      {{
-         .cog = cog1_ptr,
-       },
-       {
-         .cog = cog2_ptr,
-       }},
-    .timers = timer_vec,
-    .queue = queue,
-    .start_time = start_time,
-    .end_time = end_time,
-    .channel_publisher = std::make_shared<TestChannelPublisher>(std::move(publisher3), publish_events),
-    .cog_to_gpu_id = cog_to_gpu_id});
+  DeterministicRunner runner(
+    DeterministicRunnerConfig{
+      .resource = resource,
+      .cogs =
+        {{
+           .cog = cog1_ptr,
+         },
+         {
+           .cog = cog2_ptr,
+         }},
+      .timers = timer_vec,
+      .queue = queue,
+      .start_time = start_time,
+      .end_time = end_time,
+      .channel_publisher = std::make_shared<TestChannelPublisher>(std::move(publisher3), publish_events),
+      .cog_to_gpu_id = cog_to_gpu_id});
 
   CHECK(timer1->start(
     start_time + std::chrono::milliseconds(timer1_period_ms), std::chrono::milliseconds(timer1_period_ms)));

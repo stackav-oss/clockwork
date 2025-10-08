@@ -33,6 +33,7 @@ concept Integral = std::is_integral_v<T>;
 /// https://en.cppreference.com/w/cpp/language/classes#Implicit-lifetime_class
 template <class Type>
 concept ImplicitLifetimeType =
+  !std::is_reference_v<Type> &&
   (std::is_trivially_constructible_v<Type> || std::is_trivially_copy_constructible_v<Type>) &&
   std::is_trivially_destructible_v<Type>;
 

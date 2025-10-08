@@ -32,8 +32,10 @@
 #include <iterator>
 #include <limits>
 #include <memory_resource>
+#include <optional>
 #include <ranges>
 #include <string_view>
+#include <sys/types.h>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -61,6 +63,7 @@ struct TestMsg2
 class TestCog
 {
 public:
+  static constexpr size_t event_metrics_batch_size = 10;
   void notify(jewels::time::SyncTime /*current_time*/) {}
 };
 
@@ -104,7 +107,7 @@ struct CogInputsFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
       channels(make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size>...>(resource)),
       publishers(
         std::apply([](auto&... channel) -> PublishersArray { return {channel.make_publisher(1)...}; }, channels)),
-      subscriber(resource)
+      subscriber(resource, false)
   {
   }
 
@@ -137,6 +140,8 @@ struct NoCopyInputPolicy
     jewels::Uuid<common::EndpointClassId>::from_string("b6e2b628-62ba-4c73-b07e-b2ce77a742b4").value();
   static constexpr std::string_view name = "NoCopyInputPolicy";
   static constexpr auto max_view_size = 3U;
+  static constexpr std::optional<::ssize_t> safety_margin{};
+  static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
 };
@@ -148,6 +153,8 @@ struct CopyInputPolicy
     jewels::Uuid<common::EndpointClassId>::from_string("789e340c-556f-4cf0-a3b9-73632ba75a7c").value();
   static constexpr std::string_view name = "CopyInputPolicy";
   static constexpr auto max_view_size = 3U;
+  static constexpr std::optional<::ssize_t> safety_margin{};
+  static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
 };
@@ -183,7 +190,7 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
 
   // Empty views before receiving any messages
   auto conds = make_active_conds();
-  auto inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+  auto inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
   REQUIRE(inputs);
   REQUIRE(std::get<0>(*inputs).get_cursor_view().empty());
   REQUIRE(std::get<1>(*inputs).get_cursor_view().empty());
@@ -194,7 +201,7 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   publish(publisher1, msg1);
 
   {
-    inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
     REQUIRE(inputs);
     REQUIRE(1 == std::get<0>(*inputs).get_cursor_view().size());
     REQUIRE(std::get<1>(*inputs).get_cursor_view().empty());
@@ -206,7 +213,7 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   publish(publisher2, msg2);
 
   {
-    inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
     REQUIRE(inputs);
 
     const auto& input0 = std::get<0>(*inputs);
@@ -222,7 +229,7 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   {
     std::ignore = subscriber.commit(*inputs);
 
-    inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
     REQUIRE(inputs);
 
     const auto& input0 = std::get<0>(*inputs);
@@ -237,11 +244,14 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   SECTION("overrun subscriber 1")
   {
     REQUIRE_FALSE(subscriber.is_overrun());
+    REQUIRE_FALSE(subscriber.almost_overrun());
 
     publish(publisher1, msg1);
+    REQUIRE(subscriber.almost_overrun());
     publish(publisher2, msg2);
+    REQUIRE(subscriber.almost_overrun());
 
-    inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
     REQUIRE(inputs);
 
     publish(publisher1, msg1);
@@ -250,16 +260,20 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
     publish(publisher1, msg1);
 
     REQUIRE(subscriber.is_overrun());
+    REQUIRE(subscriber.almost_overrun());
   }
 
   SECTION("overrun subscriber 2")
   {
     REQUIRE_FALSE(subscriber.is_overrun());
+    REQUIRE_FALSE(subscriber.almost_overrun());
 
     publish(publisher1, msg1);
+    REQUIRE(subscriber.almost_overrun());
     publish(publisher2, msg2);
+    REQUIRE(subscriber.almost_overrun());
 
-    inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
     REQUIRE(inputs);
 
     publish(publisher2, msg2);
@@ -268,6 +282,7 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
     publish(publisher2, msg2);
 
     REQUIRE(subscriber.is_overrun());
+    REQUIRE(subscriber.almost_overrun());
   }
 }
 
@@ -280,7 +295,7 @@ TEST_CASE_METHOD(ZeroInputsPolicyFixture, "zero subscribers", "[cog_inputs]")
   // No active conditions before receiving any messages
 
   auto conds = make_active_conds();
-  auto inputs = subscriber.make_dial_inputs<ConditionsType>(conds);
+  auto inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
   REQUIRE(inputs);
   REQUIRE(0 == std::tuple_size<std::decay_t<decltype(*inputs)>>());
   REQUIRE_FALSE(subscriber.is_overrun());

@@ -17,7 +17,7 @@ TEST_CASE("Default bounded_string")
 
   CHECK(string.empty());
   // size can't be checked here as it runs afoul of the linter
-  CHECK(string.data()[0] == 0);
+  CHECK(*std::next(string.data(), 0) == 0);
   CHECK(string.max_size() == 2);
 }
 
@@ -31,10 +31,10 @@ TEST_CASE("Normal string")
   CHECK(string.size() == 3);
   CHECK(string.length() == 3);
   CHECK(string.max_size() == size);
-  CHECK(string.data()[0] == 'a');
-  CHECK(string.data()[1] == 'b');
-  CHECK(string.data()[2] == 'c');
-  CHECK(string.data()[3] == 0);
+  CHECK(*std::next(string.data(), 0) == 'a');
+  CHECK(*std::next(string.data(), 1) == 'b');
+  CHECK(*std::next(string.data(), 2) == 'c');
+  CHECK(*std::next(string.data(), 3) == 0);
   CHECK(string[0] == 'a');
   CHECK(string[1] == 'b');
   CHECK(string[2] == 'c');
@@ -53,11 +53,11 @@ TEST_CASE("Truncated string")
   CHECK(string.size() == size);
   CHECK(string.length() == size);
   CHECK(string.max_size() == size);
-  CHECK(string.data()[0] == 'a');
-  CHECK(string.data()[1] == 'b');
-  CHECK(string.data()[2] == 'c');
-  CHECK(string.data()[3] == 'd');
-  CHECK(string.data()[4] == 0);
+  CHECK(*std::next(string.data(), 0) == 'a');
+  CHECK(*std::next(string.data(), 1) == 'b');
+  CHECK(*std::next(string.data(), 2) == 'c');
+  CHECK(*std::next(string.data(), 3) == 'd');
+  CHECK(*std::next(string.data(), 4) == 0);
   CHECK(string[0] == 'a');
   CHECK(string[1] == 'b');
   CHECK(string[2] == 'c');
@@ -159,7 +159,7 @@ TEST_CASE("operator==")
   {
     SECTION("Empty")
     {
-      REQUIRE(BoundedString<2>{} == BoundedString<2>{}); // NOLINT(readability-container-size-empty)
+      REQUIRE(BoundedString<2>{} == BoundedString<2>{});
     }
 
     SECTION("Full")
@@ -173,7 +173,7 @@ TEST_CASE("operator==")
   {
     SECTION("Empty")
     {
-      REQUIRE(BoundedString<2>{} == BoundedString<3>{}); // NOLINT(readability-container-size-empty)
+      REQUIRE(BoundedString<2>{} == BoundedString<3>{});
     }
     SECTION("Full")
     {

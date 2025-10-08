@@ -8,7 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Generic, Protocol, TypeVar, cast
 
-from typing_extensions import Self
+from typing_extensions import Self, override
 
 
 class Context(Protocol):
@@ -29,10 +29,11 @@ class ContextKey(Generic[ContextType], ABC):
     different keys.
     """
 
-    def __init__(self, name: str) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str) -> None:
         """Construct a new ContextKey."""
         self.name = name
 
+    @override
     def __str__(self) -> str:
         """Human-readable string."""
         return self.name
@@ -79,7 +80,7 @@ class CompilerContext:
     the values.
     """
 
-    def __init__(self, name: str | None = None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None = None) -> None:
         """Create new, empty context."""
         self._contexts: dict[ContextKey[Any], Any] = {}
         self.name = name

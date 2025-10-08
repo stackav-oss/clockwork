@@ -10,3 +10,13 @@ py_library(
     srcs = ["py_context.py"],
     deps = ["@clockwork_pip//typing_extensions"],
 )
+
+py_library(
+    name = "typereg",
+    srcs = ["typereg.py"],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:typesys",
+        "@clockwork_pip//typing_extensions",
+    ],
+)

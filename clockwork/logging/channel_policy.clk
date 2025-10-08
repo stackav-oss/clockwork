@@ -13,6 +13,9 @@ enum LogType
 
         // Log in telemetry log (all the time) and also in events
         #2 telemetry;
+
+        // Log telemetry redundantly (all the time) and also in events
+        #3 redundant_telemetry;
     }
 }
 

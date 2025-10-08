@@ -56,6 +56,16 @@ TEST_CASE("MessageRateCounter")
     rate_counter.update_channel(min_rate_channel, logtime1, 105U);
     REQUIRE(rate_counter.get_channel_rate_map().at(min_rate_channel).rate_filter.get_rate(logtime2) == 3.0);
   }
+
+  SECTION("Warmup interval")
+  {
+    const auto warmup_interval = std::chrono::nanoseconds(1'000'000'000);
+    const auto start_time = jewels::time::SteadyClock::now();
+    const MessageRateCounter warm_rate_counter{memory_resource, channel_rates_config, warmup_interval, start_time};
+    REQUIRE_FALSE(warm_rate_counter.is_warmed_up(start_time));
+    REQUIRE_FALSE(warm_rate_counter.is_warmed_up(start_time + warmup_interval - std::chrono::nanoseconds(1)));
+    REQUIRE(warm_rate_counter.is_warmed_up(start_time + warmup_interval));
+  }
 }
 
 } // namespace

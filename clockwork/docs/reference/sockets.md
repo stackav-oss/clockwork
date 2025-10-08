@@ -12,7 +12,7 @@ The following sections describe how to instantiate a `udp_socket`, connect it to
 ### Declaring a `udp_socket`
 
 First, declare the message type you want on the socket.
-For this example we declare it inline, but this can be in separate clockwork module as well.
+For this example we declare it inline, but this can be in separate Clockwork module as well.
 
 ```clockwork
 // Payload type

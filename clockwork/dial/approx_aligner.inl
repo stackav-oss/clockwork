@@ -91,7 +91,7 @@ constexpr auto ApproxAligner<PolicyType, InputPolicies...>::find_alignment(
     return Result{
       .time_of_validity = now,
       .state = ApproxAlignerStateType::timeout,
-      .type = AlignmentType::full,
+      .type = AlignmentType::partial,
       .alignment = std::move(timeout_alignment),
     };
   }
@@ -221,10 +221,7 @@ constexpr auto ApproxAligner<PolicyType, InputPolicies...>::extract_values(
   };
 
   return std::apply(
-    [&extract](auto&... input) -> ValueVectorsArray
-    {
-      return { extract.template operator()<InputPolicies>(input)... };
-    },
+    [&extract](auto&... input) -> ValueVectorsArray { return {extract.template operator()<InputPolicies>(input)...}; },
     inputs);
 }
 

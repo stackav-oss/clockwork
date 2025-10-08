@@ -4,6 +4,7 @@
 #include "clockwork/pinion/incoming_udp.hh"
 
 #include "clockwork/common/abstract_epoll_manager.hh"
+#include "clockwork/common/process_description.hh"
 #include "clockwork/io/network_var_packet.hh"
 #include "clockwork/io/var_packet.hh"
 #include "clockwork/pinion/buffer.hh"
@@ -24,6 +25,7 @@
 #include "jewels/networking/socket_endpoint.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <fmt10/format.h> // IWYU pragma: keep
 
@@ -86,13 +88,14 @@ read_size_check(size_t bytes_read, Tachyon<io::NetworkVarPacket<packet_size>>& m
 
 template <class Schema>
 IncomingUdp<Tachyon<Schema>>::IncomingUdp(
+  jewels::Uuid<common::EndpointClassId> publisher_id,
   jewels::filesystem::FileDescriptor&& file_descriptor,
   std::pmr::vector<::iovec>&& io_vecs,
   std::pmr::vector<::mmsghdr>&& mmsg_hdrs,
   std::pmr::vector<::sockaddr_in>&& msg_names,
   jewels::networking::SocketEndpoint socket_endpoint)
-  : IncomingUdpImpl<
-      Tachyon<Schema>>{std::move(io_vecs), std::move(mmsg_hdrs), std::move(msg_names), std::move(socket_endpoint)},
+  : IncomingUdpImpl<Tachyon<
+      Schema>>{publisher_id, std::move(io_vecs), std::move(mmsg_hdrs), std::move(msg_names), std::move(socket_endpoint)},
     file_descriptor_{std::move(file_descriptor)}
 {
 }
@@ -102,6 +105,7 @@ template <jewels::networking::SockOption... options>
 jewels::expected<jewels::memory::NonNullSharedPtr<IncomingUdp<Tachyon<Schema>>>, jewels::filesystem::ErrorCode>
 IncomingUdp<Tachyon<Schema>>::try_make(
   jewels::memory::MemoryResource memres,
+  jewels::Uuid<common::EndpointClassId> publisher_id,
   jewels::networking::SocketEndpoint socket_endpoint,
   size_t batch_size,
   const SockOptionValue<options>&... sock_option_values)
@@ -136,6 +140,7 @@ IncomingUdp<Tachyon<Schema>>::try_make(
   return jewels::memory::NonNullSharedPtr<IncomingUdp<Msg>>{jewels::memory::make_pmr_shared<IncomingUdp<Msg>>(
     memres,
     IncomingUdp<Msg>{
+      publisher_id,
       std::move(file_descriptor),
       std::pmr::vector<::iovec>{batch_size, memres},
       std::pmr::vector<::mmsghdr>{batch_size, memres},
@@ -162,10 +167,10 @@ int IncomingUdp<Tachyon<Schema>>::fd() const
 }
 
 template <class Schema>
-jewels::expected<void, IoConnection::Error>
-IncomingUdp<Tachyon<Schema>>::connect_publisher(pinion::PublisherHandle publisher)
+jewels::expected<void, IoConnection::Error> IncomingUdp<Tachyon<Schema>>::connect_publisher(
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle publisher)
 {
-  return this->connect_publisher_impl(std::move(publisher));
+  return this->connect_publisher_impl(endpoint_id, std::move(publisher));
 }
 
 template <class Schema>
@@ -266,8 +271,8 @@ void IncomingUdpImpl<Tachyon<Schema>>::read_impl(int socket_fd)
 }
 
 template <class Schema>
-jewels::expected<void, IoConnection::Error>
-IncomingUdpImpl<Tachyon<Schema>>::connect_publisher_impl(pinion::PublisherHandle&& publisher)
+jewels::expected<void, IoConnection::Error> IncomingUdpImpl<Tachyon<Schema>>::connect_publisher_impl(
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle&& publisher)
 {
   if (publisher_)
   {
@@ -276,6 +281,10 @@ IncomingUdpImpl<Tachyon<Schema>>::connect_publisher_impl(pinion::PublisherHandle
   if (publisher.layout().message_size != sizeof(Msg))
   {
     return jewels::unexpected{IoConnection::Error::invalid_buffer_layout};
+  }
+  if (endpoint_id != publisher_id_)
+  {
+    return jewels::unexpected{IoConnection::Error::unexpected_endpoint_id};
   }
   publisher_.emplace(std::move(publisher));
 
@@ -348,11 +357,13 @@ jewels::expected<void, jewels::MonoError> IncomingUdpImpl<Tachyon<Schema>>::regi
 
 template <class Schema>
 IncomingUdpImpl<Tachyon<Schema>>::IncomingUdpImpl(
+  jewels::Uuid<common::EndpointClassId> publisher_id,
   std::pmr::vector<::iovec>&& io_vecs,
   std::pmr::vector<::mmsghdr>&& mmsg_hdrs,
   std::pmr::vector<::sockaddr_in>&& msg_names,
   jewels::networking::SocketEndpoint socket_endpoint)
-  : io_vecs_{std::move(io_vecs)},
+  : publisher_id_{publisher_id},
+    io_vecs_{std::move(io_vecs)},
     mmsg_hdrs_{std::move(mmsg_hdrs)},
     msg_names_{std::move(msg_names)},
     socket_endpoint_{std::move(socket_endpoint)}

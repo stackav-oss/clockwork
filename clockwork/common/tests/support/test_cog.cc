@@ -35,6 +35,11 @@ CogQueueStats NullCogQueue::stats() const
   return CogQueueStats{.size = 0};
 }
 
+bool NullCogQueue::is_offline() const
+{
+  return false;
+}
+
 TestCog::TestCog(jewels::memory::ObjectPtr<AbstractCogQueue> queue)
   : TestCog(queue, std::make_shared<std::shared_mutex>())
 {
@@ -113,7 +118,7 @@ jewels::expected<void, CogExecutionError> TestCog::execute(CogExecuteParams para
 
 void TestCog::push(TestMsg msg)
 {
-  const std::lock_guard lock(internals_mutex_);
+  const std::scoped_lock lock(internals_mutex_);
 
   msgs_.push(msg);
 }

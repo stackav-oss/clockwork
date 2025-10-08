@@ -82,7 +82,7 @@ std::vector<std::string> McapLogReader::get_channels()
     return {};
   }
   std::vector<std::string> channels;
-  for (const auto& [id, channel] : reader_->channels())
+  for (const auto& [_, channel] : reader_->channels())
   {
     channels.emplace_back(channel->topic);
   }
@@ -291,7 +291,7 @@ void McapLogReader::load_metadata()
     return;
   }
   std::vector<TopicMetadata> topics;
-  for (const auto& [id, channel] : reader_->channels())
+  for (const auto& [_, channel] : reader_->channels())
   {
     const auto maybe_message_encoding = wise_enum::from_string<MessageEncoding>(channel->messageEncoding);
     decltype(wise_enum::from_string<SchemaEncoding>(std::string{})) maybe_schema_encoding;
@@ -299,16 +299,17 @@ void McapLogReader::load_metadata()
     {
       maybe_schema_encoding = wise_enum::from_string<SchemaEncoding>(reader_->schema(channel->schemaId)->encoding);
     }
-    topics.emplace_back(TopicMetadata{
-      .name = channel->topic,
-      .type = (channel->schemaId == 0) ? "" : reader_->schema(channel->schemaId)->name,
-      .message_encoding = maybe_message_encoding ? *maybe_message_encoding : MessageEncoding::undefined,
-      .channel_type = ChannelType::regular,
-      .schema_encoding = maybe_schema_encoding ? *maybe_schema_encoding : SchemaEncoding::undefined,
-      .schema_definition = (channel->schemaId == 0) ? std::string{}
-                                                    : std::string{nolint_helper::byte_span_to_string_view(
-                                                        reader_->schema(channel->schemaId)->data)},
-    });
+    topics.emplace_back(
+      TopicMetadata{
+        .name = channel->topic,
+        .type = (channel->schemaId == 0) ? "" : reader_->schema(channel->schemaId)->name,
+        .message_encoding = maybe_message_encoding ? *maybe_message_encoding : MessageEncoding::undefined,
+        .channel_type = ChannelType::regular,
+        .schema_encoding = maybe_schema_encoding ? *maybe_schema_encoding : SchemaEncoding::undefined,
+        .schema_definition = (channel->schemaId == 0) ? std::string{}
+                                                      : std::string{nolint_helper::byte_span_to_string_view(
+                                                          reader_->schema(channel->schemaId)->data)},
+      });
   }
   std::ranges::sort(topics, [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
   for (const auto& metadata : topics)

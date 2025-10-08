@@ -7,7 +7,6 @@
 #include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/container/circular_buffer.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>

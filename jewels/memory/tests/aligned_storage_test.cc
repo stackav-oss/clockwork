@@ -38,7 +38,7 @@ TEST_CASE("Test policy construction")
 TEST_CASE("Test policy destruction")
 {
   static bool destructed{false};
-  struct Observable // NOLINT(cppcoreguidelines-special-member-functions)
+  struct Observable // NOLINT(cppcoreguidelines-special-member-functions) Test-only struct, member functions unneeded.
   {
     ~Observable()
     {
@@ -57,14 +57,16 @@ TEST_CASE("Test ptr/get")
 {
   STATIC_REQUIRE(
     std::is_same_v<decltype(ObjectPolicy<uint64_t>::ptr(std::declval<AlignedStorage<uint64_t>&>())), uint64_t*>);
-  STATIC_REQUIRE(std::is_same_v<
-                 decltype(ObjectPolicy<uint64_t>::ptr(std::declval<const AlignedStorage<uint64_t>&>())),
-                 const uint64_t*>);
+  STATIC_REQUIRE(
+    std::is_same_v<
+      decltype(ObjectPolicy<uint64_t>::ptr(std::declval<const AlignedStorage<uint64_t>&>())),
+      const uint64_t*>);
   STATIC_REQUIRE(
     std::is_same_v<decltype(ObjectPolicy<uint64_t>::get(std::declval<AlignedStorage<uint64_t>&>())), uint64_t&>);
-  STATIC_REQUIRE(std::is_same_v<
-                 decltype(ObjectPolicy<uint64_t>::get(std::declval<const AlignedStorage<uint64_t>&>())),
-                 const uint64_t&>);
+  STATIC_REQUIRE(
+    std::is_same_v<
+      decltype(ObjectPolicy<uint64_t>::get(std::declval<const AlignedStorage<uint64_t>&>())),
+      const uint64_t&>);
 
   AlignedStorage<uint64_t> storage{};
   ObjectPolicy<uint64_t>::construct(storage, 1234567890U);

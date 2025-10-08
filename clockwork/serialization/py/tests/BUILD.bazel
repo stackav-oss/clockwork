@@ -12,6 +12,26 @@ py_pytest_main(
 )
 
 py_test(
+    name = "common_test",
+    srcs = [
+        "common_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "//clockwork/serialization/py:common",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v1",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v2",
+        "//clockwork/serialization/py/tests/support:simple_schema_v1_clk_nb",
+        "//clockwork/serialization/py/tests/support:simple_schema_v2_clk_nb",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
     name = "compatibility_test",
     srcs = [
         "compatibility_test.py",
@@ -20,14 +40,33 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
-        "//clockwork/dsl/ir:clkbuiltins",
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/dsl/ir:module_id",
-        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl:compiler_context",
         "//clockwork/serialization/metadata:tachyon_model",
         "//clockwork/serialization/py:compatibility",
-        "//clockwork/serialization/py:tachyon_dyn",
+        "//clockwork/serialization/py:protocol",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v1",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v2",
+        "//clockwork/serialization/py/tests/support:simple_schema_v2_clk_nb",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "create_upgrader_test",
+    srcs = [
+        "create_upgrader_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "//clockwork/serialization/py:create_upgrader",
+        "//clockwork/serialization/py/tests/support:py_broken_schema_v1",
+        "//clockwork/serialization/py/tests/support:py_broken_schema_v2",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v1",
+        "//clockwork/serialization/py/tests/support:py_simple_schema_v2",
         "@clockwork_pip//pytest",
     ],
 )
@@ -42,9 +81,11 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
         "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/py:tachyon_dyn",
@@ -69,6 +110,7 @@ py_test(
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/serialization/py:tachyon_dyn",
         "@clockwork_pip//pytest",

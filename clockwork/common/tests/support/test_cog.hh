@@ -38,6 +38,7 @@ public:
   void push(CogEnvelope envelope) override;
   PopResult pop(std::chrono::nanoseconds timeout) override;
   [[nodiscard]] CogQueueStats stats() const override;
+  [[nodiscard]] bool is_offline() const override;
 };
 
 ///

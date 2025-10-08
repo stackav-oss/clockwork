@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/logging/log_writer_config.hh"
 #include "clockwork/logging/writers/channel_message_rates_config.hh"
 #include "clockwork/logging/writers/logger_config.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
 
 #include <memory>
 #include <string_view>
@@ -28,5 +30,12 @@ get_test_logger_config(std::string_view log_root_dir, std::string_view pinion_sh
 /// Generate a channel message rates configuration for unit tests
 /// @return Channel message rates  configuration
 [[nodiscard]] std::unique_ptr<clockwork::Tappy<ChannelMessageRatesConfig>> get_test_channel_message_rates_config();
+
+/// Generate a channel publisher configuration for unit tests
+/// @return Channel publisher configuration
+[[nodiscard]] std::unique_ptr<ChannelPublisherConfigTap> get_test_channel_publisher_config();
+
+[[nodiscard]] std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap>
+get_test_metrics_channel_metadata_config();
 
 } // namespace clockwork_logging::tests

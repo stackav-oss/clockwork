@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for 'bind_fixed_array.hh'.
 
@@ -42,7 +43,7 @@ def test_str_and_repr() -> None:
 
     # truncation
     long_containers = LongContainers()
-    long_containers.long_fixed_array = [2] * 100
+    long_containers.long_fixed_array.from_iter([2] * 100)
     assert str(long_containers.long_fixed_array) == "[2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, ...]"
     assert repr(long_containers.long_fixed_array) == "[" + ", ".join(["2"] * 100) + "]"
 
@@ -53,6 +54,13 @@ def test_iter() -> None:
     for k, val in enumerate(arr):
         assert val == 10 + k
     assert list(range(10, 20)) == list(arr)
+
+
+def test_from_iter() -> None:
+    """Test .from_iter()."""
+    arr = FixedArray_Int32_10()
+    arr.from_iter(range(10, 20))
+    assert list(arr) == list(range(10, 20))
 
 
 def test_getitem() -> None:
@@ -86,28 +94,26 @@ def test_init() -> None:
 
     # test with property assignment
     foo = Foo()
-    foo.prim_array = expected
+    foo.prim_array.from_iter(expected)
     assert foo.prim_array == expected
 
     foo = Foo()
-    foo.msg_array = [SubMessage(k) for k in expected]
-    assert foo.msg_array == [SubMessage(k) for k in expected]
+    foo.msg_array.from_iter([SubMessage(k) for k in expected])
+    assert list(foo.msg_array) == [SubMessage(k) for k in expected]
 
     # test with explicit iterator
     assert list(FixedArray_Int32_10(range(10))) == list(range(10))
 
     # test above capacity
-    with pytest.raises(ValueError, match=re.escape("Array of length 10 initialized from too-large iterator.")):
+    with pytest.raises(ValueError, match=re.escape("Array of length 10 set from too-large iterator.")):
         FixedArray_Int32_10([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
     # test error message when using an iterator
-    with pytest.raises(ValueError, match=re.escape("Array of length 10 initialized from too-large iterator.")):
+    with pytest.raises(ValueError, match=re.escape("Array of length 10 set from too-large iterator.")):
         FixedArray_Int32_10(range(11))
 
     # test error message when init from empty
-    with pytest.raises(
-        ValueError, match=re.escape("Array of length 10 initialized from iterator with too few elements (0).")
-    ):
+    with pytest.raises(ValueError, match=re.escape("Array of length 10 set from iterator with too few elements (0).")):
         FixedArray_Int32_10([])
 
 
@@ -177,7 +183,7 @@ __setitem__(): incompatible function arguments. The following argument types are
 Invoked with types: jewels.nanobind.clk_bindings.tests.support.bind_array_msg_clk_nb.FixedArray_Int32_10, slice, int"""),
     ):
         # this is an intentional incorrect type, so we have to type: ignore it
-        arr[1::2] = 42  # type: ignore[call-overload] # Intentionally incorrect for testing
+        arr[1::2] = 42  # pyright: ignore[reportArgumentType, reportCallIssue] # Intentionally incorrect for testing
 
     arr = FixedArray_Int32_10()
     with pytest.raises(
@@ -297,42 +303,33 @@ def test_nested_fixed_byte_array() -> None:
     assert isinstance(orig[0], bytes)
     assert isinstance(orig[1], bytes)
     assert orig == [b"\0\0\0", b"\0\0\0"]
-    obj.nested_fixed_byte_array = [b"abc", b"xyz"]
-    assert [b"abc", b"xyz"] == [b"abc", b"xyz"]
-    assert obj.nested_fixed_byte_array == [b"abc", b"xyz"]
+    obj.nested_fixed_byte_array.from_iter([b"abc", b"xyz"])
+    assert list(obj.nested_fixed_byte_array) == [b"abc", b"xyz"]
     # Arrays allow modification in place so we expect the original to change.
     assert obj.nested_fixed_byte_array == orig
 
     # Too small
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "fixed_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_fixed_byte_array = [b"ab", b"xyz"]
+        obj.nested_fixed_byte_array.from_iter([b"ab", b"xyz"])
 
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "fixed_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_fixed_byte_array = [b"abc", b"xy"]
+        obj.nested_fixed_byte_array.from_iter([b"abc", b"xy"])
 
     # Too large
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "fixed_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_fixed_byte_array = [b"abcd", b"xyz"]
+        obj.nested_fixed_byte_array.from_iter([b"abcd", b"xyz"])
 
     with pytest.raises(
-        TypeError,
-        match=re.escape(
-            "fixed_byte_array(): incompatible function arguments. The following argument types are supported:"
-        ),
+        RuntimeError,
+        match=re.escape("std::bad_cast"),
     ):
-        obj.nested_fixed_byte_array = [b"abc", b"wxyz"]
+        obj.nested_fixed_byte_array.from_iter([b"abc", b"wxyz"])

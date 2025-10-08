@@ -9,6 +9,7 @@
 #include "clockwork/logging/readers/log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 #include "jewels/std/expected.hh"
 
 #include <wise_enum.h>
@@ -60,6 +61,7 @@ public:
   /// @tparam T Message type
   /// @param[in] topic The topic to add the callback to.
   /// @param[in] callback The callback to invoke on new messages.
+  /// @param[in] error_behavior Error handling behavior (keep going or throw exception)
   /// @return Reference to this class.
   template <typename T>
   LogProcessor& add_tappy_callback(
@@ -72,6 +74,7 @@ public:
   /// @tparam T Message type
   /// @param[in] topic The topic to add the callback to.
   /// @param[in] callback The callback to invoke on new messages.
+  /// @param[in] error_behavior Error handling behavior (keep going or throw exception)
   /// @return Reference to this class.
   template <typename T>
   LogProcessor& add_tappy_callback(
@@ -134,11 +137,11 @@ public:
   /// @return the log end time or LogError on failure
   [[nodiscard]] LogExpected<LogTimestamp> end_time();
 
-protected:
   /// Log URI accessor
   /// @return The log URI string
   [[nodiscard]] std::string_view log_uri() const;
 
+protected:
   /// Reader accessor
   /// @return The log reader
   [[nodiscard]] LogReader& reader();
@@ -146,6 +149,21 @@ protected:
   /// Failed topic set accessor
   /// @return The failed topic set
   [[nodiscard]] std::unordered_set<std::string>& failed_topics();
+
+  /// Create a schema upgrader for a log topic
+  ///
+  /// If the the upgrader cannot be created and error_behavior is 'keep_going' then
+  /// the topic is added to failed_topics_.
+  ///
+  /// @tparam T Message type
+  /// @param[in] topic Log topic
+  /// @param[in] error_behavior Error handling behavior (keep going or throw exception)
+  /// @return Unique pointer to schema upgrader or nullptr on failure
+  /// @throws runtime_error on failure if error_behavior is 'throw_exception'
+  template <typename T>
+  std::unique_ptr<clockwork::serialization::TachyonUpgrader>
+  create_schema_upgrader(std::string_view topic, DeserializationErrorBehavior error_behavior)
+    requires clockwork::TappyType<T>;
 
 private:
   /// Log URI

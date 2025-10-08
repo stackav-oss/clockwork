@@ -11,6 +11,7 @@ cc_library(
         "au.inl",
     ],
     hdrs = ["au.hh"],
+    data = [":au_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//jewels/units:degrees",

@@ -22,7 +22,8 @@ namespace clockwork::pinion
 class IoConnection
 {
 public:
-  WISE_ENUM_CLASS_MEMBER((Error, uint8_t), unsupported, already_connected, invalid_buffer_layout, reserve_failure)
+  WISE_ENUM_CLASS_MEMBER(
+    (Error, uint8_t), unsupported, already_connected, invalid_buffer_layout, reserve_failure, unexpected_endpoint_id)
 
   IoConnection() = default;
 
@@ -37,11 +38,12 @@ public:
   /// Try to connect a subscriber.
   /// @param subscriber A subscriber handle.
   [[nodiscard]] virtual jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, Error>
-    connect_subscriber(pinion::SubscriberHandle /*subscriber*/);
+    connect_subscriber(jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/);
 
   /// Try to connect a publisher.
   /// @param publisher A publisher handle.
-  [[nodiscard]] virtual jewels::expected<void, Error> connect_publisher(pinion::PublisherHandle /*publisher*/);
+  [[nodiscard]] virtual jewels::expected<void, Error>
+    connect_publisher(jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::PublisherHandle /*publisher*/);
 
   /// Try to connect a diagnostics publisher.
   /// @param publisher A publisher handle.

@@ -15,6 +15,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <vector>

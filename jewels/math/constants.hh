@@ -3,20 +3,16 @@
 
 #pragma once
 
-#include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <type_traits>
 
 namespace jewels::math::constants
 {
 
-/// Mathematical constant @c pi
-template <class T, class = std::enable_if_t<std::is_floating_point_v<T>>>
-inline constexpr auto pi = static_cast<T>(M_PIl); // NOLINT(readability-identifier-length) pi is canonical.
-
 /// Mathematical constant @c tau
 template <class T, class = std::enable_if_t<std::is_floating_point_v<T>>>
-inline constexpr auto tau = static_cast<T>(2.0 * pi<long double>);
+inline constexpr auto tau = static_cast<T>(2.0 * std::numbers::pi_v<T>);
 
 /// Bytes per kilobyte (10^3)
 template <

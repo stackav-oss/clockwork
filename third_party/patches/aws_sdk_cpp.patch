@@ -1,11 +1,11 @@
 diff --git BUILD.bazel BUILD.bazel
 new file mode 100644
-index 0000000000..68fed37214
+index 00000000000..340d574ce0d
 --- /dev/null
 +++ BUILD.bazel
-@@ -0,0 +1,365 @@
-+load("@rules_cc//cc:defs.bzl", "cc_library")
+@@ -0,0 +1,377 @@
 +load("@bazel_skylib//rules:write_file.bzl", "write_file")
++load("@rules_cc//cc:defs.bzl", "cc_library")
 +
 +write_file(
 +    name = "aws-cpp-sdk-core-SDKConfig.h",
@@ -54,19 +54,25 @@ index 0000000000..68fed37214
 +            "crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/**",
 +        ],
 +    ) + select({
-+           "@platforms//cpu:aarch64": glob(["crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/**"]),
-+           "@platforms//cpu:x86_64": glob(["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/**/*.c"], exclude = ["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/msvc/*.c"])
-+       }),
++        "@platforms//cpu:aarch64": glob(["crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/**"]),
++        "@platforms//cpu:x86_64": glob(
++            ["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/**/*.c"],
++            exclude = ["crt/aws-crt-cpp/crt/aws-c-common/source/arch/intel/msvc/*.c"],
++        ),
++    }),
 +    hdrs = [":crt/aws-crt-cpp/crt/aws-c-common/include/aws/common/config.h"] + glob(
 +        ["crt/aws-crt-cpp/crt/aws-c-common/include/**"],
 +        allow_empty = False,
 +    ),
 +    includes = ["crt/aws-crt-cpp/crt/aws-c-common/include/"],
++    linkopts = [
++        "-pthread",
++        "-lpthread",
++    ],
 +    local_defines = [
 +        "CJSON_HIDE_SYMBOLS",
 +        "AWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR",
 +    ],
-+    linkopts = ["-pthread", "-lpthread"],
 +)
 +
 +cc_library(
@@ -143,7 +149,10 @@ index 0000000000..68fed37214
 +        allow_empty = False,
 +    ),
 +    includes = ["crt/aws-crt-cpp/crt/aws-c-io/include/"],
-+    local_defines = ["USE_S2N", "INTEL_NO_ITTNOTIFY_API"],
++    local_defines = [
++        "USE_S2N",
++        "INTEL_NO_ITTNOTIFY_API",
++    ],
 +    deps = [
 +        ":aws_c_cal",
 +        ":aws_c_common",
@@ -346,12 +355,15 @@ index 0000000000..68fed37214
 +        allow_empty = False,
 +    ),
 +    includes = ["src/aws-cpp-sdk-core/include/"],
-+    local_defines = ["ENABLE_OPENSSL_ENCRYPTION", "ENABLE_CURL_CLIENT"],
++    local_defines = [
++        "ENABLE_OPENSSL_ENCRYPTION",
++        "ENABLE_CURL_CLIENT",
++    ],
 +    deps = [
 +        ":aws_crt_cpp",
-+        "@zstd",
-+        "@curl//:curl",
++        "@curl",
 +        "@openssl//:ssl",
++        "@zstd",
 +    ],
 +)
 +
@@ -371,20 +383,18 @@ index 0000000000..68fed37214
 +)
 diff --git MODULE.bazel MODULE.bazel
 new file mode 100644
-index 0000000000..d49aee4f03
+index 00000000000..4aaf2339ef3
 --- /dev/null
 +++ MODULE.bazel
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,8 @@
 +module(name = "aws_sdk_cpp")
 +
-+bazel_dep(name = "openssl")
 +bazel_dep(name = "bazel_skylib")
++bazel_dep(name = "curl")
++bazel_dep(name = "openssl")
 +bazel_dep(name = "platforms")
 +bazel_dep(name = "rules_cc")
 +bazel_dep(name = "zstd")
-+bazel_dep(name = "curl")
-+
-+
 diff --git WORKSPACE WORKSPACE
 new file mode 100644
-index 0000000000..e69de29bb2
+index 00000000000..e69de29bb2d

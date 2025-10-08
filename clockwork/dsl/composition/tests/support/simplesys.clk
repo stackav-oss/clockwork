@@ -1,11 +1,22 @@
 use clockwork::dsl::tests::support::{hellocog, hellomsg};
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+use clockwork::diagnostics::report;
+
+// Common diagnostics bus
+channel DiagnosticsChannel
+{
+  name: "/diagnostics";
+  message_type: Tachyon<report::Report>;
+  max_num_messages: 200;
+  publishers: diagnostics;
+}
 
 // Channel for HelloMsg messages
 channel Chan1
 {
     message_type: Tachyon<hellomsg::HelloMsg>;
     max_num_messages: 10;
+    enforce_backwards_compatibility: true;
 }
 
 // Another channel for HelloMsg messages
@@ -13,6 +24,7 @@ channel Chan2
 {
     message_type: Tachyon<hellomsg::HelloMsg>;
     max_num_messages: 101;
+    enforce_backwards_compatibility: false;
 }
 
 // A multi-publisher channel for HelloMsg messages
@@ -57,6 +69,7 @@ box Box1
     connect cog1.out_world to Chan1;
     connect cog1.out_multi1 to MultiChan1;
     connect cog1.out_multi2 to MultiChan1;
+    connect cog1.diagnostics to DiagnosticsChannel;
     connect Chan2 to cog1.history_of_hellos;
     connect MultiChan2 to cog1.multi_publisher_hello;
 }
@@ -67,6 +80,7 @@ box Box2
     connect cog2.out_world to Chan2;
     connect cog2.out_multi1 to MultiChan2;
     connect cog2.out_multi2 to MultiChan2;
+    connect cog2.diagnostics to DiagnosticsChannel;
     connect Chan1 to cog2.history_of_hellos;
     connect MultiChan1 to cog2.multi_publisher_hello;
 }

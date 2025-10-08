@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "jewels/container/circular_buffer_state_clk_cc.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/meta/call.hh"
@@ -10,19 +11,25 @@
 #include "jewels/std/expected.hh"
 
 #include <boost/iterator/iterator_facade.hpp>
+#include <wise_enum.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
 #include <span>
-#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace jewels::container
 {
+
+/// Error code when constructing a new circular buffer.
+WISE_ENUM_CLASS((CircularBufferConstructError, uint8_t), empty_storage, invalid_state_offset, invalid_state_size);
+
+/// Error code when emplacing an element.
+WISE_ENUM_CLASS((CircularBufferEmplaceError, uint8_t), buffer_full);
 
 /// A class used to represent the position of a circular buffer iterator.
 /// @note This class does not hold the size of the container so it is
@@ -228,20 +235,28 @@ public:
   /// @param n The number of objects to hold.
   /// @param resource The resource to allocate space from.
   /// @return A valid CircularBuffer if construction was successful.
-  [[nodiscard]] static jewels::expected<CircularBuffer, std::string_view>
+  [[nodiscard]] static jewels::expected<CircularBuffer, CircularBufferConstructError>
   try_make(size_t n, jewels::memory::MemoryResource resource);
 
   /// Create a circular buffer given a preallocated storage.
   /// @pre storage is not empty.
   /// @param storage The existing storage.
   /// @return A valid CircularBuffer if construction was successful.
-  [[nodiscard]] static jewels::expected<CircularBuffer, std::string_view> try_make(Container&& storage);
+  [[nodiscard]] static jewels::expected<CircularBuffer, CircularBufferConstructError> try_make(Container&& storage);
+
+  /// Create a circular buffer given a preallocated storage and a specified state to resume from.
+  /// @pre storage is not empty and state is valid given the container size.
+  /// @param storage The existing storage.
+  /// @param state The state to resume from.
+  /// @return A valid CircularBuffer if construction was successful.
+  [[nodiscard]] static jewels::expected<CircularBuffer, CircularBufferConstructError>
+  try_make(Container&& storage, TappyCircularBufferState state);
 
   /// Try to emplace an element at the back of the container.  Will fail if full.
   /// @param args A pack of args used to construct the new element.
   /// @return An iterator to the newly emplaced element if successful.
   template <class... Args>
-  jewels::expected<iterator, std::string_view> emplace_back(Args&&... args);
+  jewels::expected<iterator, CircularBufferEmplaceError> emplace_back(Args&&... args);
 
   /// If full, pop an element from the front and emplace an element at the back.
   /// @param args A pack of args used to construct the new element.
@@ -253,7 +268,7 @@ public:
   /// @param args A pack of args used to construct the new element.
   /// @return An iteratorto the newly emplaced element if successful.
   template <class... Args>
-  jewels::expected<iterator, std::string_view> emplace_front(Args&&... args);
+  jewels::expected<iterator, CircularBufferEmplaceError> emplace_front(Args&&... args);
 
   /// If full, pop an element from the back and emplace an element at the front.
   /// @param args A pack of args used to construct the new element.
@@ -307,12 +322,16 @@ public:
   /// Check if the container is full.
   [[nodiscard]] bool full() const;
 
+  /// Get the state of the circular buffer positions.
+  /// This can be used to save and resume when using an external storage.
+  [[nodiscard]] TappyCircularBufferState state() const;
+
   /// Destruct any elements in the container.
   ~CircularBuffer();
 
 private:
   /// Construct a buffer. Meant to be called only by the static try_make functions.
-  explicit CircularBuffer(Container&& storage);
+  explicit CircularBuffer(Container&& storage, TappyCircularBufferState state);
 
   /// Helper function to emplace an element in the back of the container.
   /// @pre Assumes the container is not full.

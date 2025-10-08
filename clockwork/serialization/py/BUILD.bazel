@@ -6,15 +6,40 @@ load("//tools/rules:python.bzl", "py_library")
 package(default_visibility = ["//visibility:public"])
 
 py_library(
+    name = "common",
+    srcs = ["common.py"],
+    deps = ["//clockwork/serialization/metadata:tachyon_model"],
+)
+
+py_library(
     name = "compatibility",
     srcs = ["compatibility.py"],
     deps = [
+        ":common",
         ":protocol",
         ":tachyon_dyn",
         ":tachyon_dyn_from_metadata",
         "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:schema",
+        "//clockwork/serialization/cpp:nb_tachyon_upgrader",
+        "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/metadata:tachyon_model",
+    ],
+)
+
+py_library(
+    name = "create_upgrader",
+    srcs = ["create_upgrader.py"],
+    deps = [
+        ":common",
+        ":protocol",
+        ":tachyon_dyn",
+        ":tachyon_dyn_from_metadata",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/serialization/metadata:tachyon",
     ],
 )
 
@@ -45,6 +70,7 @@ py_library(
         "//clockwork/dsl/serialization:tachyon_reg",
         "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/metadata:tachyon_model",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -59,5 +85,6 @@ py_library(
         "//clockwork/dsl/serialization:tachyon_reg",
         "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/metadata:tachyon_model",
+        "@clockwork_pip//typing_extensions",
     ],
 )

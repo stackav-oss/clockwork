@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for schema upgrade functionality."""
 
@@ -666,7 +667,7 @@ def test_basic_schema_upgrade() -> None:
     serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
 
     # Create an instance of v1
-    TestSchemaV1 = serdes_v1.py_class  # noqa: N806
+    TestSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = TestSchemaV1(
         integer_field=42,
         string_field="test string",
@@ -718,7 +719,7 @@ def test_container_type_conversions() -> None:
     serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
 
     # Create an instance of v1
-    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806
+    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = ContainerSchemaV1(
         optional_field=42,  # Will be converted to INT64
         array_field=[98, 121, 116, 101, 115],  # Will be converted to string "bytes"
@@ -769,7 +770,7 @@ def test_array_to_optional_edge_cases() -> None:
     serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
 
     # Test case 1: Empty array -> None
-    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806
+    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     empty_array_instance = ContainerSchemaV1(
         optional_field=None,
         array_field=[],
@@ -814,7 +815,7 @@ def test_optional_to_array_edge_cases() -> None:
     serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
 
     # Test: None -> Empty array
-    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806
+    ContainerSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     none_optional_instance = ContainerSchemaV1(
         optional_field=None,
         array_field=[],
@@ -857,8 +858,8 @@ def test_nested_schema_upgrade() -> None:
     )
 
     # Create test instances
-    TestSchemaV1 = serdes_test_v1.py_class  # noqa: N806
-    OuterSchemaV1 = serdes_outer_v1.py_class  # noqa: N806
+    TestSchemaV1 = serdes_test_v1.py_class  # noqa: N806 it's a type and should be camel case
+    OuterSchemaV1 = serdes_outer_v1.py_class  # noqa: N806 it's a type and should be camel case
 
     inner_instance = TestSchemaV1(
         integer_field=42,
@@ -931,7 +932,7 @@ def test_enum_schema_upgrade() -> None:
     enum_class = serdes_enum_v1.field_serdeses[1][2].type_
 
     # Create an instance of v1
-    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806
+    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = EnumSchemaV1(
         integer_field=42,
         enum_field=enum_class.VALUE1,
@@ -972,7 +973,7 @@ def test_no_changes_needed() -> None:
     serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
 
     # Create an instance of v1
-    TestSchemaV1 = serdes_v1.py_class  # noqa: N806
+    TestSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = TestSchemaV1(
         integer_field=42,
         string_field="test string",
@@ -985,7 +986,7 @@ def test_no_changes_needed() -> None:
     assert instance_same is instance_v1  # Should be the same instance (no upgrade needed)
 
 
-def test_complex_schema_upgrade() -> None:  # noqa: PLR0915
+def test_complex_schema_upgrade() -> None:  # noqa: PLR0915 For testing only
     """Test complex schema upgrades with multiple transformations."""
     # Compile schemas
     module_v1 = compile_complex_schema_v1(fs_importer())
@@ -1010,13 +1011,13 @@ def test_complex_schema_upgrade() -> None:  # noqa: PLR0915
     serdes_v3: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v3.context, schema_v3)
 
     # Create instances of BasicSchema v1
-    BasicSchemaV1 = serdes_basic_v1.py_class  # noqa: N806
+    BasicSchemaV1 = serdes_basic_v1.py_class  # noqa: N806 it's a type and should be camel case
     basic1 = BasicSchemaV1(value=10, name="Basic1")
     basic2 = BasicSchemaV1(value=20, name="Basic2")
     basic3 = BasicSchemaV1(value=30, name="Basic3")
 
     # Create an instance of ComplexSchema v1
-    ComplexSchemaV1 = serdes_v1.py_class  # noqa: N806
+    ComplexSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = ComplexSchemaV1(
         int_array=[1, 2, 3],  # Element type will change
         opt_float=3.14,  # Container and element type will change
@@ -1215,8 +1216,8 @@ def test_schema_to_container_upgrade() -> None:
     serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
 
     # Create instances
-    NestedSchemaV1 = nested_serdes_v1.py_class  # noqa: N806
-    SchemaToContainerSchemaV1 = serdes_v1.py_class  # noqa: N806
+    NestedSchemaV1 = nested_serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
+    SchemaToContainerSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
 
     nested_instance = NestedSchemaV1(value=42)
     instance_v1 = SchemaToContainerSchemaV1(nested=nested_instance)
@@ -1231,7 +1232,7 @@ def test_schema_to_container_upgrade() -> None:
     assert instance_v2.nested_array[0].name == ""  # Default value for new field
 
 
-def test_static_parent_with_upgraded_child() -> None:  # noqa: PLR0915
+def test_static_parent_with_upgraded_child() -> None:  # noqa: PLR0915 For testing only
     """Test upgrading when a parent schema doesn't change but a child schema does."""
     # Create schema sources for version 1
     schema_v1_source = """
@@ -1392,8 +1393,8 @@ def test_static_parent_with_upgraded_child() -> None:  # noqa: PLR0915
 
     # Test case 1: Direct field of child schema
     # Create instances for v1
-    SubSchemaV1 = serdes_sub_v1.py_class  # noqa: N806
-    ParentSchemaV1 = serdes_parent_v1.py_class  # noqa: N806
+    SubSchemaV1 = serdes_sub_v1.py_class  # noqa: N806 it's a type and should be camel case
+    ParentSchemaV1 = serdes_parent_v1.py_class  # noqa: N806 it's a type and should be camel case
 
     sub_instance = SubSchemaV1(value=42, name="test child")
     parent_instance = ParentSchemaV1(parent_field=100, child=sub_instance)
@@ -1411,7 +1412,7 @@ def test_static_parent_with_upgraded_child() -> None:  # noqa: PLR0915
 
     # Test case 2: Container of child schema
     # Create instances for v1
-    ContainerParentSchemaV1 = serdes_container_parent_v1.py_class  # noqa: N806
+    ContainerParentSchemaV1 = serdes_container_parent_v1.py_class  # noqa: N806 it's a type and should be camel case
 
     sub_instance1 = SubSchemaV1(value=10, name="child 1")
     sub_instance2 = SubSchemaV1(value=20, name="child 2")
@@ -1766,7 +1767,7 @@ def test_enum_upgrade() -> None:
     explicit_enum_class = explicit_enum_serdes_v1.type_
 
     # Create an instance of v1
-    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806
+    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = EnumSchemaV1(
         integer_field=42,
         enum_field=test_enum_class.to_be_renamed,
@@ -1849,7 +1850,7 @@ def test_removed_enum_value() -> None:
     explicit_enum_class = explicit_enum_serdes_v1.type_
 
     # Create an instance of v1 with a to-be-removed enum value
-    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806
+    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806 it's a type and should be camel case
     instance_v1 = EnumSchemaV1(
         integer_field=42,
         enum_field=test_enum_class.to_be_removed,  # This value was removed in v2
@@ -1890,7 +1891,7 @@ def test_container_of_enums_upgrade() -> None:
     test_enum_class = test_enum_serdes_v1.type_
 
     # Create an instance with all enum values in the array
-    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806
+    EnumSchemaV1 = serdes_enum_v1.py_class  # noqa: N806 it's a type and should be camel case
     explicit_enum_v1 = module_enum_v1.inner_scope.lookup("ExplicitEnum")
     assert isinstance(explicit_enum_v1, clkenum.ClkEnum)
     instance_v1 = EnumSchemaV1(
@@ -1963,7 +1964,7 @@ def test_multi_step_enum_value_evolution() -> None:
     explicit_enum_class_v3 = explicit_enum_serdes_v3.type_
 
     # Create an instance focusing on multi-step values
-    EnumSchemaV1 = serdes_enum_v1.type_  # noqa: N806
+    EnumSchemaV1 = serdes_enum_v1.type_  # noqa: N806 it's a type and should be camel case
     instance_v1 = EnumSchemaV1(
         integer_field=42,
         enum_field=test_enum_class_v1.multi_step1,  # Will become multi_step_final
@@ -2064,7 +2065,7 @@ def test_unmodified_synctime_field() -> None:
     serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
 
     # Create an instance of v1
-    SyncTimeSchemaV1 = serdes_v1.py_class  # noqa: N806
+    SyncTimeSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
     time_value = 12345678  # Example SyncTime value
     instance_v1 = SyncTimeSchemaV1(
         integer_field=42,
@@ -2247,8 +2248,8 @@ def test_child_parameter_change() -> None:
     serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
 
     # Create an instance of v1
-    ParentV1 = serdes_v1.py_class  # noqa: N806
-    ContainerV1 = serdes_v1.field_serdeses[0][2].type_  # noqa: N806
+    ParentV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
+    ContainerV1 = serdes_v1.field_serdeses[0][2].type_  # noqa: N806 it's a type and should be camel case
 
     # Create a container with data
     container_instance = ContainerV1(integers=[1, 2, 3])

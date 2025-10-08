@@ -15,6 +15,7 @@ from clockwork.dsl.ir import clkbuiltins, expr, extern_type, node, primitive, st
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.module_id import CLK_REPO
 from clockwork.dsl.serialization import tachyon_reg
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -116,7 +117,7 @@ class CppExternType(node.CstNode[cst.CppExternType]):
         # can't/shouldn't try to determine type beforehand, or during any class instantiation.  Therefore,
         # we ended up with this compromise where the type-related functions are encapsulated into their
         # own handler (as oppose a design where there is a complete subclass for each type)
-        assert self.cst_node  # noqa: S101 (for mypy)
+        assert self.cst_node
         extern_t = self.extern_type_expr.evaluate()
         if isinstance(extern_t, strongtypes.StrongType):
             self.subclass_handler = StrongTypeHandler.make(extern_t, self.cst_node, self.module)
@@ -204,6 +205,8 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
             f"@{CLK_REPO}::cpp_extern_test",
             f"@{CLK_REPO}::clockwork::dsl::cog::ten_nanosecond",
             f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg",
+            f"@{CLK_REPO}::clockwork::serialization::cpp::tests::support::test_schema_v1",
+            f"@{CLK_REPO}::clockwork::serialization::cpp::tests::support::test_schema_v2",
         ]
         if module.module_id.get_fqn() not in allowlist:
             msg = f"Use of cpp_extern is restricted and not allowed in module {module.module_id.get_fqn()} (repo:{module.module_id.repo}, name:{module.module_id.name})."
@@ -219,11 +222,12 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
             factory=factory,
         )
 
+    @override
     def register(
         self,
-        compiler_context: CompilerContext,  # noqa: ARG002 (Unused but required by parent method signature)
+        compiler_context: CompilerContext,
         target_header: context.Header,
-        type_header: context.Header,  # noqa: ARG002 (Unused but required by parent method signature)
+        type_header: context.Header,
         namespace: str,
     ) -> None:
         """Register the externed type."""
@@ -235,7 +239,7 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
             overwrite=True,
         )
 
-        assert isinstance(self.strong_type.typespec, clkbuiltins.PrimitiveType)  # noqa: S101 (for mypy)
+        assert isinstance(self.strong_type.typespec, clkbuiltins.PrimitiveType)
         if self.factory:
             literal.register_factory_fn(
                 self.strong_type,
@@ -243,6 +247,7 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
                 types.CppFn(headers=[target_header], namespace=namespace, name=self.factory),
             )
 
+    @override
     def render(self, compiler_context: CompilerContext, enclosing_namespace: str) -> context.CppModuleChunks:
         """Register the externed type to cpp."""
         if not isinstance(self.strong_type, strongtypes.StrongType):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
@@ -298,6 +303,7 @@ class CppExternHandler(ExternTypeSubclassHandler):
 
         return CppExternHandler(extern_typ=extern_typ)
 
+    @override
     def register(
         self,
         compiler_context: CompilerContext,

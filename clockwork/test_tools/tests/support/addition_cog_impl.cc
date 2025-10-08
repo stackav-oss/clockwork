@@ -9,8 +9,6 @@
 #include "clockwork/test_tools/tests/support/sum_message.hh"
 #include "jewels/container/circular_buffer.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include <ranges>
 
 namespace clockwork::system_runner

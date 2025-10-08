@@ -6,17 +6,21 @@
 ---
 manifest:
   modules_mapping:
+    _hypothesis_ftz_detector: hypothesis
+    _hypothesis_globals: hypothesis
+    _hypothesis_pytestplugin: hypothesis
     _pytest: pytest
     annotated_types: annotated_types
+    attr: attrs
+    attrs: attrs
     certifi: certifi
     charset_normalizer: charset_normalizer
     click: click
     exceptiongroup: exceptiongroup
-    git: GitPython
-    gitdb: gitdb
     google._upb._message: protobuf
     google.protobuf: protobuf
     humanize: humanize
+    hypothesis: hypothesis
     idna: idna
     iniconfig: iniconfig
     lz4: lz4
@@ -34,11 +38,12 @@ manifest:
     requests: requests
     rich: rich
     runfiles: bazel_runfiles
-    smmap: smmap
+    sortedcontainers: sortedcontainers
     tomli: tomli
     typing_extensions: typing_extensions
     typing_inspection: typing_inspection
     urllib3: urllib3
+    uv: uv
     zstandard: zstandard
   pip_repository:
     name: clockwork_pip

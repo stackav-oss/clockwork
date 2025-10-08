@@ -16,9 +16,11 @@
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/schema_encoding.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -36,7 +38,6 @@
 #include <cstddef>
 #include <fcntl.h>
 #include <filesystem>
-#include <list>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -95,23 +96,25 @@ TEST_CASE("Log to memory")
   std::array<std::byte, log_buffer_size> log_buffer{};
   REQUIRE(writer.open_log(log_buffer));
 
-  REQUIRE(writer.add_channel(LoggedChannelMetadata{
-    channel_name1,
-    compression_type1,
-    message_encoding1,
-    channel_type1,
-    schema_name1,
-    schema_encoding1,
-    schema_definition1}));
+  REQUIRE(writer.add_channel(
+    LoggedChannelMetadata{
+      channel_name1,
+      compression_type1,
+      message_encoding1,
+      channel_type1,
+      schema_name1,
+      schema_encoding1,
+      schema_definition1}));
 
-  REQUIRE(writer.add_channel(LoggedChannelMetadata{
-    channel_name2,
-    compression_type2,
-    message_encoding2,
-    channel_type2,
-    schema_name1,
-    schema_encoding1,
-    schema_definition1}));
+  REQUIRE(writer.add_channel(
+    LoggedChannelMetadata{
+      channel_name2,
+      compression_type2,
+      message_encoding2,
+      channel_type2,
+      schema_name1,
+      schema_encoding1,
+      schema_definition1}));
 
   constexpr auto message_interval = std::chrono::milliseconds(10);
 
@@ -834,14 +837,15 @@ TEST_CASE("Log to memory")
     MemoryWriter writer2{memory_resource};
     REQUIRE(writer2.open_log(log_buffer2));
     REQUIRE(
-      writer2.add_channel(LoggedChannelMetadata{
-        channel_name1,
-        compression_type1,
-        message_encoding1,
-        channel_type1,
-        schema_name1,
-        schema_encoding1,
-        schema_definition1}) == jewels::unexpected(LogError::buffer_full));
+      writer2.add_channel(
+        LoggedChannelMetadata{
+          channel_name1,
+          compression_type1,
+          message_encoding1,
+          channel_type1,
+          schema_name1,
+          schema_encoding1,
+          schema_definition1}) == jewels::unexpected(LogError::buffer_full));
   }
 
   SECTION("log buffer too small for message")
@@ -849,14 +853,15 @@ TEST_CASE("Log to memory")
     std::array<std::byte, message_buffer_size> log_buffer2{};
     MemoryWriter writer2{memory_resource};
     REQUIRE(writer2.open_log(log_buffer2));
-    REQUIRE(writer2.add_channel(LoggedChannelMetadata{
-      channel_name1,
-      compression_type1,
-      message_encoding1,
-      channel_type1,
-      schema_name1,
-      schema_encoding1,
-      schema_definition1}));
+    REQUIRE(writer2.add_channel(
+      LoggedChannelMetadata{
+        channel_name1,
+        compression_type1,
+        message_encoding1,
+        channel_type1,
+        schema_name1,
+        schema_encoding1,
+        schema_definition1}));
     REQUIRE(
       writer2.log_message(
         Message{

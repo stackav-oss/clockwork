@@ -5,12 +5,12 @@
 
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/detail/mmap_region.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/file_descriptor.hh"
+#include "jewels/filesystem/mmap_region.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory_resource>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -47,9 +46,9 @@ public:
   /// @param memres resource used for allocations, only used during construction
   /// @param shm_dir directory to open the shared memory file in
   /// @param socket_ns prefix to apply to the name to create the socket address to connect to
-  /// @param name name of the channel, used as the filename (in shm_dir)
-  /// @param num_slots number of slots to size the buffer for (see BufferLayout)
-  /// @param message_size size of the messages in the channel (see BufferLayout)
+  /// @param filename UUID string name of the channel, used as the filename (in shm_dir)
+  /// @param channel_name Human readable channel name
+  /// @param buffer_layout Pinion buffer layout
   /// @param max_observers maximum number of observers to notify of socket events
   /// @param subscriber_role Indicates whether the subscriber is a normal subscriber or a spy
   /// @param resume_behavior determines whether/how a channel can be reconnected
@@ -57,7 +56,8 @@ public:
     jewels::memory::MemoryResource memres,
     const jewels::filesystem::Directory& shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view filename,
+    std::string_view channel_name,
     const BufferLayout& layout,
     size_t max_observers,
     SubscriberRole subscriber_role,
@@ -111,19 +111,14 @@ private:
   explicit ShmSubscriber(
     jewels::memory::MemoryResource memres,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view filename,
+    std::string_view channel_name,
     SubscriberRole subscriber_role,
     ResumeBehavior resume_behavior,
     BufferPtr buffer,
-    MMapRegion map,
+    jewels::filesystem::MMapRegion map,
     UnixSocket socket,
     size_t max_observers);
-
-  /// Socket namespace
-  std::pmr::string socket_ns_;
-
-  /// Channel name
-  std::pmr::string name_;
 
   /// Subscriber role
   SubscriberRole subscriber_role_;

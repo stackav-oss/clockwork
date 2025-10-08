@@ -35,11 +35,12 @@ void IndexChunkWriter::add_channel_index(uint16_t channel_id, std::span<const In
   {
     std::memcpy(&data_.at(chunk_offset), channel_index.data(), index_size_bytes);
   }
-  add_channel_entry(IndexChunkChannelEntry{
-    .channel_id = channel_id,
-    .channel_index_offset = static_cast<uint32_t>(chunk_offset),
-    .channel_index_size = static_cast<uint32_t>(channel_index.size()),
-  });
+  add_channel_entry(
+    IndexChunkChannelEntry{
+      .channel_id = channel_id,
+      .channel_index_offset = static_cast<uint32_t>(chunk_offset),
+      .channel_index_size = static_cast<uint32_t>(channel_index.size()),
+    });
 }
 
 [[nodiscard]] LogExpected<ChunkLocation>

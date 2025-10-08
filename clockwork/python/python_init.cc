@@ -5,41 +5,31 @@
 
 #include <Python.h>
 
-#include <atomic>
-#include <chrono>
-#include <thread>
+#include <stdexcept>
 
 namespace clockwork::python
 {
 
-void python_init_once()
+void python_init(InitializationMode mode)
 {
-  // Python expects the thread that calls Py_Initialize to run for the
-  // life of the interpreter.
-  [[maybe_unused]] static const auto py_initialized = []()
+  if (Py_IsInitialized() != 0)
   {
-    static std::atomic<bool> initialized_flag{false};
-    auto init_thread = std::thread{[]()
-                                   {
-                                     Py_InitializeEx(0);
-                                     const auto* thread_state = PyEval_SaveThread();
-                                     initialized_flag = true;
-                                     while (true)
-                                     {
-                                       std::this_thread::sleep_for(std::chrono::hours(1));
-                                     }
-                                     // We can't restore the thread from the exit handler.
-                                     (void)thread_state;
-                                   }};
-    // Detach the thread so we don't get terminated in the exit handler.
-    init_thread.detach();
-    // Wait for python to initialize, it won't be long.
-    while (!initialized_flag)
+    if (mode != InitializationMode::unit_test)
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      throw std::runtime_error("The python interpreter is already initialized.");
     }
-    return true;
-  }();
+    return;
+  }
+  Py_InitializeEx(0);
+  PyEval_SaveThread();
+}
+
+void throw_if_not_initialized()
+{
+  if (Py_IsInitialized() == 0)
+  {
+    throw std::runtime_error("The python interpreter has not been initialized.");
+  }
 }
 
 } // namespace clockwork::python

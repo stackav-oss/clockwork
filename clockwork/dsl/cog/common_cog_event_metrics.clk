@@ -1,4 +1,3 @@
-
 use clockwork::dsl::cog::ten_nanosecond::TenNanoseconds;
 
 // Common event metrics schema for tracking cog execution performance
@@ -49,9 +48,9 @@ cpp_target cog_event_metrics_cpp
   schema CogEventMetrics;
   schema InputChannelEventMetrics;
 
-  representation Tachyon<CogEventMetrics>;
-  representation Tachyon<InputChannelEventMetrics>;
+  representation cog_event_metrics_tach: Tachyon<CogEventMetrics>;
+  representation input_event_metrics_rep: Tachyon<InputChannelEventMetrics>;
 
-  interface Tappy<CogEventMetrics>;
+  interface cog_event_metrics_tappy: Tappy<CogEventMetrics>;
   interface Tappy<InputChannelEventMetrics>;
 }

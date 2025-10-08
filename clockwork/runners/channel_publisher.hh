@@ -3,7 +3,7 @@
 
 #pragma once
 #include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/runners/deterministic_runner.hh"
 #include "jewels/container/compare.hh"
@@ -54,7 +54,7 @@ struct MessageInfoView
 
 /// Struct representing the data+metadata to be published on the channel
 /// Message data is copied
-struct MultiMessageInfoData
+struct MultiMessageInfoData // NOLINT(clang-analyzer-core.uninitialized.Assign) TODO(OI-3663)
 {
   /// Sequence Number
   uint32_t sequence_number{};
@@ -109,14 +109,13 @@ public:
   ///
   /// Constructor.
   /// @param memory_resource Memory resource to be used.
-  /// @param log_publisher_config The log publisher config. This is a LogWriterConfigTap because the format is identical
-  /// to what is needed for the log publisher.
+  /// @param channel_publisher_config The log publisher config.
   /// @param message_fetcher The message fetcher. Used to obtain the data to publish to the relevant channels.
   /// @param channels Map of Endpoint UUIDs to channel publishers. Does not need to be restricted to only contain
   /// channels that the log publisher is publishing to.
   ChannelPublisher(
     jewels::memory::MemoryResource memory_resource,
-    jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_publisher_config,
+    jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config,
     const jewels::memory::NonNullSharedPtr<MessageFetcher>& message_fetcher,
     ShmPublisherMap channels,
     bool suppress_schema_mismatch_errors);
@@ -163,7 +162,7 @@ private:
   /// The message fetcher used to obtain the next message.
   jewels::memory::NonNullSharedPtr<MessageFetcher> message_fetcher_;
 
-  jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_publisher_config_;
+  jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config_;
   /// Potentially the next message to be published. This will be a nullopt if there are no remaining log messages to
   /// publish.
   std::optional<MultiMessageInfoData> next_message_;

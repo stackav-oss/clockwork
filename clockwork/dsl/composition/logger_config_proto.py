@@ -79,6 +79,7 @@ class LogTypeEnum(Protocol):
     none: LogType
     event: LogType
     telemetry: LogType
+    redundant_telemetry: LogType
 
 
 @dataclass(kw_only=True)

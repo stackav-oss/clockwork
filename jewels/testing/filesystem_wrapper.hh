@@ -14,10 +14,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
+#include <iterator> // IWYU pragma: keep
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace jewels::filesystem::testing
@@ -182,7 +184,14 @@ public:
   /// Creates a new temporary directory in the filesystem, creating parent directories as needed
   /// @return expected containing the path if the temporary directory was created; on failure returns an error code
   /// indicating the reason for failure
-  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> create_temporary_directory();
+  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode>
+  create_temporary_directory(std::optional<filesystem::Path> parent_path = std::nullopt);
+
+  /// Creates a new temporary directory in the filesystem, creating parent directories as needed
+  /// @return expected containing the path if the temporary directory was created; on failure returns an error code
+  /// indicating the reason for failure
+  [[nodiscard]] jewels::expected<std::pair<filesystem::Path, filesystem::FileDescriptor>, ErrorCode>
+  create_temporary_file(std::optional<filesystem::Path> parent_path = std::nullopt);
 
   /// Copy a file
   /// @param[in] old_path Old file path
@@ -309,6 +318,11 @@ public:
   /// @param[in] skip_count Number of calls to skip before injecting the error
   void inject_create_temporary_directory_error(int32_t error_code, size_t skip_count = 0U);
 
+  /// Inject an error in a future call to create_temporary_file
+  /// @param[in] error_code Error code to inject
+  /// @param[in] skip_count Number of calls to skip before injecting the error
+  void inject_create_temporary_file_error(int32_t error_code, size_t skip_count = 0U);
+
   /// Inject an error in a future call to open
   /// @param[in] error_code Error code to inject
   /// @param[in] skip_count Number of calls to skip before injecting the error
@@ -390,6 +404,9 @@ private:
 
   /// Error injection state for copy_file
   std::optional<InjectedErrorState> maybe_inject_create_temporary_directory_error_state_;
+
+  /// Error injection state for copy_file
+  std::optional<InjectedErrorState> maybe_inject_create_temporary_file_error_state_;
 
   /// Error injection state for copy_file
   std::optional<InjectedErrorState> maybe_inject_copy_file_error_state_;

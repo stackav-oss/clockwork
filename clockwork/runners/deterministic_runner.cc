@@ -4,7 +4,6 @@
 #include "clockwork/runners/deterministic_runner.hh"
 
 #include "clockwork/common/cog_envelope.hh"
-#include "jewels/memory/pointers.hh"
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
 

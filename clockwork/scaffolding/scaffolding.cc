@@ -17,6 +17,7 @@
 #include "clockwork/scaffolding/memory.hh"
 #include "clockwork/scaffolding/state.hh"
 #include "clockwork/scaffolding/timer.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -133,6 +134,14 @@ int run(
 
   auto timer_observers = connect_timers(desc.get_timers(), memres, *timers, casing);
   if (!timer_observers)
+  {
+    return EXIT_FAILURE;
+  }
+
+  auto non_connected_channels =
+    setup_non_connected_channels(desc.get_not_connected_endpoints(), casing, memres_scratch, channel_factory);
+
+  if (!non_connected_channels)
   {
     return EXIT_FAILURE;
   }

@@ -32,6 +32,8 @@ from clockwork.dsl.ir.python_cog_dial import PythonCogDial
 from clockwork.dsl.ir.representation import ReprInstantiation
 from clockwork.dsl.ir.statement import ImmutableBinding
 from clockwork.dsl.python import py_context
+from clockwork.dsl.python import typereg as py_typereg
+from clockwork.dsl.serialization import pytap
 
 SUPPORTED_TYPES: Final[list[node.NamedEntity]] = [
     clkbuiltins.BOOL,
@@ -50,6 +52,8 @@ SUPPORTED_TYPES: Final[list[node.NamedEntity]] = [
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from clockwork.dsl.compiler_context import CompilerContext
 
 
 def _render_py_constant(binding: ImmutableBinding) -> str:
@@ -71,6 +75,30 @@ def _render_py_constant(binding: ImmutableBinding) -> str:
 
 
 @dataclass
+class PyImportLookup:
+    """Lookup the pytype for those defined statically in a .clk file."""
+
+    current_repo: str
+    current_import_spec: str
+    context: CompilerContext
+
+    def __call__(self, fqn: str) -> py_typereg.PySymbol:
+        """Lookup an fqn and produce a py identifier for that type relative to the current context."""
+        py_type = py_typereg.get_py_type(self.context, fqn)
+        if py_type.repo == self.current_repo and py_type.import_spec == self.current_import_spec:
+            # Same module, so no need for an import spec.
+            return py_typereg.PySymbol(
+                import_spec=None,
+                class_name=py_type.class_name,
+            )
+
+        return py_typereg.PySymbol(
+            import_spec=py_type.import_spec,
+            class_name=py_type.class_name,
+        )
+
+
+@dataclass
 class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget]):
     """IR for PyTargets.
 
@@ -87,6 +115,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
     enums: list[EnumTarget]
     constants: dict[str, node.Deferrable[ImmutableBinding]]
     python_cog_dials: list[PythonCogDial]
+    use_v2: bool
 
     @classmethod
     def from_cst(cls: type[PyTarget], cst_node: cst.PyTarget, module: node.Module) -> PyTarget:
@@ -101,6 +130,9 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
         enums = []
         constants: dict[str, node.Deferrable[ImmutableBinding]] = {}
         python_cog_dials = []
+
+        use_v2 = bool(cst_node.maybe_py_target_v2_flag())
+
         for statement in cst_node.children_py_target_statement():
             if representation_cst := statement.maybe_cpp_representation():
                 representations.append(ReprInstantiation.from_cst(representation_cst, module))
@@ -142,6 +174,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
             enums=enums,
             constants=constants,
             python_cog_dials=python_cog_dials,
+            use_v2=use_v2,
         )
 
     def resolve(self) -> None:
@@ -166,7 +199,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
         )
 
         for constant in self.constants.values():
-            assert isinstance(constant, ImmutableBinding)  # noqa: S101 invariant
+            assert isinstance(constant, ImmutableBinding)
             python_chunks.impl.append(_render_py_constant(constant))
 
         for interface in self.interfaces:
@@ -183,7 +216,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
                 resolved_repr = repr_info.representation_ir
 
                 arguments = resolved_repr.get_schema().arguments
-                assert arguments is not None  # noqa: S101 invariant
+                assert arguments is not None
 
                 param_args, module_lookups = _render_generic_parameters(
                     interface,
@@ -220,12 +253,40 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
 
         return python_chunks
 
+    def _render_constants_interfaces_and_enums_v2(self) -> py_context.PythonChunks:
+        py_import_lookup = PyImportLookup(
+            current_repo=self.module.module_id.repo,
+            current_import_spec=self.import_spec(),
+            context=self.module.context,
+        )
+        python_chunks = py_context.PythonChunks()
+        python_chunks.append(pytap.bindings_for_interfaces(self.module.context, self.interfaces, py_import_lookup))
+        return python_chunks
+
+    def _deps_from_interfaces(self) -> set[Label]:
+        """Get deps for instantiated interfaces."""
+        deps = set()
+        deps.add(get_bazel_label_for_clk_label(self.module.module_id.repo, "//jewels/memory:py_bytes"))
+        deps.add(get_bazel_label_for_clk_label(self.module.module_id.repo, "//jewels/container/tap:value_serdes"))
+        deps.add(get_bazel_label_for_clk_label(self.module.module_id.repo, "//jewels/container/tap:py_var_array"))
+        deps |= pytap.bazel_deps_for_interfaces(
+            self.module.context, self.interfaces, self.module.module_id.repo, self.import_spec()
+        )
+        return deps
+
+    def import_spec(self) -> str:
+        """Get the import spec for this PyTarget."""
+        return str(self.module.module_id.get_base_path().parent / self.name).replace("/", ".")
+
     def render_to_str(self) -> str:
         """Render to py."""
         python_chunks = py_context.PythonChunks()
 
         if self.constants.values() or self.interfaces or self.enums:
-            python_chunks.append(self._render_constants_interfaces_and_enums())
+            if self.use_v2:
+                python_chunks.append(self._render_constants_interfaces_and_enums_v2())
+            else:
+                python_chunks.append(self._render_constants_interfaces_and_enums())
 
         for python_cog_dial in self.python_cog_dials:
             python_chunks.append(python_cog_dial.render())
@@ -248,11 +309,16 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
         }
         for py_dial in self.python_cog_dials:
             dial_targets.update(py_dial.get_bazel_targets())
+
+        deps = set()
+        if self.use_v2:
+            deps |= self._deps_from_interfaces()
+
         return [
             PyLibrary(
                 name=self.name,
                 srcs=[Path(f"{self.name}.py")],
-                deps=sorted(dial_targets),
+                deps=sorted(dial_targets | deps),
                 data=[
                     clk_targets.module_to_clk(self.module.module_id.repo, self.module.module_id),
                 ],

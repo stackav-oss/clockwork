@@ -12,8 +12,8 @@ namespace jewels
 /// Try to fix a path to support tests run from outside of the clockwork repo.
 ///
 /// When tests are run from an external repo the path needs to be prefixed
-/// with "../clockwork~/". If the file doesn't exist then try prefixing with
-/// "../clockwork~/" before failing to locate the file.
+/// with "../clockwork+/". If the file doesn't exist then try prefixing with
+/// "../clockwork+/" before failing to locate the file.
 ///
 /// Returns the original string if no file exists with either the original
 /// path or the fixed (prefixed) path.

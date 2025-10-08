@@ -183,7 +183,7 @@ All integer types `UInt8`/`UInt16`/`UInt32`/`UInt64`/`Int8`/`Int16`/`Int32`/`Int
 ### VarString
 
 `VarString` shows up as the normal Python `str` type.
-An exception will be raised if you assign a too-large `str` to a clockwork `VarString` field.
+An exception will be raised if you assign a too-large `str` to a Clockwork `VarString` field.
 
 ### Exceptions to mutable reference semantics
 

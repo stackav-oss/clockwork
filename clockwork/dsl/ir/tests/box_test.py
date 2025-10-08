@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for box."""
 
@@ -34,13 +35,13 @@ def test_box(fs_importer: FilesystemImporter) -> None:
         mem_box,
         hello_cog,
         hello_config_file,
-        rw_hello_init,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        ro_hello_init,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        rw_hello_init,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        ro_hello_init,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         ro_hello,
-        rw_hello,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        extern_hello,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        in_udp,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        out_udp,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        rw_hello,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        extern_hello,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        in_udp,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        out_udp,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
     ) = box_ir.instances
     assert isinstance(mem_box, box.Box)
     (mem_hello,) = mem_box.instances
@@ -48,7 +49,9 @@ def test_box(fs_importer: FilesystemImporter) -> None:
     assert mem_hello.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.mem_box.mem_hello"
     assert isinstance(hello_cog, cog.CogInstance)
     assert hello_cog.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.hello_cog"
-    assert hello_cog.cog_class.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellocog::HelloCog"
+    assert (
+        hello_cog.cog_class.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellocog::HelloCogWithMetrics"
+    )
 
     assert isinstance(hello_config_file, box.SerializedDataFileInstance)
     assert hello_config_file.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.hello_config"
@@ -65,7 +68,7 @@ def test_box(fs_importer: FilesystemImporter) -> None:
         == "::Tachyon<schema=@clockwork::clockwork::dsl::tests::support::hellomsg::HelloMsg>"
     )
 
-    assert len(box_ir.connections) == 17
+    assert len(box_ir.connections) == 18
     conn = box_ir.connections[6]
     chan = module.inner_scope.lookup("HelloChan")
     assert isinstance(chan, pubsub.Channel)
@@ -199,7 +202,7 @@ def test_composition_policies(fs_importer: FilesystemImporter) -> None:
     box_ir = box_template_ir.make_instance(
         cst_node=None, module=module, scope=box_template_ir.scope, name="test", doc=None
     )
-    compiler._register_box_instance_uuids(module.context, box_ir)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    compiler._register_box_instance_uuids(module.context, box_ir)
     process_policies = list(policy.lookup_all_policies(module, box.HOST_PROCESS_POLICY))
     # 10 in each HelloBox, two HelloBoxes per HelloProcs, two HelloProcs in
     # system, another HelloBox for hello_world system
@@ -234,7 +237,9 @@ def test_composition_policies(fs_importer: FilesystemImporter) -> None:
     }
 
 
+
 def test_unsatisfiable_safety_margin(fs_importer: FilesystemImporter) -> None:
+    # Step 1: Define a cog with an input with a six-message view and connect a ten-message channel to it.
     source_text = """
 use clockwork::dsl::tests::support::{hellocog, hellomsg};
 
@@ -274,10 +279,12 @@ box CogBox
     module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "unsatisfiable_safety_margin"), fs_importer)
     box_template_ir = module.inner_scope.lookup("CogBox")
     assert isinstance(box_template_ir, box.BoxTemplate)
+    # Step 2: Confirm that the compiler raises an error about the channel being too small to satisfy the view and the default safety margin.
     # view size (6) + default margin (max(6, Chan1.max_num_message/2)) should be too large
     with pytest.raises(ValueError, match="Channel Chan1 is not large enough"):
         box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
 
+    # Step 3: Define a cog with an input with an eleven-message safety margin and connect a ten-message channel to it.
     source_text = """
 use clockwork::dsl::tests::support::{hellocog, hellomsg};
 
@@ -314,9 +321,148 @@ box CogBox
     connect Chan1 to cog1.hellos;
 }
 """
+    # Step 4: Confirm that the compiler raises an error about the channel being too small to satisfy the eleven-message margin.
     # user-specified margin (11) should be flagged as unsatisifable
     module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "unsatisfiable_safety_margin"), fs_importer)
     box_template_ir = module.inner_scope.lookup("CogBox")
     assert isinstance(box_template_ir, box.BoxTemplate)
     with pytest.raises(ValueError, match="Channel Chan1 is not large enough"):
+        box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+
+    # Step 5: Define a cog with an input with a one-message view and a safety
+    # margin of one, and connect a ten-message channel to it.
+
+    # Check that we can't set the safety margin to a value that's less than the
+    # emergency margin (the one that causes the runner to terminate itself when
+    # breached).
+    source_text = """
+use clockwork::dsl::tests::support::{hellocog, hellomsg};
+
+// Doc.
+cog SomeCog
+{
+    inputs
+    {
+        // Doc.
+        hellos: Tappy<hellomsg::HelloMsg>
+        {
+            safety_margin: 1;
+        }
+    }
+
+    execution
+    {
+        condition new_msg: new_message(min=1, max=2, input=hellos);
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic or new_msg;
+    }
+}
+
+// Channel for HelloMsg messages
+channel Chan1
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+box CogBox
+{
+    new cog1: SomeCog;
+    connect Chan1 to cog1.hellos;
+}
+"""
+    # Step 6: Confirm that the compiler raises an error about how the specified margin is less than the emergency margin.
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "unsatisfiable_safety_margin"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("CogBox")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    with pytest.raises(ValueError, match="is less than the emergency margin"):
+        box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+
+    # Step 7: Define a cog with an input with a one-message view and connect a one-message channel to it.
+    source_text = """
+use clockwork::dsl::tests::support::{hellocog, hellomsg};
+
+// Doc.
+cog SomeCog
+{
+    inputs
+    {
+        // Doc.
+        hellos: Tappy<hellomsg::HelloMsg>
+        {
+            max_msgs: 1;
+        }
+    }
+
+    execution
+    {
+        condition new_msg: new_message(input=hellos);
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic or new_msg;
+    }
+}
+
+// Channel for HelloMsg messages
+channel Chan1
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 1;
+}
+
+box CogBox
+{
+    new cog1: SomeCog;
+    connect Chan1 to cog1.hellos;
+}
+"""
+    # Step 8: Confirm that the compiler raises an error about how the input view is larger than the emergency margin.
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "view_too_large"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("CogBox")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    with pytest.raises(ValueError, match="to accommodate emergency margin"):
+        box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+
+
+def test_invalid_skip_threshold(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::{hellocog, hellomsg};
+
+// Doc.
+cog SomeCog
+{
+    inputs
+    {
+        // Doc.
+        hellos: Tappy<hellomsg::HelloMsg>
+        {
+            skip_threshold: 9;
+            max_msgs: 3;
+        }
+    }
+
+    execution
+    {
+        condition new_msg: new_message(min=1, max=2, input=hellos);
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic or new_msg;
+    }
+}
+
+// Channel for HelloMsg messages
+channel Chan1
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+box CogBox
+{
+    new cog1: SomeCog;
+    connect Chan1 to cog1.hellos;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "invalid_skip_and_view"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("CogBox")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    with pytest.raises(ValueError, match="sum to more than the capacity of Chan1"):
         box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)

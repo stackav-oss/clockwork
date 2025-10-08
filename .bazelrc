@@ -20,8 +20,16 @@ build --host_platform=//tools/platform:host-clang
 build --per_file_copt=^bazel-out/.*/bin/external/,^external/@-w
 build --host_per_file_copt=^bazel-out/.*/bin/external/,^external/@-w
 
-# Prevents bazel from showing the status of every test.
-test --test_summary=terse
+# Output test errors to stderr so users don't have to `cat` or open test failure log files when tests
+# fail. This makes the log noisier in exchange for reducing the time-to-feedback on test failures for
+# users.
+# Docs: https://bazel.build/docs/user-manual#test-output
+common --test_output=errors
+
+# Don't show all the tests that pass, only show the ones that failed.
+# This means you don't have to scroll up so very far when you're trying to figure out why CI failed.
+# Docs: https://bazel.build/docs/user-manual#test-summary
+common --test_summary=terse
 
 # Use a static value for `PATH` and does not inherit `LD_LIBRARY_PATH`. Doesn't let environment
 # variables like `PATH` sneak into the build, which can cause massive cache misses when they change.
@@ -46,3 +54,9 @@ build --noremote_upload_local_results
 
 # Prevent Python packages installed in user site-packages outside of Bazel from being used under Bazel
 common --host_action_env=PYTHONNOUSERSITE=1 --action_env=PYTHONNOUSERSITE=1 --test_env=PYTHONNOUSERSITE=1
+
+# Make sure rules_proto keep working with Bazel 8
+common --noincompatible_disallow_ctx_resolve_tools
+
+# Don't load native rules
+common --incompatible_disable_autoloads_in_main_repo

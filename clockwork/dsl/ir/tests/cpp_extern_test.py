@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test the Schema IR module."""
 
@@ -196,4 +197,4 @@ def test_cpp_extern_init_value_no_factory() -> None:
         RuntimeError,
         match="Unable to convert to literal for StrongType 'MyInitStrongTypeNoFactory'.  Need to register an appropriate factory function in the cpp_target extern block.",
     ):
-        tap._value_to_cpp(strong_type.init_value)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        tap._value_to_cpp(strong_type.init_value)

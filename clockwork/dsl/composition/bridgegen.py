@@ -35,6 +35,7 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                     publisher_id=UUID(int=0),
                     buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0),
                     num_subscribers=0,
+                    channel_name="",
                 ),
             ),
             host_name=snake_from_camel(domain.logical.name),
@@ -43,19 +44,20 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                 publisher_id=UUID(int=0),
                 buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0),
                 num_subscribers=0,
+                channel_name="",
             ),
         )
         bridge_process_uuid = uuid_reg.uuid_from_name(f"{domain.logical.value_key()}.__CLOCKWORK_BRIDGE__")
         port_to_channel: dict[int, graphir.Channel] = {}
         for observer in domain.bridge_observers.values():
             source_buffer = domain.buffers[observer.source_pinion_buffer]
-            assert source_buffer.uuid == observer.source_pinion_buffer  # noqa: S101 (invariant; sanity check)
+            assert source_buffer.uuid == observer.source_pinion_buffer
 
             remote_domain = physical_system.cpu_domains[observer.dest_domain]
             # All of the following are invariants enforced during system construction
-            assert domain.lan_connection is not None  # noqa: S101  (invariant)
-            assert remote_domain.lan_connection is not None  # noqa: S101  (invariant)
-            assert domain.lan_connection.lan is remote_domain.lan_connection.lan  # noqa: S101  (invariant)
+            assert domain.lan_connection is not None
+            assert remote_domain.lan_connection is not None
+            assert domain.lan_connection.lan is remote_domain.lan_connection.lan
 
             config.bridge_servers.append(
                 tcp_bridge_config.TcpBridgeServerConfig(
@@ -77,8 +79,8 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
 
         for producer in domain.bridge_producers.values():
             dest_buffer = domain.buffers[producer.dest_pinion_buffer]
-            assert domain.lan_connection is not None  # noqa: S101  (invariant)
-            assert remote_domain.lan_connection is not None  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: S101  (invariant)
+            assert domain.lan_connection is not None
+            assert remote_domain.lan_connection is not None  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             remote_domain = physical_system.cpu_domains[producer.source_domain]
             remote_observer = remote_domain.bridge_observers[producer.remote_source]
             config.bridge_clients.append(
@@ -90,10 +92,10 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                             num_slots=dest_buffer.layout.num_slots, message_size=dest_buffer.layout.message_size
                         ),
                         num_subscribers=dest_buffer.num_subscribers,
+                        channel_name=dest_buffer.channel.channel.channel_name,
                     ),
-                    server_address=remote_domain.lan_connection.address,  # type: ignore [union-attr] # Linter doesn't know lan_connection is not None
+                    server_address=remote_domain.lan_connection.address,  # pyright: ignore[reportOptionalMemberAccess] # Linter doesn't know lan_connection is not None
                     server_port=remote_observer.lan_port,
-                    channel_name=dest_buffer.channel.channel.channel_name,
                 )
             )
 
@@ -103,24 +105,29 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
             config.diagnostics_config.reporter_id = diagnostics_producer.uuid
             config.diagnostics_config.group_id = diagnostics_producer.group_id
             config.diagnostics_config.instance_id = diagnostics_producer.instance_id
-            config.diagnostics_config.publish_endpoint.process_id = bridge_process_uuid
-            config.diagnostics_config.publish_endpoint.publisher_id = diagnostics_buffer.uuid
-            config.diagnostics_config.publish_endpoint.buffer_layout = pdf.PinionBufferLayout(
-                num_slots=diagnostics_buffer.layout.num_slots,
-                message_size=diagnostics_buffer.layout.message_size,
+            config.diagnostics_config.publish_endpoint = pdf.PublishEndpoint(
+                process_id=bridge_process_uuid,
+                publisher_id=diagnostics_buffer.uuid,
+                buffer_layout=pdf.PinionBufferLayout(
+                    num_slots=diagnostics_buffer.layout.num_slots, message_size=diagnostics_buffer.layout.message_size
+                ),
+                num_subscribers=diagnostics_buffer.num_subscribers,
+                channel_name=diagnostics_buffer.channel.channel.channel_name,
             )
-            config.diagnostics_config.publish_endpoint.num_subscribers = diagnostics_buffer.num_subscribers
 
         if domain.bridge_status_producer:
             bridge_status_producer = domain.platform_bridge_status_producers[domain.bridge_status_producer]
             bridge_status_buffer = domain.buffers[bridge_status_producer.pinion_buffer]
-            config.status_publish_endpoint.process_id = bridge_process_uuid
-            config.status_publish_endpoint.publisher_id = bridge_status_buffer.uuid
-            config.status_publish_endpoint.buffer_layout = pdf.PinionBufferLayout(
-                num_slots=bridge_status_buffer.layout.num_slots,
-                message_size=bridge_status_buffer.layout.message_size,
+            config.status_publish_endpoint = pdf.PublishEndpoint(
+                process_id=bridge_process_uuid,
+                publisher_id=bridge_status_buffer.uuid,
+                buffer_layout=pdf.PinionBufferLayout(
+                    num_slots=bridge_status_buffer.layout.num_slots,
+                    message_size=bridge_status_buffer.layout.message_size,
+                ),
+                num_subscribers=bridge_status_buffer.num_subscribers,
+                channel_name=bridge_status_buffer.channel.channel.channel_name,
             )
-            config.status_publish_endpoint.num_subscribers = bridge_status_buffer.num_subscribers
 
         if config.bridge_clients or config.bridge_servers:
             result[domain_uuid] = config

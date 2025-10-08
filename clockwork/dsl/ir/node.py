@@ -20,6 +20,7 @@ from typing import (
 )
 
 from fltk.fegen.pyrt.terminalsrc import Span
+from typing_extensions import override
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Container, Iterable, Iterator, Sequence
@@ -28,7 +29,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from fltk.fegen.pyrt.terminalsrc import TerminalSource
 
 
-from clockwork.dsl import compiler_context
+from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span, span_for_node
 
 # These generated files must be imported on a separate line from the source file import above due to a pyright limitation:
@@ -59,10 +60,12 @@ class MultiCstNode(Node[CstNodeTypes], Generic[CstNodeTypes]):
     module: Module = field(repr=False)
     cst_nodes: Sequence[CstNodeTypes] = field(repr=False)
 
+    @override
     def get_module(self) -> Module:
         """Access the Module in which this node was defined or created."""
         return self.module
 
+    @override
     def get_cst_nodes(self) -> Iterable[CstNodeTypes]:
         """Access the CST nodes associated with this IR node, if any."""
         return self.cst_nodes
@@ -78,10 +81,12 @@ class CstNode(Node[CstNodeType], Generic[CstNodeType]):
     module: Module = field(repr=False)
     cst_node: CstNodeType | None = field(repr=False, compare=False)
 
+    @override
     def get_module(self) -> Module:
         """Access the Module in which this node was defined or created."""
         return self.module
 
+    @override
     def get_cst_nodes(self) -> Iterable[CstNodeType]:
         """Access the CST node associated with this IR node, if there is one."""
         if self.cst_node is not None:
@@ -202,7 +207,7 @@ class NameProxy(NamedEntity, Generic[TemporaryNodeType]):
         if not self.is_final:
             msg = f"Attempt to retrieve final referrent of non-finalized NameProxy: {self.referent}"
             raise ValueError(msg)
-        assert isinstance(self.referent, NamedEntity)  # noqa: S101 (for mypy)
+        assert isinstance(self.referent, NamedEntity)
         return self.referent
 
     def finalize(self, final_referent: NamedEntity, replace_in_scope: bool = True) -> None:
@@ -276,7 +281,7 @@ class Module(Node[cst.Module], DocableEntity):
     terminals: TerminalSource | None = field(repr=False)
     cst_node: cst.Module | None = field(repr=False)
     unresolved_imports: list[UseResult]
-    context: compiler_context.CompilerContext = field(repr=False)
+    context: CompilerContext = field(repr=False)
 
     @classmethod
     def from_cst(
@@ -304,7 +309,7 @@ class Module(Node[cst.Module], DocableEntity):
             inner_scope=inner_scope,
             doc=None,
             unresolved_imports=[],
-            context=compiler_context.CompilerContext(uniq_path),
+            context=CompilerContext(uniq_path),
         )
         if doc := cst_node.maybe_doc():
             result.doc = Doc.from_cst(doc, module=result)
@@ -313,10 +318,12 @@ class Module(Node[cst.Module], DocableEntity):
             result.unresolved_imports.extend(result._handle_use(use.child_use_body()))
         return result
 
+    @override
     def get_module(self) -> Module:
         """Return self (to implement Node interface)."""
         return self
 
+    @override
     def get_cst_nodes(self) -> Iterable[cst.Module]:
         """Access the CST nodes associated with this IR node, if any."""
         if self.cst_node is not None:
@@ -342,7 +349,7 @@ class Module(Node[cst.Module], DocableEntity):
         cst_node: cst.UseBody | None = field(default=None, compare=False)
 
     def _handle_use(self, use: cst.UseBody) -> Iterator[UseResult]:
-        assert self.terminals is not None  # noqa: S101  (for mypy)
+        assert self.terminals is not None
         if use_repo := use.maybe_use_repo():
             repo_name = get_span(use_repo.child_identifier().child_value(), self.terminals)
         else:
@@ -372,7 +379,7 @@ class Module(Node[cst.Module], DocableEntity):
             importer: A module importer which can load external modules.
         """
         extern_scope = self.inner_scope.parent
-        assert extern_scope is not None  # noqa: S101  (for mypy)
+        assert extern_scope is not None
         for use_result in self.unresolved_imports:
             import_spec = importer.resolve_import(self, use_result)
             module, entity = importer.execute_import(import_spec, self, use_result)
@@ -418,6 +425,7 @@ class NamespacedModule(CstNode[cst.UseBody], NamedEntity, NamespaceEntity):
         """
         return []
 
+    @override
     def lookup(self, name: str) -> NamedEntity | None:
         """Look up a definition in the extern module.
 
@@ -430,7 +438,7 @@ class NamespacedModule(CstNode[cst.UseBody], NamedEntity, NamespaceEntity):
 class Scope:
     """A lexical scope with a registry of names."""
 
-    def __init__(self, parent: Scope | None, uniq_path: str, module_id_for_errors: ModuleID | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, parent: Scope | None, uniq_path: str, module_id_for_errors: ModuleID | None) -> None:
         """Construct a new Scope."""
         self.parent = parent
         self.uniq_path = uniq_path
@@ -438,6 +446,7 @@ class Scope:
         self.names: dict[str, NamedEntity] = {}
         self._anon_id = 0
 
+    @override
     def __str__(self) -> str:
         """Return a string representation of the scope."""
         return f"Scope({self.uniq_path})"
@@ -464,6 +473,7 @@ class Scope:
             parent=self, uniq_path=f"{path_parent.uniq_path}.{name}", module_id_for_errors=self.module_id_for_errors
         )
 
+    @override
     def __repr__(self) -> str:
         """Return a string representation of the scope."""
         return f"Scope({self.uniq_path})"
@@ -707,7 +717,7 @@ def resolve_names(parent: Any, scope: Scope) -> Any:  # noqa: ANN401 (Any is ess
     if isinstance(parent, collections.abc.Mapping):
         return {key: resolve_names(value, inner_scope) for key, value in parent.items()}
     if isinstance(parent, collections.abc.Iterable):
-        return type(parent)(resolve_names(item, inner_scope) for item in parent)  # type: ignore[call-arg]
+        return type(parent)(resolve_names(item, inner_scope) for item in parent)  # pyright: ignore[reportCallIssue] False positive
     if not dataclasses.is_dataclass(parent):
         return parent
     return _resolve_recurse_dataclass(parent, inner_scope)

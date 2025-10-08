@@ -68,6 +68,7 @@ TestHelper<MessageType>::open_publisher(size_t channel_index) const
     pinion_shm_root_,
     socket_ns_,
     spy_config_->get_channels()[channel_index].get_uuid().to_string(),
+    spy_config_->get_channels()[channel_index].get_channel_name(),
     spy_config_->get_channels()[channel_index].get_num_slots());
 }
 

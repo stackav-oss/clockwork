@@ -18,7 +18,7 @@ namespace jewels::networking
 {
 
 /// Socket option enumeration.
-WISE_ENUM(
+WISE_ENUM_CLASS(
   (SockOption, uint8_t),
   (so_receive_buffer, SO_RCVBUF),
   (so_reuse_address, SO_REUSEADDR),

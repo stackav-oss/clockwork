@@ -13,6 +13,7 @@ from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header
 from clockwork.dsl.ir import expr, node, typesys
 from clockwork.dsl.ir.module_id import CLK_REPO
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.dsl.ir.diagnostics import DiagnosticsDef, DiagnosticsInstance
@@ -50,14 +51,15 @@ class AudioSource(node.CstNode[cst.AudioSource], node.DocRequiredEntity, typesys
         """Audio endpoint as a string."""
         return "Unimplemented AudioSource"
 
+    @override
     def make_instance(
         self,
         *,
         cst_node: cst.NewStmt | None,
         module: node.Module,
-        scope: node.Scope,  # noqa: ARG002 (must be consistent with override)
-        name: str,  # noqa: ARG002 (must be consistent with override)
-        doc: node.Doc | None,  # noqa: ARG002 (must be consistent with override)
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> AudioSourceInstance:
         """Create an instance of the entity."""
         msg = node.append_error_line(
@@ -98,7 +100,8 @@ class AudioSourceInstance(
         )
         raise NotImplementedError(msg)
 
-    def attribute(self, name: str) -> typesys.Value | None:  # noqa: ARG002 (must be consistent with override)
+    @override
+    def attribute(self, name: str) -> typesys.Value | None:
         """Look up a definition in the membership entity."""
         msg = node.append_error_line(
             self.cst_node,

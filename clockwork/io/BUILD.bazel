@@ -19,6 +19,7 @@ cc_library(
         "network_var_packet.inl",
     ],
     hdrs = ["network_var_packet.hh"],
+    data = [":network_var_packet_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -46,6 +47,7 @@ cc_library(
         "var_packet.inl",
     ],
     hdrs = ["var_packet.hh"],
+    data = [":var_packet_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -75,6 +77,7 @@ py_cc_binding(
         "var_packet_clk_nb.hh",
         "var_packet_clk_nb.inl",
     ],
+    data = [":var_packet_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     deps = [
         ":var_packet",

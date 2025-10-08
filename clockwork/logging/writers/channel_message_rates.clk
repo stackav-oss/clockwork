@@ -11,10 +11,18 @@ schema ChannelMessageRate
     #1 rate_status: RateStatus;
 
     // Channel name
-    #2 channel_name: VarString<max_size=127>;
+    #4 channel_name: VarString<max_size=300>;
 
     // Message rate in hz
     #3 msg_rate_hz: Float64;
+  }
+  history
+  {
+    versions: [3, 4];
+    fields
+    {
+      #2 channel_name: VarString<max_size=127> -> became #4;
+    }
   }
 }
 
@@ -23,14 +31,26 @@ schema ChannelMessageRate
 schema ChannelMessageRates
 {
   uuid: 2f036e49-2dc7-4026-bcb7-e26ff622cd63;
-
+  parameters
+  {
+    // Max num channels
+    #3 max_num_channels = 2046;
+  }
   fields
   {
     // Transmit time
     #1 transmit_time: SyncTime;
 
     // Channel message rates
-    #2 message_rates: VarArray<ChannelMessageRate, max_size=512>;
+    #4 message_rates: VarArray<ChannelMessageRate, max_num_channels>;
+  }
+  history
+  {
+    versions: [2, 4];
+    fields
+    {
+      #2 message_rates: VarArray<ChannelMessageRate, max_size=512> -> became #4;
+    }
   }
 }
 
@@ -44,7 +64,7 @@ cpp_target channel_message_rates
   schema ChannelMessageRates;
 
   representation Tachyon<ChannelMessageRate>;
-  representation Tachyon<ChannelMessageRates>;
+  representation Tachyon<ChannelMessageRates<>>;
   interface ChannelMessageRateTap: Tap<Tachyon<ChannelMessageRate>>;
-  interface ChannelMessageRatesTap: Tap<Tachyon<ChannelMessageRates>>;
+  interface ChannelMessageRatesTap: Tap<Tachyon<ChannelMessageRates<>>>;
 }

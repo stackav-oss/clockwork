@@ -31,6 +31,100 @@ cog HelloCog
 
     inputs
     {
+        latest_hello: Tappy<hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+
+        // Multi-publisher input
+        multi_publisher_hello: Tappy<hellomsg::HelloMsg>
+        {
+            no_dial: true;
+        }
+
+        // Make sure larger views work
+        history_of_hellos: Tappy<hellomsg::HelloMsg>
+        {
+            no_dial: false;
+            max_msgs: 5;
+            manual_cursor: true;
+            connect_optional: true;
+        }
+    }
+
+    outputs
+    {
+        out_world: Tappy<hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_goodbye: Tappy<hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_multi1: Tappy<hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_multi2: Tappy<hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+
+    execution
+    {
+        condition any_msg: any_message(latest_hello, min=1);
+        condition new_msg: new_message(min=1, max=2, input=history_of_hellos);
+        // Execute at least at 2Hz
+        condition periodic: time_since_last_exec(500ms);
+
+        execute when: (periodic and new_msg) or any_msg;
+    }
+
+    diagnostics
+    {
+        group_id: "fault_injector_b";
+        instance_id: "a";
+    }
+    simulation_options
+    {
+       execution_duration: 2ms;
+    }
+
+    metrics_options
+    {
+        enabled: true;
+    }
+}
+
+// Hello, Cog!
+//
+// This cog is a minimal test case for the Clockwork framework.
+cog HelloCogWithMetrics
+{
+    resources
+    {
+        mem_hello: persistent;
+    }
+
+    configs
+    {
+        cfg_hello: Tappy<hellomsg::HelloMsg>;
+    }
+
+    states
+    {
+        ro_hello: Tappy<hellomsg::HelloMsg>;
+        rw_hello: Tappy<hellomsg::HelloMsg>
+        {
+            mutable: true;
+        }
+        extern_hello: CxxState;
+    }
+
+    inputs
+    {
         latest_hello: Tappy<hellomsg::HelloMsg>;
 
         // Multi-publisher input
@@ -74,6 +168,11 @@ cog HelloCog
     simulation_options
     {
        execution_duration: 2ms;
+    }
+
+    metrics_options
+    {
+        enabled: true;
     }
 }
 
@@ -127,8 +226,8 @@ cpp_target hellocog
         name: CxxState;
     }
   }
-
   cog HelloCog;
+  cog HelloCogWithMetrics;
   cog HelloInit;
   cog HelloInit2;
 }

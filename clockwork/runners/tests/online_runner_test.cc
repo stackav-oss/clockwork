@@ -38,10 +38,11 @@ TEST_CASE("execute", "[OnlineRunner]")
   auto resource = jewels::memory::MemoryResource(std::pmr::new_delete_resource());
   auto queue = OnlineCogQueue(resource);
   auto cog = TestCog(jewels::memory::make_non_null_from_ref(queue));
-  auto pool = ThreadPool(ThreadPoolConfig{
-    .resource = resource,
-    .thread_configs = {{.work = jewels::memory::make_non_null_from_ref(queue)}},
-  });
+  auto pool = ThreadPool(
+    ThreadPoolConfig{
+      .resource = resource,
+      .thread_configs = {{.work = jewels::memory::make_non_null_from_ref(queue)}},
+    });
 
   auto config = OnlineRunnerConfig{
     .cogs = {{
@@ -117,12 +118,13 @@ TEST_CASE("ensure mutually exclusive execution shared queue", "[OnlineRunner]")
   auto resource = jewels::memory::MemoryResource(std::pmr::new_delete_resource());
   auto queue = OnlineCogQueue(resource);
   auto cog = TestCog(jewels::memory::make_non_null_from_ref(queue));
-  auto pool = ThreadPool(ThreadPoolConfig{
-    .resource = resource,
-    .thread_configs =
-      {{.work = jewels::memory::make_non_null_from_ref(queue)},
-       {.work = jewels::memory::make_non_null_from_ref(queue)}},
-  });
+  auto pool = ThreadPool(
+    ThreadPoolConfig{
+      .resource = resource,
+      .thread_configs =
+        {{.work = jewels::memory::make_non_null_from_ref(queue)},
+         {.work = jewels::memory::make_non_null_from_ref(queue)}},
+    });
 
   auto config = OnlineRunnerConfig{
     .cogs = {{
@@ -262,14 +264,15 @@ TEST_CASE("simulate shared state wake up", "[OnlineRunner]")
   auto shared_state_mutex = std::make_shared<std::shared_mutex>();
   auto cog0 = TestCog(jewels::memory::make_non_null_from_ref(queue), shared_state_mutex);
   auto cog1 = TestCog(jewels::memory::make_non_null_from_ref(queue), shared_state_mutex);
-  auto pool = ThreadPool(ThreadPoolConfig{
-    .resource = resource,
-    .thread_configs =
-      {
-        {.work = jewels::memory::make_non_null_from_ref(queue)},
-        {.work = jewels::memory::make_non_null_from_ref(queue)},
-      },
-  });
+  auto pool = ThreadPool(
+    ThreadPoolConfig{
+      .resource = resource,
+      .thread_configs =
+        {
+          {.work = jewels::memory::make_non_null_from_ref(queue)},
+          {.work = jewels::memory::make_non_null_from_ref(queue)},
+        },
+    });
 
   auto config = OnlineRunnerConfig{
     .cogs =

@@ -10,9 +10,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//tools/gazelle/cc_plugin/common",
-        "@@gazelle~//config",
-        "@@gazelle~//flag",
-        "@@gazelle~//rule",
+        "@@gazelle+//config",
+        "@@gazelle+//flag",
+        "@@gazelle+//rule",
         "@org_skia_go_infra//go/skerr",
     ],
 )

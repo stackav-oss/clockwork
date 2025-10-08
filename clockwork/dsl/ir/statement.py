@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, typesys
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 
 @dataclass
@@ -113,6 +114,7 @@ class ImmutableBinding(
             raise RuntimeError(msg)  # noqa: TRY004 (RuntimeError is more correct here than TypeError)
         return self.value
 
+    @override
     def attribute(self, name: str) -> typesys.Value | None:
         """Look up a definition in the namespace entity.
 

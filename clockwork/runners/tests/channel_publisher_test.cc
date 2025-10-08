@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/pinion/observer.hh"
@@ -104,17 +104,17 @@ TEST_CASE("Test publishing from a log")
   const auto memory_resource = jewels::memory::MemoryResource(std::pmr::new_delete_resource());
 
   const jewels::testing::TmpDirectoryGuard shm_dir;
-  auto writer_config_ptr = clockwork_logging::tests::get_test_log_writer_config();
-  auto& writer_config = *writer_config_ptr;
+  auto publisher_config_ptr = clockwork_logging::tests::get_test_channel_publisher_config();
+  auto& publisher_config = *publisher_config_ptr;
   const jewels::time::SyncTime message_time{std::chrono::hours(1)};
   std::vector<MockObserver> observers;
-  observers.reserve(writer_config.get_channels().size());
+  observers.reserve(publisher_config.get_channels().size());
 
   ShmPublisherMap channel_map;
   std::vector<clockwork_logging::tests::TestPublisher> test_publishers;
-  test_publishers.reserve(writer_config.get_channels().size());
+  test_publishers.reserve(publisher_config.get_channels().size());
 
-  for (auto& channel_config : writer_config.get_mutable_channels())
+  for (auto& channel_config : publisher_config.get_mutable_channels())
   {
     // This test wants the channel names to be unique
     channel_config.get_underlying_channel_name().set_truncate(channel_config.get_uuid().to_string());
@@ -145,9 +145,9 @@ TEST_CASE("Test publishing from a log")
   constexpr size_t messages_per_channel = 10U;
   for (uint32_t i = 0U; i < messages_per_channel; ++i)
   {
-    for (uint32_t j = 0U; j < writer_config.get_channels().size(); ++j)
+    for (uint32_t j = 0U; j < publisher_config.get_channels().size(); ++j)
     {
-      const auto& channel_config = writer_config.get_channels()[j];
+      const auto& channel_config = publisher_config.get_channels()[j];
       std::vector<std::byte> data(channel_config.get_message_size());
       fill_with_random_bytes(data);
       auto logged_message = MultiMessageInfoData{
@@ -160,13 +160,13 @@ TEST_CASE("Test publishing from a log")
     }
   }
 
-  auto log_publisher = clockwork::ChannelPublisher(
-    memory_resource, jewels::memory::make_non_null_from_ref(writer_config), message_fetcher, channel_map, false);
+  auto channel_publisher = clockwork::ChannelPublisher(
+    memory_resource, jewels::memory::make_non_null_from_ref(publisher_config), message_fetcher, channel_map, false);
 
-  REQUIRE(log_publisher.initialize());
-  while (log_publisher.messages_remaining())
+  REQUIRE(channel_publisher.initialize());
+  while (channel_publisher.messages_remaining())
   {
-    REQUIRE(log_publisher.publish_next_message());
+    REQUIRE(channel_publisher.publish_next_message());
   }
   for (const auto& observer : observers)
   {

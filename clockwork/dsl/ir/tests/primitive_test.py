@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for the primitive module."""
 
@@ -11,6 +12,7 @@ import pytest
 from clockwork.dsl.ir import clkbuiltins, compiler, node, primitive, pubsub, typesys, units
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
+from typing_extensions import override
 
 
 @pytest.fixture()
@@ -21,6 +23,7 @@ def fs_importer() -> FilesystemImporter:
 class ExampleUnit(units.Unit):
     """A test unit."""
 
+    @override
     def base_unit(self) -> str:
         """Get the base unit name, without prefix."""
         return "test"

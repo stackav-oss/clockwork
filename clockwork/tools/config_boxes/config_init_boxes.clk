@@ -1,0 +1,22 @@
+use clockwork::tools::channel_spy::channel_spy_config_init::SpyConfigInitCog;
+use clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_init::MetricsChannelMetadataInitCog;
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+use clockwork::logging::channel_type::ChannelType;
+
+// Config loader box that has both channel spy and metrics channel metadata publisher
+box ConfigInitBox
+{
+    new memres: HeapMemory(max_size=10'000'000);
+    new spy_config_init_cog: SpyConfigInitCog;
+
+    connect memres to spy_config_init_cog.memres;
+    new channel_metadata_init_cog: MetricsChannelMetadataInitCog;
+}
+
+cpp_executable config_init_exe
+{
+  casing
+  {
+    box ConfigInitBox;
+  }
+}

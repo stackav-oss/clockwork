@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
+from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.cpp import context, typereg, types
 from clockwork.dsl.cpp.context import CppChunk, Header, SystemHeader
 from clockwork.dsl.cpp.types import (
@@ -26,6 +27,7 @@ from clockwork.dsl.ir.conversion_utils import (
 from clockwork.dsl.ir.module_id import JEWELS_REPO
 from clockwork.dsl.proto import proto_typereg
 from clockwork.dsl.serialization import tap
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.dsl.compiler_context import CompilerContext
@@ -34,24 +36,112 @@ if TYPE_CHECKING:
     from clockwork.dsl.ir.representation import RepresentationReference
 
 
-_TYPE_CONVERSION_MAP: Final[dict[str, ConversionInfo]] = {}
+@final
+class TapToProtoConverterRegistry(Context):
+    """Registry of Tap to Proto Conversions."""
 
-_CONVERTER_REGISTRY: ConverterRegistry = ConverterRegistry({})
+    def __init__(self, name: str | None) -> None:
+        """Create a new registry."""
+        self.name = name
+        self.type_conversion_map: dict[str, ConversionInfo] = {}
+        self.converter_registry: ConverterRegistry = ConverterRegistry({})
+
+    def register_simple_tap_proto_conversion(self, clk_type: typesys.TypeVal) -> None:
+        """Helper to register a tap to proto conversion."""
+        self.type_conversion_map[clk_type.value_key()] = ConversionInfo(_generate_simple_conversion, [])
+
+    @override
+    def import_from(self, other: TapToProtoConverterRegistry) -> None:
+        """Combine this registry with converters from another registry.
+
+        Raises:
+            RuntimeError: If a converter already exists with a different definition.
+        """
+        for key, value in other.converter_registry.registry_dict.items():
+            if key in self.converter_registry.registry_dict and self.converter_registry.registry_dict[key] != value:
+                msg = f"Converter registry entry {key} has conflicting entry: {self.converter_registry.registry_dict[key]} vs {value}\nWhen merging from {other.name} into {self.name}"
+                raise RuntimeError(msg)
+            self.converter_registry.registry_dict[key] = value
+
+        for key, value in other.type_conversion_map.items():
+            if key in self.type_conversion_map and self.type_conversion_map[key] != value:
+                msg = f"Different {key} type conversion:\nOther: {value}\nSelf: {self.type_conversion_map[key]}"
+                raise RuntimeError(msg)
+            self.type_conversion_map[key] = value
 
 
-def in_converter_registry(clk_type: typesys.Value) -> bool:
+class TapToProtoConverterRegistryKey(ContextKey[TapToProtoConverterRegistry]):
+    """Compiler context key for Tap to Proto conversions."""
+
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> TapToProtoConverterRegistry:
+        """Create an default instance of the registry."""
+        registry = TapToProtoConverterRegistry(compiler_context.name)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.BOOL)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.FLOAT32)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.FLOAT64)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.INT32)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.INT64)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.UINT64)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.UINT32)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.INT8)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.UINT8)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.INT16)
+        registry.register_simple_tap_proto_conversion(clkbuiltins.UINT16)
+
+        registry.type_conversion_map[clkbuiltins.VAR_STRING.value_key()] = ConversionInfo(
+            _generate_complex_conversion, []
+        )
+
+        registry.type_conversion_map[clkbuiltins.UUID.value_key()] = ConversionInfo(_generate_complex_conversion, [])
+
+        registry.type_conversion_map[clkbuiltins.SYNC_TIME.value_key()] = ConversionInfo(
+            _generate_complex_conversion, []
+        )
+
+        registry.type_conversion_map[clkbuiltins.DURATION.value_key()] = ConversionInfo(
+            _generate_complex_conversion, []
+        )
+
+        registry.type_conversion_map[clkbuiltins.BYTE.value_key()] = ConversionInfo(_generate_complex_conversion, [])
+
+        registry.type_conversion_map[clkbuiltins.VAR_ARRAY.value_key()] = ConversionInfo(
+            _generate_array_conversion,
+            [Header(JEWELS_REPO, "jewels/std/span.hh"), Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
+        )
+
+        registry.type_conversion_map[clkbuiltins.FIXED_ARRAY.value_key()] = ConversionInfo(
+            _generate_array_conversion,
+            [Header(JEWELS_REPO, "jewels/std/span.hh"), Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
+        )
+        registry.type_conversion_map[clkbuiltins.OPTIONAL.value_key()] = ConversionInfo(
+            _generate_optional_conversion, []
+        )
+
+        return registry
+
+
+TAP_TO_PROTO_CONVERTER_REGISTRY_KEY: Final = TapToProtoConverterRegistryKey("TapToProtoConverterRegistry")
+
+
+def in_converter_registry(clk_type: typesys.Value, compiler_context: CompilerContext) -> bool:
     """Checks whether a schema instantiation is registered in the conversion registry."""
-    return _CONVERTER_REGISTRY.in_converter_registry(clk_type)
+    registry = compiler_context[TAP_TO_PROTO_CONVERTER_REGISTRY_KEY]
+    return registry.converter_registry.in_converter_registry(clk_type)
 
 
-def get_conversion_registration(clk_type: typesys.Value) -> ConversionRegistration:
+def get_conversion_registration(clk_type: typesys.Value, compiler_context: CompilerContext) -> ConversionRegistration:
     """Obtains the conversion registration for a specific schema type."""
-    return _CONVERTER_REGISTRY.get_conversion_registration(clk_type)
+    registry = compiler_context[TAP_TO_PROTO_CONVERTER_REGISTRY_KEY]
+    return registry.converter_registry.get_conversion_registration(clk_type)
 
 
-def register_schema_conversion(clk_type: typesys.Value, conversion_info: ConversionRegistration) -> None:
+def register_schema_conversion(
+    clk_type: typesys.Value, conversion_info: ConversionRegistration, compiler_context: CompilerContext
+) -> None:
     """Register a converter in the registry."""
-    _CONVERTER_REGISTRY.register_schema_conversion(clk_type, conversion_info)
+    registry = compiler_context[TAP_TO_PROTO_CONVERTER_REGISTRY_KEY]
+    registry.converter_registry.register_schema_conversion(clk_type, conversion_info)
 
 
 def _proto_type_to_cpp_namespace(proto_type_str: str) -> str:
@@ -76,7 +166,9 @@ def _generate_simple_conversion(conversion_params: ConversionParams) -> list[str
 def _generate_enum_conversion(conversion_params: ConversionParams) -> list[str]:
     """Generate converter between the TAP/Tachyon enum and protobuf enum."""
     # Get the Protobuf C++ enum type string and convert to C++ namespace
-    proto_pb_enum_type_str = proto_typereg.get_protobuf_type(conversion_params.field_type).render()
+    proto_pb_enum_type_str = proto_typereg.get_protobuf_type(
+        conversion_params.field_type, conversion_params.compiler_context
+    ).render()
     valid_cpp_enum_type = _proto_type_to_cpp_namespace(proto_pb_enum_type_str)
     # Determine the source access method (get_... or value_...
     if conversion_params.is_optional:
@@ -121,17 +213,17 @@ def _generate_optional_conversion(conversion_params: ConversionParams) -> list[s
         raise TypeError(msg)
 
     value_type = conversion_params.field_type.arguments["type"]
-    if in_converter_registry(value_type):
+    if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_statement = [
-            f"{get_conversion_registration(value_type).namespace}::"
+            f"{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::"
             + f"tap_to_protobuf(*{conversion_params.destination_name}.mutable_{conversion_params.proto_field_name}(), "
             + f"{conversion_params.source_name}.value_{conversion_params.field_name}());",
         ]
     else:
         updated_conversion_params = dataclasses.replace(conversion_params, field_type=value_type, is_optional=True)
-        conversion_statement = _generate_conversion_statement(value_type).conversion_generator(
-            updated_conversion_params
-        )
+        conversion_statement = _generate_conversion_statement(
+            value_type, conversion_params.compiler_context
+        ).conversion_generator(updated_conversion_params)
 
     return [
         f"if ({conversion_params.source_name}.has_{conversion_params.field_name}())",
@@ -150,10 +242,10 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
     input_name = f"{conversion_params.field_name}_input"
     value_type = conversion_params.field_type.arguments["type"]
 
-    if in_converter_registry(value_type):
+    if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_lines = [
             f"{context.INDENT}auto element_{input_name} = {conversion_params.destination_name}.add_{conversion_params.proto_field_name}();",
-            f"{context.INDENT}{get_conversion_registration(value_type).namespace}::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
+            f"{context.INDENT}{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
         ]
     elif value_type == clkbuiltins.BYTE:
         return [
@@ -163,7 +255,9 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
         ]
     elif isinstance(value_type, clkenum.ResolvedEnum):
         # Get the Protobuf C++ enum type string and convert to C++ namespace
-        proto_pb_enum_type_str = proto_typereg.get_protobuf_type(value_type).render()
+        proto_pb_enum_type_str = proto_typereg.get_protobuf_type(
+            value_type, conversion_params.compiler_context
+        ).render()
         valid_cpp_enum_type = _proto_type_to_cpp_namespace(proto_pb_enum_type_str)
         conversion_lines = [
             f"{context.INDENT}{conversion_params.destination_name}.add_{conversion_params.proto_field_name}("
@@ -209,7 +303,7 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
 
 def _generate_strong_type_conversion(conversion_params: ConversionParams) -> list[str]:
     """Generate converter for strong types using byte representation."""
-    assert isinstance(conversion_params.field_type, strongtypes.StrongType)  # noqa: S101
+    assert isinstance(conversion_params.field_type, strongtypes.StrongType)
 
     underlying_type = conversion_params.field_type.get_underlying_type()
 
@@ -234,20 +328,21 @@ def _generate_strong_type_conversion(conversion_params: ConversionParams) -> lis
     ]
 
 
-def _generate_conversion_statement(field_type: typesys.Value) -> ConversionInfo:
+def _generate_conversion_statement(field_type: typesys.Value, compiler_context: CompilerContext) -> ConversionInfo:
     """Helper function that analyzes a field type gets the appropriate ConversionInfo object.
 
     The conversion info object is then used to generate the C++ text for converting the specific field.
     """
     additional_headers: list[Header] = []
+    registry = compiler_context[TAP_TO_PROTO_CONVERTER_REGISTRY_KEY]
     # If this is a var_array, fixed array or optional this takes care of getting the header for the nested type.
     if isinstance(field_type, typesys.Instantiation) and "type" in field_type.arguments:
         value_type = field_type.arguments["type"]
-        if in_converter_registry(value_type):
-            additional_headers.append(get_conversion_registration(value_type).include_location)
+        if in_converter_registry(value_type, compiler_context):
+            additional_headers.append(get_conversion_registration(value_type, compiler_context).include_location)
 
-    if in_converter_registry(field_type):
-        conversion_registration = get_conversion_registration(field_type)
+    if in_converter_registry(field_type, compiler_context):
+        conversion_registration = get_conversion_registration(field_type, compiler_context)
         conversion_info = ConversionInfo(
             lambda conversion_params: _generate_schema_converter(conversion_params, conversion_registration.namespace),
             [conversion_registration.include_location],
@@ -260,57 +355,17 @@ def _generate_conversion_statement(field_type: typesys.Value) -> ConversionInfo:
     elif isinstance(field_type, clkenum.ResolvedEnum):
         conversion_info = ConversionInfo(_generate_enum_conversion, [])
     elif isinstance(field_type, typesys.Instantiation) and (
-        field_type.instantiates.value_key() in _TYPE_CONVERSION_MAP
+        field_type.instantiates.value_key() in registry.type_conversion_map
     ):
-        conversion_info = _TYPE_CONVERSION_MAP[field_type.instantiates.value_key()]
-    elif field_type.value_key() in _TYPE_CONVERSION_MAP:
-        conversion_info = _TYPE_CONVERSION_MAP[field_type.value_key()]
+        conversion_info = registry.type_conversion_map[field_type.instantiates.value_key()]
+    elif field_type.value_key() in registry.type_conversion_map:
+        conversion_info = registry.type_conversion_map[field_type.value_key()]
     else:
         msg = f"No conversion supported for {field_type.value_key()}"
         raise TypeError(msg)
 
     conversion_info.required_includes.extend(additional_headers)
     return conversion_info
-
-
-# Register simple conversions for primitive types
-def _register_simple_tap_proto_conversion(clk_type: typesys.TypeVal) -> None:
-    """Register a converter for conversions that don't require any changes to the underlying types."""
-    _TYPE_CONVERSION_MAP[clk_type.value_key()] = ConversionInfo(_generate_simple_conversion, [])
-
-
-_register_simple_tap_proto_conversion(clkbuiltins.BOOL)
-_register_simple_tap_proto_conversion(clkbuiltins.FLOAT32)
-_register_simple_tap_proto_conversion(clkbuiltins.FLOAT64)
-_register_simple_tap_proto_conversion(clkbuiltins.INT32)
-_register_simple_tap_proto_conversion(clkbuiltins.INT64)
-_register_simple_tap_proto_conversion(clkbuiltins.UINT64)
-_register_simple_tap_proto_conversion(clkbuiltins.UINT32)
-_register_simple_tap_proto_conversion(clkbuiltins.INT8)
-_register_simple_tap_proto_conversion(clkbuiltins.UINT8)
-_register_simple_tap_proto_conversion(clkbuiltins.INT16)
-_register_simple_tap_proto_conversion(clkbuiltins.UINT16)
-
-_TYPE_CONVERSION_MAP[clkbuiltins.VAR_STRING.value_key()] = ConversionInfo(_generate_complex_conversion, [])
-
-_TYPE_CONVERSION_MAP[clkbuiltins.UUID.value_key()] = ConversionInfo(_generate_complex_conversion, [])
-
-_TYPE_CONVERSION_MAP[clkbuiltins.SYNC_TIME.value_key()] = ConversionInfo(_generate_complex_conversion, [])
-
-_TYPE_CONVERSION_MAP[clkbuiltins.DURATION.value_key()] = ConversionInfo(_generate_complex_conversion, [])
-
-_TYPE_CONVERSION_MAP[clkbuiltins.BYTE.value_key()] = ConversionInfo(_generate_complex_conversion, [])
-
-_TYPE_CONVERSION_MAP[clkbuiltins.VAR_ARRAY.value_key()] = ConversionInfo(
-    _generate_array_conversion,
-    [Header(JEWELS_REPO, "jewels/std/span.hh"), Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
-)
-
-_TYPE_CONVERSION_MAP[clkbuiltins.FIXED_ARRAY.value_key()] = ConversionInfo(
-    _generate_array_conversion,
-    [Header(JEWELS_REPO, "jewels/std/span.hh"), Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
-)
-_TYPE_CONVERSION_MAP[clkbuiltins.OPTIONAL.value_key()] = ConversionInfo(_generate_optional_conversion, [])
 
 
 def tachyon_tap_to_cpp_type(tap_interface: schema_reg.InterfaceInfo) -> types.CppType | types.CppTemplateType:
@@ -355,7 +410,7 @@ def render_tachyon_to_protobuf_converter(
     tap_cpp_type.ref = Ref.L
 
     # Get the C++ type for the proto representation (destination)
-    proto_cpp_type = protobuf_repr_to_cpp_type(proto_rep)
+    proto_cpp_type = protobuf_repr_to_cpp_type(proto_rep, compiler_context)
     proto_cpp_type.const = False
     proto_cpp_type.ref = Ref.L
 
@@ -393,14 +448,14 @@ def render_tachyon_to_protobuf_converter(
     # Generate code for each field
     for field in instantiated_schema.fields.values():
         conversion_params = ConversionParams(
-            compiler_context=instantiated_schema.schema.module.context,
+            compiler_context=compiler_context,
             source_name=source_name,
             destination_name=destination_name,
             field_type=field.type_info,
             field_name=field.cur_name,
             enclosing_namespace=namespace,
         )
-        conversion_info = _generate_conversion_statement(field.type_info)
+        conversion_info = _generate_conversion_statement(field.type_info, conversion_params.compiler_context)
         conversion_method.body.append(conversion_info.conversion_generator(conversion_params))
         needed_includes.update(conversion_info.required_includes)
 

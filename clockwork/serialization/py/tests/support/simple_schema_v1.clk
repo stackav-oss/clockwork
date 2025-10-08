@@ -1,0 +1,33 @@
+// Test schema version 1
+schema SimpleSchemaV1
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Integer field
+    #1 integer_field: Int32;
+  }
+}
+
+py_target py_simple_schema_v1
+{
+    interface Tappy<SimpleSchemaV1>;
+}
+
+nanobind_target simple_schema_v1_clk_nb
+{
+  binding Tappy<SimpleSchemaV1>;
+}
+
+cpp_target simple_schema_v1
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  schema SimpleSchemaV1;
+
+  representation Tachyon<SimpleSchemaV1>;
+  interface Tappy<SimpleSchemaV1>;
+}

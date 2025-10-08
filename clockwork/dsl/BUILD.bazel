@@ -13,6 +13,10 @@ py_library(
     name = "clk_exception",
     srcs = ["clk_exception.py"],
     visibility = [":__subpackages__"],
+    deps = [
+        "@clockwork_pip//rich",
+        "@clockwork_pip//typing_extensions",
+    ],
 )
 
 py_binary(
@@ -31,6 +35,7 @@ py_binary(
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:nanobind_target",
         "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:path_resolver",
         "//clockwork/dsl/ir:proto_target",
         "//clockwork/dsl/ir:py_target",
         "//clockwork/dsl/ir:system_target",

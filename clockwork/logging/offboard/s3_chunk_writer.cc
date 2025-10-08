@@ -91,7 +91,7 @@ S3ChunkWriter::~S3ChunkWriter()
   {
     return jewels::unexpected(LogError::not_open);
   }
-  const std::lock_guard guard{mutex_};
+  const std::scoped_lock guard{mutex_};
   return next_chunk_offset_;
 }
 

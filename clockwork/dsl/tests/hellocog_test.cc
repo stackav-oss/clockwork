@@ -21,8 +21,9 @@ TEST_CASE("ctor", "[hellocog]")
 {
   auto resource = jewels::memory::MemoryResource(std::pmr::new_delete_resource());
   auto queue = clockwork::OnlineCogQueue(resource);
-  REQUIRE_NOTHROW(clockwork::testing::cogs::HelloCogFactory{}.make(
-    resource, jewels::Uuid<clockwork::common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue)));
+  REQUIRE_NOTHROW(
+    clockwork::testing::cogs::HelloCogFactory{}.make(
+      resource, jewels::Uuid<clockwork::common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue)));
 }
 
 } // namespace

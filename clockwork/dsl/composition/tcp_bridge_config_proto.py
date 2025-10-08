@@ -26,7 +26,6 @@ class TcpBridgeClientConfig(Tachyon["TcpBridgeClientConfig"]):
     publisher_endpoint: pdfproto.PublishEndpoint
     server_address: str
     server_port: int
-    channel_name: str
 
 
 @dataclass(kw_only=True)

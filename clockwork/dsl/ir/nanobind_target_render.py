@@ -27,11 +27,13 @@ from clockwork.dsl.serialization.tap import (
     _to_cpp_type,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     to_schema_instantiation,
 )
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from clockwork.dsl.compiler_context import CompilerContext
+    from clockwork.dsl.ir.expr import TypeExpression
     from clockwork.dsl.ir.nanobind_binding import ResolvedNanobindBinding
     from clockwork.dsl.ir.nanobinding_registry import TargetId
     from clockwork.dsl.ir.statement import ImmutableBinding
@@ -107,9 +109,9 @@ def _get_var_array_max_size(type_val: TypeVal) -> int:
 
 def _get_var_string_max_size(type_val: TypeVal) -> int:
     """Get the max size parameter from a VarString as an int."""
-    assert _is_var_string_type(type_val)  # noqa: S101 (sanity check)
+    assert _is_var_string_type(type_val)
     max_size = type_val.arguments["max_size"]
-    assert isinstance(max_size, primitive.DecimalLiteral)  # noqa: S101 (sanity check)
+    assert isinstance(max_size, primitive.DecimalLiteral)
     return int(max_size.value)
 
 
@@ -156,20 +158,20 @@ def _is_built_in_conversion(type_val: TypeVal) -> bool:
 
 def _get_built_in_conversion_name(type_val: TypeVal) -> str:
     """Return the name of a built-in conversion."""
-    assert _is_built_in_conversion(type_val)  # noqa: S101 (sanity check)
+    assert _is_built_in_conversion(type_val)
 
     if isinstance(type_val, typesys.TypeDef):
         return type_val.name
 
-    assert isinstance(type_val, typesys.Instantiation)  # noqa: S101 (sanity check)
-    assert isinstance(type_val.instantiates, typesys.GenericTypeDef)  # noqa: S101 (sanity check)
+    assert isinstance(type_val, typesys.Instantiation)
+    assert isinstance(type_val.instantiates, typesys.GenericTypeDef)
     return type_val.instantiates.name
 
 
-class NanobindDependencies:
+class NanobindDependencies:  # noqa: PLW1641 Intentionally leaving out __hash__ because this is a mutable type.
     """Various dependencies a nanobind target can have."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         python_targets: set[nanobinding_registry.TargetId] | None = None,
         cpp_includes: set[Header | SystemHeader] | None = None,
@@ -178,6 +180,7 @@ class NanobindDependencies:
         self._python_targets = python_targets or set()
         self._cpp_includes = cpp_includes or set()
 
+    @override
     def __eq__(self, other: object) -> bool:
         """Equality comparison."""
         if isinstance(other, NanobindDependencies):
@@ -229,13 +232,13 @@ def _get_type_dependent_targets(  # noqa: PLR0911 (One return for each type)
     ):
         return NanobindDependencies()
 
-    maybe_target_info = nanobinding_registry.lookup_binding(type_val)
+    maybe_target_info = nanobinding_registry.lookup_binding(type_val, ir_node.module.context)
     if maybe_target_info is None:
         # If there isn't target info, then either
         # 1. A user-defined schema isn't bound in any nanobind_target.
         # 2. A type isn't in _BUILT_IN_CONVERSIONS because we don't have a type_caster for it.
         pretty = _pretty_binding_name(ir_node)
-        pretty_subtype = _sanitized_element_type_name(type_val)
+        pretty_subtype = _sanitized_element_type_name(type_val, ir_node.module.context)
         msg = f"While parsing '{pretty}', found child type '{pretty_subtype}' that doesn't have a nanobind target.\n"
         msg += "There are two likely causes:\n"
         msg += "1. If this is a user-defined type then you must bind it in a nanobind_target.\n"
@@ -355,8 +358,8 @@ def _render_optional_field_prop_rw(
       // getter
       []({tappy_cpp_type}& value) -> {arg_type}
       {{
-        return value.has_{field.cur_name}()
-            ? std::make_optional({maybe_take_address}value.value_mutable_{field.cur_name}())
+        return value.get_underlying_{field.cur_name}().has_value()
+            ? std::make_optional({maybe_take_address}value.get_underlying_{field.cur_name}().value())
             : std::nullopt;
       }},
       // setter
@@ -433,7 +436,9 @@ def _render_normal_field_prop_rw(
     )
 
 
-def _python_array_or_list_type_expr(compiler_context: CompilerContext, type_val: typesys.TypeVal) -> str:
+def _python_array_or_list_type_expr(
+    compiler_context: CompilerContext, type_val: typesys.TypeVal, *, use_union_type: bool
+) -> str:
     """Get a C++ expression that will render the python type of an array.
 
     This will return an expression something like 'python_type_name<VarArray<Msg, 22>>() + | list[" + python_type_name<Msg>() + "]"'.
@@ -449,13 +454,14 @@ def _python_array_or_list_type_expr(compiler_context: CompilerContext, type_val:
 
     cpp_type = _to_cpp_type(compiler_context, type_val).render("")
     py_cpp_type = f"::jewels::nanobind::python_type_name<{cpp_type}>()"
+    if use_union_type:
+        elem_cpp_type = _to_cpp_type(compiler_context, elem_type).render("")
+        py_cpp_element_type = f"::jewels::nanobind::python_type_name<{elem_cpp_type}>()"
+        return f'{py_cpp_type} + " | list[" + {py_cpp_element_type} + "]"'
+    return py_cpp_type
 
-    elem_cpp_type = _to_cpp_type(compiler_context, elem_type).render("")
-    py_cpp_element_type = f"::jewels::nanobind::python_type_name<{elem_cpp_type}>()"
-    return f'{py_cpp_type} + " | list[" + {py_cpp_element_type} + "]"'
 
-
-def _get_python_type_expr(compiler_context: CompilerContext, type_val: typesys.TypeVal) -> str:
+def _get_python_type_expr(compiler_context: CompilerContext, type_val: typesys.TypeVal, *, use_union_type: bool) -> str:
     """Get a C++ expression that will render the python type.
 
     This will return an expression something like 'python_type_name<VarArray<Msg, 22>>() + | list[" + python_type_name<Msg>() + "]"'.
@@ -463,9 +469,12 @@ def _get_python_type_expr(compiler_context: CompilerContext, type_val: typesys.T
     """
     if _is_optional_type(type_val):
         optional_element_type = _get_optional_element_type(type_val)
-        return _get_python_type_expr(compiler_context, optional_element_type) + ' + " | None"'
+        return (
+            _get_python_type_expr(compiler_context, optional_element_type, use_union_type=use_union_type)
+            + ' + " | None"'
+        )
     if _is_var_array_type(type_val) or _is_fixed_array_type(type_val):
-        return _python_array_or_list_type_expr(compiler_context, type_val)
+        return _python_array_or_list_type_expr(compiler_context, type_val, use_union_type=use_union_type)
     cpp_type = _to_cpp_type(compiler_context, type_val).render("")
     return f"::jewels::nanobind::python_type_name<{cpp_type}>()"
 
@@ -509,11 +518,11 @@ def _render_var_array_field_prop_rw(
             f'nb::for_setter(nb::sig("def {field.cur_name}(self, arg: bytes, /) -> None"))',
         ]
     else:
-        py_type_expr = _get_python_type_expr(compiler_context, field.type_info)
-
+        # for both setter & getter
+        py_type_expr_property = _get_python_type_expr(compiler_context, field.type_info, use_union_type=False)
         extras = [
-            f'nb::for_getter(nb::sig(std::string("def {field.cur_name}(self) -> " + {py_type_expr}).c_str()))',
-            f'nb::for_setter(nb::sig(std::string("def {field.cur_name}(self, arg: " + {py_type_expr} + ", /) -> None").c_str()))',
+            f'nb::for_getter(nb::sig(std::string("def {field.cur_name}(self) -> " + {py_type_expr_property}).c_str()))',
+            f'nb::for_setter(nb::sig(std::string("def {field.cur_name}(self, arg: " + {py_type_expr_property} + ", /) -> None").c_str()))',
         ]
 
     return _render_field_prop_rw(
@@ -549,11 +558,11 @@ def _render_fixed_array_field_prop_rw(
             f'nb::for_setter(nb::sig("def {field.cur_name}(self, arg: bytes, /) -> None"))',
         ]
     else:
-        py_type_expr = _get_python_type_expr(compiler_context, field.type_info)
-
+        # for both setter & getter
+        py_type_expr_property = _get_python_type_expr(compiler_context, field.type_info, use_union_type=False)
         extras = [
-            f'nb::for_getter(nb::sig(std::string("def {field.cur_name}(self) -> " + {py_type_expr}).c_str()))',
-            f'nb::for_setter(nb::sig(std::string("def {field.cur_name}(self, arg: " + {py_type_expr} + ", /) -> None").c_str()))',
+            f'nb::for_getter(nb::sig(std::string("def {field.cur_name}(self) -> " + {py_type_expr_property}).c_str()))',
+            f'nb::for_setter(nb::sig(std::string("def {field.cur_name}(self, arg: " + {py_type_expr_property} + ", /) -> None").c_str()))',
         ]
 
     return _render_field_prop_rw(
@@ -610,7 +619,10 @@ def _render_constructor(
 
     # customize the signature to allow list types
     signature_args = ", ".join(
-        [f'{field.cur_name}: " + {_get_python_type_expr(compiler_context, field.type_info)} + "' for field in fields]
+        [
+            f'{field.cur_name}: " + {_get_python_type_expr(compiler_context, field.type_info, use_union_type=True)} + "'
+            for field in fields
+        ]
     )
     extras_list.append(f'nb::sig(("def __init__(self, {signature_args}) -> None").c_str())')
 
@@ -664,7 +676,7 @@ def sanitize_uniqpath(uniq_path: str) -> str:
     return uniq_path
 
 
-def _sanitized_element_type_name(type_val: TypeVal) -> str:
+def _sanitized_element_type_name(type_val: TypeVal, compiler_context: CompilerContext) -> str:
     """Form a sanitized name for a non-container type.
 
     Used for naming container bindings - for example this would be the Foo in "VarArray_Foo_22" or the Int32 in "FixedArray_Int32_20".
@@ -673,14 +685,14 @@ def _sanitized_element_type_name(type_val: TypeVal) -> str:
     for instance all C++ become the same python int, and aurora units have the same python type as their underlying representation.
     """
     if isinstance(type_val, clkenum.ResolvedEnum):
-        assert type_val.inner_scope.uniq_path.endswith(type_val.name)  # noqa: S101 (sanity check)
+        assert type_val.inner_scope.uniq_path.endswith(type_val.name)
         return sanitize_uniqpath(type_val.inner_scope.uniq_path).replace("::", "_")
 
     if isinstance(type_val, schema.InstantiatedSchema):
-        assert type_val.schema.inner_scope.uniq_path.endswith(type_val.schema.name)  # noqa: S101 (sanity check)
+        assert type_val.schema.inner_scope.uniq_path.endswith(type_val.schema.name)
 
         # use the generic alias if there is one
-        target_info = nanobinding_registry.lookup_binding(type_val)
+        target_info = nanobinding_registry.lookup_binding(type_val, compiler_context)
         if target_info and target_info.maybe_generic_alias is not None:
             return target_info.maybe_generic_alias
 
@@ -727,7 +739,7 @@ def _render_bind_vectors_and_arrays(
         cpp_mod.context.add_include(Header(JEWELS_REPO, "jewels/nanobind/clk_bindings/bind_var_array.hh"))
     else:
         # not an array or optional type - nothing to bind here, just return a unique sanitized type name
-        return _sanitized_element_type_name(type_val)
+        return _sanitized_element_type_name(type_val, compiler_context)
 
     # Recursively bind any vector or array types in the element type.
     # For example, if this is vector<vector<optional<array<T> > > >, we want to bind them all from the innermost on out.
@@ -761,7 +773,7 @@ def _render_bind_vectors_and_arrays(
 class SchemaInfo:
     """Small wrapper around the schema."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         compiler_context: CompilerContext,
         binding_original_type: typesys.Instantiation,
@@ -796,8 +808,17 @@ class SchemaInfo:
   {self._class_binding_variable}
     // Default constructor.
     .def(nb::init<>(), "Default constructor.")
+    // PyTachyon2-compatible default constructor.
+    .def_static("default", [](){{return {self._rendered_tappy_cpp_type}();}})
     // Copy constructor.
     .def(nb::init<{self._rendered_tappy_cpp_type}>(), "Copy constructor.")\
+    // PyTachyon2-compatible copy and deepcopy.
+    .def("__copy__", [](const {self._rendered_tappy_cpp_type}& value) -> std::unique_ptr<{self._rendered_tappy_cpp_type}> {{
+        return std::make_unique<{self._rendered_tappy_cpp_type}>(value);
+        }})
+    .def("__deepcopy__", [](const {self._rendered_tappy_cpp_type}& value, nb::handle /* memo */) -> std::unique_ptr<{self._rendered_tappy_cpp_type}> {{
+        return std::make_unique<{self._rendered_tappy_cpp_type}>(value);
+        }})\
 """)
 
         # Make a constructor taking all fields if the schema enables that option.
@@ -817,7 +838,7 @@ class SchemaInfo:
         for field in schema_ir.fields.values():
             field_type = field.type_info
             field_cpp_type = typereg.get_cpp_type(self._compiler_context, field_type)
-            assert isinstance(field_cpp_type, types.CppType | types.CppTemplateType)  # noqa: S101  (sanity check)
+            assert isinstance(field_cpp_type, types.CppType | types.CppTemplateType)
 
             if _is_optional_type(field_type):
                 cpp_mod.append(
@@ -890,7 +911,10 @@ class SchemaInfo:
         {self._class_binding_variable},
         "{metadata_name}",
         {constraint.size},
-        {constraint.alignment});""")
+        {constraint.alignment},
+        "{self._schema_ir.schema.module.module_id.repo}",
+        "{self._schema_ir.schema.module.module_id.get_base_path()}",
+        "{self._schema_ir.schema_name}");""")
 
 
 def _render_enum_binding(resolved_enum: clkenum.ResolvedEnum) -> context.CppChunk:
@@ -898,7 +922,7 @@ def _render_enum_binding(resolved_enum: clkenum.ResolvedEnum) -> context.CppChun
     cpp_mod = context.CppChunk()
 
     enum_type = typereg.get_cpp_type(resolved_enum.module.context, resolved_enum)
-    assert isinstance(enum_type, types.CppType)  # noqa: S101  (sanity check)
+    assert isinstance(enum_type, types.CppType)
 
     cpp_mod.context.add_includes(enum_type.includes)
     enum_cpp_type = enum_type.render("")
@@ -916,6 +940,33 @@ def _render_enum_binding(resolved_enum: clkenum.ResolvedEnum) -> context.CppChun
     return cpp_mod
 
 
+def _render_decimal_literal_constant(
+    binding_value: primitive.DecimalLiteral, binding_typespec: TypeExpression | None, retain_float32: bool
+) -> str:
+    """Render a DecimalLiteral constant as a nanobind expression (like 'nb::float_(2.2)')."""
+    if binding_typespec is None:
+        # no type signature - just look for a decimal in the value
+        if "." in str(binding_value.value):
+            return f"nb::float_({binding_value.value})"
+        return f"nb::int_({binding_value.value})"
+
+    type_val = binding_typespec.resolved_value
+    assert type_val is not None, f"Expected a resolved type for {binding_typespec}"
+    is_strong_type = isinstance(type_val, StrongType)
+    if type_val == clkbuiltins.FLOAT32 or (is_strong_type and type_val.typespec == clkbuiltins.FLOAT32):
+        # make sure 32 bit floats reach python with correct precision
+        maybe_f = "f" if retain_float32 else ""
+        return f"nb::float_({binding_value.value}{maybe_f})"
+    if type_val == clkbuiltins.FLOAT64 or (is_strong_type and type_val.typespec == clkbuiltins.FLOAT64):
+        return f"nb::float_({binding_value.value})"
+    if isinstance(type_val, clkbuiltins.IntegerPrimitiveType) or (
+        is_strong_type and isinstance(type_val.typespec, clkbuiltins.IntegerPrimitiveType)
+    ):
+        return f"nb::int_({binding_value.value})"
+    msg = f"Unsupported type for decimal literal: {type_val}"
+    raise TypeError(msg)
+
+
 class Constant:
     """Wrapper around ImmutableBinding, for rendering constants."""
 
@@ -923,7 +974,7 @@ class Constant:
     # same way way we convert all int types to python `int`.
     _RETAIN_FLOAT32 = False
 
-    def __init__(self, binding: ImmutableBinding) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, binding: ImmutableBinding) -> None:
         """Render a constant as a nanobind binding assignment."""
         self._binding = binding
         if binding.value is clkbuiltins.FALSE_VALUE:
@@ -933,23 +984,7 @@ class Constant:
         elif isinstance(binding.value, primitive.StringLiteral):
             self._nb_value = f'nb::str("{binding.value.value}")'
         elif isinstance(binding.value, primitive.DecimalLiteral):
-            if binding.typespec is None:
-                # no type signature - just look for a decimal in the value
-                if "." in str(binding.value.value):
-                    self._nb_value = f"nb::float_({binding.value.value})"
-                else:
-                    self._nb_value = f"nb::int_({binding.value.value})"
-            else:
-                type_val = binding.typespec.resolved_value
-                if type_val == clkbuiltins.FLOAT32:
-                    # make sure 32 bit floats reach python with correct precision
-                    maybe_f = "f" if Constant._RETAIN_FLOAT32 else ""
-                    self._nb_value = f"nb::float_({binding.value.value}{maybe_f})"
-                elif type_val == clkbuiltins.FLOAT64:
-                    self._nb_value = f"nb::float_({binding.value.value})"
-                else:
-                    assert isinstance(type_val, clkbuiltins.IntegerPrimitiveType)  # noqa: S101 (sanity check)
-                    self._nb_value = f"nb::int_({binding.value.value})"
+            self._nb_value = _render_decimal_literal_constant(binding.value, binding.typespec, self._RETAIN_FLOAT32)
         else:
             msg = binding.append_error_line(
                 f"Converting constant type '{type(binding.value)}' to a nanobind value is unsupported."
@@ -1000,12 +1035,14 @@ def render_nanobind_bindings_module(
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
             Header(JEWELS_REPO, "jewels/nanobind/clk_bindings/bind_tachyon_serialize.hh"),
             # All type casters are always brought into scope, to rule out any potential interaction corner cases.
-            Header(JEWELS_REPO, "jewels/nanobind/nb_var_string.hh", iwyu_pragma="// IWYU pragma: keep"),
-            Header(JEWELS_REPO, "jewels/nanobind/nb_au.hh", iwyu_pragma="// IWYU pragma: keep"),
+            Header(JEWELS_REPO, "jewels/nanobind/nb_var_string.hh", iwyu_pragma="IWYU pragma: keep"),
+            Header(JEWELS_REPO, "jewels/nanobind/nb_au.hh", iwyu_pragma="IWYU pragma: keep"),
             Header(JEWELS_REPO, "jewels/nanobind/clk_bindings/get_python_type_name.hh"),
             Header(JEWELS_REPO, "jewels/nanobind/clk_bindings/cast_maybe_by_reference.hh"),
             SystemHeader("nanobind/nanobind.h"),
-            SystemHeader("nanobind/stl/optional.h", iwyu_pragma="// IWYU pragma: keep"),
+            SystemHeader("nanobind/stl/optional.h", iwyu_pragma="IWYU pragma: keep"),
+            SystemHeader("nanobind/stl/unique_ptr.h", iwyu_pragma="IWYU pragma: keep"),
+            SystemHeader("memory"),
             SystemHeader("optional"),
         ]
     )

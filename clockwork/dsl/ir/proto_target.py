@@ -51,7 +51,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
             raise ValueError(msg)
         doc = node.Doc.maybe_from_cst(cst_node.maybe_doc(), module)
         name = get_span(cst_node.child_identifier().child_value(), terminals=module.terminals)
-        options = ProtoTargetOptions.from_cst(cst_node.child_proto_target_options(), module)
+        options = ProtoTargetOptions.from_cst(cst_node.maybe_proto_target_options(), module, name)
         representations = []
         enums = []
         for statement in cst_node.children_proto_target_statement():
@@ -101,7 +101,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
             if not isinstance(entity.typespec, Instantiation):
                 msg = "Representation must be resolved before rendering"
                 raise TypeError(msg)
-            proto_module.add_message(protobuf.render(entity.name, entity.typespec))
+            proto_module.add_message(protobuf.render(entity.name, entity.typespec, entity.module.context))
 
         write_to_file(
             proto_module, root_dir, BazelPathResolver().to_buildtime_path(self.module.module_id).parent, self.name
@@ -119,7 +119,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
             if not isinstance(entity.typespec, Instantiation):
                 msg = "Representation must be resolved before rendering"
                 raise TypeError(msg)
-            for dep in protobuf.render(entity.name, entity.typespec).deps:
+            for dep in protobuf.render(entity.name, entity.typespec, entity.module.context).deps:
                 if dep.path.parent == proto_targets.PROTOBUF_PATH:
                     protobuf_deps.add(dep)
                 elif dep.path != module_file_name:
@@ -178,7 +178,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
         ]
         if self.options.go_package is not None:
             output_targets.append(
-                proto_targets.ProtoGoLibrary(  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                proto_targets.ProtoGoLibrary(  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                     name=proto_go_library_name.value,
                     srcs=[go],
                     deps=sorted(
@@ -204,15 +204,64 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
 
     @classmethod
     def from_cst(
-        cls: type[ProtoTargetOptions], cst_node: cst.ProtoTargetOptions, module: node.Module
+        cls: type[ProtoTargetOptions],
+        cst_node: cst.ProtoTargetOptions | None,
+        module: node.Module,
+        proto_target_name: str,
     ) -> ProtoTargetOptions:
         """Create an IR ProtoTargetOptions from a CST node."""
-        if module.terminals is None:
-            msg = "Cannot construct IR nodes from CST without a TerminalSource"
-            raise ValueError(msg)
         package = None
         go_package = None
         validate_proto = None
+
+        # parse the options block if it exists
+        if cst_node is not None:
+            package, go_package, validate_proto = ProtoTargetOptions._extract_options(cst_node, module)
+
+        # default package
+        if package is None:
+            # Derive default package from module path.
+            #
+            # For
+            # > repo: my_repo
+            # > filepath: path/to/my_module.clk
+            # > proto_target: my_proto
+            #
+            # The package will be
+            # > my_repo.path.to.my_module.my_proto
+            package = ".".join(
+                [
+                    module.module_id.repo,
+                    *module.module_id.name.split("::"),
+                    proto_target_name,
+                ]
+            )
+
+        # default validate_proto
+        if validate_proto is None:
+            validate_proto = True
+
+        return cls(
+            package=package, go_package=go_package, validate_proto=validate_proto, module=module, cst_node=cst_node
+        )
+
+    @staticmethod
+    def _extract_options(
+        cst_node: cst.ProtoTargetOptions,
+        module: node.Module,
+    ) -> tuple[str | None, str | None, bool | None]:
+        """Parse the options from the CST node without constructing defaults.
+
+        If an option is not specified, return None.
+        """
+        if module.terminals is None:
+            msg = "Cannot construct IR nodes from CST without a TerminalSource"
+            raise ValueError(msg)
+
+        package = None
+        go_package = None
+        validate_proto = None
+
         for option in cst_node.children_proto_package_option():
             if package is not None:
                 msg = node.append_error_line(cst_node, module, "Proto package option specified twice")
@@ -228,14 +277,8 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
                 msg = node.append_error_line(cst_node, module, "proto validation option specified twice")
                 raise ValueError(msg)
             validate_proto = get_span(validation_option.child_boolean().span, module.terminals) == "true"
-        if package is None:
-            msg = node.append_error_line(cst_node, module, "Proto package option must be provided")
-            raise ValueError(msg)
-        if validate_proto is None:
-            validate_proto = False
-        return cls(
-            package=package, go_package=go_package, validate_proto=validate_proto, module=module, cst_node=cst_node
-        )
+
+        return package, go_package, validate_proto
 
 
 @dataclass(eq=True, slots=True)
@@ -276,8 +319,8 @@ class EnumTarget:
         lines = []
         lines.append(f"enum {self.enum_ir.name}" + " {")
         for value in self.enum_ir.values.values():
-            assert isinstance(value.integer_value, int)  # noqa: S101  (sanity check)
-            assert value.integer_value >= 0  # noqa: S101  (sanity check)
+            assert isinstance(value.integer_value, int)
+            assert value.integer_value >= 0
             lines.append(f"{protobuf.INDENT}{value.name} = {value.integer_value};")
         lines.append("}")
         return "\n".join(line for line in lines)

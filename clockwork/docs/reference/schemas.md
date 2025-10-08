@@ -44,7 +44,7 @@ schema HelloWorld
     #4 data: VarArray<data_type, data_max_size>;
 
     // A self-referential identifier
-    #5 msg_id: jewels::Uuid<HelloWorld>;
+    #5 msg_id: Uuid<HelloWorld>;
 
     // A timestamp
     #6 tov: SyncTime;
@@ -133,7 +133,7 @@ Built-in types are in the table below.
 | `VarArray<type: Type, max_size: UInt64>`   | Similar interface to a `std::vector` but a custom Clockwork implementation        | `list[type]`                                  | In C++ prefer to use spans, ranges, and iterators and avoid hard-coding the container type.    |
 | `Duration`                                 | `std::chrono::nanoseconds`                                                        | Clockwork-specific `Duration` type            | This is a strong type in Clockwork with [unit literal syntax](common_syntax.md#unit-literals). |
 | `SyncTime`                                 | `jewels::time::SyncTime`                                                          | Clockwork-specific `SyncTime` type            | This is also a strong type but without any literal syntax.                                     |
-| `jewels::Uuid<tag: Type>`                  | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                   | Tag type is discarded in Python. See below for defining tag types in Clockwork.                |
+| `Uuid<tag: Type>`                          | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                   | Tag type is discarded in Python. See below for defining tag types in Clockwork.                |
 
 ### Clockwork strong types (Duration, SyncTime, UUID, tags)
 
@@ -175,7 +175,7 @@ Documentation is required for tags.
 With that, you can define a specific UUID type as `Uuid<Sample>`, which would be a _good_ identifier.
 
 It's not always necessary to define tags though, because any time you define a schema (or a Cog), the schema (or Cog) type is also directly usable as a tag type.
-So if we have a `Track` schema defined already, and we want instances of this schema to have unique IDs, that can just be `jewels::Uuid<Track>` without any explicit `tag` declaration.
+So if we have a `Track` schema defined already, and we want instances of this schema to have unique IDs, that can just be `Uuid<Track>` without any explicit `tag` declaration.
 And because of Clockwork's multi-pass compiler, you can reference the name `Track` as a tag type even before you've finished defining the `Track` schema, without any forward declaration:
 
 ```clockwork
@@ -185,7 +185,7 @@ schema Track
   fields
   {
     // Track ID
-    #1 id: jewels::Uuid<Track>;
+    #1 id: Uuid<Track>;
   }
 }
 ```

@@ -18,6 +18,7 @@ class ModuleID:
 
     repo: str
     name: str
+    suffix: str = ".clk"
 
     @classmethod
     def from_path(cls, repo: str, path: Path) -> ModuleID:
@@ -39,7 +40,11 @@ class ModuleID:
 
     def get_base_path(self) -> Path:
         """Get the base path for the module ID."""
-        return Path(*self.name.split("::")).with_suffix(".clk")
+        return Path(*self.name.split("::")).with_suffix(self.suffix)
+
+    def with_suffix(self, new_suffix: str) -> ModuleID:
+        """Change the suffix."""
+        return ModuleID(repo=self.repo, name=self.name, suffix=new_suffix)
 
     def get_fqn(self) -> str:
         """Convert to a fully qualified name."""

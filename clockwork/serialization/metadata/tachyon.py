@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from clockwork.dsl.ir import clkbuiltins, clkenum, node, schema, strongtypes, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, expr, node, primitive, schema, strongtypes, typesys
 from clockwork.dsl.serialization import tachyon_layout_reg, tachyon_reg
 from clockwork.serialization.metadata import tachyon_model as model
 from clockwork.serialization.metadata import tachyon_model_pb2 as model_pb2
@@ -17,10 +18,144 @@ if TYPE_CHECKING:
     from clockwork.dsl.compiler_context import CompilerContext
 
 
+def _init_value_from_decimal_value(
+    fld: schema.InstantiatedFieldDef,
+    value: primitive.DecimalValue,
+) -> model.InitialValue | None:
+    """Get a field initial value from a decimal value.
+
+    Arguments:
+        fld: Instantiated schema field.
+        value: Decimal value.
+
+    Returns:
+        Field initial value.
+    """
+    value_type = fld.type_info
+    if isinstance(value_type, strongtypes.StrongType):
+        value_type = value_type.get_underlying_type()
+    if isinstance(value_type, clkbuiltins.IntegerPrimitiveType) and value_type.signed:
+        return model.SignedInitialValue(value=int(value.value))
+    if isinstance(value_type, clkbuiltins.IntegerPrimitiveType) and not value_type.signed:
+        return model.UnsignedInitialValue(value=int(value.value))
+    if isinstance(value_type, clkbuiltins.FloatingPointPrimitiveType):
+        return model.FloatInitialValue(value=value.value)
+    msg = fld.append_error_line("Unsupported initial value: {value_type}")
+    raise TypeError(msg)
+
+
+def _init_value_from_enum_value(fld: schema.InstantiatedFieldDef, value: clkenum.ValueRef) -> model.InitialValue | None:
+    """Get a field initial value from an enum value.
+
+    Arguments:
+        fld: Instantiated schema field.
+        value: Enum value.
+
+    Returns:
+        Field initial value.
+    """
+    enum_value = value.value_def.integer_value
+    if isinstance(enum_value, expr.Expr):
+        enum_value = enum_value.evaluate()
+    assert isinstance(enum_value, int)
+    if not isinstance(fld.type_info, clkenum.ResolvedEnum):
+        msg = fld.append_error_line("Unsupported initial value")
+        raise TypeError(msg)
+    if fld.type_info.underlying_type in [clkbuiltins.INT8, clkbuiltins.INT16, clkbuiltins.INT32, clkbuiltins.INT64]:
+        return model.SignedInitialValue(value=enum_value)
+    if fld.type_info.underlying_type in [clkbuiltins.UINT8, clkbuiltins.UINT16, clkbuiltins.UINT32, clkbuiltins.UINT64]:
+        return model.UnsignedInitialValue(value=enum_value)
+    msg = fld.append_error_line("Unsupported initial value")
+    raise TypeError(msg)
+
+
+def _init_value_from_schema_field(
+    schema_ir: schema.InstantiatedSchema, fld: schema.InstantiatedFieldDef
+) -> model.InitialValue | None:
+    """Get the initial value from a typesys value.
+
+    Arguments:
+        schema_ir: Instantiated schema definition.
+        fld: Instantiated field definition.
+
+    Returns:
+        Initial value or None.
+    """
+    value = fld.init_value
+    if isinstance(value, schema.ParameterRef):
+        if not schema_ir.arguments or value.name not in schema_ir.arguments:
+            msg = fld.append_error_line(f"Unknown schema parameter {value.name} in initial value")
+            raise TypeError(msg)
+        value = schema_ir.arguments[value.name]
+
+    if value is None or isinstance(value, clkbuiltins.Nullopt):
+        return None
+
+    if isinstance(value, primitive.DecimalValue):
+        return _init_value_from_decimal_value(fld, value)
+
+    if value is clkbuiltins.FALSE_VALUE:
+        return model.BoolInitialValue(value=False)
+
+    if value is clkbuiltins.TRUE_VALUE:
+        return model.BoolInitialValue(value=True)
+
+    if isinstance(value, clkenum.ValueRef):
+        return _init_value_from_enum_value(fld, value)
+
+    msg = fld.append_error_line("Unsupported initial value")
+    raise TypeError(msg)
+
+
+def _init_value_to_protobuf(value: model.InitialValue | None, pb_fld: model_pb2.SchemaField) -> None:
+    """Convert model initial value to proto initial value in a schema field.
+
+    Arguments:
+        value: Model initial value.
+        pb_fld: Schema field protobuf.
+    """
+    if value is None:
+        return
+    if isinstance(value, model.SignedInitialValue):
+        pb_fld.init_value.signed_value = value.value
+        return
+    if isinstance(value, model.UnsignedInitialValue):
+        pb_fld.init_value.unsigned_value = value.value
+        return
+    if isinstance(value, model.FloatInitialValue):
+        pb_fld.init_value.float_value = str(value.value)
+        return
+    pb_fld.init_value.bool_value = value.value
+
+
+def _init_value_from_pb(pb_fld: model_pb2.SchemaField) -> model.InitialValue | None:
+    """Convert proto initial value to model initial value.
+
+    Arguments:
+        pb_fld: Schema field protobuf.
+
+    Returns:
+        Model initial value or None.
+    """
+    if not pb_fld.HasField("init_value"):
+        return None
+    if pb_fld.init_value.HasField("signed_value"):
+        return model.SignedInitialValue(value=pb_fld.init_value.signed_value)
+    if pb_fld.init_value.HasField("unsigned_value"):
+        return model.UnsignedInitialValue(value=pb_fld.init_value.unsigned_value)
+    if pb_fld.init_value.HasField("float_value"):
+        return model.FloatInitialValue(value=Decimal(pb_fld.init_value.float_value))
+    if pb_fld.init_value.HasField("bool_value"):
+        return model.BoolInitialValue(value=pb_fld.init_value.bool_value)
+
+    msg = f"Unsupported value proto: {pb_fld.init_value}"
+    raise TypeError(msg)
+
+
 class Builder:
     """Tachyon Metadata Builder."""
 
-    def __init__(self, compiler_context: CompilerContext) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, compiler_context: CompilerContext) -> None:
         """Create a Builder."""
         self.compiler_context = compiler_context
         self.types: list[model.ClkType] = []
@@ -54,7 +189,7 @@ class Builder:
 
     def _handle_builtin(self, typ: typesys.TypeVal, key: str) -> int:
         inner = _get_inner_typedef(typ)
-        assert inner.scope is clkbuiltins.BUILTINS_SCOPE  # noqa: S101  (sanity check; enforced in handle_type)
+        assert inner.scope is clkbuiltins.BUILTINS_SCOPE
         if not isinstance(inner, clkbuiltins.SerializableBuiltin):
             msg = node.enrich_error_if_possible(inner, f"Builtin type {key} {type(inner)} is not serializable")
             raise TypeError(msg)
@@ -75,13 +210,13 @@ class Builder:
         args = []
         if isinstance(typ, typesys.Instantiation):
             params = inner.generic_parameters()
-            assert params is not None  # noqa: S101  (invariant: Instantiated types have parameters)
+            assert params is not None
             for param in params:
                 arg = typ.arguments[param.name]
                 arg_val: int | str
                 if param.type_bound is clkbuiltins.TYPE_TYPE or isinstance(arg, typesys.TypeVal):
-                    assert param.type_bound is clkbuiltins.TYPE_TYPE  # noqa: S101  (sanity check)
-                    assert isinstance(arg, typesys.TypeVal)  # noqa: S101  (sanity check)
+                    assert param.type_bound is clkbuiltins.TYPE_TYPE
+                    assert isinstance(arg, typesys.TypeVal)
                     if typ.instantiates is clkbuiltins.UUID and isinstance(arg, schema.Schema):
                         arg = schema.InstantiatedSchema.from_typespec(arg)
                     arg_val = self.handle_type(arg)
@@ -98,6 +233,14 @@ class Builder:
             raise ValueError(msg)
         constraint = tachyon_reg.constraint_for_type(self.compiler_context, schema_ir)
         layout = tachyon_layout_reg.layout_for_type(self.compiler_context, schema_ir)
+        removed: set[int] = set()
+        became: dict[int, int] = {}
+        versions: set[int] = set(schema_ir.history.versions)
+        for field_history in schema_ir.history.fields.values():
+            if field_history.removed_in_version is not None:
+                removed.add(field_history.num)
+            if field_history.became_field_num is not None:
+                became[field_history.num] = field_history.became_field_num
         if constraint is None or layout is None:
             msg = f"No Tachyon representation for {key}"
             raise ValueError(msg)
@@ -108,6 +251,9 @@ class Builder:
             schema_uuid=schema_ir.schema_uuid,
             version=schema_ir.cur_version(),
             fields=(),
+            removed=removed,
+            became=became,
+            versions=versions,
         )
         type_id = len(self.types)
         self.types.append(result)
@@ -117,7 +263,11 @@ class Builder:
             fld = schema_ir.fields[field_span.field_num]
             fields.append(
                 model.SchemaField(
-                    offset=field_span.offset, num=fld.num, name=fld.cur_name, type_id=self.handle_type(fld.type_info)
+                    offset=field_span.offset,
+                    num=fld.num,
+                    name=fld.cur_name,
+                    type_id=self.handle_type(fld.type_info),
+                    init_value=_init_value_from_schema_field(schema_ir, fld),
                 )
             )
         result.fields = tuple(fields)
@@ -131,6 +281,14 @@ class Builder:
         values = []
         for fld_num, value in sorted(enum_ir.values.items()):
             values.append(model.EnumValue(num=fld_num, value=value.integer_value, name=value.name))
+        removed: set[int] = set()
+        became: dict[int, int] = {}
+        versions: set[int] = set(enum_ir.history.versions)
+        for value_history in enum_ir.history.values.values():
+            if value_history.removed_in_version is not None:
+                removed.add(value_history.field_num)
+            if value_history.became_field_num is not None:
+                became[value_history.field_num] = value_history.became_field_num
         result = model.ClkEnumType(
             fqn=enum_ir.value_key(),
             options=model.ClkEnumType.Options.flags if enum_ir.bit_flags else model.ClkEnumType.Options(0),
@@ -138,6 +296,9 @@ class Builder:
             enum_uuid=enum_ir.uuid,
             version=enum_ir.cur_version(),
             values=tuple(values),
+            removed=removed,
+            became=became,
+            versions=versions,
         )
         type_id = len(self.types)
         self.types.append(result)
@@ -147,7 +308,7 @@ class Builder:
 
     def _handle_strong_type(self, strong_type: strongtypes.StrongType, key: str) -> int:
         underlying_type = strong_type.typespec
-        assert isinstance(underlying_type, clkbuiltins.PrimitiveType)  # noqa: S101  (invariant)
+        assert isinstance(underlying_type, clkbuiltins.PrimitiveType)
         result = model.StrongType(fqn=strong_type.value_key(), underlying_type_id=self.handle_type(underlying_type))
         type_id = len(self.types)
         self.types.append(result)
@@ -174,48 +335,83 @@ def _get_inner_typedef(typ: typesys.TypeVal) -> typesys.TypeDef:
     return result
 
 
-def to_protobuf(metadata: model.TachyonMetadata) -> model_pb2.TachyonMetadata:  # noqa: C901
+def _builtin_to_protobuf(
+    metadata: model.TachyonMetadata, type_desc: model.BuiltInType, pb_desc: model_pb2.TypeDesc
+) -> None:
+    """Convert a BuiltInType to Protobuf."""
+    pb_desc.built_in.fqn = type_desc.fqn
+    pb_desc.built_in.uuid = type_desc.uuid.bytes
+    pb_desc.built_in.size = type_desc.size
+    pb_desc.built_in.alignment = type_desc.alignment
+    pb_desc.built_in.hash = type_desc.get_hash(metadata.types)
+    for arg in type_desc.arguments:
+        pb_arg = pb_desc.built_in.arguments.add()
+        if isinstance(arg, int):
+            pb_arg.type_id = arg
+        else:
+            pb_arg.value = arg
+
+
+def _schema_to_protobuf(
+    metadata: model.TachyonMetadata, type_desc: model.SchemaType, pb_desc: model_pb2.TypeDesc
+) -> None:
+    """Convert a SchemaType to Protobuf."""
+    pb_desc.schema.fqn = type_desc.fqn
+    pb_desc.schema.size = type_desc.size
+    pb_desc.schema.alignment = type_desc.alignment
+    pb_desc.schema.schema_uuid = type_desc.schema_uuid.bytes
+    pb_desc.schema.version = type_desc.version
+    pb_desc.schema.hash = type_desc.get_hash(metadata.types)
+    for fld in type_desc.fields:
+        pb_fld = pb_desc.schema.fields.add()
+        pb_fld.offset = fld.offset
+        pb_fld.num = fld.num
+        pb_fld.name = fld.name
+        pb_fld.type_id = fld.type_id
+        _init_value_to_protobuf(fld.init_value, pb_fld)
+    for removed in type_desc.removed:
+        pb_desc.schema.history.removed.append(removed)
+    for old_num, new_num in type_desc.became.items():
+        pb_desc.schema.history.became[old_num] = new_num
+    for version in sorted(type_desc.versions):
+        pb_desc.schema.history.versions.append(version)
+
+
+def _enum_to_protobuf(
+    metadata: model.TachyonMetadata, type_desc: model.ClkEnumType, pb_desc: model_pb2.TypeDesc
+) -> None:
+    """Convert a ClkEnumType to Protobuf."""
+    pb_desc.clk_enum.fqn = type_desc.fqn
+    pb_desc.clk_enum.options = int(type_desc.options)
+    pb_desc.clk_enum.underlying_type_id = type_desc.underlying_type_id
+    pb_desc.clk_enum.enum_uuid = type_desc.enum_uuid.bytes
+    pb_desc.clk_enum.version = type_desc.version
+    pb_desc.clk_enum.hash = type_desc.get_hash(metadata.types)
+    for val in type_desc.values:
+        pb_val = pb_desc.clk_enum.values.add()
+        pb_val.num = val.num
+        pb_val.value = val.value
+        pb_val.name = val.name
+    for removed in type_desc.removed:
+        pb_desc.clk_enum.history.removed.append(removed)
+    for old_num, new_num in type_desc.became.items():
+        pb_desc.clk_enum.history.became[old_num] = new_num
+    for version in sorted(type_desc.versions):
+        pb_desc.clk_enum.history.versions.append(version)
+
+
+def to_protobuf(metadata: model.TachyonMetadata) -> model_pb2.TachyonMetadata:
     """Convert a TachyonMetadata to Protobuf."""
     result = model_pb2.TachyonMetadata(outer_type_id=metadata.outer_type_id, version=metadata.version)
+    result.python_required = metadata.python_required
     for type_desc in metadata.types:
         pb_desc = result.types.add()
         if isinstance(type_desc, model.BuiltInType):
-            pb_desc.built_in.fqn = type_desc.fqn
-            pb_desc.built_in.uuid = type_desc.uuid.bytes
-            pb_desc.built_in.size = type_desc.size
-            pb_desc.built_in.alignment = type_desc.alignment
-            pb_desc.built_in.hash = type_desc.get_hash(metadata.types)
-            for arg in type_desc.arguments:
-                pb_arg = pb_desc.built_in.arguments.add()
-                if isinstance(arg, int):
-                    pb_arg.type_id = arg
-                else:
-                    pb_arg.value = arg
+            _builtin_to_protobuf(metadata, type_desc, pb_desc)
         elif isinstance(type_desc, model.SchemaType):
-            pb_desc.schema.fqn = type_desc.fqn
-            pb_desc.schema.size = type_desc.size
-            pb_desc.schema.alignment = type_desc.alignment
-            pb_desc.schema.schema_uuid = type_desc.schema_uuid.bytes
-            pb_desc.schema.version = type_desc.version
-            pb_desc.schema.hash = type_desc.get_hash(metadata.types)
-            for fld in type_desc.fields:
-                pb_fld = pb_desc.schema.fields.add()
-                pb_fld.offset = fld.offset
-                pb_fld.num = fld.num
-                pb_fld.name = fld.name
-                pb_fld.type_id = fld.type_id
+            _schema_to_protobuf(metadata, type_desc, pb_desc)
         elif isinstance(type_desc, model.ClkEnumType):
-            pb_desc.clk_enum.fqn = type_desc.fqn
-            pb_desc.clk_enum.options = int(type_desc.options)
-            pb_desc.clk_enum.underlying_type_id = type_desc.underlying_type_id
-            pb_desc.clk_enum.enum_uuid = type_desc.enum_uuid.bytes
-            pb_desc.clk_enum.version = type_desc.version
-            pb_desc.clk_enum.hash = type_desc.get_hash(metadata.types)
-            for val in type_desc.values:
-                pb_val = pb_desc.clk_enum.values.add()
-                pb_val.num = val.num
-                pb_val.value = val.value
-                pb_val.name = val.name
+            _enum_to_protobuf(metadata, type_desc, pb_desc)
         elif isinstance(type_desc, model.TagType):
             pb_desc.tag.fqn = type_desc.fqn
             pb_desc.tag.hash = type_desc.get_hash(metadata.types)
@@ -266,10 +462,17 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                     hash=pb_desc.schema.hash,
                     fields=tuple(
                         model.SchemaField(
-                            offset=pb_fld.offset, num=pb_fld.num, name=pb_fld.name, type_id=pb_fld.type_id
+                            offset=pb_fld.offset,
+                            num=pb_fld.num,
+                            name=pb_fld.name,
+                            type_id=pb_fld.type_id,
+                            init_value=_init_value_from_pb(pb_fld),
                         )
                         for pb_fld in pb_desc.schema.fields
                     ),
+                    became=dict(pb_desc.schema.history.became.items()),
+                    removed=set(pb_desc.schema.history.removed),
+                    versions=set(pb_desc.schema.history.versions),
                 )
             )
         elif pb_desc.HasField("clk_enum"):
@@ -285,6 +488,9 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                         model.EnumValue(num=pb_val.num, value=pb_val.value, name=pb_val.name)
                         for pb_val in pb_desc.clk_enum.values
                     ),
+                    became=dict(pb_desc.clk_enum.history.became.items()),
+                    removed=set(pb_desc.clk_enum.history.removed),
+                    versions=set(pb_desc.clk_enum.history.versions),
                 )
             )
         elif pb_desc.HasField("tag"):
@@ -300,7 +506,12 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
         else:
             msg = f"Unrecognized metadata type {pb_desc.WhichOneof('type_desc')}"
             raise NotImplementedError(msg)
-    return model.TachyonMetadata(outer_type_id=pb_metadata.outer_type_id, types=types, version=pb_metadata.version)
+    return model.TachyonMetadata(
+        outer_type_id=pb_metadata.outer_type_id,
+        types=types,
+        version=pb_metadata.version,
+        python_required=pb_metadata.python_required,
+    )
 
 
 def get_metadata(compiler_context: CompilerContext, schema_ir: schema.InstantiatedSchema) -> model.TachyonMetadata:

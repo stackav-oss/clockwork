@@ -1,6 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -36,8 +37,10 @@ clk(
         "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_simplelaunch_config.textproto",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
+        "demo_system.demo_system_sys.logged_channel_metadata.pbbin",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -77,6 +80,7 @@ merge_simplelaunch_config(
         "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
         ":logger_exe",
         ":spy_exe",
@@ -118,6 +122,7 @@ cc_binary(
         "logger_exe.inl",
     ],
     data = [
+        "demo_system.demo_system_sys.logged_channel_metadata.pbbin",
         "//clockwork/examples/demo_system/resources:channel_rates_config.pbtxt",
         "//clockwork/examples/demo_system/resources:logger_config.pbtxt",
     ],
@@ -178,5 +183,24 @@ cc_binary(
         "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+# Sample unit test to check upgradability for changes to the schemas for logged channels.
+# This example checks the old schema into the repo.  Typically one would store the old metadata
+# in a different repository and update it after each merge so that you could change that each
+# change is upgradable from the previous schema version.
+sh_test(
+    name = "validate_logged_channel_metadata",
+    srcs = ["@clockwork//clockwork/serialization/cpp:validate_logged_channel_metadata_test.sh"],
+    args = [
+        "$(location {0})".format("//clockwork/serialization/cpp:validate_logged_channel_metadata"),
+        "$(location {0})".format("//clockwork/examples/demo_system/resources:logged_channel_metadata.bin"),
+        "$(location {0})".format(":demo_system.demo_system_sys.logged_channel_metadata.pbbin"),
+    ],
+    data = [
+        ":demo_system.demo_system_sys.logged_channel_metadata.pbbin",
+        "//clockwork/examples/demo_system/resources:logged_channel_metadata.bin",
+        "//clockwork/serialization/cpp:validate_logged_channel_metadata",
     ],
 )

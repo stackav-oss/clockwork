@@ -36,6 +36,7 @@ struct LogConfig
 struct ClockworkSystemRunnerConfig
 {
   std::string process_description_path;
+  std::optional<std::string> metrics_channel_metadata_config_path{};
   std::optional<jewels::time::SyncTime> start_time{};
   std::optional<jewels::time::SyncTime> end_time{};
   std::optional<LogConfig> input_log_config{};
@@ -46,7 +47,7 @@ WISE_ENUM_CLASS(
   (ClockworkSystemRunnerError, uint8_t),
   error_reading_process_description,
   error_reading_input_log,
-  error_reading_log_publisher_config,
+  error_reading_channel_publisher_config,
   error_opening_log_reader,
   error_making_casing,
   error_making_channel_factory,
@@ -59,10 +60,10 @@ struct MessageInjectorSystemRunnerConfig
   jewels::time::SyncTime start_time;
   jewels::time::SyncTime end_time;
   /// Path to the log publisher config
-  std::string log_publisher_config_;
+  std::string channel_publisher_config;
 
   /// Path to the log writer config
-  std::string log_writer_config_;
+  std::string log_writer_config;
 };
 
 class ClockworkSystemRunner
@@ -98,10 +99,13 @@ private:
   std::shared_ptr<common::ProcessDescriptionTap> process_description_;
 
   /// Path to the log publisher config
-  std::optional<std::string> log_publisher_config_;
+  std::optional<std::string> channel_publisher_config_;
 
   /// Path to the log writer config
   std::optional<std::string> log_writer_config_;
+
+  /// Path to the metrics channel metadata config
+  std::optional<std::string> metrics_channel_metadata_config_;
 
   /// Input log uri
   std::optional<std::string> input_log_uri_;

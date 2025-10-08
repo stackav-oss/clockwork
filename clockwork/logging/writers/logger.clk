@@ -50,7 +50,7 @@ cog LoggerStatusPublisherCog
   outputs
   {
     logger_status: Tappy<LoggerStatus>;
-    channel_rates: Tappy<ChannelMessageRates>;
+    channel_rates: Tappy<ChannelMessageRates<>>;
   }
 
   execution

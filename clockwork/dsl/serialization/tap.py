@@ -16,8 +16,9 @@ from typing import TYPE_CHECKING
 
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.cpp import literal, typereg, types, values
-from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, SystemHeader, comment_doc_string
+from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, Header, SystemHeader, comment_doc_string
 from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, strongtypes, typesys
+from clockwork.dsl.ir.module_id import JEWELS_REPO
 from clockwork.dsl.ir.statement import ImmutableBinding
 from clockwork.dsl.ir.uuid_reg import lookup_uuid
 from clockwork.dsl.serialization.tachyon_layout import Layout, layout_schema
@@ -35,7 +36,7 @@ def _value_to_cpp(value: typesys.Value | None) -> types.CppValueExpr | None:
     if value in (clkbuiltins.FALSE_VALUE, clkbuiltins.TRUE_VALUE):
         return literal.bool_value_to_cpp(value)
     if isinstance(value, ImmutableBinding):
-        assert isinstance(value.value, typesys.Value)  # noqa: S101 (invariant; assured by type system)
+        assert isinstance(value.value, typesys.Value)
         return _value_to_cpp(value.value)
     if isinstance(value, primitive.DecimalValue):
         try:
@@ -122,6 +123,7 @@ def create_get_method(field_name: str, cpp_type: types.CppTypeExpr, method_prefi
     """Define a const get method given the field name and type."""
     inline = CppChunk()
     inline.append(f"return fields_.{field_name};")
+    inline.context.add_includes(cpp_type.includes)
     return types.CppMethod(
         name=f"{method_prefix}_{field_name}",
         doc=f"{field_name}: A const get method.",
@@ -138,6 +140,7 @@ def create_get_mutable_method(field_name: str, method_prefix: str, cpp_type: typ
     """Define a get_mutable method given the field name and type."""
     inline = CppChunk()
     inline.append(f"return fields_.{field_name};")
+    inline.context.add_includes(cpp_type.includes)
     return types.CppMethod(
         name=f"{method_prefix}_{field_name}",
         doc=f"{field_name}: An explicitly mutable get method.",
@@ -154,6 +157,7 @@ def create_set_method(field_name: str, cpp_type: types.CppTypeExpr) -> types.Cpp
     """Define a set method given the field name and type."""
     inline = CppChunk()
     inline.append(f"fields_.{field_name} = new_value;")
+    inline.context.add_includes(cpp_type.includes)
     return types.CppMethod(
         name=f"set_{field_name}",
         doc=f"{field_name}: A set method.",
@@ -190,6 +194,14 @@ def _to_tap_tachyon_helper(
             msg = "An instantiated type is expected to have generic parameters."
             raise ValueError(msg)
 
+        if isinstance(type_info.instantiates, schema.ResolvedSchema):
+            return schema_transform(type_info)
+
+        # At this point, this is a template that needs to recurse and
+        # apply the transform to the inner arguments.  This is for
+        # something like VarArray<Schema, N> where VarArray is the
+        # top-level and Schema needs the transform.
+
         # Shallow copy so we can modify arguments.
         converted = replace(type_info)
         converted.arguments = {}
@@ -197,13 +209,11 @@ def _to_tap_tachyon_helper(
         for param in generic_parameters:
             if param.type_bound == clkbuiltins.TYPE_TYPE:
                 arg = type_info.arguments[param.name]
-                assert isinstance(arg, typesys.TypeVal)  # noqa: S101 (for mypy)
+                assert isinstance(arg, typesys.TypeVal)
                 # Always convert anything nested to Tap-Tachyon regardless of the top level.
                 converted.arguments[param.name] = _to_tap_tachyon_helper(arg, _schema_to_tap)
             else:
                 converted.arguments[param.name] = type_info.arguments[param.name]
-        if isinstance(type_info.instantiates, schema.ResolvedSchema):
-            return schema_transform(converted)
         return converted
     return type_info
 
@@ -286,9 +296,9 @@ def create_get_span_method(
 
 
 def create_set_span_method(field_name: str, cpp_type: types.CppType | types.CppTemplateType) -> types.CppMethod:
-    """Define a const get method that returns a span."""
+    """Define a set method that takes a span."""
     inline = CppChunk()
-    inline.append(f"std::copy(input_span.begin(), input_span.end(), ::std::begin(fields_.{field_name}));")
+    inline.append(f"std::ranges::copy(input_span, ::std::begin(fields_.{field_name}));")
     inline.context.add_includes(cpp_type.includes)
     inline.context.add_includes((types.ALGORITHM_HEADER, types.ITERATOR_HEADER))
     return types.CppMethod(
@@ -303,11 +313,50 @@ def create_set_span_method(field_name: str, cpp_type: types.CppType | types.CppT
     )
 
 
-def create_value_optional_method(field_name: str, cpp_type: types.CppTypeExpr, const: bool) -> types.CppMethod:
-    """Define a get method for an optional."""
+def create_try_set_span_method(field_name: str, cpp_type: types.CppType | types.CppTemplateType) -> types.CppMethod:
+    """Define a try_set method that takes a span."""
+    inline = CppChunk()
+    inline.append(f"return fields_.{field_name}.try_set(input_span);")
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"try_set_{field_name}",
+        doc=f"{field_name}: Try set from a span.",
+        return_type=types.BOOLEAN,
+        arguments=[types.CppNamedType(cpp_type, "input_span")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=True,
+    )
+
+
+def create_value_optional_method(
+    field_name: str, cpp_type: types.CppTypeExpr, const: bool, method_prefix: str = "value"
+) -> types.CppMethod:
+    """Define a value method for an optional."""
     inline = CppChunk()
     inline.append("// Throws if no value exists.")
     inline.append(f"return fields_.{field_name}.value();")
+    inline.context.add_includes(cpp_type.includes)
+    name = (f"{method_prefix}_" if const else f"{method_prefix}_mutable_") + field_name
+    return types.CppMethod(
+        name=name,
+        doc=f"{field_name}: Get the value of an optional by reference.",
+        return_type=cpp_type,
+        arguments=[],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=(["const"] if const else []) + [types.Ref.L.value],
+        body=inline,
+        no_discard=True,
+    )
+
+
+def create_value_span_optional_method(field_name: str, cpp_type: types.CppTypeExpr, const: bool) -> types.CppMethod:
+    """Define a value method for an optional that returns a span."""
+    inline = CppChunk()
+    inline.append("// Throws if no value exists.")
+    inline.append(f"return fields_.{field_name}.value();")
+    inline.context.add_includes(cpp_type.includes)
     name = ("value_" if const else "value_mutable_") + field_name
     return types.CppMethod(
         name=name,
@@ -322,11 +371,156 @@ def create_value_optional_method(field_name: str, cpp_type: types.CppTypeExpr, c
 
 
 def create_set_optional_method(field_name: str, cpp_type: types.CppTypeExpr) -> types.CppMethod:
-    """Define a set method for an optional."""
+    """Define a set method for an optional that takes a value."""
     inline = CppChunk()
     inline.append(f"fields_.{field_name}.emplace(new_value);")
+    inline.context.add_includes(cpp_type.includes)
     return types.CppMethod(
         name=f"set_{field_name}",
+        doc=f"{field_name}: Set the optional to the input value.",
+        return_type=types.VOID,
+        arguments=[types.CppNamedType(cpp_type, "new_value")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=False,
+    )
+
+
+def create_set_optional_from_span_method(field_name: str, cpp_type: types.CppTypeExpr) -> types.CppMethod:
+    """Define a set method for an optional that takes an optional span."""
+    inline = CppChunk()
+    inline.append(
+        [
+            f"if (!fields_.{field_name}.has_value())",
+            "{",
+            f"  fields_.{field_name}.emplace();",
+            "}",
+            f"std::ranges::copy(new_value, ::std::begin(fields_.{field_name}.value()));",
+        ]
+    )
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"set_{field_name}",
+        doc=f"{field_name}: Set the optional to the input value.",
+        return_type=types.VOID,
+        arguments=[types.CppNamedType(cpp_type, "new_value")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=False,
+    )
+
+
+def create_try_set_optional_from_span_method(
+    field_name: str, cpp_type: types.CppType | types.CppTemplateType
+) -> types.CppMethod:
+    """Define a try_set method for an optional that takes an optional span."""
+    inline = CppChunk()
+    inline.append(
+        [
+            f"if (!fields_.{field_name}.has_value())",
+            "{",
+            f"  fields_.{field_name}.emplace();",
+            "}",
+            f"return fields_.{field_name}.value().try_set(new_value);",
+        ]
+    )
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"try_set_{field_name}",
+        doc=f"{field_name}: Set from a span.",
+        return_type=types.BOOLEAN,
+        arguments=[types.CppNamedType(cpp_type, "new_value")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=True,
+    )
+
+
+def create_set_optional_from_optional_span_method(field_name: str, cpp_type: types.CppTypeExpr) -> types.CppMethod:
+    """Define a set method for an optional that takes an optional span."""
+    inline = CppChunk()
+    inline.append(
+        [
+            "if (new_value.has_value())",
+            "{",
+            f"  if (!fields_.{field_name}.has_value())",
+            "  {",
+            f"    fields_.{field_name}.emplace();",
+            "  }",
+            f"  std::ranges::copy(new_value.value(), ::std::begin(fields_.{field_name}.value()));",
+            "}",
+            "else",
+            "{",
+            f"  fields_.{field_name}.reset();",
+            "}",
+        ]
+    )
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"setopt_{field_name}",
+        doc=f"{field_name}: Set the optional to the input value.",
+        return_type=types.VOID,
+        arguments=[types.CppNamedType(cpp_type, "new_value")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=False,
+    )
+
+
+def create_try_set_optional_from_optional_span_method(
+    field_name: str, cpp_type: types.CppType | types.CppTemplateType
+) -> types.CppMethod:
+    """Define a try_set method for an optional that takes an optional span."""
+    inline = CppChunk()
+    inline.append(
+        [
+            "if (new_value.has_value())",
+            "{",
+            f"  if (!fields_.{field_name}.has_value())",
+            "  {",
+            f"    fields_.{field_name}.emplace();",
+            "  }",
+            f"  return fields_.{field_name}.value().try_set(new_value.value());",
+            "}",
+            f"fields_.{field_name}.reset();",
+            "return true;",
+        ]
+    )
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"try_setopt_{field_name}",
+        doc=f"{field_name}: Set from a span.",
+        return_type=types.BOOLEAN,
+        arguments=[types.CppNamedType(cpp_type, "new_value")],
+        leading_qualifiers=["inline"],
+        trailing_qualifiers=[types.Ref.L.value],
+        body=inline,
+        no_discard=True,
+    )
+
+
+def create_set_optional_from_optional_method(field_name: str, cpp_type: types.CppTypeExpr) -> types.CppMethod:
+    """Define a set method for an optional that takes an optional."""
+    inline = CppChunk()
+    inline.append(
+        [
+            "if (new_value.has_value())",
+            "{",
+            f"  fields_.{field_name}.emplace(new_value.value());",
+            "}",
+            "else",
+            "{",
+            f"  fields_.{field_name}.reset();",
+            "}",
+        ]
+    )
+    inline.context.add_includes(cpp_type.includes)
+    return types.CppMethod(
+        name=f"setopt_{field_name}",
         doc=f"{field_name}: Set the optional to the input value.",
         return_type=types.VOID,
         arguments=[types.CppNamedType(cpp_type, "new_value")],
@@ -457,6 +651,7 @@ def _field_var_array_to_cpp(compiler_context: CompilerContext, field: schema.Ins
             create_get_span_method(field.cur_name, mutable_span, False),
             create_get_method(field.cur_name, types.cref_qualify(cpp_type, True, types.Ref.L), "get_underlying"),
             create_get_mutable_method(field.cur_name, "get_underlying", types.ref_qualify(cpp_type, types.Ref.L)),
+            create_try_set_span_method(field.cur_name, span),
         ],
     )
 
@@ -493,6 +688,7 @@ def _field_var_string_to_cpp(compiler_context: CompilerContext, field: schema.In
             create_get_span_method(field.cur_name, mutable_span, False),
             create_get_method(field.cur_name, types.cref_qualify(cpp_type, True, types.Ref.L), "get_underlying"),
             create_get_mutable_method(field.cur_name, "get_underlying", types.ref_qualify(cpp_type, types.Ref.L)),
+            create_try_set_span_method(field.cur_name, types.STRING_VIEW),
         ],
     )
 
@@ -525,6 +721,99 @@ def _field_optional_to_cpp(compiler_context: CompilerContext, field: schema.Inst
     l_value = types.ref_qualify(cpp_value_type, types.Ref.L)
     const_l_value = types.const_qualify(l_value, True)
 
+    methods = [
+        create_reset_optional_method(field.cur_name),
+        create_has_optional_method(field.cur_name),
+        create_get_method(field.cur_name, types.cref_qualify(cpp_type, True, types.Ref.L), "get_underlying"),
+        create_get_mutable_method(field.cur_name, "get_underlying", types.ref_qualify(cpp_type, types.Ref.L)),
+        create_set_optional_method(field.cur_name, const_l_value),
+    ]
+
+    if isinstance(value_type, typesys.Instantiation) and value_type.instantiates == clkbuiltins.FIXED_ARRAY:
+        element_type = value_type.arguments["type"]
+        assert isinstance(element_type, typesys.TypeVal)
+        cpp_element_type = _to_cpp_type(compiler_context, element_type)
+        value_size = value_type.arguments["size"]
+        cpp_value_size = _value_to_cpp(value_size)
+        assert isinstance(cpp_value_size, types.CppValue)
+        span = types.SPAN.instantiate([types.const_qualify(cpp_element_type, True), cpp_value_size])
+        mutable_span = types.SPAN.instantiate([cpp_element_type, cpp_value_size])
+        opt_span = types.CppTemplateType(
+            include=[SystemHeader("optional")],
+            template_name="optional",
+            cpp_namespace="std",
+            arguments=[span],
+        )
+        methods.extend(
+            [
+                create_value_span_optional_method(field.cur_name, span, True),
+                create_value_span_optional_method(field.cur_name, mutable_span, False),
+                create_set_optional_from_span_method(field.cur_name, span),
+                create_set_optional_from_optional_span_method(field.cur_name, opt_span),
+            ]
+        )
+
+    elif isinstance(value_type, typesys.Instantiation) and value_type.instantiates == clkbuiltins.VAR_ARRAY:
+        element_type = value_type.arguments["type"]
+        assert isinstance(element_type, typesys.TypeVal)
+        cpp_element_type = _to_cpp_type(compiler_context, element_type)
+        span = types.SPAN.instantiate([types.const_qualify(cpp_element_type, True)])
+        mutable_span = types.SPAN.instantiate([cpp_element_type])
+        opt_span = types.CppTemplateType(
+            include=[SystemHeader("optional")],
+            template_name="optional",
+            cpp_namespace="std",
+            arguments=[span],
+        )
+        methods.extend(
+            [
+                create_value_span_optional_method(field.cur_name, span, True),
+                create_value_span_optional_method(field.cur_name, mutable_span, False),
+                create_try_set_optional_from_span_method(field.cur_name, span),
+                create_try_set_optional_from_optional_span_method(field.cur_name, opt_span),
+            ]
+        )
+
+    elif isinstance(value_type, typesys.Instantiation) and value_type.instantiates == clkbuiltins.VAR_STRING:
+        span = types.STRING_VIEW
+        mutable_span = types.SPAN.instantiate([types.CHAR])
+        opt_span = types.CppTemplateType(
+            include=[SystemHeader("optional")],
+            template_name="optional",
+            cpp_namespace="std",
+            arguments=[span],
+        )
+        methods.extend(
+            [
+                create_value_span_optional_method(field.cur_name, span, True),
+                create_value_span_optional_method(field.cur_name, mutable_span, False),
+                create_try_set_optional_from_span_method(field.cur_name, span),
+                create_try_set_optional_from_optional_span_method(field.cur_name, opt_span),
+            ]
+        )
+
+    else:
+        extra_includes: list[Header] = []
+        if isinstance(value_type, typesys.Instantiation) and value_type.instantiates == clkbuiltins.UUID:
+            extra_includes.append(Header(JEWELS_REPO, "jewels/container/compare.hh", iwyu_pragma="IWYU pragma: keep"))
+
+        opt_value_type = types.CppTemplateType(
+            include=[SystemHeader("optional"), *extra_includes],
+            template_name="optional",
+            cpp_namespace="std",
+            arguments=[cpp_value_type],
+        )
+
+        opt_const_l_value = types.cref_qualify(opt_value_type, True, types.Ref.L)
+
+        methods.extend(
+            [
+                create_value_optional_method(field.cur_name, const_l_value, True),
+                create_value_optional_method(field.cur_name, l_value, False),
+                create_set_optional_from_optional_method(field.cur_name, opt_const_l_value),
+            ]
+        )
+
     return types.CppField(
         doc=field.doc.value,
         member=types.CppNamedValue(
@@ -532,13 +821,7 @@ def _field_optional_to_cpp(compiler_context: CompilerContext, field: schema.Inst
             value=_value_to_cpp(field.init_value),
             doc=f"{field.cur_name}: data member.",
         ),
-        methods=[
-            create_value_optional_method(field.cur_name, const_l_value, True),
-            create_value_optional_method(field.cur_name, l_value, False),
-            create_set_optional_method(field.cur_name, const_l_value),
-            create_reset_optional_method(field.cur_name),
-            create_has_optional_method(field.cur_name),
-        ],
+        methods=methods,
     )
 
 
@@ -634,7 +917,7 @@ def to_cpp_struct(compiler_context: CompilerContext, type_info: typesys.TypeDef)
 
     if hasattr(type_info, "uuid") and type_info.uuid is not None:  # pyright: ignore[reportAttributeAccessIssue] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
         cpp_struct.public.append(
-            values.uuid_to_named_value(compiler_context, type_info.uuid, "uuid", tag=clkbuiltins.SCHEMA_TAG_TYPE)  # pyright: ignore[reportAttributeAccessIssue] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            values.uuid_to_named_value(compiler_context, type_info.uuid, "uuid", tag=clkbuiltins.SCHEMA_TAG_TYPE)  # pyright: ignore[reportAttributeAccessIssue] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         )
 
     return cpp_struct
@@ -788,7 +1071,7 @@ def to_schema_instantiation(typespec: typesys.Instantiation) -> schema.Instantia
         typespec = representation
     if typespec.instantiates is clkbuiltins.TACHYON:
         schema_ir = typespec.arguments["schema"]
-        assert isinstance(schema_ir, schema.Schema | typesys.Instantiation)  # noqa: S101  (invariant)
+        assert isinstance(schema_ir, schema.Schema | typesys.Instantiation)
         return schema.InstantiatedSchema.from_typespec(schema_ir)
     msg = f"Expected an instantiation of either Tap or Tachyon.  Received: {type(typespec)}"
     raise TypeError(msg)
@@ -905,7 +1188,7 @@ def to_cpp_spec(compiler_context: CompilerContext, typespec: typesys.Instantiati
     layout = layout_schema(compiler_context, schema_ir)
     if schema_ir.arguments is not None:
         parameters = schema_ir.schema.generic_parameters()
-        assert parameters is not None  # noqa: S101  (invariant)
+        assert parameters is not None
         class_local_defs = to_class_local_defs(compiler_context, parameters, schema_ir.arguments)
     else:
         class_local_defs = []
@@ -933,12 +1216,32 @@ def render_tap_init_struct(cpp_spec: CppSpec, enclosing_namespace: str) -> CppMo
     tap_init_type = types.CppStruct(
         name=typereg.get_cpp_type(cpp_spec.schema_ir.schema.module.context, _to_tap_init(cpp_spec.schema_ir)),
         doc=f"Tap init struct for {schema_name}.",
-        no_lints=["clang-analyzer-optin.performance.Padding"],
+        no_lints=["clang-analyzer-optin.performance.Padding", "cppcoreguidelines-pro-type-member-init"],
     )
     tap_init_type.public.extend(cpp_spec.class_local_defs)
 
+    def disable_initializer(field: types.CppNamedValue) -> types.CppNamedValue:
+        """Don't render the initializer.
+
+        The compiler warning about missing a designated initializer
+        only fires if the fields aren't explicitly initialized.
+        """
+        # If the field has an explicit default value, allow it to be omitted.
+        if field.value is not None:
+            return field
+        field_without_init = replace(field)
+        # Fields in TapInit are intentionally left uninitialized
+        # because otherwise the -Wmissing-field-initializer warning
+        # won't flag a missing field when using designated
+        # initializers.  The consequence of this is if a user default
+        # constructs a TapInit type pritmive types can be left
+        # uninitialized.  However, that should never happen as the
+        # purpose of using TapInit to use designated initializers.
+        field_without_init.render_initializer = False
+        return field_without_init
+
     for field in sorted(fields, key=lambda field: field_src_order[field.field_num]):
-        tap_init_type.public.append(field.field.member)
+        tap_init_type.public.append(disable_initializer(field.field.member))
 
     cpp_mod = CppModuleChunks()
 
@@ -980,6 +1283,9 @@ def _render_logging_traits(
     header_chunk.append("{")
     header_chunk.append("  static const std::string_view schema_name;")
     header_chunk.append(f"  static const std::array<char, {len(binary_schema)}> schema_definition;")
+    header_chunk.append("  static const std::string_view module_name;")
+    header_chunk.append("  static const std::string_view source_file_name;")
+    header_chunk.append("  static const std::string_view class_name;")
     header_chunk.append("};")
 
     # implementation
@@ -999,6 +1305,12 @@ def _render_logging_traits(
     if count != 0:
         impl_chunk.append(array_line)
     impl_chunk.append("};")
+    impl_chunk.append(f"const std::string_view {specialized_struct}::module_name = ")
+    impl_chunk.append(f'    "{cpp_spec.schema_ir.schema.module.module_id.repo}";')
+    impl_chunk.append(f"const std::string_view {specialized_struct}::source_file_name = ")
+    impl_chunk.append(f'    "{cpp_spec.schema_ir.schema.module.module_id.get_base_path()}";')
+    impl_chunk.append(f"const std::string_view {specialized_struct}::class_name = ")
+    impl_chunk.append(f'    "{cpp_spec.schema_ir.schema_name}";')
 
     return cpp_mod
 

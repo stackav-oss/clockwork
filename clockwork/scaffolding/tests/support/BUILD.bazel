@@ -64,10 +64,13 @@ cc_library(
         "test_cogs.inl",
     ],
     hdrs = ["test_cogs.hh"],
+    data = [":test_cogs_clk"],
     deps = [
         ":cxx_state",
+        ":test_cogs_diags",
         ":test_cogs_dial",
         ":test_cogs_impl",
+        ":test_msgs",
         "//clockwork/cog:include_common",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
@@ -92,14 +95,21 @@ clk(
 )
 
 cc_library(
+    name = "test_cogs_diags",
+    hdrs = ["test_cogs_diags.hh"],
+)
+
+cc_library(
     name = "test_cogs_dial",
     srcs = [
         "test_cogs_dial.cc",
         "test_cogs_dial.inl",
     ],
     hdrs = ["test_cogs_dial.hh"],
+    data = [":test_cogs_clk"],
     deps = [
         ":cxx_state",
+        ":test_cogs_diags",
         ":test_msgs",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
@@ -130,7 +140,6 @@ cc_library(
         "//clockwork/common:abstract_epoll_manager",
         "//clockwork/common:process_description",
         "//clockwork/pinion:io_connection",
-        "//clockwork/pinion:observer",
         "//clockwork/pinion:publisher_handle",
         "//clockwork/pinion:subscriber_handle",
         "//clockwork/pinion/tests/support:pub_sub",
@@ -151,6 +160,7 @@ cc_library(
         "test_msgs.inl",
     ],
     hdrs = ["test_msgs.hh"],
+    data = [":test_msgs_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -209,6 +219,7 @@ cc_library(
         "test_msgs_proto_conv.inl",
     ],
     hdrs = ["test_msgs_proto_conv.hh"],
+    data = [":test_msgs_clk"],
     deps = [
         ":test_msgs",
         ":test_msgs_proto_cc_library",

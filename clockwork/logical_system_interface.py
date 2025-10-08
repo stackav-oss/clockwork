@@ -9,10 +9,11 @@ import contextlib
 import logging
 from copy import copy
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, final
 
 from clockwork.dsl.composition import logger_config
 from clockwork.dsl.composition.graphir import Channel as GraphirChannel
+from clockwork.dsl.composition.graphir import MetricsChannel as GraphirMetricsChannel
 from clockwork.dsl.composition.system import (
     LOG_PRODUCER_TYPE,
     Channel,
@@ -20,10 +21,13 @@ from clockwork.dsl.composition.system import (
     Endpoint,
     LogicalSystem,
     LogProducer,
+    MetricsChannel,
+    ObserverType,
+    ProducerType,
     make_system,
 )
 from clockwork.dsl.composition.systemgen import gen_system_from_logical_system
-from clockwork.dsl.ir import importer, primitive, system_target
+from clockwork.dsl.ir import primitive, system_target
 from clockwork.dsl.ir.box import (
     HOST_CPU_DOMAIN_POLICY,
     HOST_PROCESS_POLICY,
@@ -33,8 +37,8 @@ from clockwork.dsl.ir.box import (
     StateInstance,
 )
 from clockwork.dsl.ir.clkenum import ResolvedEnum, ResolvedValueDef, ValueRef
-from clockwork.dsl.ir.cog import CogInstance, CogInstanceMember
-from clockwork.dsl.ir.compiler import compile_source_file
+from clockwork.dsl.ir.cog import CogInstance, CogInstanceMember, InputDef, OutputDef
+from clockwork.dsl.ir.compiler import compile_source_file, create_filesystem_importer
 from clockwork.dsl.ir.hardware import CpuDomain
 from clockwork.dsl.ir.policy import (
     _POLICY_KEY,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
@@ -47,13 +51,10 @@ from clockwork.dsl.ir.policy import (
     lookup_all_policies,
     lookup_policy,
 )
-from clockwork.dsl.ir.schema import InstantiatedSchema, SchemaInstance
-from clockwork.dsl.ir.typesys import TypeVal
+from clockwork.dsl.ir.schema import SchemaInstance
+from clockwork.dsl.ir.typesys import TypeVal, Value
 from clockwork.dsl.ir.udp import UdpSocketEndpointInstance
-from clockwork.dsl.ir.uuid_reg import register_entity_with_stable_key
-from clockwork.logging.offboard.nb_log_writer_impl import LogWriter
-from clockwork.logging.readers.nb_log_reader import LogReader
-from clockwork.logging.tools.upgrade_log.upgrade_lib import upgrade_log
+from clockwork.dsl.ir.uuid_reg import lookup_uuid, register_entity_with_stable_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from clockwork.dsl.ir.module_id import ModuleID
+    from clockwork.dsl.ir.node import Importer
 
 _logger: Final = logging.getLogger(__name__)
 
@@ -75,23 +77,31 @@ class GeneratedSystemFiles:
     bridge_config_files: list[Path]
     simplelaunch_config_files: list[Path]
     multi_subscriber_config_files: list[Path]
-    log_reader_config_files: list[Path]
+    channel_publisher_config_files: list[Path]
     channel_allocation_report_files: list[Path]
     channel_spy_config_files: list[Path]
     diagnostics_database_config_files: list[Path]
+    logged_channel_metadata_files: list[Path]
+    metrics_channel_metadata_files: list[Path]
 
 
 class LogicalSystemInterface:
     """Public interface to Clockwork LogicalSystem data."""
 
-    def __init__(self, module_id: ModuleID) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        """Constructor for the interface to a LogicalSystem."""
+    def __init__(self, module_id: ModuleID, module_importer: Importer | None = None) -> None:
+        """Constructor for the interface to a LogicalSystem.
+
+        Parameters:
+            module_id: Module containing a system target to interface with.
+            module_importer: Optional importer instance to use when compiling Clockwork modules.
+                         Use the same importer if you are compiling and combining multiple logical system interfaces in the same process.
+        """
         # Maybe turn down the logger because the clk compiler debug is too verbose
         previous_level = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel("DEBUG")
         debug_level = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel("INFO" if previous_level == debug_level else previous_level)
-        self._logical_system = self._logical_system_from_system_target_config(module_id)
+        self._logical_system = self._logical_system_from_system_target_config(module_id, module_importer)
         logging.getLogger().setLevel(previous_level)
 
     def import_context_from(self, other: LogicalSystemInterface) -> None:
@@ -108,6 +118,7 @@ class LogicalSystemInterface:
         """Generate execution config files for a LogicalSystem."""
         include_dir = root_dir
         write_files = True
+        write_json_files = False
         system_fqn = "path.prefix.System"
         system_key = system_fqn
         generated_system_files, _output_targets_by_domain, _physical_system = gen_system_from_logical_system(
@@ -115,6 +126,7 @@ class LogicalSystemInterface:
             root_dir=root_dir,
             logical_system=self._logical_system,
             write_files=write_files,
+            write_json_files=write_json_files,
             system_fqn=system_fqn,
             system_key=system_key,
         )
@@ -125,40 +137,24 @@ class LogicalSystemInterface:
             bridge_config_files=generated_system_files.bridge_config_files,
             simplelaunch_config_files=generated_system_files.simplelaunch_config_files,
             multi_subscriber_config_files=generated_system_files.multi_subscriber_config_files,
-            log_reader_config_files=generated_system_files.log_reader_config_files,
+            channel_publisher_config_files=generated_system_files.channel_publisher_config_files,
             channel_allocation_report_files=generated_system_files.channel_allocation_report_files,
             channel_spy_config_files=generated_system_files.channel_spy_config_files,
             diagnostics_database_config_files=generated_system_files.diagnostics_database_config_files,
+            logged_channel_metadata_files=generated_system_files.logged_channel_metadata_files,
+            metrics_channel_metadata_files=generated_system_files.metrics_channel_metadata_files,
         )
-
-    def upgrade_log_playback_channels(self, input_log_uri: str, output_log_dir: Path) -> None:
-        """Upgrade the channels in a log that are being read by the LogicalSystem."""
-        channel_list: list[tuple[str, InstantiatedSchema]] = []
-        for channel in self.get_channels():
-            for producer in channel.get_producers():
-                if producer.is_log_producer():
-                    schema = channel._channel.channel.message_repr.get_schema()  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-                    channel_name = producer.get_log_producer_source_name()
-                    channel_list.append((channel_name, schema))
-        _logger.debug("Upgraded channel list: %s", channel_list)
-        log_writer = LogWriter()
-        log_writer.open(str(output_log_dir), "")
-        upgrade_log(
-            compiler_context=self._logical_system.module.context,
-            reader=LogReader(input_log_uri),
-            writer=log_writer,
-            upgrades=channel_list,
-            copy_unspecified_channels=True,
-        )
-        log_writer.close()
 
     def get_channels(self) -> list[ChannelInterface]:
         """Get the channels in the system."""
-        return [ChannelInterface(self._logical_system, channel_name) for channel_name in self._logical_system.channels]
+        return [
+            ChannelInterface(self._logical_system, channel_name)
+            for channel_name in (self._logical_system.channels | self._logical_system.metrics_channels)
+        ]
 
     def get_channel(self, channel_name: str) -> ChannelInterface | None:
         """Get a channel from the system."""
-        channel = self._logical_system.channels.get(channel_name)
+        channel = (self._logical_system.channels | self._logical_system.metrics_channels).get(channel_name)
         if not channel:
             return None
         return ChannelInterface(self._logical_system, channel_name)
@@ -169,11 +165,15 @@ class LogicalSystemInterface:
         output_channel = channel._channel.channel  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
         if alternative_channel_name:
             channel_name = alternative_channel_name
-            if channel_name in self._logical_system.channels:
+            if channel_name in (self._logical_system.channels | self._logical_system.metrics_channels):
                 return ChannelInterface(self._logical_system, channel_name)
             output_channel = _get_channel_with_alternate_name(channel._channel, alternative_channel_name)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
         self._logical_system.ensure_channel(output_channel)
-        new_channel = self._logical_system.channels[channel_name]
+        if channel.is_metrics_channel():
+            new_channel = self._logical_system.metrics_channels[channel_name]
+        else:
+            new_channel = self._logical_system.channels[channel_name]
+
         new_channel.producers.clear()
         new_channel.observers.clear()
         return ChannelInterface(self._logical_system, channel_name)
@@ -181,6 +181,17 @@ class LogicalSystemInterface:
     def remove_channel(self, channel: ChannelInterface) -> None:
         """Remove a channel from the system."""
         channel.remove_self_from_system()
+
+    def get_io_connections(self) -> list[IoConnectionInterface]:
+        """Get the io connections in the system."""
+        io_connections = []
+        io_connections.extend(
+            IoConnectionInterface(self._logical_system, uuid) for uuid in self._logical_system.udp_sockets
+        )
+        io_connections.extend(
+            IoConnectionInterface(self._logical_system, uuid) for uuid in self._logical_system.audio_sources
+        )
+        return io_connections
 
     def get_cogs(self) -> list[CogInterface]:
         """Get the cogs in the system."""
@@ -238,6 +249,12 @@ class LogicalSystemInterface:
             CpuDomainInterface(self, self._logical_system, cpu_domain_uuid)
             for cpu_domain_uuid in self._logical_system.cpu_domains
         ]
+
+    def get_cpu_domain_for_entity(self, entity_uuid: UUID) -> CpuDomainInterface:
+        """Get the cpu domain where an entity resides."""
+        process_uuid = self._logical_system.entity_to_process[entity_uuid]
+        cpu_domain_uuid = self._logical_system.process_to_domain[process_uuid]
+        return CpuDomainInterface(self, self._logical_system, cpu_domain_uuid)
 
     def add_cpu_domain(self, cpu_domain: CpuDomainInterface) -> CpuDomainInterface:
         """Add a CPU Domain to the system."""
@@ -309,10 +326,12 @@ class LogicalSystemInterface:
             raise RuntimeError(error_str)
 
         for channel in channels:
+            if isinstance(channel._channel, MetricsChannel):  # pyright: ignore[reportPrivateUsage]  TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+                continue
             type_infos = list(channel_logging_policy_class.target_bound)
             if (
-                isinstance(channel._channel.channel.ir_node.type_info, TypeVal)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-                and channel._channel.channel.ir_node.type_info not in type_infos  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+                isinstance(channel._channel.channel.ir_node.type_info, TypeVal)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+                and channel._channel.channel.ir_node.type_info not in type_infos  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
             ):
                 type_infos.append(channel._channel.channel.ir_node.type_info)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
             channel_logging_policy_class.target_bound = list(type_infos)
@@ -333,14 +352,14 @@ class LogicalSystemInterface:
                     source=None,
                     type_info=POLICY_DATA_TYPE,
                 ),
-                channel._channel.channel.ir_node,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+                channel._channel.channel.ir_node,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
             )
 
     def is_endpoint_connected_to_cog(self, endpoint: EndpointInterface, cog: CogInterface) -> bool:
         """Determine whether an endpoint is connected to a cog."""
         return (
-            isinstance(endpoint._endpoint.entity, CogInstanceMember)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-            and endpoint._endpoint.entity.cog_instance is cog._cog  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+            isinstance(endpoint._endpoint.entity, CogInstanceMember)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+            and endpoint._endpoint.entity.cog_instance is cog._cog  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
         )
 
     def connect_channel_observer(self, channel: ChannelInterface, observer: EndpointInterface) -> None:
@@ -349,7 +368,11 @@ class LogicalSystemInterface:
 
     def connect_channel_producer(self, channel: ChannelInterface, producer: EndpointInterface) -> None:
         """Connect a channel to a channel producer."""
-        self._logical_system.connect_channel_producer(channel._channel.channel, producer._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        if channel.is_metrics_channel():
+            self._logical_system.connect_metrics_channel_producer(
+                channel._channel.channel, producer._endpoint.entity)  # pyright: ignore[reportArgumentType, reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        else:
+            self._logical_system.connect_channel_producer(channel._channel.channel, producer._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
 
     def _get_cpu_domain_policy(self, cpu_domain: CpuDomainInterface) -> PolicyData:
         """Get the CPU domain policy data associated with this CPU domain."""
@@ -363,11 +386,15 @@ class LogicalSystemInterface:
         error_str = f"Couldn't find CPU domain policy data for a CPU domain named {cpu_domain.get_name()}"
         raise RuntimeError(error_str)
 
-    def _logical_system_from_system_target_config(self, module_id: ModuleID) -> LogicalSystem:
+    def _logical_system_from_system_target_config(
+        self, module_id: ModuleID, module_importer: Importer | None = None
+    ) -> LogicalSystem:
         """Generate a LogicalSystem representing the system target defined in the given clockwork config file."""
+        if module_importer is None:
+            module_importer = create_filesystem_importer()
         module = compile_source_file(
             module_id,
-            importer=importer.FilesystemImporter(compile_fn=compile_source_file),
+            importer=module_importer,
         )
         logical_system: LogicalSystem | None = None
         for obj in module.inner_scope.names.values():
@@ -379,7 +406,9 @@ class LogicalSystemInterface:
                     )
                     raise RuntimeError(error_str)
                 system_target_ir = obj.get_resolved()
-                logical_system = make_system([system_target_ir.box_instance], system_target_ir.module)
+                logical_system = make_system(
+                    [system_target_ir.box_instance], system_target_ir.module, system_target_ir.require_logging_policies
+                )
         if logical_system is None:
             error_str = f"Clockwork configuration '{module_id.get_base_path()}' did not specify any system targets."
             raise RuntimeError(error_str)
@@ -389,7 +418,7 @@ class LogicalSystemInterface:
 class EndpointInterface:
     """Public interface to clockwork logical system endpoint."""
 
-    def __init__(self, logical_system: LogicalSystem, uuid: UUID, endpoint: Endpoint[Any, Any]) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, logical_system: LogicalSystem, uuid: UUID, endpoint: Endpoint[Any, Any]) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._uuid: UUID = uuid
@@ -409,6 +438,12 @@ class EndpointInterface:
             error_str = "Trying to get source name of a non-log producer endpoint."
             raise TypeError(error_str)
         return str(self._endpoint.entity.source_name)
+
+    def get_connected_channel(self) -> ChannelInterface | None:
+        """Get the channel connected to this endpoint, if any."""
+        if isinstance(self._endpoint.connected_to, Channel):
+            return ChannelInterface(self._logical_system, self._endpoint.connected_to.channel.channel_name)
+        return None
 
     def update_observed_channel(self, old_channel: ChannelInterface, new_channel: ChannelInterface) -> None:
         """Update an endpoint connection to a different channel."""
@@ -455,12 +490,22 @@ class ChannelLoggingPolicy:
 class ChannelInterface:
     """Public interface to clockwork logical system channel."""
 
-    def __init__(self, logical_system: LogicalSystem, channel_name: str) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, logical_system: LogicalSystem, channel_name: str) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._channel_name: str = channel_name
-        self._channel: Channel = self._logical_system.channels[self._channel_name]
+        self._channel: Channel | MetricsChannel = (
+            self._logical_system.channels | self._logical_system.metrics_channels
+        )[self._channel_name]
         self._logging_policy: ChannelLoggingPolicy | None = self._lookup_logging_policy()
+
+    def is_metrics_channel(self) -> bool:
+        """Check if the channel is a metrics channel."""
+        return isinstance(self._channel, MetricsChannel)
+
+    def is_multi_producer(self) -> bool:
+        """Check if the channel is a multi producer."""
+        return self._channel.is_multi_producer()
 
     def get_producers(self) -> list[EndpointInterface]:
         """Get the inputs into the channel."""
@@ -482,6 +527,8 @@ class ChannelInterface:
 
     def has_log_writer_policy(self) -> bool:
         """Determine whether a channel is configured to be written to an output log."""
+        if isinstance(self._channel, MetricsChannel):
+            return True
         channel_logging_policy_class = logger_config.get_channel_logging_policy()
         return (
             lookup_policy(self._logical_system.module, channel_logging_policy_class, self._channel.channel.ir_node)
@@ -500,6 +547,8 @@ class ChannelInterface:
 
     def _lookup_logging_policy(self) -> ChannelLoggingPolicy | None:
         """Lookup the channel log writer policy, or None if one is not set."""
+        if isinstance(self._channel, MetricsChannel):
+            return ChannelLoggingPolicy(log_type=self._channel.channel.log_type.name, channel_type="regular")
         channel_logging_policy_class = logger_config.get_channel_logging_policy()
         policy = lookup_policy(self._logical_system.module, channel_logging_policy_class, self._channel.channel.ir_node)
         if policy is None:
@@ -512,10 +561,10 @@ class ChannelInterface:
             return None
 
         # Return the logging policy
-        # MyPy doesn't know how to get the attributes of these dynamic enums
+        # Linter doesn't know how to get the attributes of these dynamic enums
         return ChannelLoggingPolicy(
-            log_type=log_type.name,  # type: ignore [attr-defined]
-            channel_type=channel_type.name,  # type: ignore [attr-defined]
+            log_type=log_type.name,  # pyright: ignore[reportAttributeAccessIssue] Dynamic Enum
+            channel_type=channel_type.name,  # pyright: ignore[reportAttributeAccessIssue] Dynamic Enum
         )
 
     def get_log_writer_policy(self) -> None | ChannelLoggingPolicy:
@@ -526,21 +575,33 @@ class ChannelInterface:
         """Get whether the logging policy is persistent."""
         if self._logging_policy is None:
             return False
-        return self._logging_policy.channel_type is logger_config.ChannelType.persistent.name  # type: ignore [attr-defined]
+        return self._logging_policy.channel_type == logger_config.ChannelType.persistent.name  # pyright: ignore[reportAttributeAccessIssue] Dynamic Type
 
     def remove_self_from_system(self) -> None:
         """Remove this channel from its system."""
-        removed_channel = self._logical_system.channels.pop(self._channel_name)
+        if self.is_metrics_channel():
+            removed_channel = self._logical_system.metrics_channels.pop(self._channel_name)
+        else:
+            removed_channel = self._logical_system.channels.pop(self._channel_name)
         for endpoint_dict in _get_endpoint_dicts(self._logical_system):
             for endpoint_uuid in list(endpoint_dict.keys()):
                 endpoint = endpoint_dict[endpoint_uuid]
-                if isinstance(endpoint.connected_to, Channel) and removed_channel == endpoint.connected_to:
+                if (
+                    isinstance(endpoint.connected_to, Channel | MetricsChannel)
+                    and removed_channel.channel.channel_name == endpoint.connected_to.channel.channel_name
+                ):
                     _remove_endpoint(self._logical_system, endpoint_uuid)
 
     def add_log_producer(
         self, alternative_output_channel_name: str | None = None, alternative_input_channel_name: str | None = None
     ) -> None:
         """Add a log producer to the system that produces this channel."""
+        if isinstance(self._channel, MetricsChannel):
+            error_str = (
+                "Trying to add a log producer for a metrics channel. Metrics channels are not supported for log "
+                "producers."
+            )
+            raise TypeError(error_str)
         channel_name = self.get_name()
         # cant read schema from the log if it doesn't have a uuid
         if (
@@ -561,6 +622,8 @@ class ChannelInterface:
             else:
                 output_channel_name = alternative_output_channel_name
                 output_channel = _get_channel_with_alternate_name(self._channel, alternative_output_channel_name)
+                # A Graphir Channel was the argument in so that type should be the output of _get_channel_with_alternate_name
+                assert isinstance(output_channel, GraphirChannel)
             self._logical_system.ensure_channel(output_channel)
         input_channel_name = alternative_input_channel_name if alternative_input_channel_name else channel_name
         log_producer = LogProducer(
@@ -575,6 +638,10 @@ class ChannelInterface:
             output_channel,
         )
 
+    def get_message_repr_name(self) -> str:
+        """Get the name of the message representation."""
+        return self._channel.channel.message_repr.schema_ir.schema.fqn
+
     def get_message_size_bytes(self) -> int:
         """Get the size of messages on this channel."""
         return self._channel.channel.message_size
@@ -585,13 +652,13 @@ class ChannelInterface:
 
     def set_queue_size(self, queue_size: int) -> None:
         """Set the message queue size for the channel."""
-        self._channel.channel = replace(self._channel.channel, num_slots=queue_size)
+        self._channel.channel = replace(self._channel.channel, num_slots=queue_size)  # pyright: ignore[reportAttributeAccessIssue] # False positive, pyright doesn't understand replace() is a dataclass method
 
 
 class ConnectableInterface:
     """Public interface to clockwork logical system connectable."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self, logical_system: LogicalSystem, connectable_uuid: UUID, connectable_dict: dict[UUID, Any]
     ) -> None:
         """Constructor."""
@@ -670,7 +737,7 @@ class ConnectableInterface:
 class ProcessInterface:
     """Public interface to clockwork logical system process."""
 
-    def __init__(self, logical_system: LogicalSystem, process_uuid: UUID) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, logical_system: LogicalSystem, process_uuid: UUID) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._process_uuid: UUID = process_uuid
@@ -686,7 +753,7 @@ class ProcessInterface:
 class CpuDomainInterface:
     """Public interface to clockwork logical system CPU domains."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(
         self,
         logical_system_interface: LogicalSystemInterface,
         logical_system: LogicalSystem,
@@ -712,10 +779,73 @@ class CpuDomainInterface:
         return self._logical_system_interface._get_cpu_domain_policy(self)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
 
 
+@final
+class IoConnectionInterface:
+    """Public interface to a clockwork IoConnection."""
+
+    def __init__(self, logical_system: LogicalSystem, uuid: UUID) -> None:
+        """Initialize the class."""
+        self._logical_system = logical_system
+        self._uuid = uuid
+
+    def get_uuid(self) -> UUID:
+        """Get UUID for the io connection instance."""
+        return self._uuid
+
+    def get_name(self) -> str:
+        """Get name for the io connection instance."""
+        if udp_socket := self._logical_system.udp_sockets.get(self._uuid):
+            return udp_socket.fqn
+        if audio_source := self._logical_system.audio_sources.get(self._uuid):
+            return audio_source.fqn
+        msg = "Not supported"
+        raise NotImplementedError(msg)
+
+    def _entities_to_channel_names(
+        self,
+        entities: list[Value],
+        mapping: dict[UUID, Endpoint[ObserverType, Any]] | dict[UUID, Endpoint[ProducerType, Any]],
+    ) -> list[str]:
+        channel_names = []
+        for entity in entities:
+            entity_uuid = lookup_uuid(self._logical_system.module.context, entity)
+            endpoint = mapping[entity_uuid]
+            if isinstance(endpoint.connected_to, Channel):
+                channel_names.append(endpoint.connected_to.channel.channel_name)
+        return channel_names
+
+    def get_output_channel_names(self) -> list[str]:
+        """Names of any output channels."""
+        entities: list[Value] = []
+        if udp_socket := self._logical_system.udp_sockets.get(self._uuid):
+            if udp_socket.producer_endpoint:
+                entities.append(udp_socket.producer_endpoint)
+        elif audio_source := self._logical_system.audio_sources.get(self._uuid):
+            entities.append(audio_source)
+        else:
+            msg = "Not supported"
+            raise NotImplementedError(msg)
+        return self._entities_to_channel_names(entities, self._logical_system.producer_endpoints)
+
+    def get_input_channel_names(self) -> list[str]:
+        """Names of any input channels."""
+        entities: list[Value] = []
+        if udp_socket := self._logical_system.udp_sockets.get(self._uuid):
+            if udp_socket.observer_endpoint:
+                entities.append(udp_socket.observer_endpoint)
+        elif self._logical_system.audio_sources.get(self._uuid):
+            # Audio sources only have outputs.
+            pass
+        else:
+            msg = "Not supported"
+            raise NotImplementedError(msg)
+        return self._entities_to_channel_names(entities, self._logical_system.observer_endpoints)
+
+
 class CogInterface:
     """Public interface to clockwork logical system cog."""
 
-    def __init__(self, logical_system: LogicalSystem, cog_uuid: UUID) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, logical_system: LogicalSystem, cog_uuid: UUID) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._cog_uuid: UUID = cog_uuid
@@ -728,6 +858,58 @@ class CogInterface:
     def get_uuid(self) -> UUID:
         """Get the cog UUID."""
         return self._cog_uuid
+
+    def is_init(self) -> bool:
+        """Whether or not this is an init cog."""
+        return self._cog.cog_class.is_init()
+
+    def get_output_channel_names(self) -> list[str]:
+        """Names of any output channels."""
+        channel_names = []
+        for entity in self._cog.members:
+            if not isinstance(entity.member, OutputDef):
+                continue
+            endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
+            endpoint = self._logical_system.producer_endpoints[endpoint_uuid]
+            if not isinstance(endpoint.connected_to, Channel):
+                continue
+            channel_names.append(endpoint.connected_to.channel.channel_name)
+        return channel_names
+
+    def get_endpoint_by_output_name(self, name: str) -> EndpointInterface | None:
+        """Get an endpoint by its name in the cog outputs."""
+        for entity in self._cog.members:
+            if not isinstance(entity.member, OutputDef):
+                continue
+            if entity.name == name:
+                endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
+                endpoint = self._logical_system.producer_endpoints[endpoint_uuid]
+                return EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
+        return None
+
+    def get_input_channel_names(self) -> list[str]:
+        """Names of any input channels."""
+        channel_names = []
+        for entity in self._cog.members:
+            if not isinstance(entity.member, InputDef):
+                continue
+            endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
+            endpoint = self._logical_system.observer_endpoints[endpoint_uuid]
+            if not isinstance(endpoint.connected_to, Channel):
+                continue
+            channel_names.append(endpoint.connected_to.channel.channel_name)
+        return channel_names
+
+    def get_endpoint_by_input_name(self, name: str) -> EndpointInterface | None:
+        """Get an endpoint by its name in the cog inputs."""
+        for entity in self._cog.members:
+            if not isinstance(entity.member, InputDef):
+                continue
+            if entity.name == name:
+                endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
+                endpoint = self._logical_system.observer_endpoints[endpoint_uuid]
+                return EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
+        return None
 
     def get_connectables(self) -> list[ConnectableInterface]:
         """Get the connectables that feed into this cog."""
@@ -838,7 +1020,7 @@ def _remove_endpoint(logical_system: LogicalSystem, endpoint_to_remove_uuid: UUI
     for endpoint_dict in _get_endpoint_dicts(logical_system):
         endpoint_dict.pop(endpoint_to_remove_uuid, None)
 
-    for channel in logical_system.channels.values():
+    for channel in (logical_system.channels | logical_system.metrics_channels).values():
         channel.producers.pop(endpoint_to_remove_uuid, None)
         channel.observers.pop(endpoint_to_remove_uuid, None)
 
@@ -885,8 +1067,12 @@ def _get_endpoint_dicts(logical_system: LogicalSystem) -> list[dict[UUID, Endpoi
     ]
 
 
-def _get_channel_with_alternate_name(channel: Channel, alternative_channel_name: str) -> GraphirChannel:
+def _get_channel_with_alternate_name(
+    channel: Channel | MetricsChannel, alternative_channel_name: str
+) -> GraphirChannel | GraphirMetricsChannel:
     """Make a copy of a channel, except with a different name."""
+    if isinstance(channel, MetricsChannel):
+        return _get_metrics_channel_with_alternate_name(channel, alternative_channel_name)
     updated_ir_node = copy(channel.channel.ir_node)
     updated_ir_node.name = alternative_channel_name
     updated_ir_node.channel_name = primitive.StringValue.make(alternative_channel_name)
@@ -899,5 +1085,22 @@ def _get_channel_with_alternate_name(channel: Channel, alternative_channel_name:
         channel.channel.is_multi_publisher,
         channel.channel.is_diagnostics,
         channel.channel.is_bridge_status,
+        channel.channel.enforce_backwards_compatibility,
         updated_ir_node,
+    )
+
+
+def _get_metrics_channel_with_alternate_name(
+    channel: MetricsChannel, alternative_channel_name: str
+) -> GraphirMetricsChannel:
+    """Make a copy of a metrics channel, except with a different name."""
+    return GraphirMetricsChannel(
+        alternative_channel_name,
+        channel.channel.message_repr,
+        channel.channel.log_type,
+        channel.channel.message_size,
+        channel.channel.num_slots,
+        channel.channel.uuid,
+        channel.channel.cog_path,
+        channel.channel.cog_instance_path,
     )

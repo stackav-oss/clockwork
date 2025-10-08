@@ -94,4 +94,11 @@ TEST_CASE("Test integer_sequence to_array")
   CHECK(to_array(std::integer_sequence<char, 1>{}) == std::array<char, 1>{{1}});
 }
 
+TEST_CASE("Test MakeRepeatedIntegerSequence")
+{
+  static_assert(std::is_same_v<MakeRepeatedIntegerSequence<std::size_t, 0, 99>, std::index_sequence<>>);
+  static_assert(std::is_same_v<MakeRepeatedIntegerSequence<std::size_t, 2, 99>, std::index_sequence<99, 99>>);
+  static_assert(std::is_same_v<MakeRepeatedIntegerSequence<int, 2, 99>, std::integer_sequence<int, 99, 99>>);
+}
+
 } // namespace jewels::meta

@@ -17,10 +17,22 @@ cc_library(
         "example_cogs.inl",
     ],
     hdrs = ["example_cogs.hh"],
+    data = [":example_cogs_clk"],
     deps = [
         ":example_cogs_dial",
         ":example_cogs_impl",
+        ":test_message",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/logging/log_playback:end_of_log",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -35,7 +47,12 @@ clk(
         "example_cogs_dial.hh",
         "example_cogs_dial.inl",
     ],
-    deps = [":test_message_clk"],
+    deps = [
+        ":test_message_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+        "//clockwork/logging/log_playback:end_of_log_clk",
+    ],
 )
 
 cc_library(
@@ -45,9 +62,11 @@ cc_library(
         "example_cogs_dial.inl",
     ],
     hdrs = ["example_cogs_dial.hh"],
+    data = [":example_cogs_clk"],
     deps = [
         ":test_message",
         "//clockwork/dial:include_common",
+        "//clockwork/logging/log_playback:end_of_log",
     ],
 )
 
@@ -69,9 +88,7 @@ cc_binary(
     deps = [
         ":test_message",
         "//clockwork:repr_iface",
-        "//clockwork/logging:channel_type",
         "//clockwork/logging:log_timestamp",
-        "//clockwork/logging:message_encoding",
         "//clockwork/logging/offboard:types",
         "//clockwork/logging/offboard:writer",
         "//jewels/container/tap:var_string",
@@ -94,16 +111,17 @@ cc_binary(
     ],
     data = [
         ":clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
-        ":log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        ":log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         ":log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
     ],
     deps = [
         ":example_cogs",
         ":test_message",
         "//clockwork:repr_iface",
+        "//clockwork/logging/log_playback:end_of_log",
         "//clockwork/scaffolding:abstract_casing",
         "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
+        "//clockwork/scaffolding:offline_main",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
     ],
@@ -136,16 +154,19 @@ clk(
         "log_runner_example_exe.hh",
         "log_runner_example_exe.inl",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_allocations.csv",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
-        "log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_simplelaunch_config.textproto",
         "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.logged_channel_metadata.pbbin",
     ],
     deps = [
         ":example_cogs_clk",
         ":test_message_clk",
         "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging/log_playback:end_of_log_channel_clk",
     ],
 )
 
@@ -156,8 +177,8 @@ command(
         "--deterministic-runner",
         "--input-log-uri",
         "/tmp/test_log/log_runner/publisher/",
-        "--log-publisher-config",
-        "clockwork/examples/log_runner/log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "--channel-publisher-config",
+        "clockwork/examples/log_runner/log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         "--output-log-uri",
         "/tmp/test_log/log_runner/log_writer/",
         "--log-writer-config",
@@ -176,9 +197,10 @@ merge_simplelaunch_config(
     data = [
         "clockwork.clockwork.examples.log_runner.log_runner_example_system.log_runner_example_system.proc.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_allocations.csv",
+        "log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
-        "log_runner_example_system.log_runner_example_system.SimCpu_log_reader_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
         ":log_runner_example_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
@@ -192,6 +214,7 @@ cc_library(
         "test_message.inl",
     ],
     hdrs = ["test_message.hh"],
+    data = [":test_message_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",

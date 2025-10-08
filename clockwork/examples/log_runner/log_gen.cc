@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/examples/log_runner/test_message.hh"
-#include "clockwork/logging/channel_type.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/repr_iface.hh"
@@ -40,11 +38,7 @@ int main(int /*argc*/, const char** /*argv*/)
   {
     jewels::log_cerr_error("error opening logger");
   }
-  auto channel_status = writer.create_channel(clockwork_logging::offboard::LoggedChannelMetadata{
-    .channel_name = "test_channel",
-    .message_encoding = clockwork_logging::MessageEncoding::tachyon,
-    .channel_type = clockwork_logging::ChannelType::regular,
-  });
+  auto channel_status = writer.create_channel<clockwork::Tappy<clockwork::logging::test::TestMessage>>("test_channel");
 
   if (!channel_status)
   {
@@ -52,11 +46,8 @@ int main(int /*argc*/, const char** /*argv*/)
     return EXIT_FAILURE;
   }
 
-  auto channel_status2 = writer.create_channel(clockwork_logging::offboard::LoggedChannelMetadata{
-    .channel_name = "test_channel2",
-    .message_encoding = clockwork_logging::MessageEncoding::tachyon,
-    .channel_type = clockwork_logging::ChannelType::regular,
-  });
+  auto channel_status2 =
+    writer.create_channel<clockwork::Tappy<clockwork::logging::test::TestMessage>>("test_channel2");
 
   if (!channel_status2)
   {

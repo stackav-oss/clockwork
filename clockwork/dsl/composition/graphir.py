@@ -15,11 +15,13 @@ starting point for tooling that wants to query and manipulate a system graph.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import TYPE_CHECKING, Final, TypeAlias, final
 
+from clockwork.dsl.compiler_context import Context, ContextKey
 from clockwork.dsl.ir import (
     audio,
     box,
+    clkbuiltins,
     cog,
     diagnostics,
     extern_type,
@@ -31,6 +33,49 @@ from clockwork.dsl.ir import (
     typesys,
     udp,
 )
+from clockwork.dsl.serialization import tachyon_reg
+from typing_extensions import override
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from clockwork.dsl import compiler_context
+    from clockwork.dsl.compiler_context import CompilerContext
+
+
+@final
+class GraphirChannelRegistry(Context):
+    """GraphIR Channel Registry."""
+
+    def __init__(self, name: str | None) -> None:
+        """Create a new GraphIR channel registry."""
+        self.name = name
+        self.channel_registry: dict[str, Channel] = {}
+
+    @override
+    def import_from(self, other: GraphirChannelRegistry) -> None:
+        """Combine this channel registry with cached channels from another registry.
+
+        Raises:
+            RuntimeError: If a channel already exists with a different definition.
+        """
+        for key, channel in other.channel_registry.items():
+            if key in self.channel_registry and self.channel_registry[key] != channel:
+                msg = f"Channel registry entry {key} has conflicting entry: {self.channel_registry[key]} vs {channel}\nWhen merging {other.name} into {self.name}"
+                raise RuntimeError(msg)
+            self.channel_registry[key] = channel
+
+
+class GraphirChannelRegistryKey(ContextKey[GraphirChannelRegistry]):
+    """CompilerContext Key for GraphIR Channel Registry."""
+
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> GraphirChannelRegistry:
+        """Create a default instance of a GraphIR Channel Registry."""
+        return GraphirChannelRegistry(compiler_context.name)
+
+
+GRAPHIR_CHANNEL_REGISTRY_KEY: Final = GraphirChannelRegistryKey("GraphirChannelRegistryKey")
 
 
 @dataclass(slots=True, frozen=True)
@@ -48,6 +93,39 @@ class DocRequiredEntity:
 
 
 @dataclass(slots=True, frozen=True)
+class MetricsChannel:
+    """GraphIR Node representing a metrics channel."""
+
+    channel_name: str
+    message_repr: representation.ResolvedReprInstantiation
+    log_type: cog.MetricsLogType
+    message_size: int
+    num_slots: int
+    uuid: UUID
+    cog_path: str
+    cog_instance_path: str
+
+    @override
+    def __repr__(self) -> str:
+        """User-friendly printable representation."""
+        return f"{type(self).__name__}({self.channel_name})"
+
+
+def get_representation_size(
+    compiler_context: compiler_context.CompilerContext, message_repr: representation.ResolvedReprInstantiation
+) -> int | None:
+    """Get the size of a representation."""
+    if message_repr.typespec.instantiates is clkbuiltins.TACHYON:
+        schema_type = message_repr.schema_ir
+        constraint = tachyon_reg.constraint_for_type(compiler_context, schema_type)
+        if constraint is None:
+            return None
+        return constraint.size
+    msg = f"Unsupported message type {message_repr.typespec}"
+    raise RuntimeError(msg)
+
+
+@dataclass(slots=True, frozen=True)
 class Channel(DocRequiredEntity):
     """GraphIR Node representing a pub/sub channel."""
 
@@ -58,8 +136,10 @@ class Channel(DocRequiredEntity):
     is_multi_publisher: bool
     is_diagnostics: bool
     is_bridge_status: bool
+    enforce_backwards_compatibility: bool
     ir_node: pubsub.Channel
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}({self.channel_name})"
@@ -71,7 +151,7 @@ class Channel(DocRequiredEntity):
             not isinstance(ir_node.channel_name, primitive.StringValue)
             or not isinstance(ir_node.message_repr, representation.ResolvedReprInstantiation)
             or not isinstance(ir_node.message_size, primitive.DecimalValue)
-            or not isinstance(ir_node.num_slots, primitive.DecimalValue)  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            or not isinstance(ir_node.num_slots, primitive.DecimalValue)  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         ):
             msg = f"Attempt to convert unresolved Channel: {ir_node}"
             raise RuntimeError(msg)  # noqa: TRY004 (RuntimeError is appropriate because this is a compiler bug)
@@ -84,54 +164,53 @@ class Channel(DocRequiredEntity):
             is_multi_publisher=ir_node.publishers_option == pubsub.ChannelPublishersOption.multiple,
             is_diagnostics=ir_node.is_diagnostics,
             is_bridge_status=ir_node.is_bridge_status,
+            enforce_backwards_compatibility=ir_node.enforce_backwards_compatibility,
             ir_node=ir_node,
         )
 
 
-_CHANNEL_REG: dict[str, Channel] = {}
-_DIAGNOSTICS_CHANNEL: Channel | None = None
-_BRIDGE_STATUS_CHANNEL: Channel | None = None
-
-
-def lookup_channel(key: str | pubsub.Channel, create_if_new: bool = True) -> Channel:
+def lookup_channel(key: str | pubsub.Channel, compiler_context: CompilerContext, create_if_new: bool = True) -> Channel:
     """Look up a GraphIR channel for an IR channel.
 
     Args:
         key: Either a channel name or an IR Channel object.
+        compiler_context: Context to look up channel in.
         create_if_new: If True, create and register and return a new GraphIR node.
 
     Raises:
         KeyError if create_if_new is False and there's no GraphIR node yet, or if there's no underlying IR Channel.
     """
+    registry = compiler_context[GRAPHIR_CHANNEL_REGISTRY_KEY]
     if isinstance(key, pubsub.Channel):
         if not isinstance(key.channel_name, primitive.StringValue):
             msg = f"Attempt to look up unresolved channel {key}"
             raise RuntimeError(msg)  # noqa: TRY004 (RuntimeError is appropriate because this is a compiler bug)
         key = key.channel_name.value
     try:
-        return _CHANNEL_REG[key]
+        return registry.channel_registry[key]
+
     except KeyError:
         if not create_if_new:
             raise
-    result = Channel.from_ir(pubsub.lookup_channel(key))
-    _CHANNEL_REG[key] = result
+    result = Channel.from_ir(pubsub.lookup_channel(key, compiler_context))
+    registry.channel_registry[key] = result
     return result
 
 
-def diagnostics_channel() -> Channel | None:
+def diagnostics_channel(compiler_context: CompilerContext) -> Channel | None:
     """Get the GraphIR diagnostics channel for the IR diagnostics channel."""
-    ir_channel = pubsub.diagnostics_channel()
+    ir_channel = pubsub.diagnostics_channel(compiler_context)
     if not ir_channel:
         return None
-    return lookup_channel(ir_channel)
+    return lookup_channel(ir_channel, compiler_context)
 
 
-def bridge_status_channel() -> Channel | None:
+def bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
     """Get the GraphIR bridge status channel for the IR bridge status channel."""
-    ir_channel = pubsub.bridge_status_channel()
+    ir_channel = pubsub.bridge_status_channel(compiler_context)
     if not ir_channel:
         return None
-    return lookup_channel(ir_channel)
+    return lookup_channel(ir_channel, compiler_context)
 
 
 @dataclass(slots=True, frozen=True)
@@ -148,6 +227,7 @@ class ChannelToCogSubscribeConnection(ChannelSubscribeConnection):
 
     cog_instance_member: cog.CogInstanceMember[cog.InputDef]
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return (
@@ -169,6 +249,7 @@ class ChannelToCogPublishConnection(ChannelPublishConnection):
 
     cog_instance_member: cog.CogInstanceMember[cog.OutputDef]
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return (
@@ -182,6 +263,7 @@ class ChannelToUdpPublishConnection(ChannelPublishConnection):
 
     socket_endpoint: udp.UdpSocketEndpointInstance
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(channel={self.channel}, socket_instance={self.socket_endpoint.socket.endpoint})"
@@ -193,6 +275,7 @@ class ChannelToUdpSubscribeConnection(ChannelSubscribeConnection):
 
     socket_endpoint: udp.UdpSocketEndpointInstance
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(channel={self.channel}, socket_instance={self.socket_endpoint.socket.endpoint})"
@@ -204,6 +287,7 @@ class ChannelToAudioPublishConnection(ChannelPublishConnection):
 
     source_instance: audio.AudioSourceInstance
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(channel={self.channel}, source_instance={self.source_instance.source.endpoint})"
@@ -215,6 +299,7 @@ class ChannelToDiagnosticsPublish(ChannelPublishConnection):
 
     diagnostics_instance: diagnostics.DiagnosticsInstance
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         group_id, instance_id = (
@@ -231,6 +316,7 @@ class ConfigConnection:
     config_instance: box.SerializedDataFileInstance
     cog_instance_member: cog.CogInstanceMember[cog.ConfigDef]
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(config={self.config_instance}, cog_instance_member={self.cog_instance_member.member.fqn})"
@@ -243,6 +329,7 @@ class StateConnection:
     state_instance: box.StateInstance
     cog_instance_member: cog.CogInstanceMember[cog.StateDef]
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(state={self.state_instance}, cog_instance_member={self.cog_instance_member.member.fqn})"
@@ -255,6 +342,7 @@ class MemoryResourceConnection:
     memory_resource: box.MemoryResourceInstance
     cog_instance_member: cog.CogInstanceMember[cog.ResourceDef]
 
+    @override
     def __repr__(self) -> str:
         """User-friendly printable representation."""
         return f"{type(self).__name__}(memory_resource={self.memory_resource}, cog_instance_member={self.cog_instance_member.member.fqn})"
@@ -270,9 +358,14 @@ ConnectionType: TypeAlias = (
 
 
 def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057): Refactor this function to reduce complexity
-    ir_node: box.Connection,
+    ir_node: box.Connection, compiler_context: CompilerContext
 ) -> ConnectionType:
-    """Construct a GraphIR connection of the appropriate class from an IR Connection."""
+    """Construct a GraphIR connection of the appropriate class from an IR Connection.
+
+    Parameters:
+        ir_node: IR Connection to generate GraphIR from.
+        compiler_context: Compiler context to use for looking up channels.
+    """
     if isinstance(ir_node.source, cog.CogInstanceMember):
         if not isinstance(ir_node.source.member, cog.OutputDef | diagnostics.DiagnosticsDef):
             msg = ir_node.append_error_line(
@@ -282,13 +375,13 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
         if not isinstance(ir_node.target, pubsub.Channel):
             msg = ir_node.append_error_line(f"Connection target must be a Channel, not {ir_node.target}")
             raise TypeError(msg)
-        channel = lookup_channel(ir_node.target)
+        channel = lookup_channel(ir_node.target, compiler_context)
         if channel.message_repr.typespec.value_key() != ir_node.source.member.get_representation_typespec().value_key():
             msg = f"Attempt to connect channel type {channel.message_repr.typespec.value_key()} to output type {ir_node.source.member.get_representation_typespec().value_key()}"
             raise TypeError(msg)
         return ChannelToCogPublishConnection(channel=channel, cog_instance_member=ir_node.source, ir_node=ir_node)
     if isinstance(ir_node.source, pubsub.Channel):
-        channel = lookup_channel(ir_node.source)
+        channel = lookup_channel(ir_node.source, compiler_context)
         if isinstance(ir_node.target, udp.UdpSocketInstance):
             if not isinstance(channel.message_repr.typespec, typesys.TypeVal):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
                 msg = "Unable to connect unresolved channel to udp socket."
@@ -326,7 +419,7 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
             )
             msg = ir_node.append_error_line(f"Connection target must be a Channel, not {target_name}")
             raise TypeError(msg)
-        channel = lookup_channel(ir_node.target)
+        channel = lookup_channel(ir_node.target, compiler_context)
         if not isinstance(channel.message_repr.typespec, typesys.TypeVal):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             msg = "Unable to connect unresolved channel to audio source."
             raise TypeError(msg)
@@ -343,7 +436,7 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
             )
             msg = ir_node.append_error_line(f"Connection target must be a Channel, not {target_name}")
             raise TypeError(msg)
-        channel = lookup_channel(ir_node.target)
+        channel = lookup_channel(ir_node.target, compiler_context)
         if not isinstance(channel.message_repr.typespec, typesys.TypeVal):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             msg = "Unable to connect unresolved channel to udp socket."
             raise TypeError(msg)
@@ -393,7 +486,7 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
         if not isinstance(ir_node.target, pubsub.Channel):
             msg = ir_node.append_error_line(f"Connection target must be a Channel, not {ir_node.target}")
             raise TypeError(msg)
-        channel = lookup_channel(ir_node.target)
+        channel = lookup_channel(ir_node.target, compiler_context)
         if (
             channel.message_repr.typespec.value_key()
             != ir_node.source.diagnostics.get_representation_typespec().value_key()
@@ -409,7 +502,7 @@ def _validate_state_connection(
     ir_node: box.Connection, state_ir: box.StateInstance, instance_member: cog.CogInstanceMember[cog.StateDef]
 ) -> StateConnection:
     if isinstance(instance_member.member.message_type, schema_reg.InterfaceInfo):
-        assert isinstance(  # noqa: S101  (for mypy)
+        assert isinstance(
             instance_member.member.message_type.interface_ir.representation, representation.RepresentationReference
         )
         if (source_key := state_ir.repr_typespec.value_key()) != (

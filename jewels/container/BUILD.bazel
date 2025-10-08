@@ -1,6 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
 
 cc_library(
@@ -23,12 +24,42 @@ cc_library(
     hdrs = ["circular_buffer.hh"],
     visibility = ["//visibility:public"],
     deps = [
+        ":circular_buffer_state_clk_cc",
         "//jewels/memory:aligned_storage",
         "//jewels/memory:memory_resource",
         "//jewels/meta:call",
         "//jewels/meta:type_traits",
         "//jewels/std:expected",
         "@boost//:iterator",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "circular_buffer_state_clk",
+    srcs = ["circular_buffer_state.clk"],
+    outs = [
+        "circular_buffer_state_clk_cc.cc",
+        "circular_buffer_state_clk_cc.hh",
+        "circular_buffer_state_clk_cc.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "circular_buffer_state_clk_cc",
+    srcs = [
+        "circular_buffer_state_clk_cc.cc",
+        "circular_buffer_state_clk_cc.inl",
+    ],
+    hdrs = ["circular_buffer_state_clk_cc.hh"],
+    data = [":circular_buffer_state_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
     ],
 )
 

@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
-#include <linux/if_ether.h>
 #include <netinet/in.h>
 #include <span>
 #include <sys/socket.h>
@@ -60,7 +59,7 @@ socklen_t SocketAddress::byte_size()
 }
 
 jewels::expected<RawSocketAddress, filesystem::ErrorCode>
-RawSocketAddress::create(const std::string& address, const int32_t interface_index) noexcept
+RawSocketAddress::create(const std::string_view address, const int32_t interface_index, const int32_t protocol) noexcept
 {
   constexpr auto mac_address_len{6};
   ::sockaddr_ll addr{};
@@ -70,7 +69,7 @@ RawSocketAddress::create(const std::string& address, const int32_t interface_ind
   /// The network interface index, which can be looked up via if_nametoindex()
   addr.sll_ifindex = interface_index;
   addr.sll_halen = mac_address_len;
-  addr.sll_protocol = htons(ETH_P_ALL);
+  addr.sll_protocol = htons(protocol);
 
   auto addr_view = std::span(addr.sll_addr);
   std::ranges::copy(address, addr_view.begin());

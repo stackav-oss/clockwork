@@ -141,19 +141,24 @@ TEST_CASE("Publisher handle") // NOLINT(readability-function-size) This test is 
 
   SECTION("Destructor")
   {
+    TestObserver observer;
+    REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+
     auto reservation = pub_handle.reserve();
     REQUIRE(reservation);
 
-    SECTION("Failed discard in desctructor")
+    SECTION("Failed discard in destructor")
     {
       REQUIRE(reservation->discard());
       reservation->mark_for_discard();
       REQUIRE_THROWS([&] { auto copied{*std::move(reservation)}; }());
+      CHECK(!observer.event);
     }
-    SECTION("Cannot commit in desctructor")
+    SECTION("Commit is ignored in destructor")
     {
       reservation->mark_for_commit();
-      REQUIRE_THROWS([&] { auto copied{*std::move(reservation)}; }());
+      REQUIRE_NOTHROW([&] { auto copied{*std::move(reservation)}; }());
+      CHECK(!observer.event);
     }
   }
 
@@ -507,6 +512,16 @@ TEST_CASE("Publisher handle") // NOLINT(readability-function-size) This test is 
         REQUIRE(message_range);
         REQUIRE(std::ranges::size(*message_range) == 1UL);
         REQUIRE(message_range->front() == 123456789UL);
+      }
+      SECTION("Sim only mark for publish")
+      {
+        constexpr jewels::time::SyncTime sim_publish_time{std::chrono::nanoseconds{1234567890}};
+        publishable->sim_only_mark_for_publish_with_fake_timestamp(sim_publish_time);
+        REQUIRE(reservation->state() == ReservationState::State::commit);
+        REQUIRE(std::ranges::empty(sub_handle.available()));
+        REQUIRE(reservation->process(fake_publish_time));
+        auto begin = sub_handle.available().begin();
+        REQUIRE(begin->header()->publish_timestamp == sim_publish_time.time_since_epoch().count());
       }
     }
   }

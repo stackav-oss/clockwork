@@ -77,6 +77,18 @@ void bind_var_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_b
     },
     "Construct from an iterable object");
 
+  vec_binding.def(
+    "from_iter",
+    [](Vector& vec, nb::typed<nb::iterable, Value> seq)
+    {
+      vec.clear();
+      for (nb::handle handle : seq)
+      {
+        vec.push_back(cast_maybe_by_reference<Value>(handle));
+      }
+    },
+    "Set elements from an iterable object.");
+
   nb::implicitly_convertible<nb::iterable, Vector>();
 
   vec_binding
@@ -140,8 +152,9 @@ void bind_var_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_b
 
         if (length != value.size())
         {
-          throw nb::index_error("The left and right hand side of the slice "
-                                "assignment have mismatched sizes!");
+          throw nb::index_error(
+            "The left and right hand side of the slice "
+            "assignment have mismatched sizes!");
         }
 
         for (size_t i = 0; i < length; ++i)

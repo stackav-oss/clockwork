@@ -22,6 +22,54 @@ channel LoggerStatusChannel
 channel LoggerMessageRatesChannel
 {
   name: "/logger/message_rates";
-  message_type: Tachyon<ChannelMessageRates>;
+  message_type: Tachyon<ChannelMessageRates<>>;
+  max_num_messages: 2;
+}
+
+// Logger config
+channel LoggerConfigChannel1
+{
+  name: "/logger/config1";
+  message_type: Tachyon<LoggerConfig>;
+  max_num_messages: 1;
+}
+
+// Logger status
+channel LoggerStatusChannel1
+{
+  name: "/logger/status1";
+  message_type: Tachyon<LoggerStatus>;
+  max_num_messages: 10;
+}
+
+// Logger channel message rates
+channel LoggerMessageRatesChannel1
+{
+  name: "/logger/message_rates1";
+  message_type: Tachyon<ChannelMessageRates<>>;
+  max_num_messages: 2;
+}
+
+// Logger config
+channel LoggerConfigChannel2
+{
+  name: "/logger/config2";
+  message_type: Tachyon<LoggerConfig>;
+  max_num_messages: 1;
+}
+
+// Logger status
+channel LoggerStatusChannel2
+{
+  name: "/logger/status2";
+  message_type: Tachyon<LoggerStatus>;
+  max_num_messages: 10;
+}
+
+// Logger channel message rates
+channel LoggerMessageRatesChannel2
+{
+  name: "/logger/message_rates2";
+  message_type: Tachyon<ChannelMessageRates<>>;
   max_num_messages: 2;
 }

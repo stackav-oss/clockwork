@@ -181,7 +181,8 @@ template <
   typename ReferenceCounterType,
   typename LockProviderType>
 [[nodiscard]] RefCountedPoolImpl<Derived, ValueType, ContainerType, ReferenceCounterType, LockProviderType>::
-  SharedReferenceImpl::operator bool() const
+  SharedReferenceImpl::
+  operator bool() const
 {
   return entry_ptr_ != nullptr;
 }

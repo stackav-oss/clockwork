@@ -6,6 +6,7 @@
 #include "clockwork/common/exec_tools.hh"
 #include "clockwork/common/process_description.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "clockwork/scaffolding/end_process_exception.hh"
 #include "clockwork/scaffolding/scaffolding.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -43,7 +44,7 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
     return EXIT_FAILURE;
   }
 
-  auto desc = read_tachyon_config<common::ProcessDescriptionTap>(arg_desc_file.getValue());
+  auto desc = read_tachyon_config_to_heap<common::ProcessDescriptionTap>(arg_desc_file.getValue());
   if (!desc)
   {
     return EXIT_FAILURE;
@@ -69,11 +70,18 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
     jewels::log_cerr_error("failed to create sim params");
     return EXIT_FAILURE;
   }
-  if (execution_params->execution_mode == ExecutionMode::deterministic)
+  try
   {
-    return run_deterministic(*desc, *casing, *channel_factory, exit, *execution_params);
+    if (execution_params->execution_mode == ExecutionMode::deterministic)
+    {
+      return run_deterministic(**desc, *casing, *channel_factory, exit, *execution_params);
+    }
+    return run(**desc, *casing, *channel_factory, exit, *execution_params);
   }
-  return run(*desc, *casing, *channel_factory, exit, *execution_params);
+  catch (const EndProcessException& e)
+  {
+    return e.return_code();
+  }
 }
 
 } // namespace clockwork::scaffolding

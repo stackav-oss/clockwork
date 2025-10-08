@@ -22,11 +22,23 @@ enum SomeEnum
   uuid: 02d1a601-5c69-46dd-9922-06fee33b581e;
   values
   {
+
     // First value
-    #1 first_value default;
+    #3 first_value default;
 
     // Second value
-    #2 second_value;
+    #4 second_value;
+  }
+  history
+  {
+    versions: [2, 4];
+    values
+    {
+      // Original value
+      #1 original_value default -> became #3;
+      // Removed value
+      #2 removed_value -> removed #4;
+    }
   }
 }
 
@@ -45,13 +57,24 @@ enum SomeFlags
     // No bits set
     #0 none default { underlying_value: 0; }
     // LSB
-    #1 flag1 { underlying_value: 1; }
+    #3 flag1 { underlying_value: 1; }
     // Bit1
-    #2 flag2 { underlying_value: 2; }
+    #4 flag2 { underlying_value: 2; }
     // Bit1
-    #3 flag3 { underlying_value: 4; }
+    #5 flag3 { underlying_value: 4; }
     // Bit0 + Bit1
-    #4 flag12 { underlying_value: 3; }
+    #6 flag12 { underlying_value: 3; }
+  }
+  history
+  {
+    versions: [0, 6];
+    values
+    {
+      // Renamed flag1
+      #1 renamed_flag1 { underlying_value: 1; } -> became #3;
+      // Removed flag23
+      #2 flag23 { underlying_value: 6; } -> removed #6;
+    }
   }
 }
 
@@ -144,6 +167,11 @@ schema ParamAsField
 schema TapMsg
 {
   uuid: cae6ee0b-ec41-40cf-8b87-fb1583e5985d;
+  parameters
+  {
+    // Int64 initial value
+    #0 signed_value: Int32 = 234;
+  }
   fields
   {
     // Integer type
@@ -207,7 +235,45 @@ schema TapMsg
     #18 fixed_array: FixedArray<type=Int32, size=2>;
 
     // VarString
-    #19 var_string: VarString<max_size=2>;
+    #23 var_string: VarString<max_size=2>;
+
+    // Integer type with init
+    #24 integer_with_init: Int32 = signed_value;
+  }
+  history
+  {
+    versions: [21, 23, 24];
+    fields
+    {
+      #19 var_string: VarString<max_size=1> -> became #23;
+      #22 removed_var_string: VarString<max_size=2> -> removed #23;
+    }
+  }
+}
+
+// Second Message to test Tap without having to rework the unit tests that check offsets and sizes
+schema TapMsg2
+{
+  uuid: c372f501-ace8-458c-ab70-e531f78aeddc;
+  fields
+  {
+    // Optional VarArray
+    #1 optional_var_array: Optional<VarArray<type=UInt32, max_size=4>>;
+
+    // Optional VarString
+    #2 optional_var_string: Optional<VarString<max_size=4>>;
+
+    // Optional FixedArray
+    #3 optional_fixed_array: Optional<FixedArray<type=UInt32, size=4>>;
+
+    // Optional UUID
+    #4 optional_uuid: Optional<Uuid<SubMsg>>;
+
+    // Optional Bool
+    #5 optional_bool: Optional<Bool>;
+
+    // Optional Strong type
+    #6 optional_strong_type: Optional<MyStrongType>;
   }
 }
 
@@ -330,6 +396,7 @@ cpp_target tapmsg
   schema GenericSubMsg;
   schema GenericMsg;
   schema TapMsg;
+  schema TapMsg2;
   schema OutOfOrderFields;
   schema ConstructorContainer;
   schema NoConstructor;
@@ -345,7 +412,8 @@ cpp_target tapmsg
   representation Tachyon<GenericMsg<3, Bool>>;
   representation Tachyon<GenericMsg<3, SubMsg>>;
   representation Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>;
-  representation Tachyon<TapMsg>;
+  representation Tachyon<TapMsg<>>;
+  representation Tachyon<TapMsg2>;
   representation Tachyon<OutOfOrderFields>;
   representation Tachyon<ConstructorContainer>;
   representation Tachyon<NoConstructor>;
@@ -359,7 +427,8 @@ cpp_target tapmsg
   interface Tap<Tachyon<GenericMsg<3, SubMsg>>>;
   interface Tap<Tachyon<ParamAsField<PaddedMsg>>>;
   interface GenericTapMsgAlias: Tap<Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>>;
-  interface TapMsgAlias: Tap<Tachyon<TapMsg>>;
+  interface TapMsgAlias: Tap<Tachyon<TapMsg<>>>;
+  interface Tappy<TapMsg2>;
   interface Tappy<OutOfOrderFields>;
   interface Tappy<ConstructorContainer>;
   interface Tappy<NoConstructor>;
@@ -382,7 +451,8 @@ py_target pytapmsg
   enum SomeFlags;
 
   interface Tap<Tachyon<SubMsg>>;
-  interface Tap<Tachyon<TapMsg>>;
+  interface TapMsgTap: Tap<Tachyon<TapMsg<>>>;
+  interface TapMsg2Tap: Tap<Tachyon<TapMsg2>>;
   interface Tap<Tachyon<PaddedMsg>>;
 
   representation Tachyon<GenericSubMsg<3, Bool>>;

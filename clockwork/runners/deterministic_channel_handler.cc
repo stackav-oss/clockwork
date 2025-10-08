@@ -85,12 +85,13 @@ void DeterministicChannelHandler::message_callback(
   auto slot_header = slot.header();
   const auto& message_data = slot.message();
 
-  message_writer_->message_received_callback(MessageInfoView{
-    .sequence_number = static_cast<uint32_t>(slot_header->sequence_number),
-    .time_to_publish = current_time,
-    .data = message_data,
-    .channel = std::pmr::string(channel_name, memory_resource_),
-  });
+  message_writer_->message_received_callback(
+    MessageInfoView{
+      .sequence_number = static_cast<uint32_t>(slot_header->sequence_number),
+      .time_to_publish = current_time,
+      .data = message_data,
+      .channel = std::pmr::string(channel_name, memory_resource_),
+    });
 }
 
 void DeterministicChannelHandler::drop_callback(std::string_view channel_name, size_t drop_count)

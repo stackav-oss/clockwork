@@ -65,6 +65,13 @@ TEST_CASE("ImplicitLifetimeType")
   STATIC_REQUIRE(ImplicitLifetimeType<NotTriviallyConstructible>);
   STATIC_REQUIRE(ImplicitLifetimeType<NotTriviallyCopyConstructible>);
   STATIC_REQUIRE(!ImplicitLifetimeType<NotTriviallyDestructible>);
+
+  // Qualifiers
+  STATIC_REQUIRE(ImplicitLifetimeType<const TrivialType>);
+  STATIC_REQUIRE(!ImplicitLifetimeType<TrivialType&>);
+  STATIC_REQUIRE(!ImplicitLifetimeType<TrivialType&&>);
+  STATIC_REQUIRE(!ImplicitLifetimeType<const TrivialType&>);
+  STATIC_REQUIRE(!ImplicitLifetimeType<const TrivialType&&>);
 }
 
 TEST_CASE("Byte")

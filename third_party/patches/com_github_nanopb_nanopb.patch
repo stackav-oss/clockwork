@@ -1,20 +1,25 @@
 diff --git BUILD.bazel BUILD.bazel
-index e51e42b..ced6660 100644
+index b98441a..0113773 100644
 --- BUILD.bazel
 +++ BUILD.bazel
-@@ -1,6 +1,10 @@
+@@ -1,10 +1,12 @@
+ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+-
+-# Note: if you are still using WORKSPACE, you will need to patch this file to use the following instead
+-# load("@python_3_11//:defs.bzl", "py_binary")
+-load("@python_versions//3.11:defs.bzl", "py_binary")
 +load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
 +load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
 +load("@build_stack_rules_proto//rules/go:proto_go_library.bzl", "proto_go_library")
 +load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
 +load("@rules_cc//cc:defs.bzl", "cc_library")
  load("@rules_proto//proto:defs.bzl", "proto_library")
- load("@rules_python//python:defs.bzl", "py_binary")
--load("@nanopb_pypi//:requirements.bzl", "requirement")
  load("@rules_proto_grpc//:defs.bzl", "proto_plugin")
- load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
++load("@rules_python//python:defs.bzl", "py_binary")
+ load("@rules_python//python:proto.bzl", "py_proto_library")
+ load("@rules_python//python/pip_install:requirements.bzl", "compile_pip_requirements")
  load("//extra/bazel:nanopb_cc_proto_library.bzl", "cc_nanopb_proto_library")
-@@ -25,6 +29,7 @@ cc_library(
+@@ -28,6 +30,7 @@ cc_library(
          "pb_decode.h",
          "pb_encode.h",
      ],
@@ -22,19 +27,19 @@ index e51e42b..ced6660 100644
      visibility = ["//visibility:public"],
  )
  
-@@ -49,7 +54,9 @@ py_binary(
+@@ -55,7 +58,9 @@ py_binary(
          "generator",
      ],
      deps = [
--        requirement("grpcio-tools"),
+-        ":nanopb_py_proto",
 +        ":nanopb_py_pb2",
 +        "@grpc//src/python/grpcio/grpc:grpcio",
 +        "@protobuf//:protobuf_python",
      ],
  )
  
-@@ -75,6 +82,20 @@ proto_library(
-     strip_import_prefix = "generator/proto/",
+@@ -77,6 +82,20 @@ proto_plugin(
+     visibility = ["//visibility:public"],
  )
  
 +proto_compile(
@@ -54,8 +59,8 @@ index e51e42b..ced6660 100644
  proto_library(
      name = "nanopb_proto",
      srcs = [
-@@ -84,6 +105,52 @@ proto_library(
-     deps = [":descriptor"],
+@@ -91,6 +110,52 @@ py_proto_library(
+     deps = [":nanopb_proto"],
  )
  
 +proto_compile(
@@ -100,46 +105,99 @@ index e51e42b..ced6660 100644
 +    deps = [
 +        "@org_golang_google_protobuf//reflect/protoreflect",
 +        "@org_golang_google_protobuf//runtime/protoimpl",
-+        "@rules_go//proto/wkt:descriptor_go_proto",
++        "@org_golang_google_protobuf//types/descriptorpb",
 +    ],
 +)
 +
  cc_nanopb_proto_library(
      name = "test_compilation",
-     protos = [":descriptor"],
+     protos = ["@protobuf//:descriptor_proto"],
 diff --git MODULE.bazel MODULE.bazel
-new file mode 100644
-index 0000000..020d8e0
---- /dev/null
+index 8aaa68e..6bf8028 100644
+--- MODULE.bazel
 +++ MODULE.bazel
-@@ -0,0 +1,22 @@
-+module(name = "com_github_nanopb_nanopb")
-+bazel_dep(name = "clockwork")
-+
-+bazel_dep(name = "bazel_skylib", version = "1.4.1")
+@@ -1,10 +1,15 @@
+ module(
+-    name = "nanopb",
++    name = "com_github_nanopb_nanopb",
+     version = "0.4.9",
+ )
+ 
+ bazel_dep(name = "bazel_skylib", version = "1.7.1")
 +bazel_dep(name = "build_stack_rules_proto")
++bazel_dep(name = "clockwork")
 +bazel_dep(name = "gazelle")
-+bazel_dep(name = "grpc", version = "1.48.1")
-+bazel_dep(name = "protobuf")
-+bazel_dep(name = "rules_cc", version = "0.0.6")
++bazel_dep(name = "grpc")
+ bazel_dep(name = "rules_cc", version = "0.0.10")
 +bazel_dep(name = "rules_go")
-+bazel_dep(name = "rules_proto_grpc")
-+bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
-+bazel_dep(name = "rules_python", version = "0.21.0")
+ bazel_dep(name = "rules_python", version = "0.35.0")
+ bazel_dep(name = "rules_proto", version = "6.0.2")
+ bazel_dep(name = "protobuf", version = "28.2")
+@@ -14,7 +19,7 @@ pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+ 
+ python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+ 
+-PYTHON_VERSION = "3.11"
++PYTHON_VERSION = "3.10"
+ 
+ # No need for this since rules_python already creates our version.
+ # python.toolchain(python_version = PYTHON_VERSION)
+@@ -24,5 +29,16 @@ use_repo(pip, "nanopb_pypi")
+ pip.parse(
+     hub_name = "nanopb_pypi",
+     python_version = PYTHON_VERSION,
+-    requirements_lock = "@nanopb//:extra/requirements_lock.txt",
++    requirements_lock = "@com_github_nanopb_nanopb//:extra/requirements_lock.txt",
+ )
++
++go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
++go_sdk.from_file(go_mod = "@clockwork//:go.mod")
 +
 +go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-+go_deps.from_file(go_mod = "//:go.mod")
++go_deps.from_file(go_mod = "@clockwork//:go.mod")
 +
-+# All *direct* Go dependencies of the module have to be listed explicitly.
 +use_repo(
 +    go_deps,
 +    "org_golang_google_protobuf",
 +)
+\ No newline at end of file
+diff --git extra/bazel/nanopb_cc_proto_library.bzl extra/bazel/nanopb_cc_proto_library.bzl
+index aae5965..9286edc 100644
+--- extra/bazel/nanopb_cc_proto_library.bzl
++++ extra/bazel/nanopb_cc_proto_library.bzl
+@@ -39,7 +39,7 @@ cc_nanopb_proto_compile = rule(
+         _plugins = attr.label_list(
+             providers = [ProtoPluginInfo],
+             default = [
+-                Label("@nanopb//:nanopb_plugin"),
++                Label("@com_github_nanopb_nanopb//:nanopb_plugin"),
+             ],
+             doc = "List of protoc plugins to apply",
+         ),
+@@ -94,5 +94,5 @@ def cc_nanopb_proto_library(name, **kwargs):  # buildifier: disable=function-doc
+     )
+ 
+ PROTO_DEPS = [
+-    "@nanopb//:nanopb",
++    "@com_github_nanopb_nanopb//:nanopb",
+ ]
+diff --git extra/bazel/python_deps.bzl extra/bazel/python_deps.bzl
+index a66791e..7e03bf1 100644
+--- extra/bazel/python_deps.bzl
++++ extra/bazel/python_deps.bzl
+@@ -7,6 +7,6 @@ def nanopb_python_deps(interpreter=None):
+     if "nanopb_pypi" not in native.existing_rules():
+         pip_parse(
+             name = "nanopb_pypi",
+-            requirements_lock = "@nanopb//:extra/requirements_lock.txt",
++            requirements_lock = "@com_github_nanopb_nanopb//:extra/requirements_lock.txt",
+             python_interpreter_target = interpreter,
+         )
 diff --git generator/nanopb_generator.py generator/nanopb_generator.py
-index c11f6fa..e2fb0ed 100755
+index 16c6fd7..0ede208 100755
 --- generator/nanopb_generator.py
 +++ generator/nanopb_generator.py
-@@ -1957,6 +1957,8 @@ class ProtoFile:
+@@ -2039,6 +2039,8 @@ class ProtoFile:
          else:
              yield '/* Generated by %s at %s. */\n\n' % (nanopb_version, time.asctime())
  
@@ -149,12 +207,12 @@ index c11f6fa..e2fb0ed 100755
              symbol = make_identifier(self.fdesc.package + '_' + headername)
          else:
 diff --git generator/proto/__init__.py generator/proto/__init__.py
-index cfab910..4488ea8 100644
+index b2b47b6..dd960b0 100644
 --- generator/proto/__init__.py
 +++ generator/proto/__init__.py
-@@ -76,6 +76,9 @@ def load_nanopb_pb2():
+@@ -71,6 +71,9 @@ def load_nanopb_pb2():
+     protosrc = os.path.join(dirname, "nanopb.proto")
      protodst = os.path.join(dirname, "nanopb_pb2.py")
-     proto_ok = False
  
 +    import nanopb_pb2 as nanopb_pb2_mod
 +    return nanopb_pb2_mod
@@ -163,10 +221,10 @@ index cfab910..4488ea8 100644
          tmpdir = None # Use system-wide temp dir
  
 diff --git generator/proto/nanopb.proto generator/proto/nanopb.proto
-index 660685a..9987324 100644
+index 1a1cc98..21892f0 100644
 --- generator/proto/nanopb.proto
 +++ generator/proto/nanopb.proto
-@@ -9,6 +9,7 @@ syntax = "proto2";
+@@ -15,6 +15,7 @@ syntax = "proto2";
  import "google/protobuf/descriptor.proto";
  
  option java_package = "fi.kapsi.koti.jpa.nanopb";
@@ -195,7 +253,7 @@ index 0000000..2d1cb6c
 @@ -0,0 +1 @@
 +google.golang.org/grpc v1.31.0/go.mod h1:N36X2cJ7JwdamYAgDz+s+rVMFjt3numwzf/HckM8pak=
 diff --git pb.h pb.h
-index c7a055f..08b9249 100644
+index 10249bb..6aaeeee 100644
 --- pb.h
 +++ pb.h
 @@ -23,7 +23,7 @@
@@ -207,7 +265,7 @@ index c7a055f..08b9249 100644
  
  /* Disable support for error messages in order to save some code space. */
  /* #define PB_NO_ERRMSG 1 */
-@@ -907,7 +907,7 @@ struct pb_extension_s {
+@@ -912,7 +912,7 @@ struct pb_extension_s {
  
  extern "C++"
  {

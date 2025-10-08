@@ -5,11 +5,11 @@
 
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/detail/mmap_region.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/mmap_region.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -18,6 +18,8 @@
 #include <wise_enum.h>
 
 #include <cstdint>
+#include <memory_resource>
+#include <string>
 #include <string_view>
 #include <tuple>
 
@@ -59,8 +61,8 @@ public:
   ~ShmChannel() override;
   ShmChannel(const ShmChannel&) = delete;
   ShmChannel& operator=(const ShmChannel&) = delete;
-  ShmChannel(ShmChannel&&) = default;
-  ShmChannel& operator=(ShmChannel&&) = default;
+  ShmChannel(ShmChannel&&) noexcept = default;
+  ShmChannel& operator=(ShmChannel&&) noexcept = default;
 
   /// Create a subscriber for the channel
   [[nodiscard]] SubscriberHandle make_subscriber();
@@ -85,26 +87,43 @@ public:
   //// Close the notification socket.
   void close_socket();
 
+  /// Get the socket namespace of the channel
+  [[nodiscard]] const std::pmr::string& socket_ns() const noexcept;
+
+  /// Get the shm filename (not full path, usually a uuid) of the channel
+  [[nodiscard]] const std::pmr::string& filename() const noexcept;
+
+  /// Get the human readable channel name of the channel
+  [[nodiscard]] const std::pmr::string& channel_name() const noexcept;
+
   /// Get the resume behavior of the channel
   [[nodiscard]] ResumeBehavior resume_behavior() const noexcept;
 
 protected:
-  explicit ShmChannel(BufferPtr buffer, MMapRegion map, UnixSocket socket, ResumeBehavior resume_behavior);
+  explicit ShmChannel(
+    jewels::memory::MemoryResource memres,
+    BufferPtr buffer,
+    jewels::filesystem::MMapRegion map,
+    UnixSocket socket,
+    std::string_view socket_ns,
+    std::string_view filename,
+    std::string_view channel_name,
+    ResumeBehavior resume_behavior);
 
   /// Open a file in shared memory and map it into memory, returning the map and corresponding buffer if successful and
   /// an error if not.
   /// @param memres resource used for allocations, only used during construction
   /// @param shm_dir directory to open the shared memory file in
-  /// @param name name of the channel, used as the filename (in shm_dir)
+  /// @param filename uuid string of the channel, used as the filename (in shm_dir)
   /// @param num_slots number of slots to size the buffer for (see BufferLayout)
   /// @param message_size size of the messages in the channel (see BufferLayout)
   /// @param role signals what role the buffer is being used for.  Publishers will open as read/write and create the
   /// file if it doesn't exist.  Subscribers will fail with Error::missing if the shared file doesn't exist.
   /// @param resume_behavior determines whether/how a channel can be reconnected
-  static jewels::expected<std::tuple<MMapRegion, BufferPtr>, Error> open_buffer(
+  static jewels::expected<std::tuple<jewels::filesystem::MMapRegion, BufferPtr>, Error> open_buffer(
     jewels::memory::MemoryResource memres,
     const jewels::filesystem::Directory& shm_dir,
-    std::string_view name,
+    std::string_view filename,
     const BufferLayout& layout,
     Role role,
     ShmChannel::ResumeBehavior resume_behavior);
@@ -121,9 +140,12 @@ protected:
   static jewels::expected<UnixSocket, Error> open_socket(std::string_view socket_ns, std::string_view name, Role role);
 
 private:
-  MMapRegion map_;
+  jewels::filesystem::MMapRegion map_;
   BufferPtr buffer_;
   UnixSocket socket_;
+  std::pmr::string socket_ns_;
+  std::pmr::string filename_;
+  std::pmr::string channel_name_;
   ResumeBehavior resume_behavior_;
 };
 

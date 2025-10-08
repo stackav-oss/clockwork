@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Final, cast
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, typesys
 from clockwork.dsl.ir.cst_util import get_span
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.dsl.ir import node
@@ -47,7 +48,7 @@ class Unit(ABC):
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
         try:
-            return CST_MAP[cst_node.child()[0]]  # type: ignore[index]
+            return CST_MAP[cst_node.child()[0]]  # pyright: ignore[reportArgumentType] Assuming child node label exists
         except KeyError:
             pass
         msg = f"Unit {get_span(cst_node.span, module.terminals)} not implemented."
@@ -62,6 +63,7 @@ class TimeUnit(Unit):
         """Create TimeUnit."""
         super().__init__(value_type=clkbuiltins.DURATION, scale=scale, canonical_unit=canonical_unit)
 
+    @override
     def base_unit(self) -> str:
         """Return the base unit name "second"."""
         return "second"
@@ -82,6 +84,7 @@ class BytesUnit(Unit):
         """Create BytesUnit."""
         super().__init__(value_type=clkbuiltins.BYTES, scale=scale, canonical_unit=canonical_unit)
 
+    @override
     def base_unit(self) -> str:
         """Return the base unit name "byte"."""
         return "byte"
@@ -102,6 +105,7 @@ class BitsUnit(Unit):
         """Create BitsUnit."""
         super().__init__(value_type=clkbuiltins.BITS, scale=scale, canonical_unit=canonical_unit)
 
+    @override
     def base_unit(self) -> str:
         """Return the base unit name "bit"."""
         return "bit"

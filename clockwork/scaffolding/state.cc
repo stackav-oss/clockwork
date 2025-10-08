@@ -60,6 +60,7 @@ jewels::expected<std::pmr::vector<std::shared_ptr<pinion::ShmPublisher>>, jewels
       constexpr size_t state_publisher_subscriber_limit = 2;
       auto result = factory.open_publisher(
         desc.get_state_instance_id().to_string(memres_sys),
+        desc.get_instance_path_name(),
         pinion::BufferLayout{
           .num_slots = desc.value_maybe_buffer_layout().get_num_slots(),
           .message_size = desc.value_maybe_buffer_layout().get_message_size(),

@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/onboard/types.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -23,6 +24,7 @@
 #include <span>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 namespace clockwork_logging
 {
@@ -212,14 +214,15 @@ void OnboardLogReader::load_topic_metadata()
   topic_metadata_ptr_->reserve(metadata_result.value().size());
   for (const auto& [channel_name, channel_metadata] : metadata_result.value())
   {
-    topic_metadata_ptr_->emplace_back(TopicMetadata{
-      .name = std::string{channel_metadata.channel_name},
-      .type = std::string{channel_metadata.schema_name},
-      .message_encoding = channel_metadata.message_encoding,
-      .channel_type = channel_metadata.channel_type,
-      .schema_encoding = channel_metadata.schema_encoding,
-      .schema_definition = std::string(channel_metadata.schema_definition),
-    });
+    topic_metadata_ptr_->emplace_back(
+      TopicMetadata{
+        .name = std::string{channel_metadata.channel_name},
+        .type = std::string{channel_metadata.schema_name},
+        .message_encoding = channel_metadata.message_encoding,
+        .channel_type = channel_metadata.channel_type,
+        .schema_encoding = channel_metadata.schema_encoding,
+        .schema_definition = std::string(channel_metadata.schema_definition),
+      });
   }
   std::sort(
     topic_metadata_ptr_->begin(),

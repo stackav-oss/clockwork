@@ -1,6 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/container/at.hh" // IWYU pragma: keep
 #include "jewels/container/tap/protobuf_to_tap.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
@@ -114,11 +115,11 @@ TEST_CASE("Test int conversion")
   uint8_t u8o = 0;
   int8_t i8o = 0;
 
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) Test-only, using a macro to preserve line number information
 #define CONV_PASS(var, value) \
   CHECK(protobuf_to_tap(var, value)); \
   CHECK((var) == (value));
-// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) Test-only, consistent with test API
 #define CONV_FAIL(var, value) CHECK(!protobuf_to_tap(var, value));
 
   constexpr auto i16_max = std::numeric_limits<int16_t>::max();

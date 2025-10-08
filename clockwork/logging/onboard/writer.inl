@@ -48,7 +48,6 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
-#include <ratio>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1176,11 +1175,12 @@ Writer<Policy>::add_schema_metadata(
     return map_iter->second;
   }
   ++schema_count_;
-  const auto& schema_metadata = schema_metadata_list_.emplace_back(SchemaMetadata{
-    schema_count_,
-    std::pmr::string{schema_name, runtime_memory_resource_},
-    schema_encoding,
-    std::pmr::string{schema_definition, runtime_memory_resource_}});
+  const auto& schema_metadata = schema_metadata_list_.emplace_back(
+    SchemaMetadata{
+      schema_count_,
+      std::pmr::string{schema_name, runtime_memory_resource_},
+      schema_encoding,
+      std::pmr::string{schema_definition, runtime_memory_resource_}});
   const auto schema_ptr = jewels::memory::make_non_null_from_ref(schema_metadata);
   schema_map_.emplace(schema_ptr->schema_name, schema_ptr);
   return schema_ptr;
@@ -1230,13 +1230,14 @@ Writer<Policy>::add_channel_metadata(
     return map_iter->second;
   }
   ++channel_count_;
-  const auto& channel_metadata = channel_metadata_list_.emplace_back(ChannelMetadata{
-    channel_count_,
-    schema_id,
-    std::pmr::string{channel_name, runtime_memory_resource_},
-    compression_type,
-    message_encoding,
-    channel_type});
+  const auto& channel_metadata = channel_metadata_list_.emplace_back(
+    ChannelMetadata{
+      channel_count_,
+      schema_id,
+      std::pmr::string{channel_name, runtime_memory_resource_},
+      compression_type,
+      message_encoding,
+      channel_type});
   const auto channel_ptr = jewels::memory::make_non_null_from_ref(channel_metadata);
   channel_map_.emplace(channel_ptr->channel_name, channel_ptr);
   return channel_ptr;

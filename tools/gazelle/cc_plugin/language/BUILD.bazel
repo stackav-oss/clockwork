@@ -13,9 +13,9 @@ go_library(
         "//tools/gazelle/cc_plugin/configurer",
         "//tools/gazelle/cc_plugin/parsers",
         "//tools/gazelle/cc_plugin/resolver",
-        "@@gazelle~//config",
-        "@@gazelle~//language",
-        "@@gazelle~//rule",
+        "@@gazelle+//config",
+        "@@gazelle+//language",
+        "@@gazelle+//rule",
         "@com_github_bazelbuild_buildtools//build",
         "@com_github_emirpasic_gods//sets/treeset",
         "@com_github_emirpasic_gods//utils",
@@ -28,7 +28,7 @@ go_test(
     embed = [":language"],
     deps = [
         "//tools/gazelle/cc_plugin/common",
-        "@@gazelle~//rule",
+        "@@gazelle+//rule",
         "@com_github_stretchr_testify//assert",
     ],
 )

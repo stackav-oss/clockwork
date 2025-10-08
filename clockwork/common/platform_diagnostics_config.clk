@@ -15,7 +15,7 @@ schema PlatformDiagnosticsConfig {
     #3 instance_id: VarString<max_size=32>;
 
     // Diagnostics publish endpoint
-    #4 publish_endpoint: process_description::PublishEndpoint;
+    #4 publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
   }
 }
 

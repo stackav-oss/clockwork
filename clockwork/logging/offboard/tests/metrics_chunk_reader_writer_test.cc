@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <unordered_map>

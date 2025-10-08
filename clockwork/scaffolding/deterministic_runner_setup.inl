@@ -57,23 +57,23 @@ jewels::expected<DeterministicRunnerConfig, jewels::MonoError> build_determinist
     return jewels::unexpected(jewels::MonoError{});
   }
   std::shared_ptr<AbstractChannelPublisher> channel_publisher;
-  if (logging_config.log_publisher_config && execution_params.message_injectors.message_fetcher_)
+  if (logging_config.channel_publisher_config && execution_params.message_injectors.message_fetcher_)
   {
     channel_publisher = std::make_shared<clockwork::ChannelPublisher>(
       memres_runner,
-      jewels::memory::make_non_null_from_ref(*logging_config.log_publisher_config),
+      jewels::memory::make_non_null_from_ref(*logging_config.channel_publisher_config),
       *execution_params.message_injectors.message_fetcher_,
       *runner_channels,
       logging_config.suppress_schema_mismatch_errors);
   }
-  else if (logging_config.log_publisher_config && execution_params.input_log_uri)
+  else if (logging_config.channel_publisher_config && execution_params.input_log_uri)
   {
     channel_publisher = std::make_shared<clockwork::ChannelPublisher>(
       memres_runner,
-      jewels::memory::make_non_null_from_ref(*logging_config.log_publisher_config),
+      jewels::memory::make_non_null_from_ref(*logging_config.channel_publisher_config),
       jewels::memory::make_shared<LogMessageFetcherType>(
         *execution_params.input_log_uri,
-        jewels::memory::make_non_null_from_ref(*logging_config.log_publisher_config),
+        jewels::memory::make_non_null_from_ref(*logging_config.channel_publisher_config),
         clockwork_logging::LogInterval{
           clockwork_logging::LogTimestamp{time_range.start}, clockwork_logging::LogTimestamp{time_range.end}},
         memres_runner),

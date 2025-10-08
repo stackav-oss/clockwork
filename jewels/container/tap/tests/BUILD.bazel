@@ -1,9 +1,16 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
 load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
 
 package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
 
 cc_test(
     name = "optional_test",
@@ -19,11 +26,27 @@ cc_test(
     name = "protobuf_to_tap_test",
     srcs = ["protobuf_to_tap_test.cc"],
     deps = [
+        "//jewels/container:at",
         "//jewels/container/tap:protobuf_to_tap",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
         "//jewels/uuid",
         "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "py_var_array_test",
+    srcs = [
+        "py_var_array_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//jewels/container/tap:py_var_array",
+        "//jewels/container/tap:value_serdes",
+        "@clockwork_pip//pytest",
     ],
 )
 
@@ -40,6 +63,20 @@ cc_test(
         "@catch2//:catch2_main",
         "@gsl//:util",
         "@protobuf",
+    ],
+)
+
+py_test(
+    name = "value_serdes_test",
+    srcs = [
+        "value_serdes_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//jewels/container/tap:value_serdes",
+        "@clockwork_pip//pytest",
     ],
 )
 

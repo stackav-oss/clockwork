@@ -4,6 +4,7 @@
 #include "clockwork/logging/channel_type.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_processor.hh"
 #include "clockwork/logging/readers/tests/support/test_log_reader.hh"
@@ -11,23 +12,30 @@
 #include "clockwork/logging/tests/support/test_message.hh"
 #include "clockwork/logging/writers/logger_status.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_upgrader.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/tmp_directory_guard.hh"
 
 #include <catch2/catch_test_macros.hpp>
 #include <fmt10/format.h>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <initializer_list>
 #include <map>
 #include <memory>
+#include <memory_resource>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace clockwork_logging
@@ -54,6 +62,16 @@ TEST_CASE("LogProcessor topic filter")
   REQUIRE(filter("/topic1"));
   REQUIRE(filter("/topic2"));
   REQUIRE_FALSE(filter("/topic3"));
+}
+
+TEST_CASE("Interface")
+{
+  constexpr std::string_view log_uri{"test_log"};
+  const std::map<std::string, std::vector<TestMsgRecord>> msgs{};
+  const LogProcessor processor(
+    std::make_unique<TestLogReader>(log_uri, std::optional<LogInterval>{}, std::optional<RelativeInterval>{}, msgs),
+    {});
+  REQUIRE(processor.log_uri() == log_uri);
 }
 
 TEST_CASE("LogProcessor callbacks")
@@ -278,6 +296,111 @@ TEST_CASE("LogProcessor next")
   // Since there are no messages left to read, we get empty responses from this point onwards
   REQUIRE(!processor.next()); // empty
   REQUIRE(!processor.next()); // still empty
+}
+
+TEST_CASE("LogProcesser - upgrade schema")
+{
+  constexpr auto test_log_name = "test_log";
+
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const jewels::testing::TmpDirectoryGuard test_dir;
+  const auto test_log_path = test_dir.get_path() / test_log_name;
+  offboard::Writer writer{memory_resource};
+
+  constexpr LogTimestamp time1{std::chrono::seconds(1)};
+  constexpr LogTimestamp time2{std::chrono::seconds(2)};
+
+  constexpr auto channel_name1 = "channel1";
+  constexpr auto channel_name2 = "channel2";
+
+  clockwork::Tappy<clockwork::tests::SimpleSchemaV1> message1{};
+  message1.set_integer_field(42);
+
+  clockwork::Tappy<clockwork::tests::SimpleSchemaV2> message2{};
+  message2.set_integer_field(42);
+  message2.get_underlying_string_field().set_truncate("test");
+
+  REQUIRE(writer.open(test_log_path.string()));
+  REQUIRE(writer.create_channel<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>(channel_name1));
+  REQUIRE(writer.create_channel<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(channel_name2));
+
+  REQUIRE(writer.write(channel_name1, 1U, time1, time1, message1));
+  REQUIRE(writer.write(channel_name2, 2U, time2, time2, message2));
+
+  const auto close_result = writer.close();
+  REQUIRE(close_result);
+
+  SECTION("callback")
+  {
+    auto channel1_count = 0U;
+    auto channel2_count = 0U;
+
+    auto config = LogReaderConfig{
+      .uri = test_log_path.string(),
+      .interval = {},
+      .relative_interval = {},
+      .topic_filter = {},
+    };
+
+    REQUIRE(LogProcessor(config)
+              .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
+                channel_name1,
+                [&](const auto& msg)
+                {
+                  ++channel1_count;
+                  CHECK(msg.get_integer_field() == 42);
+                  CHECK(msg.get_string_field().empty());
+                })
+              .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
+                channel_name2,
+                [&](const auto& msg)
+                {
+                  ++channel2_count;
+                  CHECK(msg.get_integer_field() == 42);
+                  CHECK(msg.get_string_field() == "test");
+                })
+              .process());
+
+    REQUIRE(channel1_count == 1U);
+    REQUIRE(channel2_count == 1U);
+  }
+
+  SECTION("callback with timestamp")
+  {
+    auto channel1_count = 0U;
+    auto channel2_count = 0U;
+
+    auto config = LogReaderConfig{
+      .uri = test_log_path.string(),
+      .interval = {},
+      .relative_interval = {},
+      .topic_filter = {},
+    };
+
+    REQUIRE(LogProcessor(config)
+              .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
+                channel_name1,
+                [&](const LogTimestamp& timestamp, const auto& msg)
+                {
+                  ++channel1_count;
+                  CHECK(timestamp.get_duration() == std::chrono::seconds(1));
+                  CHECK(msg.get_integer_field() == 42);
+                  CHECK(msg.get_string_field().empty());
+                })
+              .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
+                channel_name2,
+                [&](const LogTimestamp& timestamp, const auto& msg)
+                {
+                  ++channel2_count;
+                  CHECK(timestamp.get_duration() == std::chrono::seconds(2));
+                  CHECK(msg.get_integer_field() == 42);
+                  CHECK(msg.get_string_field() == "test");
+                })
+              .process());
+
+    REQUIRE(channel1_count == 1U);
+    REQUIRE(channel2_count == 1U);
+  }
 }
 
 } // namespace

@@ -91,8 +91,8 @@ to_message_range(const std::ranges::subrange<BufferIterator>& buffer_range);
 template <class Message>
 struct MessageSlot
 {
-  const Slot slot; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members) it should be const since it's a ref
-  Message& msg;    // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members) this is a view struct
+  const Slot slot; // it should be const since it's a ref
+  Message& msg;    // this is a view struct
 };
 
 /// Functor type to convert from a slot to a MessageSlot.

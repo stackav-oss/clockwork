@@ -10,6 +10,23 @@
 
 namespace jewels::meta
 {
+
+/// An empty struct.
+struct Void
+{
+};
+
+/// Holds a non-type template parameter.
+template <auto in_value>
+struct NonType
+{
+  static constexpr auto value{in_value};
+};
+
+/// A non type.
+template <auto value>
+inline constexpr NonType<value> non_type_v{};
+
 /// A pack of types.
 template <class...>
 struct Types

@@ -16,7 +16,8 @@ namespace jewels::memory
 struct Deleter
 {
   template <class T>
-  void operator()(T&& /*unused*/) noexcept // NOLINT(cppcoreguidelines-missing-std-forward)
+  // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) Test code for tracking deletions, parameter not used
+  void operator()(T&& /*unused*/) noexcept
   {
     ++deleted;
   }

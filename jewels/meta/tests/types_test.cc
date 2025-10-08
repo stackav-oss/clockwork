@@ -28,4 +28,11 @@ TEST_CASE("Always false")
   STATIC_REQUIRE(!always_false_v<int>);
   STATIC_REQUIRE(!AlwaysFalse<int>{});
 }
+
+TEST_CASE("NonType")
+{
+  constexpr auto fn_ptr = &decltype([] {})::operator();
+  STATIC_REQUIRE(NonType<fn_ptr>::value == fn_ptr);
+  STATIC_REQUIRE(decltype(non_type_v<fn_ptr>)::value == fn_ptr);
+}
 } // namespace jewels::meta

@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <iterator>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -114,7 +115,7 @@ jewels::expected<void, ErrorCode> Directory::process(auto&& processor)
     for (size_t offset = 0; offset < expected_bytes_read.value(); offset += entry->d_reclen)
     {
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Required to interpret data as directory entry
-      entry = reinterpret_cast<decltype(entry)>(entry_buffer.data() + offset);
+      entry = reinterpret_cast<decltype(entry)>(std::next(std::begin(entry_buffer), static_cast<int>(offset)));
       // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay) Intentional decay
       auto result = processor(descriptor(), std::string_view(entry->d_name), entry->d_type);
       if (!result)

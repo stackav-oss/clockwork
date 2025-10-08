@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Log reader python wrapper."""
 
@@ -58,6 +59,8 @@ def test_log_timestamp() -> None:
     assert not timestamp1 >= timestamp2_2
     assert timestamp2 >= timestamp1_2
     assert timestamp2 >= timestamp2_2
+
+    assert str(timestamp1) == repr(timestamp1) == f"LogTimestamp({timestamp1.nanoseconds}ns)"
 
 
 def test_log_interval() -> None:

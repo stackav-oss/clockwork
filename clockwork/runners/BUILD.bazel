@@ -1,6 +1,5 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
-
 load("//tools/rules:cc.bzl", "cc_library")
 
 package(default_visibility = ["//clockwork:__subpackages__"])
@@ -13,7 +12,7 @@ cc_library(
     deps = [
         ":deterministic_runner",
         "//clockwork/common:process_description",
-        "//clockwork/logging:log_writer_config",
+        "//clockwork/logging:channel_publisher_config",
         "//clockwork/pinion:error",
         "//clockwork/pinion:publisher_handle",
         "//clockwork/pinion:shm_publisher",

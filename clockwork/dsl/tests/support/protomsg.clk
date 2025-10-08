@@ -11,6 +11,17 @@ schema ProtoTester
     #2 other_number: Int32;
   }
 }
+// Make sure that when this is used as part of a generic the includes are generated properly
+schema DependencyTester
+{
+  uuid: 8b87e174-6280-4a5c-b609-15a1919404b9;
+
+  fields
+  {
+    // Optional field
+    #1 an_optional: Optional<Int16>;
+  }
+}
 
 // Hello, composition!
 schema BetterThanInheritance
@@ -84,6 +95,15 @@ schema BetterThanInheritance
 
     // Optional of a UUID
     #24 opt_uuid: Optional<Uuid<BetterThanInheritance>>;
+
+    // Optional dependency
+    #25 opt_dependency: Optional<DependencyTester>;
+
+    // Var array of small int
+    #26 var_array_of_small_int: VarArray<Int8, 10>;
+
+    // Fixed array of small int
+    #27 fixed_array_of_small_int: FixedArray<Int8, 3>;
   }
 }
 
@@ -143,6 +163,31 @@ proto_target proto_tester_onboard
   }
 
   representation proto_tester: Protobuf<ProtoTester>;
+}
+
+proto_target dependency_tester_proto
+{
+  options
+  {
+    package clockwork.my_proto;
+  }
+
+  representation dependency_tester: Protobuf<DependencyTester>;
+}
+
+cpp_target dependency_tester_cpp
+{
+  options
+  {
+    namespace clockwork::demo;
+  }
+
+  schema DependencyTester;
+
+  representation Tachyon<DependencyTester>;
+  interface Tappy<DependencyTester>;
+  converter ProtobufToTap<Protobuf<DependencyTester>, Tappy<DependencyTester>>;
+  converter TapToProtobuf<Tappy<DependencyTester>, Protobuf<DependencyTester>>;
 }
 
 cpp_target better_than_inheritance_cpp

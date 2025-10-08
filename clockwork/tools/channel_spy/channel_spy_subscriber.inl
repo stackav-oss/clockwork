@@ -22,7 +22,8 @@ template <typename MessageType>
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
   std::string_view shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view uuid_str,
+  std::string_view channel_name,
   size_t num_slots,
   DeserializedMessageCallback<MessageType> callback_fn)
   requires(TappyType<MessageType> || TachyonType<MessageType>)
@@ -30,7 +31,8 @@ template <typename MessageType>
   return make_subscriber(
     shm_dir,
     socket_ns,
-    name,
+    uuid_str,
+    channel_name,
     num_slots,
     sizeof(MessageType),
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here

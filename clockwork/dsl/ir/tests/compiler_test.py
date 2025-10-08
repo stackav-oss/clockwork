@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for ir.compile."""
 
@@ -43,6 +44,10 @@ cog TestCog
         // That's our only condition actually
         execute when: periodic;
     }
+    metrics_options
+    {
+        enabled: false;
+    }
 }
 """
     mock_importer = MockImporter()
@@ -60,7 +65,7 @@ cog TestCog
     assert c.extern_module is mock_importer.result_entities["c"]
     test_cog_ir = module.inner_scope.lookup("TestCog")
     assert isinstance(test_cog_ir, cog.Cog)
-    _ = uuid_reg.lookup_uuid(module.context, test_cog_ir.conditions["periodic"])
+    uuid_reg.lookup_uuid(module.context, test_cog_ir.conditions["periodic"])
     assert isinstance(module.inner_scope.lookup("TestSchema"), schema.Schema)
     assert len(module.inner_scope.names) == 2
     assert module.inner_scope.parent is not None
@@ -130,7 +135,7 @@ def test_error_resolution_changes_entity_identity(monkeypatch: pytest.MonkeyPatc
 
 @patch("clockwork.dsl.bazel.clk_targets.module_to_clk")
 def test_clk_target(mock_path_to_clk: MagicMock, tmp_path: Path) -> None:
-    mock_path_to_clk.side_effect = lambda _, module: targets.Label(  # pyright: ignore[reportUnknownLambdaType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    mock_path_to_clk.side_effect = lambda _, module: targets.Label(  # pyright: ignore[reportUnknownLambdaType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         value=f"//{Path(module.get_base_path().parent)!s}:{Path(module.get_base_path().stem)!s}_clk"
     )
 

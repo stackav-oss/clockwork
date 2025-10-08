@@ -76,7 +76,7 @@ std::shared_ptr<pinion::ShmSubscriber> make_snoop(
     .num_slots = buffer_desc.get_num_slots(),
     .message_size = buffer_desc.get_message_size(),
   };
-  if (auto open = factory.open_subscriber(chan_id.to_string(), layout, 0); open)
+  if (auto open = factory.open_subscriber(chan_id.to_string(), "snooper", layout, 0); open)
   {
     return *std::move(open);
   }

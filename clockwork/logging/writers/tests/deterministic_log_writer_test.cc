@@ -7,6 +7,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
@@ -14,13 +15,16 @@
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_test_macros.hpp>
@@ -104,6 +108,8 @@ TEST_CASE("Log messages")
     ChannelMap channel_map;
     std::map<std::pmr::string, size_t> expected_message_counts;
     std::unordered_set<std::string_view> persistent_channel_set;
+
+    const jewels::time::SyncTime init_time;
     for (auto& channel_config : writer_config.get_mutable_channels())
     {
       // This test needs the channel names to be unique
@@ -133,7 +139,12 @@ TEST_CASE("Log messages")
     auto test_writer_ptr = std::make_unique<clockwork::DeterministicChannelHandler>(
       memory_resource,
       jewels::memory::make_shared<LogMessageWriter>(
-        memory_resource, jewels::memory::make_non_null_from_ref(writer_config), channel_map, expected_log_path),
+        memory_resource,
+        jewels::memory::make_non_null_from_ref(writer_config),
+        get_test_metrics_channel_metadata_config(),
+        channel_map,
+        expected_log_path,
+        init_time),
       jewels::memory::make_non_null_from_ref(writer_config),
       channel_map);
 
@@ -171,6 +182,19 @@ TEST_CASE("Log messages")
   // Check the logged messages
   OffboardLogReader reader{expected_log_path, {}, {}, DecompressOption::decompress};
   REQUIRE(reader.open({}));
+
+  // Checked metrics channel metadata persistent message.
+  auto maybe_metrics_channel_metadata = reader.next_message();
+  REQUIRE(maybe_metrics_channel_metadata);
+  const auto& logged_metrics_channel_metadata = *maybe_metrics_channel_metadata;
+  REQUIRE(logged_metrics_channel_metadata.topic == metrics_channel_metadata_channel_name);
+  const auto metrics_channel_metadata =
+    nolint_helper::byte_span_to_value_ptr<clockwork::tools::MetricsChannelMetadataReportTap>(
+      logged_metrics_channel_metadata.data);
+  REQUIRE(metrics_channel_metadata);
+  const auto* const metrics_channel_metadata_ptr = metrics_channel_metadata.value();
+  REQUIRE(metrics_channel_metadata_ptr->get_underlying_metrics_channels().size() == 2U);
+
   for (const auto& expected_message : expected_messages)
   {
     auto read_result = reader.next_message();

@@ -15,6 +15,7 @@ cc_binary(
         "//clockwork/logging/readers:log_processor",
         "//clockwork/logging/readers:types",
         "//clockwork/pinion:bridge_status",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
         "@fmt",
         "@tclap",
         "@wise_enum",
@@ -31,6 +32,23 @@ cc_binary(
         "//clockwork/logging/readers:log_processor",
         "//clockwork/logging/readers:types",
         "//clockwork/pinion:bridge_status",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
+        "@fmt",
+        "@tclap",
+    ],
+)
+
+cc_binary(
+    name = "dump_counters",
+    srcs = ["dump_counters.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:log_processor",
+        "//clockwork/logging/readers:types",
+        "//clockwork/pinion:bridge_status",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
         "@fmt",
         "@tclap",
     ],

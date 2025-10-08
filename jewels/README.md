@@ -6,6 +6,7 @@ Like the jewel bearings in a clock, `jewels` lower the friction of software deve
 ## Jewel summary
 
 - `aligner`: buffer alignment tools.
+- `callsig`: tools to implement function calling conventions (return codes and output parameters).
 - `cli`: functionality for CLI applications.
 - `compiler`: abstractions for compiler directives in source code.
 - `container`: fixed-size container classes.

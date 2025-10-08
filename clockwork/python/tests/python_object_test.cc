@@ -29,7 +29,7 @@ TEST_CASE("Python object test")
   CAPTURE(test_index);
 
   const jewels::memory::MemoryResource memory_resource(std::pmr::new_delete_resource());
-  python_init_once();
+  python_init(InitializationMode::unit_test);
   const GilLockGuard gil_guard;
 
   const auto helper_module_dict =

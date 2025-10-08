@@ -26,7 +26,7 @@ std::string python_type_name()
   namespace nb = ::nanobind;
 
   // Create a nanobind function object returning type T
-  auto fun = nb::cpp_function([]() -> T { return {}; });
+  auto fun = nb::cpp_function([]() -> T* { return {}; });
   const nb::object signature_obj = nb::getattr(fun, "__nb_signature__", nb::none());
 
   if (signature_obj.is_none())

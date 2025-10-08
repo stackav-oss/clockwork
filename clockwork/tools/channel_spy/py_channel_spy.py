@@ -12,6 +12,7 @@ import clockwork.tools.channel_spy.nb_channel_spy as _nb_channel_spy
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.serialization.metadata import tachyon
 from clockwork.serialization.py import protocol, tachyon_dyn_from_metadata
+from typing_extensions import override
 
 _logger: Final = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class ChannelSpy(_nb_channel_spy.ChannelSpy):
         super().__init__(shm_root_dir, socket_ns)
         self.compiler_context = CompilerContext()
 
+    @override
     def run(self) -> None:
         """Loop processing subscriptions."""
         while True:

@@ -26,6 +26,7 @@ cc_library(
         "test_message.inl",
     ],
     hdrs = ["test_message.hh"],
+    data = [":test_message_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -58,6 +59,7 @@ py_cc_binding(
         "test_message_clk_nb.hh",
         "test_message_clk_nb.inl",
     ],
+    data = [":test_message_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//visibility:public"],
     deps = [

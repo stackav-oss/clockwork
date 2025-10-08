@@ -7,9 +7,11 @@
 #include "jewels/std/expected.hh"
 
 #include <cstdint>
+#include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <netinet/in.h>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -54,10 +56,11 @@ class RawSocketAddress
 {
 public:
   /// Construct an address from a mac address.
-  /// @param[in] address A mac address.
+  /// @param[in] address A mac address, in bytes.
   /// @param[in] interface_index The interface index.
+  /// @param[in] protocol Ethernet protocol to use.
   static jewels::expected<RawSocketAddress, filesystem::ErrorCode>
-  create(const std::string& address, int32_t interface_index) noexcept;
+  create(std::string_view address, int32_t interface_index, int32_t protocol = ETH_P_ALL) noexcept;
 
   /// Get the address as a sockaddr pointer.
   [[nodiscard]] const ::sockaddr* ptr() const noexcept;

@@ -44,7 +44,6 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace clockwork::scaffolding
@@ -52,7 +51,7 @@ namespace clockwork::scaffolding
 namespace
 {
 
-#if defined(__has_feature)
+#ifdef __has_feature
 #if __has_feature(thread_sanitizer)
 __attribute__((constructor)) void fix_catch2_cerr_nonthreadsafe_redirect()
 {
@@ -302,14 +301,15 @@ TEST_CASE("bind_channels_to_epoll")
   const pinion::support::TmpShmNamespace tmp_namespace;
   auto channel_factory = tmp_namespace.make_factory();
 
+  constexpr auto* channel_name = "/channel";
   const auto pub_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto sub_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const pinion::BufferLayout layout{
     .num_slots = 2,
     .message_size = sizeof(Msg),
   };
-  auto pub = channel_factory.open_publisher(pub_id.to_string(), layout, 1).value();
-  auto sub = channel_factory.open_subscriber(pub_id.to_string(), layout, 1).value();
+  auto pub = channel_factory.open_publisher(pub_id.to_string(), channel_name, layout, 1).value();
+  auto sub = channel_factory.open_subscriber(pub_id.to_string(), channel_name, layout, 1).value();
 
   TestObserver observer;
   REQUIRE(sub->add_observer(jewels::memory::make_non_null_from_ref(observer)));
@@ -329,6 +329,107 @@ TEST_CASE("bind_channels_to_epoll")
   // ...until the epoll loop is run to dispatch the readable state
   CHECK(manager.wait(std::chrono::milliseconds(50)));
   REQUIRE(observer.event);
+}
+
+TEST_CASE("setup_non_connected_channels")
+{
+  using RetT = jewels::expected<void, AbstractCasing::Error>;
+
+  constexpr uint64_t num_slots = 3;
+
+  const pinion::support::TmpShmNamespace tmp_namespace;
+  auto channel_factory = tmp_namespace.make_factory();
+
+  const auto publisher_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
+  const auto subscriber_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
+
+  jewels::memory::MonitorResource memory;
+  const jewels::memory::MemoryResource memres{memory};
+
+  std::vector<common::NotConnectedEndpointTap> endpoints;
+
+  // Add a publisher endpoint
+  endpoints.emplace_back();
+  endpoints.back().get_mutable_endpoint_id() = publisher_id;
+  endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::publisher;
+  endpoints.back().get_mutable_buffer_layout().get_mutable_num_slots() = num_slots;
+  endpoints.back().get_mutable_buffer_layout().get_mutable_message_size() = sizeof(Msg);
+
+  // Add a subscriber endpoint
+  endpoints.emplace_back();
+  endpoints.back().get_mutable_endpoint_id() = subscriber_id;
+  endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::subscriber;
+  endpoints.back().get_mutable_buffer_layout().get_mutable_num_slots() = num_slots;
+  endpoints.back().get_mutable_buffer_layout().get_mutable_message_size() = sizeof(Msg);
+
+  MockCasing casing;
+
+  // For the subscriber endpoint, expect set_subscriber to be called
+  REQUIRE_CALL(casing, set_subscriber(subscriber_id)).RETURN(RetT{});
+
+  // For the publisher endpoint, expect set_publisher_handle to be called
+  REQUIRE_CALL(casing, set_publisher_handle(publisher_id, ::trompeloeil::_)).RETURN(RetT{});
+
+  auto channels = setup_non_connected_channels(endpoints, casing, memres, channel_factory);
+
+  REQUIRE(channels);
+
+  // Only the publisher endpoint should be in the channel map (subscribers are handled via casing)
+  CHECK(channels->size() == 1);
+  CHECK(channels->count(publisher_id) == 1);
+  CHECK(!channels->contains(subscriber_id));
+
+  // Verify that the channel is a publisher
+  auto* publisher_ptr = dynamic_cast<pinion::ShmPublisher*>((*channels)[publisher_id].get());
+  REQUIRE(publisher_ptr);
+}
+
+TEST_CASE("setup_non_connected_channels error cases")
+{
+  constexpr uint64_t num_slots = 3;
+
+  const pinion::support::TmpShmNamespace tmp_namespace;
+  auto channel_factory = tmp_namespace.make_factory();
+
+  jewels::memory::MonitorResource memory;
+  const jewels::memory::MemoryResource memres{memory};
+
+  SECTION("subscriber set_subscriber fails")
+  {
+    const auto subscriber_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
+
+    std::vector<common::NotConnectedEndpointTap> endpoints;
+    endpoints.emplace_back();
+    endpoints.back().get_mutable_endpoint_id() = subscriber_id;
+    endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::subscriber;
+    endpoints.back().get_mutable_buffer_layout().get_mutable_num_slots() = num_slots;
+    endpoints.back().get_mutable_buffer_layout().get_mutable_message_size() = sizeof(Msg);
+
+    MockCasing casing;
+    REQUIRE_CALL(casing, set_subscriber(subscriber_id)).RETURN(jewels::unexpected(AbstractCasing::Error{}));
+
+    auto channels = setup_non_connected_channels(endpoints, casing, memres, channel_factory);
+    CHECK(!channels);
+  }
+
+  SECTION("publisher set_publisher_handle fails")
+  {
+    const auto publisher_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
+
+    std::vector<common::NotConnectedEndpointTap> endpoints;
+    endpoints.emplace_back();
+    endpoints.back().get_mutable_endpoint_id() = publisher_id;
+    endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::publisher;
+    endpoints.back().get_mutable_buffer_layout().get_mutable_num_slots() = num_slots;
+    endpoints.back().get_mutable_buffer_layout().get_mutable_message_size() = sizeof(Msg);
+
+    MockCasing casing;
+    REQUIRE_CALL(casing, set_publisher_handle(publisher_id, ::trompeloeil::_))
+      .RETURN(jewels::unexpected(AbstractCasing::Error{}));
+
+    auto channels = setup_non_connected_channels(endpoints, casing, memres, channel_factory);
+    CHECK(!channels);
+  }
 }
 
 } // namespace

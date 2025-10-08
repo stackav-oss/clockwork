@@ -12,8 +12,8 @@
 #include <wise_enum.h>
 
 #include <cstdint>
+#include <optional>
 #include <ranges>
-
 namespace clockwork
 {
 
@@ -50,6 +50,9 @@ public:
   /// @param subscriber The subscriber handle
   explicit InputCondition(pinion::SubscriberHandle subscriber) noexcept;
 
+  /// Default constructor for non-connected endpoints
+  /// Creates an InputCondition without a subscriber handle
+  InputCondition() noexcept;
   /// Validate that all internal types are set correctly.
   [[nodiscard]] bool validate() const;
 
@@ -63,7 +66,7 @@ public:
 
 private:
   /// The underlying subscriber handle.
-  pinion::SubscriberHandle subscriber_;
+  std::optional<pinion::SubscriberHandle> subscriber_;
   /// Iterator for the last viewed message.
   pinion::BufferIterator last_viewed_;
 

@@ -22,7 +22,7 @@ namespace jewels
   {
     return std::string(file_path);
   }
-  auto fixed_path = std::string("../clockwork~/").append(file_path);
+  auto fixed_path = std::string("../clockwork+/").append(file_path);
   if (const auto exists_result = filesys.exists(fixed_path); exists_result && exists_result.value())
   {
     return fixed_path;

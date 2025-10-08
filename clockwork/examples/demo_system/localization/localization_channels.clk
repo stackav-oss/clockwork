@@ -5,5 +5,5 @@ channel PoseChannel
 {
   name: "/pose";
   message_type: Tachyon<pose_message::PoseMessage>;
-  max_num_messages: 100;
+  max_num_messages: 111;
 }

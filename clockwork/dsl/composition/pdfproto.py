@@ -23,10 +23,27 @@ class MemoryResourceType(Protocol):
     _please_never_define_a_class_with_this_attribute_memory_resource_type: None
 
 
+class NotConnectedEndpointType(Protocol):
+    """Fake enum type for values of NotConnectedEndpointType."""
+
+    # The point is that the only way to get an instance of the enum is via the
+    # dynamic runtime enum class.  The type here is just to be able to disambiguate
+    #  between different enum types. The real enum values get set at runtime.
+    #  So this just needs to be a protocol that nothing can ever satisfy.
+    _please_never_define_a_class_with_this_attribute_not_connected_endpoint_type: None
+
+
 class MemoryResourceTypeEnum(Protocol):
     """Type of memory resource."""
 
     new_delete: MemoryResourceType
+
+
+class NotConnectedEndpointTypeEnum(Protocol):
+    """Type of not-connected endpoint."""
+
+    publisher: NotConnectedEndpointType
+    subscriber: NotConnectedEndpointType
 
 
 @dataclass(kw_only=True)
@@ -43,6 +60,7 @@ class ProcessDescription(Tachyon["ProcessDescription"]):
     init_cogs: list[UUID]
     log_cog: UUID
     io_connections: list[IoConnectionInstanceDescription]
+    not_connected_endpoints: list[NotConnectedEndpoint]
 
 
 @dataclass(kw_only=True)
@@ -84,6 +102,7 @@ class PublishEndpoint(Tachyon["PublishEndpoint"]):
     publisher_id: UUID
     buffer_layout: PinionBufferLayout
     num_subscribers: int
+    channel_name: str
 
 
 @dataclass(kw_only=True)
@@ -199,3 +218,12 @@ class IoConnectionInstanceDescription(Tachyon["IoConnectionInstanceDescription"]
     endpoints: list[EndpointInstanceDescription]
     diags_endpoint_id: UUID | None
     instance_path_name: str
+
+
+@dataclass(kw_only=True)
+class NotConnectedEndpoint(Tachyon["NotConnectedEndpoint"]):
+    """Describes an endpoint that is not connected to any publisher or subscriber."""
+
+    endpoint_id: UUID
+    endpoint_type: NotConnectedEndpointType
+    buffer_layout: PinionBufferLayout

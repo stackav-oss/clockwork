@@ -26,11 +26,21 @@
 namespace clockwork::support
 {
 
+/// Helper function to wait for a socket to be readable.  This is used
+/// in unit tests when it's expected that a socket is readable
+/// immediately after writing.
+/// @param fd_to_wait_on The file descriptor to wait on.
+/// @return A valid expected if readable and an error otherwise.
+jewels::expected<void, jewels::filesystem::ErrorCode> wait_for_readable(int fd_to_wait_on);
+
 /// For a network socket, get the assigned addr information.  Useful
 /// when providing port 0 and needing to know what port was assigned.
 /// @param file_descriptor The fd of the socket.
 /// @return The address information if successful.
 jewels::expected<struct sockaddr_in, jewels::filesystem::ErrorCode> get_assigned_addr(int file_descriptor);
+
+/// Get the port from a sockaddr_in.
+uint16_t get_port(struct sockaddr_in const& addr);
 
 /// Send bytes to a socket.
 /// @param data The bytes to send.
@@ -38,6 +48,28 @@ jewels::expected<struct sockaddr_in, jewels::filesystem::ErrorCode> get_assigned
 /// @param addr The address to send to.
 jewels::expected<size_t, jewels::filesystem::ErrorCode>
 send_to(std::span<const std::byte> data, int file_descriptor, struct sockaddr_in const& addr);
+
+/// A helper class to open a socket used for sending bytes.
+class Sender
+{
+public:
+  /// Open a datagram socket.
+  Sender();
+
+  /// Send bytes to the provided address.
+  /// @param data Bytes to send.
+  /// @param addr The address to send to.
+  /// @return Number of bytes written or an error.
+  jewels::expected<size_t, jewels::filesystem::ErrorCode>
+  operator()(std::span<const std::byte> data, struct sockaddr_in const& addr) const;
+
+  /// Get the underlying file descriptor.
+  [[nodiscard]] int fd() const;
+
+private:
+  /// File descriptor for the socket.
+  jewels::filesystem::FileDescriptor file_descriptor_;
+};
 
 /// Helper class to bind to adn read from a socket.
 class Receiver

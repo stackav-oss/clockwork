@@ -276,11 +276,12 @@ MemoryWriter::log_message(const ZeroCopyMessage& message, bool is_lite_compresse
     return map_iter->second;
   }
   ++schema_count_;
-  const auto& schema_metadata = schema_metadata_list_.emplace_back(SchemaMetadata{
-    .schema_id = schema_count_,
-    .schema_name = std::pmr::string{schema_name, memory_resource_},
-    .schema_encoding = schema_encoding,
-    .schema_definition = std::pmr::string{schema_definition, memory_resource_}});
+  const auto& schema_metadata = schema_metadata_list_.emplace_back(
+    SchemaMetadata{
+      .schema_id = schema_count_,
+      .schema_name = std::pmr::string{schema_name, memory_resource_},
+      .schema_encoding = schema_encoding,
+      .schema_definition = std::pmr::string{schema_definition, memory_resource_}});
   const auto schema_ptr = jewels::memory::make_non_null_from_ref(schema_metadata);
   schema_map_.emplace(schema_ptr->schema_name, schema_ptr);
   return schema_ptr;
@@ -324,13 +325,14 @@ MemoryWriter::add_channel_metadata(
     return map_iter->second;
   }
   ++channel_count_;
-  const auto& channel_metadata = channel_metadata_list_.emplace_back(ChannelMetadata{
-    .channel_id = channel_count_,
-    .schema_id = schema_id,
-    .channel_name = std::pmr::string{channel_name, memory_resource_},
-    .compression_type = compression_type,
-    .message_encoding = message_encoding,
-    .channel_type = channel_type});
+  const auto& channel_metadata = channel_metadata_list_.emplace_back(
+    ChannelMetadata{
+      .channel_id = channel_count_,
+      .schema_id = schema_id,
+      .channel_name = std::pmr::string{channel_name, memory_resource_},
+      .compression_type = compression_type,
+      .message_encoding = message_encoding,
+      .channel_type = channel_type});
   const auto channel_ptr = jewels::memory::make_non_null_from_ref(channel_metadata);
   channel_map_.emplace(channel_ptr->channel_name, channel_ptr);
   return channel_ptr;

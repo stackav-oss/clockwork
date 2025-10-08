@@ -329,7 +329,7 @@ struct fmt::formatter<jewels::Uuid<TagType>, Char>
       if (*iter == 'x' || *iter == 'X')
       {
         uppercase = (*iter == 'X');
-        ++iter;
+        ++iter; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic) TODO(OI-3647)
       }
     }
     if (iter != ctx.end() && *iter != '}')

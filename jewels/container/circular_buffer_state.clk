@@ -1,0 +1,31 @@
+// Representation of state for a circular buffer
+schema CircularBufferState
+{
+  uuid: 8245e667-6572-4e0e-a891-a61ea38ac297;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // The offset from the begin of the underlying container to the first element of the circular buffer.
+    #0 offset: UInt64;
+
+    // Size of the circular buffer.
+    #1 size: UInt64;
+  }
+}
+
+cpp_target circular_buffer_state_clk_cc
+{
+  options
+  {
+    namespace jewels::container;
+  }
+
+  schema CircularBufferState;
+  representation Tachyon<CircularBufferState>;
+  interface TappyCircularBufferState: Tap<Tachyon<CircularBufferState>>;
+}

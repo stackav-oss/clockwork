@@ -77,6 +77,10 @@ public:
   /// @return True iff the filename has an extension
   [[nodiscard]] bool has_extension() const noexcept;
 
+  /// Check if the path is absolute
+  /// @return True if the path is absolute
+  [[nodiscard]] bool is_absolute() const noexcept;
+
   /// Return the parent path
   /// @return Path to the parent directory
   [[nodiscard]] Path parent_path() const;

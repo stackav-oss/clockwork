@@ -74,10 +74,11 @@ Writer::FileWriterState::FileWriterState(
     jewels::log_cerr_error("Invalid log URI: {}", file_uri);
     return jewels::unexpected(LogError::invalid_log_uri);
   }
-  log_file_metadata_list_.push_back(LogFileMetadata{
-    .log_file_name = std::pmr::string{uri_result.value().filename(), memory_resource_},
-    .maybe_transmit_time_interval = std::nullopt,
-  });
+  log_file_metadata_list_.push_back(
+    LogFileMetadata{
+      .log_file_name = std::pmr::string{uri_result.value().filename(), memory_resource_},
+      .maybe_transmit_time_interval = std::nullopt,
+    });
   auto writer_result = chunk_writer_factory.make_chunk_writer(file_uri);
   if (!writer_result)
   {
@@ -176,15 +177,16 @@ Writer::FileWriterState::create_channel(const LoggedChannelMetadata& channel_met
   {
     return jewels::unexpected(LogError::not_open);
   }
-  const auto metadata_result = metadata_writer_.add_channel(reader::LoggedChannelInfo{
-    .compression_type = compression_type,
-    .channel_name = std::pmr::string{channel_metadata.channel_name, memory_resource_},
-    .message_encoding = channel_metadata.message_encoding,
-    .channel_type = channel_metadata.channel_type,
-    .schema_name = std::pmr::string{channel_metadata.schema_name, memory_resource_},
-    .schema_encoding = channel_metadata.schema_encoding,
-    .schema_definition = std::pmr::string{channel_metadata.schema_definition, memory_resource_},
-  });
+  const auto metadata_result = metadata_writer_.add_channel(
+    reader::LoggedChannelInfo{
+      .compression_type = compression_type,
+      .channel_name = std::pmr::string{channel_metadata.channel_name, memory_resource_},
+      .message_encoding = channel_metadata.message_encoding,
+      .channel_type = channel_metadata.channel_type,
+      .schema_name = std::pmr::string{channel_metadata.schema_name, memory_resource_},
+      .schema_encoding = channel_metadata.schema_encoding,
+      .schema_definition = std::pmr::string{channel_metadata.schema_definition, memory_resource_},
+    });
   if (!metadata_result)
   {
     jewels::log_cerr_error("Failed to create channel {}: {}", channel_metadata.channel_name, metadata_result.error());
@@ -255,6 +257,7 @@ Writer::FileWriterState::get_log_file_metadata_list() const
 
 Writer::Writer(jewels::memory::MemoryResource memory_resource, MessageChunkIndexFormat message_chunk_index_format)
   : memory_resource_(std::move(memory_resource)),
+    lite_compressor_(memory_resource_),
     message_chunk_index_format_(message_chunk_index_format),
     async_work_queue_ptr_(
       jewels::memory::allocate_shared<AsyncWorkQueue, std::pmr::polymorphic_allocator<AsyncWorkQueue>>(
@@ -409,17 +412,34 @@ Writer::open(std::string_view uri_str, std::string_view config_str, OverwriteMod
 
 [[nodiscard]] LogExpected<void> Writer::write(const LoggedMessage& message)
 {
-  return write(ZeroCopyLoggedMessage{
-    .channel_name = message.channel_name,
-    .sequence_number = message.sequence_number,
-    .log_time = message.log_time,
-    .transmit_time = message.transmit_time,
-    .header = message.header,
-    .data = std::span{&message.data, 1U},
-    .is_repeated_persistent = message.is_repeated_persistent,
-    .message_encoding = message.message_encoding,
-    .is_lite_compressed = message.is_lite_compressed,
-  });
+  auto data = std::span{&message.data, 1U};
+  bool is_lite_compressed = message.is_lite_compressed;
+  if (!is_lite_compressed)
+  {
+    const auto compressed_data = lite_compressor_.compress(message.data);
+    const auto compressed_data_size = std::accumulate(
+      compressed_data.begin(),
+      compressed_data.end(),
+      size_t{0U},
+      [](size_t lhs, auto& rhs) { return lhs + rhs.size(); });
+    if (compressed_data_size < message.data.size())
+    {
+      data = compressed_data;
+      is_lite_compressed = true;
+    }
+  }
+  return write(
+    ZeroCopyLoggedMessage{
+      .channel_name = message.channel_name,
+      .sequence_number = message.sequence_number,
+      .log_time = message.log_time,
+      .transmit_time = message.transmit_time,
+      .header = message.header,
+      .data = data,
+      .is_repeated_persistent = message.is_repeated_persistent,
+      .message_encoding = message.message_encoding,
+      .is_lite_compressed = is_lite_compressed,
+    });
 }
 
 [[nodiscard]] LogExpected<void> Writer::write(const ZeroCopyLoggedMessage& message)

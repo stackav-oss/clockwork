@@ -6,6 +6,9 @@
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/log_format.hh"
+#include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
@@ -35,19 +38,26 @@ namespace
 /// @param[in] memory_resource Memory resource
 /// @param[in] source_uri Source log URI
 /// @param[in] maybe_desired_channels Optional set of desired channels
+/// @param[in] maybe_excluded_channels Optional set of excluded channels
 /// @param[in] maybe_log_interval Optional relative log interval
 /// @return Reader pointer or LogError on failure
 [[nodiscard]] LogExpected<std::unique_ptr<AbstractLogReader>> open_reader(
   jewels::memory::MemoryResource memory_resource,
   std::string_view source_uri,
   const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_excluded_channels,
   const std::optional<RelativeInterval>& maybe_log_interval)
 {
-  const auto topic_filter = [memory_resource, maybe_desired_channels](std::string_view topic)
-  { return !maybe_desired_channels || maybe_desired_channels->contains(std::pmr::string{topic, memory_resource}); };
   try
   {
     auto reader_ptr = make_reader(source_uri, {}, maybe_log_interval, DecompressOption::dont_decompress);
+    const auto topic_filter =
+      [memory_resource, &maybe_desired_channels, &maybe_excluded_channels](std::string_view topic)
+    {
+      const auto topic_str = std::pmr::string(topic, memory_resource);
+      return (!maybe_desired_channels || maybe_desired_channels->contains(topic_str)) &&
+             (!maybe_excluded_channels || !maybe_excluded_channels->contains(topic_str));
+    };
     if (const auto open_result = reader_ptr->open(topic_filter); !open_result)
     {
       return jewels::unexpected(open_result.error());
@@ -101,29 +111,31 @@ namespace
     if (topic_iter != topic_map.end())
     {
       const auto& topic_metadata = *(topic_iter->second);
-      if (const auto create_result = writer.create_channel(LoggedChannelMetadata{
-            .channel_name = topic_metadata.name,
-            .message_encoding = topic_metadata.message_encoding,
-            .channel_type = topic_metadata.channel_type,
-            .schema_name = topic_metadata.type,
-            .schema_encoding = topic_metadata.schema_encoding,
-            .schema_definition = topic_metadata.schema_definition,
-          });
+      if (const auto create_result = writer.create_channel(
+            LoggedChannelMetadata{
+              .channel_name = topic_metadata.name,
+              .message_encoding = topic_metadata.message_encoding,
+              .channel_type = topic_metadata.channel_type,
+              .schema_name = topic_metadata.type,
+              .schema_encoding = topic_metadata.schema_encoding,
+              .schema_definition = topic_metadata.schema_definition,
+            });
           !create_result)
       {
         return jewels::unexpected(create_result.error());
       }
       topic_map.erase(topic_iter);
     }
-    if (const auto write_result = writer.write(LoggedMessage{
-          .channel_name = maybe_message->topic,
-          .sequence_number = maybe_message->sequence_number,
-          .log_time = maybe_message->log_time,
-          .transmit_time = maybe_message->publish_time,
-          .header = maybe_message->header,
-          .data = maybe_message->data,
-          .is_lite_compressed = maybe_message->is_lite_compressed,
-        });
+    if (const auto write_result = writer.write(
+          ZeroCopyLoggedMessage{
+            .channel_name = maybe_message->topic,
+            .sequence_number = maybe_message->sequence_number,
+            .log_time = maybe_message->log_time,
+            .transmit_time = maybe_message->publish_time,
+            .header = maybe_message->header,
+            .data = {&maybe_message->data, 1U},
+            .is_lite_compressed = maybe_message->is_lite_compressed,
+          });
         !write_result)
     {
       return jewels::unexpected(write_result.error());
@@ -136,17 +148,84 @@ namespace
   return {};
 }
 
+/// Make a shallow copy of a log union by copying the log_union.pbtxt file to the destination log
+/// @param[in] reader_writer_factory Chunk reader/writer factory
+/// @param[in] source_uri Source log URI
+/// @param[in] dest_uri Destination log URI
+/// @return LogError on failure
+[[nodiscard]] LogExpected<void> shallow_copy_log_union(
+  ChunkReaderWriterFactory& reader_writer_factory, const LogUri& source_uri, const LogUri& dest_uri)
+{
+  const auto exists_result = reader_writer_factory.exists(dest_uri.string());
+  if (!exists_result)
+  {
+    jewels::log_cerr_error("Failed to open destination writer for {}: {}", dest_uri.string(), exists_result.error());
+    return jewels::unexpected(exists_result.error());
+  }
+  if (exists_result.value())
+  {
+    jewels::log_cerr_error("Failed to open destination writer for {}: log already exists", dest_uri.string());
+    return jewels::unexpected(LogError::log_already_exists);
+  }
+  const auto read_result =
+    reader_writer_factory.read_log_file(source_uri.apply_relative_path(log_union_filename).string());
+  if (!read_result)
+  {
+    jewels::log_cerr_error("Failed to read source log {}: {}", source_uri.string(), read_result.error());
+    return jewels::unexpected(read_result.error());
+  }
+  if (const auto mkdir_result = reader_writer_factory.create_directories(dest_uri.string()); !mkdir_result)
+  {
+    jewels::log_cerr_error("Failed to write destination log {}: {}", dest_uri.string(), mkdir_result.error());
+    return jewels::unexpected(mkdir_result.error());
+  }
+  if (const auto write_result = reader_writer_factory.write_log_file(
+        dest_uri.apply_relative_path(log_union_filename).string(), read_result.value());
+      !write_result)
+  {
+    jewels::log_cerr_error("Failed to write destination log {}: {}", dest_uri.string(), write_result.error());
+    return jewels::unexpected(write_result.error());
+  }
+  return {};
+}
+
 } // namespace
 
+// NOLINTNEXTLINE(readability-function-size) Manage complexity with inline parameter comments in calls to copy_log
 [[nodiscard]] LogExpected<void> copy_log(
   jewels::memory::MemoryResource memory_resource,
   std::string_view source_uri,
   std::string_view dest_uri,
   const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_excluded_channels,
   const std::optional<RelativeInterval>& maybe_log_interval,
-  std::string_view writer_config_str)
+  std::string_view writer_config_str,
+  bool no_deep_copy)
 {
-  const auto reader_result = open_reader(memory_resource, source_uri, maybe_desired_channels, maybe_log_interval);
+  if (no_deep_copy)
+  {
+    const auto source_uri_result = LogUri::try_make(source_uri, memory_resource);
+    if (!source_uri_result)
+    {
+      jewels::log_cerr_error("Failed to open {}: Invalid log URI", source_uri);
+      return jewels::unexpected(LogError::invalid_log_uri);
+    }
+    ChunkReaderWriterFactory reader_writer_factory{memory_resource};
+    if (const auto exists_result =
+          reader_writer_factory.exists(source_uri_result->apply_relative_path(log_union_filename).string());
+        exists_result && exists_result.value())
+    {
+      const auto dest_uri_result = LogUri::try_make(dest_uri, memory_resource);
+      if (!dest_uri_result)
+      {
+        jewels::log_cerr_error("Failed to open {}: Invalid log URI", dest_uri);
+        return jewels::unexpected(LogError::invalid_log_uri);
+      }
+      return shallow_copy_log_union(reader_writer_factory, *source_uri_result, *dest_uri_result);
+    }
+  }
+  const auto reader_result =
+    open_reader(memory_resource, source_uri, maybe_desired_channels, maybe_excluded_channels, maybe_log_interval);
   if (!reader_result)
   {
     jewels::log_cerr_error("Failed to open {} for read: {}", source_uri, reader_result.error());
@@ -156,7 +235,7 @@ namespace
   if (!writer_result)
   {
     jewels::log_cerr_error("Failed to open {} for write: {}", dest_uri, writer_result.error());
-    return jewels::unexpected(reader_result.error());
+    return jewels::unexpected(writer_result.error());
   }
   if (const auto copy_result = copy_log(*reader_result.value(), *writer_result.value()); !copy_result)
   {

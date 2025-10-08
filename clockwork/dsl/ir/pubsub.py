@@ -8,11 +8,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
+from typing import Final, final
 
 from clockwork.dsl import cst
+from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, representation, schema_reg, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.serialization import tachyon_reg
+from typing_extensions import override
 
 
 class ChannelPublishersOption(Enum):
@@ -34,6 +37,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
     publishers_option: ChannelPublishersOption
     is_diagnostics: bool
     is_bridge_status: bool
+    enforce_backwards_compatibility: bool
 
     @classmethod
     def from_cst(cls: type[Channel], cst_node: cst.Channel, module: node.Module, scope: node.Scope) -> Channel:
@@ -67,6 +71,13 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
         )
         is_diagnostics = bool(cst_publishers_option and cst_publishers_option.maybe_diagnostics())
         is_bridge_status = bool(cst_publishers_option and cst_publishers_option.maybe_bridge_status())
+        enforce_backwards_compatibility: bool = True
+        if (
+            maybe_enforce_backwards_compatibility_option
+            := cst_node.maybe_channel_option_enforce_backwards_compatibility()
+        ):
+            enforce_backwards_compatibility_value = maybe_enforce_backwards_compatibility_option.child_boolean()
+            enforce_backwards_compatibility = enforce_backwards_compatibility_value.maybe_true() is not None
         result = cls(
             type_info=clkbuiltins.CHANNEL_TYPE,
             doc=doc,
@@ -82,29 +93,29 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
             publishers_option=publishers_option,
             is_diagnostics=is_diagnostics,
             is_bridge_status=is_bridge_status,
+            enforce_backwards_compatibility=enforce_backwards_compatibility,
         )
         scope.define(name, result, module.terminals)
         return result
 
     def _register(self) -> None:
-        assert isinstance(self.channel_name, primitive.StringValue)  # noqa: S101  (Guaranteed by resolve)
-        _CHANNEL_REG[self.channel_name.value] = self
+        assert isinstance(self.channel_name, primitive.StringValue)
+        registry = self.module.context[CHANNEL_REGISTRY_KEY]
+        registry.channel_registry[self.channel_name.value] = self
         if self.is_diagnostics:
-            global _DIAGNOSTICS_CHANNEL  # noqa: PLW0603 (Only one diagnostics channel per system is allowed)
-            if _DIAGNOSTICS_CHANNEL:
+            if registry.diagnostics_channel:
                 msg = self.append_error_line(
-                    f"Attempt to define multiple diagnostics channels {self.channel_name} and {_DIAGNOSTICS_CHANNEL.channel_name}"
+                    f"Attempt to define multiple diagnostics channels {self.channel_name} and {registry.diagnostics_channel.channel_name}"
                 )
                 raise ValueError(msg)
-            _DIAGNOSTICS_CHANNEL = self  # pyright: ignore[reportConstantRedefinition] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            registry.diagnostics_channel = self
         if self.is_bridge_status:
-            global _BRIDGE_STATUS_CHANNEL  # noqa: PLW0603 (Only one bridge status channel per system is allowed)
-            if _BRIDGE_STATUS_CHANNEL:
+            if registry.bridge_status_channel:
                 msg = self.append_error_line(
-                    f"Attempt to define multiple bridge status channels {self.channel_name} and {_BRIDGE_STATUS_CHANNEL.channel_name}"
+                    f"Attempt to define multiple bridge status channels {self.channel_name} and {registry.bridge_status_channel.channel_name}"
                 )
                 raise ValueError(msg)
-            _BRIDGE_STATUS_CHANNEL = self  # pyright: ignore[reportConstantRedefinition] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            registry.bridge_status_channel = self
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
@@ -113,7 +124,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
             raise RuntimeError(msg)  # noqa: TRY004 (Resolving twice is a runtime error)
         if isinstance(self.channel_name, expr.Expr):
             channel_name = self.channel_name.evaluate()
-            assert isinstance(channel_name, primitive.StringValue)  # noqa: S101  (Should be guaranteed by type system)
+            assert isinstance(channel_name, primitive.StringValue)
             self.channel_name = channel_name
         self._register()
 
@@ -121,7 +132,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
 
         if isinstance(self.message_size, expr.Expr):
             message_size = self.message_size.evaluate()
-            assert isinstance(message_size, primitive.DecimalValue)  # noqa: S101  (Should be guaranteed by type system)
+            assert isinstance(message_size, primitive.DecimalValue)
             if expected_message_size is not None and message_size.value != expected_message_size.value:
                 msg = self.message_size.append_error_line(
                     f"Specified representation has size {expected_message_size.value}; either remove the explicit size or modify it to match."
@@ -135,7 +146,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
             self.message_size = expected_message_size
         if isinstance(self.num_slots_expr, expr.Expr):
             num_slots = self.num_slots_expr.evaluate()
-            assert isinstance(num_slots, primitive.DecimalValue)  # noqa: S101  (Should be guaranteed by type system)
+            assert isinstance(num_slots, primitive.DecimalValue)
             if num_slots.value < 1:
                 msg = self.num_slots_expr.append_error_line("Must specify at least one slot in the channel.")
                 raise ValueError(msg)
@@ -153,7 +164,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
         )
 
     def _resolve_message_type(self) -> primitive.DecimalValue | None:
-        assert isinstance(self.message_type, expr.TypeExpression)  # noqa: S101  (for mypy)
+        assert isinstance(self.message_type, expr.TypeExpression)
         message_type = self.message_type.evaluate()
         if isinstance(message_type, typesys.DeferrableType):
             msg = self.message_type.append_error_line("Channel type may not be a generic parameter.")
@@ -168,7 +179,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
                 "Representation not instantiated or instantiation not visible here."
             )
             raise ValueError(msg)
-        assert isinstance(repr_info.representation_ir.typespec, typesys.Instantiation)  # noqa: S101 (for mypy)
+        assert isinstance(repr_info.representation_ir.typespec, typesys.Instantiation)
         if repr_info.representation_ir.typespec.instantiates is clkbuiltins.TACHYON:
             schema_type = repr_info.representation_ir.schema_ir
             constraint = tachyon_reg.constraint_for_type(self.module.context, schema_type)
@@ -183,6 +194,7 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
         self.message_repr = repr_info.representation_ir
         return expected_message_size
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         if not isinstance(self.channel_name, primitive.StringValue):
@@ -191,37 +203,78 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
         return f"Channel({self.channel_name.value})"
 
 
-def lookup_channel(channel_name: str) -> Channel:
+def lookup_channel(channel_name: str, compiler_context: CompilerContext) -> Channel:
     """Look up a channel by name.
 
     Raises:
         KeyError if no such channel is defined.
     """
-    return _CHANNEL_REG[channel_name]
+    registry = compiler_context[CHANNEL_REGISTRY_KEY]
+    return registry.channel_registry[channel_name]
 
 
-def diagnostics_channel() -> Channel | None:
+def diagnostics_channel(compiler_context: CompilerContext) -> Channel | None:
     """Get the diagnostics channel."""
-    return _DIAGNOSTICS_CHANNEL
+    registry = compiler_context[CHANNEL_REGISTRY_KEY]
+    return registry.diagnostics_channel
 
 
-def bridge_status_channel() -> Channel | None:
+def bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
     """Get the bridge status channel."""
-    return _BRIDGE_STATUS_CHANNEL
+    registry = compiler_context[CHANNEL_REGISTRY_KEY]
+    return registry.bridge_status_channel
 
 
-# Channels are not namespaced; in any given system there can be only one channel
-# of each name.  This prevents confusion.  This global registry enforces that.
-# Unlike other registries, this one isn't primarily meant to allow lookups of
-# channels, but it could also be used for that if (later) exposed by a lookup
-# function.  The way of referencing a channel within Clockwork source is by
-# importing the module that defines it, so looking it up by channel name should
-# not be needed.
-_CHANNEL_REG: dict[str, Channel] = {}
+@final
+class ChannelRegistry(Context):
+    """Channel Registry."""
+
+    def __init__(self, name: str | None) -> None:
+        """Create a new channel registry."""
+        self.name = name
+
+        # Channels are not namespaced; in any given system there can be only one channel
+        # of each name.  This prevents confusion.  This registry enforces that.
+        # Unlike other registries, this one isn't primarily meant to allow lookups of
+        # channels, but it could also be used for that if (later) exposed by a lookup
+        # function.  The way of referencing a channel within Clockwork source is by
+        # importing the module that defines it, so looking it up by channel name should
+        # not be needed.
+        self.channel_registry: dict[str, Channel] = {}
+
+        # The system can only have one diagnostics channel and one bridge status channel.
+        # These variables are used to store the diagnostics and bridge status channel
+        # definitions as they are encountered during parsing.
+        self.diagnostics_channel: Channel | None = None
+        self.bridge_status_channel: Channel | None = None
+
+    @override
+    def import_from(self, other: ChannelRegistry) -> None:
+        """Combine this registry with cached channels from another registry.
+
+        Raises:
+            RuntimeError: If a channel already exists with a different definition
+        """
+        for key, channel in other.channel_registry.items():
+            if key in self.channel_registry and self.channel_registry[key] != channel:
+                msg = f"Channel registry entry {key} has conflicting entry: {self.channel_registry[key]} vs {channel}\nWhen merging {other.name} into {self.name}"
+                raise RuntimeError(msg)
+            self.channel_registry[key] = channel
+
+        if other.bridge_status_channel and not self.bridge_status_channel:
+            self.bridge_status_channel = other.bridge_status_channel
+
+        if other.diagnostics_channel and not self.diagnostics_channel:
+            self.diagnostics_channel = other.diagnostics_channel
 
 
-# The system can only have one diagnostics channel and one bridge status channel.
-# These variables are used to store the diagnostics and bridge status channel
-# definitins as they are encountered during parsing.
-_DIAGNOSTICS_CHANNEL: Channel | None = None
-_BRIDGE_STATUS_CHANNEL: Channel | None = None
+class ChannelRegistryKey(ContextKey[ChannelRegistry]):
+    """CompilerContext Key for Channel Registry."""
+
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> ChannelRegistry:
+        """Create a default instance of a Channel Registry."""
+        return ChannelRegistry(compiler_context.name)
+
+
+CHANNEL_REGISTRY_KEY: Final = ChannelRegistryKey("ChannelRegistryKey")

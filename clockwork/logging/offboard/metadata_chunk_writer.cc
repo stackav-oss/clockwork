@@ -104,19 +104,20 @@ MetadataChunkWriter::write_chunk(const ChunkCompressor& chunk_compressor, ChunkW
   channel_entries.reserve(metadata_map_.size());
   for (const auto& [channel_id, metadata] : metadata_map_)
   {
-    channel_entries.push_back(MetadataChunkChannelEntry{
-      .channel_id = channel_id,
-      .compression_type = metadata.compression_type,
-      .message_encoding = metadata.message_encoding,
-      .schema_encoding = metadata.schema_encoding,
-      .channel_name_offset = log_string(metadata.channel_name, chunk),
-      .channel_name_size = static_cast<uint32_t>(metadata.channel_name.size()),
-      .schema_name_offset = log_string(metadata.schema_name, chunk),
-      .schema_name_size = static_cast<uint32_t>(metadata.schema_name.size()),
-      .schema_definition_offset = log_string(metadata.schema_definition, chunk),
-      .schema_definition_size = static_cast<uint32_t>(metadata.schema_definition.size()),
-      .channel_type = metadata.channel_type,
-    });
+    channel_entries.push_back(
+      MetadataChunkChannelEntry{
+        .channel_id = channel_id,
+        .compression_type = metadata.compression_type,
+        .message_encoding = metadata.message_encoding,
+        .schema_encoding = metadata.schema_encoding,
+        .channel_name_offset = log_string(metadata.channel_name, chunk),
+        .channel_name_size = static_cast<uint32_t>(metadata.channel_name.size()),
+        .schema_name_offset = log_string(metadata.schema_name, chunk),
+        .schema_name_size = static_cast<uint32_t>(metadata.schema_name.size()),
+        .schema_definition_offset = log_string(metadata.schema_definition, chunk),
+        .schema_definition_size = static_cast<uint32_t>(metadata.schema_definition.size()),
+        .channel_type = metadata.channel_type,
+      });
   }
   chunk.reserve((channel_entries.size() * metadata_chunk_channel_entry_size) + metadata_chunk_trailer_size);
   const auto channel_entries_offset = chunk.size();

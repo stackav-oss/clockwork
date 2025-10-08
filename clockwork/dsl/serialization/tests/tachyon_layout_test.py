@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for tachyon_layout module."""
 
@@ -122,7 +123,7 @@ def test_layout_fields_1() -> None:
         tachyon_layout.ConstrainedField(size=13, alignment=8, field_num=5),
     ]
 
-    layout = tachyon_layout._layout_fields(constrained_fields)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    layout = tachyon_layout._layout_fields(constrained_fields)
     result_fields = [(fld.field_num, fld.offset, fld.size) for fld in layout.fields]
 
     expected_layout: list[tuple[int, int, int]] = [
@@ -149,7 +150,7 @@ def test_layout_fields_2() -> None:
         tachyon_layout.ConstrainedField(size=13, alignment=16, field_num=5),
     ]
 
-    layout = tachyon_layout._layout_fields(constrained_fields)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    layout = tachyon_layout._layout_fields(constrained_fields)
     result_fields = [(fld.field_num, fld.offset, fld.size) for fld in layout.fields]
 
     expected_layout: list[tuple[int, int, int]] = [
@@ -177,7 +178,7 @@ def test_layout_fields_trailing_padding() -> None:
         tachyon_layout.ConstrainedField(size=1, alignment=1, field_num=2),
     ]
 
-    layout = tachyon_layout._layout_fields(constrained_fields)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    layout = tachyon_layout._layout_fields(constrained_fields)
     result_fields = [(fld.field_num, fld.offset, fld.size) for fld in layout.fields]
 
     expected_layout: list[tuple[int, int, int]] = [
@@ -201,7 +202,7 @@ def test_layout_fields_no_trailing_padding() -> None:
         tachyon_layout.ConstrainedField(size=7, alignment=1, field_num=3),
     ]
 
-    layout = tachyon_layout._layout_fields(constrained_fields)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    layout = tachyon_layout._layout_fields(constrained_fields)
     result_fields = [(fld.field_num, fld.offset, fld.size) for fld in layout.fields]
 
     expected_layout: list[tuple[int, int, int]] = [

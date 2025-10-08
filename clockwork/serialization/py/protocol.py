@@ -44,6 +44,21 @@ class Tachyon(Protocol[T_co]):
     def get_tachyon_metadata(cls: type[T_co]) -> tachyon_model.TachyonMetadata | None:  # pyright: ignore[reportGeneralTypeIssues] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
         """Get the tachyon metadata for the class."""
 
+    @classmethod
+    @abstractmethod
+    def get_tachyon_module_name(cls: type[T_co]) -> str:  # pyright: ignore[reportGeneralTypeIssues] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        """Get the tachyon source module name for the class."""
+
+    @classmethod
+    @abstractmethod
+    def get_tachyon_source_file_name(cls: type[T_co]) -> str:  # pyright: ignore[reportGeneralTypeIssues] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        """Get the tachyon source file name for the class."""
+
+    @classmethod
+    @abstractmethod
+    def get_tachyon_class_name(cls: type[T_co]) -> str:  # pyright: ignore[reportGeneralTypeIssues] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        """Get the tachyon class name for the class."""
+
 
 def write_tachyon_to_file(obj: Tachyon[Any], filename: Path, mode: str = "wb") -> None:
     """Write a Tachyon object to a file."""
@@ -64,5 +79,5 @@ def read_tachyon_from_file(tachyon_class: type[TachyClass], filename: Path) -> T
         msg = f"Unexpected Tachyon file size: {bufsz} != {tachysz} in file {filename}"
         raise ValueError(msg)
     result = tachyon_class.deserialize_tachyon(memoryview(buffer))
-    assert isinstance(result, tachyon_class)  # noqa: S101  (for mypy)
+    assert isinstance(result, tachyon_class)
     return result

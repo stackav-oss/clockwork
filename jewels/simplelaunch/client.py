@@ -19,23 +19,27 @@ _DEFAULT_HEADERS: Final = {
 DEFAULT_PORT: Final = 8080
 
 SimpleLaunchConnectionError: TypeAlias = requests.exceptions.ConnectionError
+SimpleLaunchHTTPError: TypeAlias = requests.exceptions.HTTPError
 
 
 class SimpleLaunchClient:
     """Client for simplelaunch."""
 
-    def __init__(self, host: str, port: int = DEFAULT_PORT, headers: dict[str, str] = _DEFAULT_HEADERS) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, host: str, port: int = DEFAULT_PORT, headers: dict[str, str] = _DEFAULT_HEADERS) -> None:
         """Constructor."""
         self.host = host
         self.port = port
         self.headers = headers
 
-    def _send_command(self, command: SimpleLaunchCommand) -> requests.Response:
+    def _send_command(
+        self, command: SimpleLaunchCommand | None, path: str | None = None, timeout: int = 5
+    ) -> requests.Response:
         """Send simplelaunch a command."""
+        path_str = path if path else ""
         response = requests.post(
-            f"http://{self.host}:{self.port}/",
-            timeout=5,
-            data=command.SerializeToString(),
+            f"http://{self.host}:{self.port}/{path_str}",
+            timeout=timeout,
+            data=command.SerializeToString() if command else None,
             headers=self.headers,
         )
         response.raise_for_status()
@@ -47,6 +51,23 @@ class SimpleLaunchClient:
         process_list = GetProcessListResponse()
         process_list.ParseFromString(response.content)
         return process_list
+
+    def is_server_running(self) -> bool:
+        """Check if a server is running."""
+        try:
+            self.is_running()
+        except SimpleLaunchConnectionError:
+            return False
+        else:
+            return True
+
+    def quit(self) -> None:
+        """Stop all processes and exit."""
+        # Use a larger timeout here because the server only sends the
+        # response once all child processes have exited.  If a child
+        # doesn't go down, the server sleeps between escalations of
+        # the signal.  So it can take a while sometimes.
+        self._send_command(command=None, path="quit", timeout=30)
 
     def stop(self, name: str) -> None:
         """Stop a process."""

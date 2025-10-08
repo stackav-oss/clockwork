@@ -144,17 +144,20 @@ nb::class_<SyncTime> bind_sync_time(nb::handle scope)
       },
       nb::arg("other"),
       nb::sig("def __eq__(self: SyncTime, other: object) -> bool"))
-    .def(nb::self > nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self >= nb::self) // NOLINT(misc-redundant-expression)
-    .def(nb::self < nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self <= nb::self) // NOLINT(misc-redundant-expression)
+    .def(nb::self > nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self >= nb::self) // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self < nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self <= nb::self) // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
     .def("__add__", [](const SyncTime& self, const Duration& other) -> SyncTime { return self + other; })
     .def("__sub__", nb::overload_cast<const SyncTime&, const SyncTime&>(&subtract<SyncTime, SyncTime>))
     .def("__sub__", nb::overload_cast<const SyncTime&, const Duration&>(&subtract<SyncTime, Duration>))
     .def(
       "__repr__",
       [](const SyncTime& sync_time) -> std::string
-      { return fmt::format("SyncTime({}ns)", jewels::time::get_ns(sync_time)); });
+      { return fmt::format("SyncTime({}ns)", jewels::time::get_ns(sync_time)); })
+    .def("__getstate__", [](const SyncTime& self) -> int64_t { return jewels::time::get_ns(self); })
+    .def(
+      "__setstate__", [](SyncTime& self, int64_t nanoseconds) { self = SyncTime(chrono::nanoseconds(nanoseconds)); });
 }
 
 nb::class_<Duration> bind_duration(nb::handle scope)
@@ -199,22 +202,23 @@ nb::class_<Duration> bind_duration(nb::handle scope)
       },
       nb::arg("other"),
       nb::sig("def __eq__(self: Duration, other: object) -> bool"))
-    .def(nb::self + nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self - nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self > nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self >= nb::self) // NOLINT(misc-redundant-expression)
-    .def(nb::self < nb::self)  // NOLINT(misc-redundant-expression)
-    .def(nb::self <= nb::self) // NOLINT(misc-redundant-expression)
+    .def(nb::self + nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self - nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self > nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self >= nb::self) // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self < nb::self)  // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
+    .def(nb::self <= nb::self) // NOLINT(misc-redundant-expression) Definition of an operation, not an expression.
     .def("__add__", [](const Duration& self, const SyncTime& other) -> SyncTime { return self + other; })
     .def("__neg__", [](const Duration& self) -> Duration { return -self; })
     .def("__mul__", nb::overload_cast<const Duration&, double>(&multiply<Duration, double>))
     .def("__mul__", nb::overload_cast<const Duration&, int64_t>(&multiply<Duration, int64_t>))
-    .def("__truediv__", nb::overload_cast<const Duration&, const Duration&>(&divide<Duration>))
     .def("__truediv__", nb::overload_cast<const Duration&, int64_t>(&divide<int64_t>))
     .def("__truediv__", nb::overload_cast<const Duration&, double>(&divide<double>))
     .def(
       "__repr__",
-      [](const Duration& duration) -> std::string { return fmt::format("Duration({}ns)", duration.count()); });
+      [](const Duration& duration) -> std::string { return fmt::format("Duration({}ns)", duration.count()); })
+    .def("__getstate__", [](const Duration& self) -> int64_t { return self.count(); })
+    .def("__setstate__", [](Duration& self, int64_t nanoseconds) { self = Duration(nanoseconds); });
 }
 
 NB_MODULE(nb_sync_time, mod)

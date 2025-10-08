@@ -47,8 +47,10 @@ public:
   static const FactoryType* find(const IdType& class_id);
 
 private:
-  static FactoryType* head_; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-  static FactoryType* tail_; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) Static to allow singleton semantics
+  static FactoryType* head_;
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) Static to allow singleton semantics
+  static FactoryType* tail_;
   FactoryType* prev_;
   FactoryType* next_;
 

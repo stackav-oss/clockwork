@@ -6,31 +6,9 @@
 #include "jewels/container/tap/var_string.hh"
 
 #include <algorithm>
-#include <cstddef>
-#include <sys/socket.h>
 
 namespace clockwork::pinion
 {
-
-void advance_iovecs(std::span<struct iovec> iovecs, size_t amount)
-{
-  for (auto& iov : iovecs)
-  {
-    if (iov.iov_len < amount)
-    {
-      amount -= iov.iov_len;
-      // recvmsg() and sendmsg() will gracefully step over this.
-      iov.iov_len = 0;
-    }
-    else
-    {
-      auto new_iov = std::span<std::byte>(static_cast<std::byte*>(iov.iov_base), iov.iov_len).subspan(amount);
-      iov.iov_base = new_iov.data();
-      iov.iov_len = new_iov.size();
-      break;
-    }
-  }
-}
 
 void update_client_server_counters(
   uint64_t message_bytes,

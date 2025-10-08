@@ -50,14 +50,14 @@ class NanobindTypeCaster(node.CstNode[cst.NanobindTypeCaster]):
         typespec: expr.Expr | node.Deferrable[InterfaceAlias | clkenum.ClkEnum] | None = None
         if (identifier := child_typespec.maybe_identifier()) is not None:
             typespec = node.DeferredLookup.make(
-                expected_type=InterfaceAlias | clkenum.ClkEnum,  # type: ignore[arg-type]
+                expected_type=InterfaceAlias | clkenum.ClkEnum,  # pyright: ignore[reportArgumentType] Type not known ahead of time
                 cst_identifier=identifier,
                 terminals=module.terminals,
             )
         else:
             typespec = expr.Expr.from_cst(child_typespec, module)
 
-        assert typespec is not None  # noqa: S101  (invariant, sanity check)
+        assert typespec is not None
 
         return cls(
             module=module,
@@ -105,7 +105,7 @@ class NanobindTypeCaster(node.CstNode[cst.NanobindTypeCaster]):
             msg = self.append_error_line(f"Cannot generate nanobind casters for {type(self.typespec)}.")
             raise TypeError(msg)
 
-        assert isinstance(original_type, InterfaceReference | InterfaceAlias | clkenum.ResolvedEnum)  # noqa: S101 (sanity check)
+        assert isinstance(original_type, InterfaceReference | InterfaceAlias | clkenum.ResolvedEnum)
 
         if not isinstance(self.python_target, PyTarget):
             msg = self.append_error_line(f"Invalid type for python target: {type(self.python_target)}")
@@ -133,19 +133,19 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
     cpp_mod = context.CppModuleChunks()
 
     interface: InterfaceInstantiation | InterfaceReference | None = None
-    assert isinstance(nanobind_caster.original_type, InterfaceAlias | InterfaceReference)  # noqa: S101 (invariant)
+    assert isinstance(nanobind_caster.original_type, InterfaceAlias | InterfaceReference)
     if isinstance(nanobind_caster.original_type, InterfaceAlias):
         interface = nanobind_caster.original_type.interface
     else:
         interface = nanobind_caster.original_type
 
-    assert interface.representation is not None  # noqa: S101 (sanity check)
+    assert interface.representation is not None
     repr_typespec = interface.representation.typespec
     repr_schema = repr_typespec.arguments["schema"]
-    assert isinstance(repr_schema, schema.Schema | schema.ResolvedSchema | typesys.Instantiation)  # noqa: S101  (sanity check)
+    assert isinstance(repr_schema, schema.Schema | schema.ResolvedSchema | typesys.Instantiation)
     schema_ir = schema.InstantiatedSchema.from_typespec(repr_schema)
     schema_type = typereg.get_cpp_type(nanobind_caster.module.context, schema_ir)
-    assert isinstance(schema_type, types.CppType | types.CppTemplateType)  # noqa: S101  (sanity check)
+    assert isinstance(schema_type, types.CppType | types.CppTemplateType)
 
     cpp_mod.header_chunk.context.add_includes(schema_type.includes)
     schema_cpp_type = schema_type.render("")
@@ -183,7 +183,7 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
 
     message_arg_type = typereg.get_cpp_type(nanobind_caster.module.context, interface.typespec)
     cpp_mod.header_chunk.context.add_includes(message_arg_type.includes)
-    assert isinstance(message_arg_type, types.CppTemplateType)  # noqa: S101  (invariant)
+    assert isinstance(message_arg_type, types.CppTemplateType)
     message_arg_type.ref = types.Ref.L
     serialize_fn_call = types.CppFn(
         headers=[Header(JEWELS_REPO, "jewels/nanobind/nanobind_tappy_convert.hh")],
@@ -197,7 +197,7 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
         ]
     )
     py_module = nanobind_caster.python_target.module.module_id.get_base_path()
-    module_parts = py_module.parts[:-1] + (nanobind_caster.python_target.name,)
+    module_parts = (*py_module.parts[:-1], nanobind_caster.python_target.name)
     module_path = ".".join(module_parts)
     from_cpp_body = CppChunk()
     if isinstance(nanobind_caster.original_type, InterfaceAlias):
@@ -231,7 +231,7 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
     )
 
     tappy_type = typereg.get_cpp_type(nanobind_caster.module.context, interface.typespec)
-    assert isinstance(tappy_type, types.CppTemplateType)  # noqa: S101  (invariant)
+    assert isinstance(tappy_type, types.CppTemplateType)
     cpp_mod.header_chunk.context.add_includes(tappy_type.includes)
     tappy_cpp_type = tappy_type.render(NB_DETAIL_NAMESPACE)
     friendly_tappy_type = tappy_type.render(tappy_type.cpp_namespace)
@@ -265,9 +265,9 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
 def _render_enum_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> context.CppModuleChunks:
     cpp_mod = context.CppModuleChunks()
 
-    assert isinstance(nanobind_caster.original_type, clkenum.ResolvedEnum)  # noqa: S101  (sanity check)
+    assert isinstance(nanobind_caster.original_type, clkenum.ResolvedEnum)
     enum_type = typereg.get_cpp_type(nanobind_caster.module.context, nanobind_caster.original_type)
-    assert isinstance(enum_type, types.CppType)  # noqa: S101  (sanity check)
+    assert isinstance(enum_type, types.CppType)
     cpp_mod.header_chunk.context.add_includes(enum_type.includes)
     enum_cpp_type = enum_type.render("")
 
@@ -314,7 +314,7 @@ def _render_enum_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> context.
         ]
     )
     py_module = nanobind_caster.python_target.module.module_id.get_base_path()
-    module_parts = py_module.parts[:-1] + (nanobind_caster.python_target.name,)
+    module_parts = (*py_module.parts[:-1], nanobind_caster.python_target.name)
     module_path = ".".join(module_parts)
     from_cpp_body = CppChunk()
     from_cpp_body.append(f'const std::string enum_name{{"{nanobind_caster.original_type.name}"}};')

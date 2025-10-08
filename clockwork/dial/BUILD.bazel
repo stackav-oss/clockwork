@@ -17,6 +17,7 @@ cc_library(
         "alignment_type.inl",
     ],
     hdrs = ["alignment_type.hh"],
+    data = [":alignment_type_clk"],
     deps = ["@wise_enum"],
 )
 
@@ -51,6 +52,7 @@ cc_library(
         "approx_aligner_config.inl",
     ],
     hdrs = ["approx_aligner_config.hh"],
+    data = [":approx_aligner_config_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -113,6 +115,7 @@ cc_library(
         "approx_aligner_config_proto_conv.inl",
     ],
     hdrs = ["approx_aligner_config_proto_conv.hh"],
+    data = [":approx_aligner_config_clk"],
     deps = [
         ":approx_aligner_config",
         ":approx_aligner_config_proto_cc_library",
@@ -163,6 +166,8 @@ cc_library(
         ":cond_time_since_last_exec",
         ":msg_input",
         "//clockwork:repr_iface",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
         "//clockwork/pinion:publisher_handle",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",

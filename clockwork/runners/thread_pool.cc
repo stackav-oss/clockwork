@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <stdexcept>
 #include <tuple>
-#include <type_traits>
 #include <utility>
 
 namespace clockwork

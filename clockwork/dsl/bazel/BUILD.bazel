@@ -8,7 +8,10 @@ package(default_visibility = ["//clockwork:__subpackages__"])
 py_library(
     name = "cc_targets",
     srcs = ["cc_targets.py"],
-    deps = [":targets"],
+    deps = [
+        ":targets",
+        "@clockwork_pip//typing_extensions",
+    ],
 )
 
 py_library(
@@ -42,7 +45,10 @@ py_library(
     name = "nanobind_targets",
     srcs = ["nanobind_targets.py"],
     visibility = ["//clockwork/dsl:__subpackages__"],
-    deps = [":targets"],
+    deps = [
+        ":targets",
+        "@clockwork_pip//typing_extensions",
+    ],
 )
 
 py_library(
@@ -51,19 +57,26 @@ py_library(
     deps = [
         ":targets",
         "//clockwork/dsl/serialization:protobuf_clk",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
 py_library(
     name = "py_targets",
     srcs = ["py_targets.py"],
-    deps = [":targets"],
+    deps = [
+        ":targets",
+        "@clockwork_pip//typing_extensions",
+    ],
 )
 
 py_library(
     name = "simple_launch_targets",
     srcs = ["simple_launch_targets.py"],
-    deps = [":targets"],
+    deps = [
+        ":targets",
+        "@clockwork_pip//typing_extensions",
+    ],
 )
 
 py_library(
@@ -72,19 +85,22 @@ py_library(
     deps = [
         "//clockwork/dsl/ir:module_id",
         "@clockwork_pip//pydantic",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
 py_binary(
     name = "update_clk_targets",
     srcs = ["update_clk_targets.py"],
+    data = ["@clockwork//:buildifier_config"],
     visibility = ["//visibility:public"],  # This is needed for bazel target auto-generation across the repo
     deps = [
+        ":cc_targets",
         ":extract_targets",
         ":targets",
         "//clockwork/dsl:clk_exception",
         "//tools:sort_build_file",
+        "@clockwork_pip//bazel_runfiles",
         "@clockwork_pip//click",
-        "@clockwork_pip//gitpython",
     ],
 )

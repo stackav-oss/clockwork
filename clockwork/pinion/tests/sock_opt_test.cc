@@ -41,39 +41,45 @@ TEST_CASE("ip_add_membership")
   std::string evil(static_cast<size_t>(NAME_MAX + 1), 'x');
   auto result = handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = {evil}, .local_address = "127.0.0.1"}));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = {evil}, .local_address = "127.0.0.1"}));
   REQUIRE_FALSE(result);
   REQUIRE(result.error().value() == EINVAL);
   result = handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = "239.22.0.2", .local_address = {evil}}));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = "239.22.0.2", .local_address = {evil}}));
   REQUIRE_FALSE(result);
   REQUIRE(result.error().value() == EINVAL);
   result = handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = "no", .local_address = "127.0.0.1"}));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = "no", .local_address = "127.0.0.1"}));
   REQUIRE_FALSE(result);
   REQUIRE(result.error().value() == EINVAL);
   result = handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = "239.22.0.2", .local_address = "stop"}));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = "239.22.0.2", .local_address = "stop"}));
   REQUIRE_FALSE(result);
   REQUIRE(result.error().value() == EINVAL);
 
   // Should fail if we try to join a non-multicast address.
   REQUIRE_FALSE(handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = "10.0.1.100", .local_address = "127.0.0.1"})));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = "10.0.1.100", .local_address = "127.0.0.1"})));
 
   REQUIRE(handle_sock_options(
     *file_desc,
-    std::make_tuple(SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
-      .group_address = "239.22.0.2", .local_address = "127.0.0.1"})));
+    std::make_tuple(
+      SockOptionValue<jewels::networking::SockOption::ip_add_membership>{
+        .group_address = "239.22.0.2", .local_address = "127.0.0.1"})));
 }
 
 TEST_CASE("ip_multicast_if")

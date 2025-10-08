@@ -1,0 +1,26 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "outcome_test",
+    srcs = ["outcome_test.cc"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "outparam_test",
+    srcs = ["outparam_test.cc"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:pointers",
+        "@catch2//:catch2_main",
+    ],
+)

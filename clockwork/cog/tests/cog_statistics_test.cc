@@ -16,7 +16,6 @@
 #include <limits>
 #include <memory_resource>
 #include <optional>
-#include <ratio>
 
 namespace clockwork
 {
@@ -151,10 +150,10 @@ TEST_CASE("CogMetricsTest")
 
   SECTION("Nominal Case")
   {
-    CogMetrics test_metrics{memory_resource};
+    CogMetrics test_metrics{memory_resource, 10};
     test_metrics.cog_ready(run1.ready_time);
     CHECK(test_metrics.execution_attempted(run1.execution_first_attempt_time).has_value());
-    CHECK(test_metrics.execution_started(run1.execution_start_time).has_value());
+    CHECK(test_metrics.execution_started(run1.execution_start_time, 0).has_value());
     CHECK(test_metrics.execution_completed(run1.execution_complete_time).has_value());
 
     CHECK(test_metrics.event_metrics().size() == 1);
@@ -184,9 +183,7 @@ TEST_CASE("CogMetricsTest")
     SECTION("Bad state transitions")
     {
       CHECK(!test_metrics.execution_completed(run2.execution_complete_time).has_value());
-      CHECK(!test_metrics.execution_attempted(run2.execution_first_attempt_time).has_value());
-      CHECK(!test_metrics.execution_started(run2.execution_start_time).has_value());
-
+      CHECK(!test_metrics.execution_started(run2.execution_start_time, 0).has_value());
       CHECK(test_metrics.event_metrics().size() == 1);
     }
     // Going to cog ready effectively gets us back into a valid state.
@@ -194,7 +191,7 @@ TEST_CASE("CogMetricsTest")
 
     CHECK(test_metrics.execution_attempted(run2.execution_first_attempt_time).has_value());
     CHECK(test_metrics.execution_attempted(run2.execution_first_attempt_time).has_value());
-    CHECK(test_metrics.execution_started(run2.execution_start_time).has_value());
+    CHECK(test_metrics.execution_started(run2.execution_start_time, 0).has_value());
     CHECK(test_metrics.execution_completed(run2.execution_complete_time).has_value());
 
     auto event_metrics = test_metrics.event_metrics().back();
@@ -224,10 +221,73 @@ TEST_CASE("CogMetricsTest")
     CHECK(*exec_period_max == expected_period);
   }
 
+  SECTION("Output metrics handling")
+  {
+    CogMetrics test_metrics{memory_resource, 10};
+    const uint64_t conditions_mask = 0xABCD;
+
+    // First execution
+    test_metrics.cog_ready(run1.ready_time);
+    test_metrics.update_output_metrics(0, 10);
+    test_metrics.update_output_metrics(1, 20);
+    CHECK(test_metrics.execution_attempted(run1.execution_first_attempt_time).has_value());
+    CHECK(test_metrics.execution_started(run1.execution_start_time, conditions_mask).has_value());
+    CHECK(test_metrics.execution_completed(run1.execution_complete_time).has_value());
+
+    // Verify event metrics
+    REQUIRE(test_metrics.event_metrics().size() == 1);
+    const auto& event_metrics = test_metrics.event_metrics();
+    const auto& event_metrics_first = event_metrics.front();
+    CHECK(event_metrics_first.conditions_mask == conditions_mask);
+    REQUIRE(event_metrics_first.output_metrics.size() == 2);
+    CHECK(event_metrics_first.output_metrics.at(0) == 10);
+    CHECK(event_metrics_first.output_metrics.at(1) == 20);
+
+    // Verify telemetry metrics
+    auto telemetry = test_metrics.telemetry_metrics();
+    REQUIRE(telemetry.output_metrics.size() == 2);
+    CHECK(telemetry.output_metrics.at(0).min() == 10);
+    CHECK(telemetry.output_metrics.at(0).max() == 10);
+    CHECK(telemetry.output_metrics.at(1).min() == 20);
+    CHECK(telemetry.output_metrics.at(1).max() == 20);
+
+    // Second execution
+    test_metrics.cog_ready(run2.ready_time);
+    test_metrics.update_output_metrics(0, 5);  // New value for index 0
+    test_metrics.update_output_metrics(2, 30); // New output index
+    CHECK(test_metrics.execution_attempted(run2.execution_first_attempt_time).has_value());
+    CHECK(test_metrics.execution_started(run2.execution_start_time, conditions_mask).has_value());
+    CHECK(test_metrics.execution_completed(run2.execution_complete_time).has_value());
+
+    // Verify event metrics for second execution
+    REQUIRE(test_metrics.event_metrics().size() == 2);
+    const auto& event_metrics2 = test_metrics.event_metrics();
+    const auto& event_metrics2_last = event_metrics2.back();
+    REQUIRE(event_metrics2_last.output_metrics.size() == 2);
+    CHECK(event_metrics2_last.output_metrics.at(0) == 5);
+    CHECK(event_metrics2_last.output_metrics.at(2) == 30);
+
+    // Verify updated telemetry
+    telemetry = test_metrics.telemetry_metrics();
+    REQUIRE(telemetry.output_metrics.size() == 3);
+    CHECK(telemetry.output_metrics.at(0).min() == 5);
+    CHECK(telemetry.output_metrics.at(0).max() == 10);
+    CHECK(telemetry.output_metrics.at(1).min() == 20);
+    CHECK(telemetry.output_metrics.at(1).max() == 20);
+    CHECK(telemetry.output_metrics.at(2).min() == 30);
+    CHECK(telemetry.output_metrics.at(2).max() == 30);
+
+    // Test reset
+    test_metrics.reset_metrics();
+    telemetry = test_metrics.telemetry_metrics();
+    CHECK(telemetry.output_metrics.empty());
+    CHECK(test_metrics.event_metrics().empty());
+  }
+
   SECTION("Duration overflow handling")
   {
     using namespace std::chrono_literals;
-    CogMetrics test_metrics{memory_resource};
+    CogMetrics test_metrics{memory_resource, 10};
 
     // Create times with a gap larger than maximum representable duration (~42.9s)
     // Max value for TenNanoseconds is uint32_max * 10ns ≈ 42.9s
@@ -243,7 +303,7 @@ TEST_CASE("CogMetricsTest")
     // Execute the regular workflow
     test_metrics.cog_ready(ready_time);
     CHECK(test_metrics.execution_attempted(attempt_time).has_value());
-    CHECK(test_metrics.execution_started(execution_time).has_value());
+    CHECK(test_metrics.execution_started(execution_time, 0).has_value());
     CHECK(test_metrics.execution_completed(completion_time).has_value());
 
     // Verify metrics
@@ -265,10 +325,10 @@ TEST_CASE("CogMetricsTest")
   SECTION("Event metrics overflow handling")
   {
     using namespace std::chrono_literals;
-    CogMetrics test_metrics{memory_resource};
+    constexpr size_t max_events = 10;
+    CogMetrics test_metrics{memory_resource, max_events};
 
     constexpr auto start_time = jewels::time::SyncTime(0s);
-    constexpr size_t max_events = 10; // This should match event_metrics_batch_size
 
     // Fill the event metrics to capacity
     for (size_t i = 0; i < max_events; ++i)
@@ -278,7 +338,7 @@ TEST_CASE("CogMetricsTest")
       // Complete execution sequence
       test_metrics.cog_ready(event_time);
       CHECK(test_metrics.execution_attempted(event_time + 1ms).has_value());
-      CHECK(test_metrics.execution_started(event_time + 2ms).has_value());
+      CHECK(test_metrics.execution_started(event_time + 2ms, 0).has_value());
       CHECK(test_metrics.execution_completed(event_time + 10ms).has_value());
     }
 
@@ -290,7 +350,7 @@ TEST_CASE("CogMetricsTest")
     auto overflow_time = start_time + 1100ms;
     test_metrics.cog_ready(overflow_time);
     CHECK(test_metrics.execution_attempted(overflow_time + 1ms).has_value());
-    CHECK(test_metrics.execution_started(overflow_time + 2ms).has_value());
+    CHECK(test_metrics.execution_started(overflow_time + 2ms, 0).has_value());
 
     // This should fail with an error
     auto result = test_metrics.execution_completed(overflow_time + 10ms);
@@ -311,7 +371,7 @@ TEST_CASE("CogMetricsTest")
     auto new_time = start_time + 2000ms;
     test_metrics.cog_ready(new_time);
     CHECK(test_metrics.execution_attempted(new_time + 1ms).has_value());
-    CHECK(test_metrics.execution_started(new_time + 2ms).has_value());
+    CHECK(test_metrics.execution_started(new_time + 2ms, 0).has_value());
     auto new_result = test_metrics.execution_completed(new_time + 10ms);
     CHECK(new_result.has_value());
 

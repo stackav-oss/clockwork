@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 from clockwork.dsl import cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable
@@ -228,7 +229,7 @@ class EnumHistory:
         if not (options_block := enum_history.maybe_enum_history_options_block()):
             return None
 
-        assert module.terminals is not None  # noqa: S101  (invariant)
+        assert module.terminals is not None
         historical_options = []
 
         for history_options in options_block.children_enum_history_options():
@@ -495,7 +496,7 @@ class ResolvedEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEnti
                         raise ValueError(msg)
                     default_field_num = field_num
 
-                assert field_num not in historical_values  # noqa: S101 (invariant)
+                assert field_num not in historical_values
                 historical_values[field_num] = _HistoricalValueInfo(
                     doc=node.Doc(
                         module=self.module,
@@ -603,7 +604,7 @@ class ResolvedEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEnti
         """
         final_values: dict[int, ResolvedValueDef] = {}
         for field_num, info in values.items():
-            assert info.integer_value is not None  # noqa: S101 (invariant)
+            assert info.integer_value is not None
             final_values[field_num] = ResolvedValueDef(
                 doc=info.doc,
                 module=self.module,
@@ -703,6 +704,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
     history: EnumHistory | None = field(repr=False)
     resolved: ResolvedEnum | None = field(repr=False)
 
+    @override
     def lookup(self, name: str) -> node.NamedEntity | None:
         """Look up a value within this enum.
 
@@ -787,7 +789,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
             msg = node.append_error_line(cst_node, module, f"No value designated as default for enum {name}")
             raise ValueError(msg)
         result.default_field_num = default_field_num
-        assert result.default_field_num >= 0  # noqa: S101  (Just a sanity check to ensure we really did replace it)
+        assert result.default_field_num >= 0
 
         if history_cst := cst_node.maybe_enum_history_block():
             result.history = EnumHistory.from_cst(history_cst, module, result)
@@ -826,7 +828,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         overlap = pseudo_set.intersection(all_field_nums)
         if overlap:
             msg = self.append_error_line(
-                f"Pseudoversions {overlap} conflict with value numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                f"Pseudoversions {overlap} conflict with value numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
                 "Please note: pseudofield numbers are reserved after creation and cannot be reused as value numbers.\n"
                 "If you're seeing this error after adding a value, renumber the value(s)\n"
                 "to not conflict with any already-reserved pseudofield numbers."
@@ -958,7 +960,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
 
         has_explicit_values = False
         if isinstance(self.underlying_type, expr.Expr):
-            assert self.has_explicit_underlying_type  # noqa: S101  (invariant)
+            assert self.has_explicit_underlying_type
             underlying_type = self.underlying_type.evaluate()
             if not isinstance(underlying_type, clkbuiltins.IntegerPrimitiveType):
                 msg = self.underlying_type.append_error_line(
@@ -984,7 +986,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
                 versions=[self.cur_version()], pseudoversions=[], values={}, options=None
             ).resolve()
 
-        assert self.underlying_type is not None  # noqa: S101  (invariant)
+        assert self.underlying_type is not None
         self.resolved = ResolvedEnum(
             doc=self.doc,
             name=self.name,
@@ -1025,7 +1027,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         cur_value = 1
         for field_num, value_def in sorted(self.values.items()):
             if value_def.is_default:
-                assert self.default_field_num == field_num  # noqa: S101  (Just a sanity check)
+                assert self.default_field_num == field_num
                 value_def.integer_value = 0
             else:
                 value_def.integer_value = cur_value
@@ -1048,7 +1050,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
     def _resolve_underlying_values(self) -> None:
         underlying_values = {}
         for fld_def in self.values.values():
-            assert isinstance(fld_def.integer_value, expr.Expr)  # noqa: S101  (invariant; for mypy)
+            assert isinstance(fld_def.integer_value, expr.Expr)
             underlying_value = fld_def.integer_value.evaluate()
             if not isinstance(underlying_value, primitive.DecimalValue):
                 msg = fld_def.integer_value.append_error_line(f"Expected an integer value, but got {underlying_value}")
@@ -1064,7 +1066,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
                 raise ValueError(msg)
             if fld_def.is_default and int_value != 0:
                 msg = fld_def.integer_value.append_error_line(
-                    "Default value must have underlying value of 0, not {int_value}"
+                    f"Default value must have underlying value of 0, not {int_value}"
                 )
                 raise ValueError(msg)
             underlying_values[int_value] = fld_def
@@ -1120,9 +1122,9 @@ def _validate_underlying_type(clkenum: ClkEnum | ResolvedEnum, min_: int, max_: 
     smallest_type = primitive.smallest_type_to_hold_range(min_, max_)
     if clkenum.underlying_type is None:
         clkenum.underlying_type = smallest_type
-        assert clkenum.has_explicit_underlying_type is False  # noqa: S101  (invariant)
+        assert clkenum.has_explicit_underlying_type is False
         return
-    assert isinstance(clkenum.underlying_type, clkbuiltins.IntegerPrimitiveType)  # noqa: S101  (for mypy)
+    assert isinstance(clkenum.underlying_type, clkbuiltins.IntegerPrimitiveType)
     if smallest_type.signed and not clkenum.underlying_type.signed:
         msg = clkenum.append_error_line(
             "Requested underlying type is unsigned but some values are specified as negative."
@@ -1221,6 +1223,7 @@ class ValueRef(node.NamedEntity, typesys.Value):
         """Construct a ValueRef."""
         return cls(type_info=value_def.enum, name=value_def.name, scope=value_def.scope, value_def=value_def)
 
+    @override
     def value_key(self) -> str:
         """Generate a comparable, hashable, string representation of this value."""
         return f"{self.value_def.enum.value_key()}::{self.value_def.field_num}"

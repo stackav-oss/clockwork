@@ -11,7 +11,7 @@ namespace jewels
 
 /// Create a span from a single value.
 /// @note This allows an r-value just like `std::span{...}`.  This
-/// makes it convenient to pass as an arugment to a function where a
+/// makes it convenient to pass as an argument to a function where a
 /// span is expected.  However, be careful of lifetimes when making a
 /// span from a temporary.
 /// @param value The single value to make a span from.

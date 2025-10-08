@@ -13,6 +13,7 @@
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
+#include "clockwork/logging/writers/channel_message_rates.hh"
 #include "clockwork/logging/writers/channel_message_rates_config.hh"
 #include "clockwork/logging/writers/log_writer_state.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
@@ -51,6 +52,7 @@
 #include <memory_resource>
 #include <mutex>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -87,8 +89,9 @@ LogWriterBase<Derived, BufferPoolT>::LogWriterBase(
   size_t buffer_pool_size,
   std::chrono::nanoseconds max_log_file_duration,
   const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
-  : guarded_state_(jewels::memory::make_pmr_unique<GuardedState>(
-      memory_resource, memory_resource, log_writer_config, channel_rates_config)),
+  : guarded_state_(
+      jewels::memory::make_pmr_unique<GuardedState>(
+        memory_resource, memory_resource, log_writer_config, channel_rates_config)),
     memory_resource_(std::move(memory_resource)),
     log_writer_config_(log_writer_config),
     pinion_shm_root_(pinion_shm_root, memory_resource_),
@@ -98,8 +101,9 @@ LogWriterBase<Derived, BufferPoolT>::LogWriterBase(
     shm_subscriber_ptrs_(log_writer_config_.get_channels().size(), memory_resource_),
     pending_subscriptions_(memory_resource_),
     persistent_channels_(memory_resource_),
-    buffer_pool_ptr_(jewels::memory::allocate_shared<BufferPoolType, std::pmr::polymorphic_allocator<BufferPoolType>>(
-      memory_resource_, memory_resource_, buffer_pool_size)),
+    buffer_pool_ptr_(
+      jewels::memory::allocate_shared<BufferPoolType, std::pmr::polymorphic_allocator<BufferPoolType>>(
+        memory_resource_, memory_resource_, buffer_pool_size)),
     writer_(
       memory_resource_, memory_resource_, buffer_pool_ptr_, max_log_file_duration, onboard::WriterEnvironment::normal),
     epoll_(memory_resource_)
@@ -354,6 +358,16 @@ bool LogWriterBase<Derived, BufferPoolT>::get_is_degraded()
 template <typename Derived, typename BufferPoolT>
 [[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::initialize()
 {
+  if (ChannelMessageRatesTap::max_num_channels < log_writer_config_.get_channels().size())
+  {
+    std::pmr::string error_string{memory_resource_};
+    fmt::format_to(
+      std::back_inserter(error_string),
+      "Number of logged channels ({}) exceeds max supported by ChannelMessageRates ({})",
+      log_writer_config_.get_channels().size(),
+      ChannelMessageRatesTap::max_num_channels);
+    throw std::invalid_argument(error_string.c_str());
+  }
   if (is_initialized_)
   {
     return jewels::unexpected(LogError::already_initialized);
@@ -398,6 +412,7 @@ LogWriterBase<Derived, BufferPoolT>::get_channel_message_rates()
   const auto current_steady_time = jewels::time::SteadyClock::now();
   num_low_rate_channels_ = 0U;
   low_rate_channel_name_.clear();
+  const auto rates_are_valid = guarded_state_->message_rate_counter.is_warmed_up();
   for (auto& [channel_name, entry] : guarded_state_->message_rate_counter.get_channel_rate_map())
   {
     const auto msg_rate_hz = entry.rate_filter.get_rate(current_steady_time);
@@ -405,7 +420,7 @@ LogWriterBase<Derived, BufferPoolT>::get_channel_message_rates()
       (guarded_state_->logged_persistent_channels.contains(channel_name) || msg_rate_hz >= entry.min_msg_rate_hz)
         ? RateStatus::good
         : RateStatus::low;
-    if (rate_status == RateStatus::low)
+    if (rates_are_valid && rate_status == RateStatus::low)
     {
       ++num_low_rate_channels_;
       if (low_rate_channel_name_.empty())
@@ -506,6 +521,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
     const auto& pending_subscription = subscription_configs_.at(subscription_index);
     auto open_result = shm_channel_factory_ptr_->open_subscriber(
       pending_subscription.uuid_str,
+      pending_subscription.channel_name,
       clockwork::pinion::BufferLayout{
         .num_slots = pending_subscription.num_slots,
         .message_size = pending_subscription.message_size_b,

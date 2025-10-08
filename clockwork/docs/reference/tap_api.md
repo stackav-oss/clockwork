@@ -136,3 +136,9 @@ Tap<Tachyon<SchemaWithConstructor>> var{{.field_a = var_a, .field_b = var_b, ...
 ```
 
 This avoids the need to explicitly write out `TapInit<Tachyon<SchemaWithConstructor>>` and is as close as we can get to initializing a struct using named initializers.
+
+> [!WARNING]
+> Do not default construct a `TapInit` type (e.g., `TapInit<Tachyon<T>>{}`).
+> These structs intentionally leave fields uninitialized.
+> This is because `-Wmissing-field-initializers` won't flag a missing member if it has explicit initialization in the member declaration.
+> The consequence of this is primitive types may be left in an uninitialized state if a `TapInit` type is default constructed.

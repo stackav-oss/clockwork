@@ -15,12 +15,18 @@
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/writers/channel_message_rates.hh"
 #include "clockwork/logging/writers/channel_message_rates_config.hh"
 #include "clockwork/logging/writers/log_writer_base.hh"
 #include "clockwork/logging/writers/log_writer_state.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
+#include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/container/tap/var_array.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/math/constants.hh"
@@ -37,6 +43,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +54,7 @@
 #include <memory>
 #include <memory_resource>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -266,17 +274,27 @@ TEST_CASE("Empty log")
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(metadata_result->schema_name == "TestType1");
+  REQUIRE(
+    metadata_result->schema_name ==
+    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
-  REQUIRE(metadata_result->schema_definition == "Schema definition 1");
+  REQUIRE(
+    std::ranges::equal(
+      metadata_result->schema_definition,
+      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_definition));
 
   metadata_result = reader.get_channel_metadata("channel2");
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(metadata_result->schema_name == "TestType2");
+  REQUIRE(
+    metadata_result->schema_name ==
+    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
-  REQUIRE(metadata_result->schema_definition == "Schema definition 2");
+  REQUIRE(
+    std::ranges::equal(
+      metadata_result->schema_definition,
+      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_definition));
 }
 
 TEST_CASE("Log all messages")
@@ -1113,5 +1131,34 @@ TEST_CASE("Set is degraded")
   REQUIRE(test_writer.stop_logging());
 }
 
+TEST_CASE("Initialization throws if number of channels exceeds limit")
+{
+  const auto memory_resource = jewels::memory::MemoryResource(std::pmr::new_delete_resource());
+
+  const jewels::testing::TmpDirectoryGuard shm_dir;
+
+  auto log_writer_config_ptr = std::make_unique<LogWriterConfigTap>();
+
+  if (LogWriterConfigTap::max_num_channels <= ChannelMessageRatesTap::max_num_channels)
+  {
+    // Nothing to test in this case. The log writer config will never contain more channels than there are in channel
+    // message rates.
+    return;
+  }
+  // Set up the log writer config with too many channels
+  for (uint32_t i = 0; i < ChannelMessageRatesTap::max_num_channels + 1; ++i)
+  {
+    log_writer_config_ptr->get_underlying_channels().emplace_back();
+  }
+
+  auto test_writer_ptr = std::make_unique<TestWriter>(
+    memory_resource,
+    *log_writer_config_ptr,
+    shm_dir.get_path().string(),
+    pinion_namespace,
+    buffer_pool_size,
+    max_log_file_duration);
+  REQUIRE_THROWS_AS(test_writer_ptr->initialize(), std::invalid_argument);
+}
 } // namespace
 } // namespace clockwork_logging::tests

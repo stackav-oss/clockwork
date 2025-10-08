@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -15,11 +16,13 @@ from clockwork.dsl.ir import (
     cog,
     diagnostics,
     extern_type,
+    node,
     representation,
     schema_reg,
     typesys,
     udp,
 )
+from clockwork.dsl.ir.cog_components import InputDef, MetricsOutputDef, OutputDef
 from clockwork.dsl.ir.uuid_reg import lookup_uuid
 from clockwork.dsl.serialization import tachyon_layout_reg
 
@@ -51,6 +54,7 @@ class _ProcessGraph:
                 init_cogs=[],
                 log_cog=uuid4(),
                 io_connections=[],
+                not_connected_endpoints=[],
             ),
             cog_names={},
             init_cog_deps={},
@@ -71,6 +75,7 @@ def gen_pd_sys(sys: system.PhysicalSystem) -> dict[UUID, pdfproto.ProcessDescrip
     _gen_config_sys(sys, processes)
     _gen_memres_sys(sys, processes)
     _gen_pubsub_sys(sys, processes)
+    _gen_non_connected_endpoints(sys, processes)
     return {process_uuid: process.pdf for process_uuid, process in processes.items()}
 
 
@@ -81,7 +86,7 @@ def _gen_cogs_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGrap
         process_graph = processes[process_uuid]
         process_desc = process_graph.pdf
         cog_desc, cog_timers = gen_cog(cog_instance)
-        assert uuid == cog_desc.cog_instance_id  # noqa: S101  (invariant; sanity check)
+        assert uuid == cog_desc.cog_instance_id
         process_desc.cog_instances.append(cog_desc)
         process_graph.cog_names[uuid] = cog_desc.instance_path_name
         process_desc.timers.extend(cog_timers)
@@ -202,12 +207,61 @@ def _gen_memres_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
             )
 
 
+def _add_non_connected_endpoint(
+    entity: cog.CogInstanceMember[InputDef]
+    | cog.CogInstanceMember[OutputDef]
+    | cog.CogInstanceMember[MetricsOutputDef],
+    message_size: int,
+    process_desc: pdfproto.ProcessDescription,
+) -> None:
+    """Add a non-connected endpoint to the process description along with whether the endpoint is a publisher or subscriber and the message size."""
+    uuid = lookup_uuid(entity.cog_instance.module.context, entity)
+    if isinstance(entity.member, InputDef):
+        endpoint_type = pdf.NotConnectedEndpointType.subscriber
+    else:
+        endpoint_type = pdf.NotConnectedEndpointType.publisher
+    process_desc.not_connected_endpoints.append(
+        pdf.NotConnectedEndpoint(
+            endpoint_id=uuid,
+            endpoint_type=endpoint_type,
+            # The buffer will not be connected so it just needs one slot. We still need the message size so that a dummy
+            # channel or buffer can be properly setup.
+            buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=message_size),
+        )
+    )
+
+
+def _gen_non_connected_endpoints(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGraph]) -> None:
+    """Lookup the non-connected endpoints for each process and write them to the process description.
+
+    This is ultimately used for tracking which cog inputs and outputs are valid as "non-connected"
+    even though they are not in the pubsub graph.
+    """
+    for process_uuid, process_graph in processes.items():
+        process_desc = process_graph.pdf
+        for observer_uuid, message_size in sys.system.ignored_observer_endpoints.items():
+            if sys.system.observer_endpoints[observer_uuid].process == process_uuid:
+                observer_entity = sys.system.observer_endpoints[observer_uuid].entity
+                if not isinstance(observer_entity, cog.CogInstanceMember):
+                    msg = node.enrich_error_if_possible(observer_entity, "Non-cog observer endpoint  cannot be ignored")
+                    raise ValueError(msg)
+                _add_non_connected_endpoint(observer_entity, message_size, process_desc)
+
+        for producer_uuid, message_size in sys.system.ignored_producer_endpoints.items():
+            if sys.system.producer_endpoints[producer_uuid].process == process_uuid:
+                producer_entity = sys.system.producer_endpoints[producer_uuid].entity
+                if not isinstance(producer_entity, cog.CogInstanceMember):
+                    msg = node.enrich_error_if_possible(producer_entity, "Non-cog producer endpoint cannot be ignored")
+                    raise ValueError(msg)
+                _add_non_connected_endpoint(producer_entity, message_size=message_size, process_desc=process_desc)
+
+
 def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGraph]) -> None:
     for process_uuid, process_graph in processes.items():
         process_desc = process_graph.pdf
         cpu_uuid = sys.system.process_to_domain[process_uuid]
         cpu_domain = sys.cpu_domains[cpu_uuid]
-        for buffer_uuid, buffer in cpu_domain.buffers.items():
+        for buffer_uuid, buffer in itertools.chain(cpu_domain.buffers.items(), cpu_domain.metrics_buffers.items()):
             pub_ep = pdf.PublishEndpoint(
                 process_id=sys.system.entity_to_process.get(buffer_uuid, UUID(int=0)),
                 publisher_id=buffer_uuid,
@@ -215,6 +269,7 @@ def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
                     num_slots=buffer.layout.num_slots, message_size=buffer.layout.message_size
                 ),
                 num_subscribers=buffer.num_subscribers,
+                channel_name=buffer.channel.channel.channel_name,
             )
             # We include this buffer's publish endpoint only if this process publishes it or subscribes to it.
             # If we subscribe but don't publish, that's handled below.
@@ -272,8 +327,10 @@ def gen_cog_endpoint(
         | cog.StateDef
         | cog.InputDef
         | cog.OutputDef
+        | cog.MetricsOutputDef
         | cog.ConditionDef
         | diagnostics.DiagnosticsDef
+        | diagnostics.InfraDiagnosticsDef
     ],
 ) -> pdfproto.EndpointInstanceDescription:
     """Generate an EndpointInstanceDescription for a CogInstanceMember."""
@@ -337,7 +394,7 @@ def _gen_state_instance_schema(
         msg = state_instance.append_error_line(f"No representation registered for {repr_typespec.value_key()}")
         raise ValueError(msg)
     schema_typespec = repr_typespec.arguments["schema"]
-    assert isinstance(schema_typespec, typesys.TypeVal)  # noqa: S101  (for mypy)
+    assert isinstance(schema_typespec, typesys.TypeVal)
     layout = tachyon_layout_reg.layout_for_type(state_instance.module.context, schema_typespec)
     if layout is None:
         msg = state_instance.append_error_line(f"No Tachyon layout for {repr_typespec.value_key()}")
@@ -354,7 +411,7 @@ def _gen_state_instance_schema(
 def _gen_state_instance_extern(
     state_instance: box.StateInstance, repr_typespec: extern_type.ExternType
 ) -> pdfproto.StateInstanceDescription:
-    assert state_instance.memory_resource is not None  # noqa: S101 (for mypy; assured by box logic)
+    assert state_instance.memory_resource is not None
     return pdf.StateInstanceDescription(
         representation_id=lookup_uuid(state_instance.module.context, repr_typespec),
         state_instance_id=lookup_uuid(state_instance.module.context, state_instance),

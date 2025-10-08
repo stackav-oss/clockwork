@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Channel spy test."""
 
@@ -7,7 +8,8 @@ import uuid
 
 import clockwork.tools.channel_spy.py_channel_spy as channel_spy
 import clockwork.tools.channel_spy.tests.support.nb_test_helper as test_helper
-import jewels.testing.nb_tmp_directory_guard as tmp_directory_guard  # type: ignore[import-untyped]
+import jewels.testing.nb_tmp_directory_guard as tmp_directory_guard
+import numpy as np
 from clockwork.serialization.py import protocol
 from clockwork.tools.channel_spy.tests.support import test_message_clk_nb as test_message_clk
 
@@ -33,7 +35,7 @@ class TestChannelSpyClass:
             nonlocal last_sequence_number, last_message_time, last_message_string
             last_sequence_number = sequence_number
             last_message_time = message_time
-            message = test_message_clk.TestMessage.deserialize_tachyon(memoryview(message_data))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            message = test_message_clk.TestMessage.deserialize_tachyon(np.asarray(memoryview(message_data)))
             last_message_string = message.message_string
 
         spy.subscribe_raw("channel_1", raw_callback)
@@ -42,7 +44,7 @@ class TestChannelSpyClass:
 
         message0 = test_message_clk.TestMessage()
         message0.message_string = "Test message 0"
-        message0.serialize_tachyon(memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message0.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(0, buffer)
 
         spy.run_once()
@@ -53,7 +55,7 @@ class TestChannelSpyClass:
 
         message1 = test_message_clk.TestMessage()
         message1.message_string = "Test message 1"
-        message1.serialize_tachyon(memoryview(buffer))
+        message1.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(1, buffer)
 
         spy.run_once()
@@ -88,7 +90,7 @@ class TestChannelSpyClass:
 
         message0 = test_message_clk.TestMessage()
         message0.message_string = "Test message 0"
-        message0.serialize_tachyon(memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message0.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(0, buffer)
 
         spy.run_once()
@@ -99,7 +101,7 @@ class TestChannelSpyClass:
 
         message1 = test_message_clk.TestMessage()
         message1.message_string = "Test message 1"
-        message1.serialize_tachyon(memoryview(buffer))
+        message1.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(1, buffer)
 
         spy.run_once()
@@ -126,7 +128,7 @@ class TestChannelSpyClass:
             nonlocal last_sequence_number, last_message_time, last_message_string
             last_sequence_number = sequence_number
             last_message_time = message_time
-            last_message_string = message.message_string  # type: ignore[attr-defined]
+            last_message_string = message.message_string  # pyright: ignore[reportAttributeAccessIssue] Tachyon type not known ahead of time
 
         spy.subscribe_auto("channel_1", auto_callback)
 
@@ -134,7 +136,7 @@ class TestChannelSpyClass:
 
         message0 = test_message_clk.TestMessage()
         message0.message_string = "Test message 0"
-        message0.serialize_tachyon(memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        message0.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(0, buffer)
 
         spy.run_once()
@@ -145,7 +147,7 @@ class TestChannelSpyClass:
 
         message1 = test_message_clk.TestMessage()
         message1.message_string = "Test message 1"
-        message1.serialize_tachyon(memoryview(buffer))
+        message1.serialize_tachyon(np.asarray(memoryview(buffer)))
         publisher.publish(1, buffer)
 
         spy.run_once()

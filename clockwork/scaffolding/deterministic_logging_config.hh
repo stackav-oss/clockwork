@@ -4,7 +4,9 @@
 #pragma once
 
 #include "clockwork/common/exec_tools.hh"
+#include "clockwork/logging/channel_publisher_config.hh"
 #include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -18,7 +20,8 @@ namespace clockwork
 struct DeterministicLoggingConfig
 {
   std::shared_ptr<const clockwork_logging::LogWriterConfigTap> log_writer_config;
-  std::shared_ptr<const clockwork_logging::LogWriterConfigTap> log_publisher_config;
+  std::shared_ptr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config;
+  std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap> metrics_channel_metadata_config;
   bool suppress_schema_mismatch_errors = false;
 };
 

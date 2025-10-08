@@ -10,7 +10,6 @@
 #include <chrono>
 #include <ctime>
 #include <exception>
-#include <ratio>
 #include <stdexcept>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -41,7 +40,7 @@ void TimerfdTimer::set_observer(pinion::Observer* observer)
 
 bool TimerfdTimer::start(jewels::time::SyncTime trigger_at, std::chrono::nanoseconds period)
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   when_ = trigger_at;
   period_ = period;
   return set_timer(trigger_at, period_);
@@ -68,7 +67,7 @@ void TimerfdTimer::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
   while (read(*descriptor_, &event_count, sizeof(event_count)) > 0)
   {
     {
-      const std::lock_guard lock(mutex_);
+      const std::scoped_lock lock(mutex_);
       auto earliness = when_ - jewels::time::SyncClock::now();
       if (earliness.count() > 0)
       {
@@ -90,9 +89,6 @@ void TimerfdTimer::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
   }
 }
 
-// False-positive. AbstractTimer doesn't require this method to be pure. So, we
-// can't mark it here.
-// NOLINTNEXTLINE(readability-make-member-function-const)
 bool TimerfdTimer::stop()
 {
   auto flags = 0;

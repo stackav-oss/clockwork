@@ -85,14 +85,15 @@ void create_offboard_log_channel(
     throw std::runtime_error(fmt::format("Failed to get metadata for channel {}", channel_name));
   }
   const auto& metadata = metadata_iter->second;
-  if (const auto create_result = writer.create_channel(offboard::LoggedChannelMetadata{
-        .channel_name = metadata.name,
-        .message_encoding = metadata.message_encoding,
-        .channel_type = metadata.channel_type,
-        .schema_name = metadata.type,
-        .schema_encoding = metadata.schema_encoding,
-        .schema_definition = metadata.schema_definition,
-      });
+  if (const auto create_result = writer.create_channel(
+        offboard::LoggedChannelMetadata{
+          .channel_name = metadata.name,
+          .message_encoding = metadata.message_encoding,
+          .channel_type = metadata.channel_type,
+          .schema_name = metadata.type,
+          .schema_encoding = metadata.schema_encoding,
+          .schema_definition = metadata.schema_definition,
+        });
       !create_result)
   {
     const auto err = fmt::format("Failed to create channel {}: {}", channel_name, create_result.error());

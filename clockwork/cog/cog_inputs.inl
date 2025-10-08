@@ -14,10 +14,13 @@
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -26,14 +29,15 @@ namespace clockwork
 {
 
 template <typename... Policies>
-CogInputs<Policies...>::CogInputs(jewels::memory::MemoryResource resource) noexcept
-  : resource_(std::move(resource))
+CogInputs<Policies...>::CogInputs(jewels::memory::MemoryResource resource, bool running_offline) noexcept
+  : resource_(std::move(resource)), running_offline_(running_offline)
 {
 }
 
 template <typename... Policies>
 bool CogInputs<Policies...>::validate() const
 {
+  const std::scoped_lock lock{subscribers_mutex_};
   auto validate = []<typename Policy>(const std::shared_ptr<InputView<Policy>>& subscriber)
   {
     if (!subscriber)
@@ -53,13 +57,15 @@ jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError> CogInputs
   pinion::SubscriberHandle handle,
   jewels::memory::ObjectPtr<CogType> cog)
 {
+  const std::scoped_lock lock{subscribers_mutex_};
   std::shared_ptr<pinion::Observer> observer = {};
   auto try_set = [this, &observer, &endpoint_id, &handle, &cog](auto& subscriber) -> bool
   {
     using SubscriberType = typename std::decay_t<decltype(subscriber)>::element_type;
     if (endpoint_id == SubscriberType::endpoint_id)
     {
-      subscriber = jewels::memory::make_pmr_shared<SubscriberType>(resource_, std::move(handle));
+      subscriber = jewels::memory::make_pmr_shared<SubscriberType>(
+        resource_, std::move(handle), CogType::event_metrics_batch_size, resource_, running_offline_);
       observer = jewels::memory::make_pmr_shared<CogPassthroughObserver<CogType>>(resource_, cog);
       return true;
     }
@@ -78,14 +84,44 @@ jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError> CogInputs
 }
 
 template <typename... Policies>
+template <typename CogType>
+jewels::expected<void, jewels::MonoError>
+CogInputs<Policies...>::set_input(jewels::Uuid<common::EndpointClassId> endpoint_id)
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  auto try_set = [this, &endpoint_id](auto& subscriber) -> bool
+  {
+    using SubscriberType = typename std::decay_t<decltype(subscriber)>::element_type;
+    if (endpoint_id == SubscriberType::endpoint_id)
+    {
+      subscriber = jewels::memory::make_pmr_shared<SubscriberType>(
+        resource_, CogType::event_metrics_batch_size, resource_, running_offline_);
+      return true;
+    }
+    return false;
+  };
+
+  auto is_set =
+    std::apply([&try_set](auto&... subscriber) -> bool { return (try_set(subscriber) || ...); }, subscribers_);
+
+  if (is_set)
+  {
+    return {};
+  }
+
+  return jewels::unexpected(jewels::MonoError{});
+}
+template <typename... Policies>
 template <typename ConditionsType>
-auto CogInputs<Policies...>::make_dial_inputs(const typename ConditionsType::ConditionsTuple& conditions)
+auto CogInputs<Policies...>::make_dial_inputs(
+  const typename ConditionsType::ConditionsTuple& conditions, jewels::time::SyncTime current_time)
   -> jewels::expected<InputDialTuple, pinion::ProgressError>
 {
-  auto make_input = [&conditions]<typename Policy>(SubscriberType<Policy>& subscriber)
+  const std::scoped_lock lock{subscribers_mutex_};
+  auto make_input = [&conditions, current_time]<typename Policy>(SubscriberType<Policy>& subscriber)
   {
     auto max_new_msgs = ConditionsType::template get_max_new_msgs<Policy>(conditions);
-    return subscriber->make_dial_input(max_new_msgs);
+    return subscriber->make_dial_input(max_new_msgs, current_time);
   };
 
   auto dial_inputs = std::apply(
@@ -102,6 +138,7 @@ auto CogInputs<Policies...>::make_dial_inputs(const typename ConditionsType::Con
 template <typename... Policies>
 auto CogInputs<Policies...>::commit(const InputDialTuple& inputs) -> LastViewedArray
 {
+  const std::scoped_lock lock{subscribers_mutex_};
   return [this, &inputs]<size_t... idx>(std::index_sequence<idx...>)
   {
     return LastViewedArray{std::get<idx>(subscribers_)->commit(std::get<idx>(inputs))...};
@@ -111,7 +148,36 @@ auto CogInputs<Policies...>::commit(const InputDialTuple& inputs) -> LastViewedA
 template <typename... Policies>
 bool CogInputs<Policies...>::is_overrun() const
 {
+  const std::scoped_lock lock{subscribers_mutex_};
   return std::apply([](auto&... subscriber) { return (subscriber->is_overrun() || ...); }, subscribers_);
+}
+
+template <typename... Policies>
+bool CogInputs<Policies...>::almost_overrun() const
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::apply([](auto&... subscriber) { return (subscriber->almost_overrun() || ...); }, subscribers_);
+}
+
+template <typename... Policies>
+CogInputs<Policies...>::SubscribersTuple& CogInputs<Policies...>::subscribers()
+{
+  return subscribers_;
+}
+
+template <typename... Policies>
+template <typename Report, typename Enum, Enum... missing_ids, Enum... safety_skip_ids>
+void CogInputs<Policies...>::set_infra_diagnostics(
+  Report& report,
+  jewels::time::SyncTime start_time,
+  std::integer_sequence<Enum, missing_ids...> /*missing*/,
+  std::integer_sequence<Enum, safety_skip_ids...> /*safety_skip*/) const
+{
+
+  ((report.template set<missing_ids>(std::chrono::duration_cast<std::chrono::microseconds>(
+     start_time - std::get<SubscriberType<Policies>>(subscribers_)->latest_message_time()))),
+   ...);
+  ((report.template set<safety_skip_ids>(std::get<SubscriberType<Policies>>(subscribers_)->did_safety_skip())), ...);
 }
 
 } // namespace clockwork

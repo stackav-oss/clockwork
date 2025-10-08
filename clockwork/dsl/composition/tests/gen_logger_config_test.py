@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit test for logger configs generation."""
 
@@ -40,10 +41,9 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
     box_template_ir = module.inner_scope.lookup("System1")
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
-    compiler._register_box_instance_uuids(module.context, box_ir)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    logical_system = system.make_system([box_ir.get_resolved()], module)
+    compiler._register_box_instance_uuids(module.context, box_ir)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False)
     physical_system = system.make_physical_system(logical_system)
-    system.add_logging_observers(physical_system)
     configs = gen_logger_configs.gen_logger_configs(physical_system)
 
     for domain_uuid, domain in physical_system.cpu_domains.items():
@@ -79,3 +79,32 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
     tel_conf2 = configs[cpu2_uuid].telemetry_config  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     assert len(tel_conf2.channels) == 1
     assert {ch.channel_name for ch in tel_conf2.channels} == {"Chan2"}
+
+
+def test_gen_logged_channel_metadata(fs_importer: FilesystemImporter) -> None:
+    # Generate logged channel metadata
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/composition/tests/support/simplesys.clk")),
+        fs_importer,
+    )
+    box_template_ir = module.inner_scope.lookup("System1")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    compiler._register_box_instance_uuids(module.context, box_ir)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    physical_system = system.make_physical_system(logical_system)
+    metadata = gen_logger_configs.gen_logged_channel_metadata(physical_system)
+
+    assert set(metadata.channel_metadata) == {
+        "Chan1",
+        "MultiChan1",
+        "MultiChan2",
+    }
+
+    for channel_name in metadata.channel_metadata:
+        channel = module.inner_scope.lookup(channel_name)
+        assert isinstance(channel, pubsub.Channel)
+        assert channel.message_repr is not None
+        channel_msg = channel.message_repr.get_schema()
+        channel_metadata = tachyon_metadata.get_serialized_metadata(module.context, channel_msg)
+        assert channel_metadata == metadata.channel_metadata[channel_name].SerializeToString()

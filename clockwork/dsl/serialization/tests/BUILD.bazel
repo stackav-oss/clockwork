@@ -75,6 +75,8 @@ cc_test(
         "//clockwork/dsl/tests/support:better_than_inheritance_cc_library",
         "//clockwork/dsl/tests/support:better_than_inheritance_cpp",
         "//clockwork/dsl/tests/support:convert_hello_msg",
+        "//clockwork/dsl/tests/support:dependency_tester_cpp",
+        "//clockwork/dsl/tests/support:dependency_tester_proto_cc_library",
         "//clockwork/dsl/tests/support:msg_with_au",
         "//clockwork/dsl/tests/support:msg_with_au_proto_cc_library",
         "//clockwork/dsl/tests/support:proto_tester_onboard_cc_library",
@@ -141,6 +143,7 @@ py_test(
         "//clockwork/dsl/serialization:tachyon_layout_reg",
         "//clockwork/dsl/serialization:tachyon_reg",
         "@clockwork_pip//pytest",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 

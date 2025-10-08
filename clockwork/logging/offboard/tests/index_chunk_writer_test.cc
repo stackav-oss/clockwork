@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>

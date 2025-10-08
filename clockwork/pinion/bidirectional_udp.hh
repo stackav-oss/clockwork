@@ -59,6 +59,8 @@ public:
   static jewels::expected<jewels::memory::NonNullSharedPtr<BidirectionalUdp<Msg>>, jewels::filesystem::ErrorCode>
   try_make(
     jewels::memory::MemoryResource memres,
+    jewels::Uuid<common::EndpointClassId> publisher_id,
+    jewels::Uuid<common::EndpointClassId> subscriber_id,
     jewels::networking::SocketEndpoint local,
     jewels::networking::SocketEndpoint remote,
     const SockOptionValue<options>&... sock_option_values);
@@ -86,7 +88,8 @@ public:
   void read();
 
   /// Connect the publisher. The socket connects to an "incoming" channel onto which it'll write incoming packets.
-  [[nodiscard]] jewels::expected<void, IoConnection::Error> connect_publisher(pinion::PublisherHandle publisher) final;
+  [[nodiscard]] jewels::expected<void, IoConnection::Error>
+  connect_publisher(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle publisher) final;
 
   /// Callback for the EPoll loop to read messages from pinion and write to the socket.  Socket is an Observer.
   /// @note Overrides Observer::notify
@@ -97,7 +100,7 @@ public:
 
   /// Connect the subscriber. The socket subscribes to an "outgoing" channel from which it gets payload.
   [[nodiscard]] jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
-  connect_subscriber(pinion::SubscriberHandle subscriber) final;
+  connect_subscriber(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber) final;
 
 private:
   /// Constructor
@@ -110,6 +113,8 @@ private:
   /// @param msg_names Preallocated socketaddr_in s for use with mmesg syscalls.
   /// @param holding_buffer Staging buffer
   BidirectionalUdp(
+    jewels::Uuid<common::EndpointClassId> publisher_id,
+    jewels::Uuid<common::EndpointClassId> subscriber_id,
     jewels::filesystem::FileDescriptor&& file_descriptor,
     jewels::networking::SocketEndpoint local,
     jewels::networking::SocketEndpoint remote,

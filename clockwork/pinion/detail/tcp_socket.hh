@@ -45,6 +45,9 @@ public:
   /// Gets the underlying file descriptor for the socket
   [[nodiscard]] int descriptor() const noexcept;
 
+  /// Get ownership of the underlying file descriptor for the socket
+  [[nodiscard]] jewels::filesystem::FileDescriptor release_descriptor();
+
   /// Get the bound address.
   [[nodiscard]] jewels::expected<jewels::networking::SocketAddress, std::errc> get_bound_address() const noexcept;
 

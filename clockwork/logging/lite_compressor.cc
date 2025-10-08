@@ -4,6 +4,7 @@
 #include "clockwork/logging/lite_compressor.hh"
 
 #include "clockwork/logging/nolint_helper.hh"
+#include "clockwork/logging/xxh3_checksum.hh"
 #include "jewels/aligner/aligner.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -13,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <numeric>
 #include <span>
 #include <utility>
 
@@ -41,6 +43,25 @@ constexpr size_t min_zero_chunk_size = 3U;
   return data.size();
 }
 
+/// Find the first zero in a span of uint64_t while updating the data checksum
+/// @param[in,out] data_checksum_state Data checksum state
+/// @param[in] data Span of uint64_t
+/// @param[in] start_index Search start index
+/// @return Index of the first non-zero or the size of the span if no zero is found
+[[nodiscard]] size_t
+find_first_zero(XXH3_state_t& data_checksum_state, std::span<const uint64_t> data, size_t start_index)
+{
+  for (auto i = start_index; i < data.size(); ++i)
+  {
+    if (data[i] == 0U)
+    {
+      return i;
+    }
+    update_xxh3_checksum(data_checksum_state, std::as_bytes(std::span{&data[i], 1U}));
+  }
+  return data.size();
+}
+
 /// Find the first non-zero in a span of uint64_t
 /// @param[in] data Span of uint64_t
 /// @param[in] start_index Search start index
@@ -60,7 +81,13 @@ constexpr size_t min_zero_chunk_size = 3U;
 } // namespace
 
 LiteCompressor::SpanCursor::SpanCursor(std::span<const std::span<const std::byte>> data_spans)
-  : data_spans_(data_spans)
+  : data_spans_(data_spans),
+    size_(
+      std::accumulate(
+        data_spans_.begin(),
+        data_spans_.end(),
+        size_t{0U},
+        [](size_t sum, const auto& data) { return sum + data.size(); }))
 {
 }
 
@@ -110,6 +137,11 @@ LiteCompressor::SpanCursor::SpanCursor(std::span<const std::span<const std::byte
          (span_index_ + 1U == data_spans_.size() && span_offset_ == data_spans_[span_index_].size());
 }
 
+[[nodiscard]] size_t LiteCompressor::SpanCursor::size() const
+{
+  return size_;
+}
+
 LiteCompressor::LiteCompressor(jewels::memory::MemoryResource memory_resource)
   : memory_resource_(std::move(memory_resource)),
     byte_counts_(memory_resource_),
@@ -127,8 +159,16 @@ LiteCompressor::LiteCompressor(jewels::memory::MemoryResource memory_resource)
   data_spans_.resize(1U);
 
   // Compression operates on aligned 64 bit values. Any data before the aligned region isn't compressed.
-  using Aligner = jewels::Aligner<sizeof(uint64_t)>;
-  const auto start_offset = static_cast<size_t>(Aligner::ptr_aligned_remainder(data.data()));
+  size_t start_offset = 0U;
+  if (data.size() < sizeof(uint64_t) * min_zero_chunk_size)
+  {
+    start_offset = data.size();
+  }
+  else
+  {
+    using Aligner = jewels::Aligner<sizeof(uint64_t)>;
+    start_offset = std::min(static_cast<size_t>(Aligner::ptr_aligned_remainder(data.data())), data.size());
+  }
   if (start_offset != 0U)
   {
     byte_counts_.emplace_back(static_cast<int32_t>(start_offset));
@@ -140,7 +180,8 @@ LiteCompressor::LiteCompressor(jewels::memory::MemoryResource memory_resource)
     // Compress the data that is aligned to 64 bits.
     const auto aligned_data = nolint_helper::byte_span_to_value_span<uint64_t>(
       std::span{&data[start_offset], ((data.size() - start_offset) / sizeof(uint64_t) * sizeof(uint64_t))});
-    compress_aligned_data(aligned_data);
+    std::optional<XXH3_state_t> unused_checksum_state = std::nullopt;
+    compress_aligned_data(unused_checksum_state, aligned_data);
 
     // Any data after the aligned region isn't compressed.
     if (const auto end_remainder = data.size() - start_offset - (aligned_data.size() * sizeof(uint64_t));
@@ -151,11 +192,65 @@ LiteCompressor::LiteCompressor(jewels::memory::MemoryResource memory_resource)
     }
   }
   byte_counts_.at(0U) = static_cast<int32_t>(byte_counts_.size() * sizeof(int32_t));
-  data_spans_.at(0U) = std::as_bytes(std::span(byte_counts_.data(), byte_counts_.size()));
-  return {data_spans_.data(), data_spans_.size()};
+  data_spans_.at(0U) = std::as_bytes(std::span{byte_counts_});
+  return {data_spans_};
 }
 
-void LiteCompressor::compress_aligned_data(std::span<const uint64_t> aligned_data)
+void LiteCompressor::compress(
+  jewels::Out<std::span<const std::span<const std::byte>>> compressed_data,
+  jewels::Out<uint64_t> counts_checksum,
+  jewels::Out<uint64_t> data_checksum,
+  std::span<const std::byte> data)
+{
+  byte_counts_.resize(2U);
+  byte_counts_.at(1U) = static_cast<int32_t>(data.size());
+  data_spans_.resize(1U);
+
+  std::optional<XXH3_state_t> data_checksum_state = init_xxh3_checksum();
+
+  // Compression operates on aligned 64 bit values. Any data before the aligned region isn't compressed.
+  size_t start_offset = 0U;
+  if (data.size() < sizeof(uint64_t) * min_zero_chunk_size)
+  {
+    start_offset = data.size();
+  }
+  else
+  {
+    using Aligner = jewels::Aligner<sizeof(uint64_t)>;
+    start_offset = std::min(static_cast<size_t>(Aligner::ptr_aligned_remainder(data.data())), data.size());
+  }
+  if (start_offset != 0U)
+  {
+    byte_counts_.emplace_back(static_cast<int32_t>(start_offset));
+    data_spans_.emplace_back(data.data(), start_offset);
+    update_xxh3_checksum(data_checksum_state.value(), data_spans_.back());
+  }
+
+  if (start_offset < data.size())
+  {
+    // Compress the data that is aligned to 64 bits.
+    const auto aligned_data = nolint_helper::byte_span_to_value_span<uint64_t>(
+      std::span{&data[start_offset], ((data.size() - start_offset) / sizeof(uint64_t) * sizeof(uint64_t))});
+    compress_aligned_data(data_checksum_state, aligned_data);
+
+    // Any data after the aligned region isn't compressed.
+    if (const auto end_remainder = data.size() - start_offset - (aligned_data.size() * sizeof(uint64_t));
+        end_remainder != 0U)
+    {
+      byte_counts_.emplace_back(static_cast<int32_t>(end_remainder));
+      data_spans_.emplace_back(&data[start_offset + (aligned_data.size() * sizeof(uint64_t))], end_remainder);
+      update_xxh3_checksum(data_checksum_state.value(), data_spans_.back());
+    }
+  }
+  byte_counts_.at(0U) = static_cast<int32_t>(byte_counts_.size() * sizeof(int32_t));
+  data_spans_.at(0U) = std::as_bytes(std::span{byte_counts_});
+  *compressed_data = {data_spans_};
+  *counts_checksum = compute_xxh3_checksum(data_spans_.at(0U));
+  *data_checksum = digest_xxh3_checksum(data_checksum_state.value());
+}
+
+void LiteCompressor::compress_aligned_data(
+  std::optional<XXH3_state_t>& maybe_data_checksum_state, std::span<const uint64_t> aligned_data)
 {
   size_t offset = 0U;
   size_t non_zero_count = 0U;
@@ -167,6 +262,12 @@ void LiteCompressor::compress_aligned_data(std::span<const uint64_t> aligned_dat
       offset = find_first_non_zero(aligned_data, offset + 1U);
       if (offset - prev_offset < min_zero_chunk_size)
       {
+        if (maybe_data_checksum_state)
+        {
+          update_xxh3_checksum(
+            maybe_data_checksum_state.value(),
+            std::as_bytes(std::span{&aligned_data[prev_offset], offset - prev_offset}));
+        }
         non_zero_count += offset - prev_offset;
       }
       else
@@ -183,7 +284,8 @@ void LiteCompressor::compress_aligned_data(std::span<const uint64_t> aligned_dat
     }
     else
     {
-      offset = find_first_zero(aligned_data, offset + 1U);
+      offset = maybe_data_checksum_state ? find_first_zero(maybe_data_checksum_state.value(), aligned_data, offset)
+                                         : find_first_zero(aligned_data, offset + 1);
       non_zero_count += offset - prev_offset;
     }
   }
@@ -203,16 +305,25 @@ LiteCompressor::decompress(std::span<const std::span<const std::byte>> data_span
   {
     return jewels::unexpected(copy_result.error());
   }
-  byte_counts_.resize(static_cast<size_t>(counts_size - 1) / sizeof(int32_t));
-  if (const auto copy_result =
-        cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_.data(), byte_counts_.size()}));
-      !copy_result)
+  if (
+    std::cmp_greater(counts_size, cursor.size()) || (counts_size % static_cast<int32_t>(sizeof(uint32_t)) != 0) ||
+    std::cmp_less(counts_size, sizeof(uint32_t) * 2U))
+  {
+    return jewels::unexpected(LogError::decompression_failure);
+  }
+  byte_counts_.resize((static_cast<size_t>(counts_size) / sizeof(int32_t)) - 1U);
+  if (const auto copy_result = cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_})); !copy_result)
   {
     return jewels::unexpected(copy_result.error());
   }
   buffer_.resize(static_cast<size_t>(byte_counts_.at(0U)));
-  return decompress_common(
-    cursor, std::span{byte_counts_.data(), byte_counts_.size()}, std::span{buffer_.data(), buffer_.size()});
+  std::optional<XXH3_state_t> unused_checksum_state = std::nullopt;
+  if (const auto decompress_outcome = decompress_common(unused_checksum_state, cursor, byte_counts_, buffer_);
+      !decompress_outcome.ok())
+  {
+    return jewels::unexpected(decompress_outcome.get());
+  }
+  return {buffer_};
 }
 
 [[nodiscard]] LogExpected<std::span<const std::span<const std::byte>>>
@@ -224,10 +335,14 @@ LiteCompressor::zero_copy_decompress(std::span<const std::span<const std::byte>>
   {
     return jewels::unexpected(copy_result.error());
   }
-  byte_counts_.resize(static_cast<size_t>(counts_size - 1) / sizeof(int32_t));
-  if (const auto copy_result =
-        cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_.data(), byte_counts_.size()}));
-      !copy_result)
+  if (
+    std::cmp_greater(counts_size, cursor.size()) || (counts_size % static_cast<int32_t>(sizeof(uint32_t)) != 0) ||
+    std::cmp_less(counts_size, sizeof(uint32_t) * 2U))
+  {
+    return jewels::unexpected(LogError::decompression_failure);
+  }
+  byte_counts_.resize((static_cast<size_t>(counts_size) / sizeof(int32_t)) - 1U);
+  if (const auto copy_result = cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_})); !copy_result)
   {
     return jewels::unexpected(copy_result.error());
   }
@@ -278,27 +393,46 @@ LiteCompressor::zero_copy_decompress(std::span<const std::span<const std::byte>>
   return std::span<const std::span<const std::byte>>{zero_copy_spans_.data(), zero_copy_spans_.size()};
 }
 
-[[nodiscard]] LogExpected<std::span<const std::byte>>
-LiteCompressor::decompress(std::span<const std::span<const std::byte>> data_spans, std::span<std::byte> dest_span)
+LogOutcome LiteCompressor::decompress(
+  uint64_t counts_checksum, uint64_t data_checksum, std::span<const std::byte> data, std::span<std::byte> dest_span)
 {
-  SpanCursor cursor{data_spans};
+  SpanCursor cursor{{&data, 1U}};
   int32_t counts_size{};
   if (const auto copy_result = cursor.copy_out(std::as_writable_bytes(std::span{&counts_size, 1U})); !copy_result)
   {
-    return jewels::unexpected(copy_result.error());
+    return copy_result.error();
   }
-  byte_counts_.resize(static_cast<size_t>(counts_size - 1) / sizeof(int32_t));
-  if (const auto copy_result =
-        cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_.data(), byte_counts_.size()}));
-      !copy_result)
+  if (
+    std::cmp_greater(counts_size, cursor.size()) || (counts_size % static_cast<int32_t>(sizeof(uint32_t)) != 0) ||
+    std::cmp_less(counts_size, sizeof(uint32_t) * 2U))
   {
-    return jewels::unexpected(copy_result.error());
+    return LogError::decompression_failure;
+  }
+  if (compute_xxh3_checksum(data.first(static_cast<size_t>(counts_size))) != counts_checksum)
+  {
+    return LogError::bad_checksum;
+  }
+  byte_counts_.resize((static_cast<size_t>(counts_size) / sizeof(int32_t)) - 1U);
+  if (const auto copy_result = cursor.copy_out(std::as_writable_bytes(std::span{byte_counts_})); !copy_result)
+  {
+    return copy_result.error();
   }
   if (dest_span.size() != static_cast<size_t>(byte_counts_.at(0U)))
   {
-    return jewels::unexpected(LogError::decompression_failure);
+    return LogError::decompression_failure;
   }
-  return decompress_common(cursor, std::span{byte_counts_.data(), byte_counts_.size()}, dest_span);
+  std::optional data_checksum_state = init_xxh3_checksum();
+  if (const auto decompress_outcome =
+        decompress_common(data_checksum_state, cursor, std::span{byte_counts_}, dest_span);
+      !decompress_outcome.ok())
+  {
+    return decompress_outcome;
+  }
+  if (digest_xxh3_checksum(data_checksum_state.value()) != data_checksum)
+  {
+    return LogError::bad_checksum;
+  }
+  return LogError::success;
 }
 
 [[nodiscard]] LogExpected<std::span<const std::byte>> LiteCompressor::decompress(std::span<const std::byte> data)
@@ -312,14 +446,11 @@ LiteCompressor::zero_copy_decompress(std::span<const std::byte> data)
   return zero_copy_decompress(std::span<const std::span<const std::byte>>{&data, 1U});
 }
 
-[[nodiscard]] LogExpected<std::span<const std::byte>>
-LiteCompressor::decompress(std::span<const std::byte> data, std::span<std::byte> dest_span)
-{
-  return decompress(std::span<const std::span<const std::byte>>{&data, 1U}, dest_span);
-}
-
-[[nodiscard]] LogExpected<std::span<const std::byte>> LiteCompressor::decompress_common(
-  SpanCursor cursor, std::span<const int32_t> byte_counts, std::span<std::byte> dest_span)
+LogOutcome LiteCompressor::decompress_common(
+  std::optional<XXH3_state_t>& maybe_data_checksum_state,
+  SpanCursor cursor,
+  std::span<const int32_t> byte_counts,
+  std::span<std::byte> dest_span)
 {
   size_t dest_offset = 0U;
   for (size_t i = 1U; i < byte_counts.size(); ++i)
@@ -331,7 +462,7 @@ LiteCompressor::decompress(std::span<const std::byte> data, std::span<std::byte>
       const auto bytes_to_zero = static_cast<size_t>(-byte_count);
       if (dest_offset + bytes_to_zero > dest_span.size())
       {
-        return jewels::unexpected(LogError::decompression_failure);
+        return LogError::decompression_failure;
       }
       std::memset(&dest_span[dest_offset], 0, bytes_to_zero);
       dest_offset += bytes_to_zero;
@@ -341,20 +472,25 @@ LiteCompressor::decompress(std::span<const std::byte> data, std::span<std::byte>
       const auto bytes_to_copy = static_cast<size_t>(byte_count);
       if (dest_offset + bytes_to_copy > dest_span.size())
       {
-        return jewels::unexpected(LogError::decompression_failure);
+        return LogError::decompression_failure;
       }
-      if (const auto copy_result = cursor.copy_out(std::span{&dest_span[dest_offset], bytes_to_copy}); !copy_result)
+      const std::span subspan{&dest_span[dest_offset], bytes_to_copy};
+      if (const auto copy_result = cursor.copy_out(subspan); !copy_result)
       {
-        return jewels::unexpected(copy_result.error());
+        return copy_result.error();
+      }
+      if (maybe_data_checksum_state)
+      {
+        update_xxh3_checksum(maybe_data_checksum_state.value(), subspan);
       }
       dest_offset += bytes_to_copy;
     }
   }
   if (dest_offset != dest_span.size() || !cursor.empty())
   {
-    return jewels::unexpected(LogError::decompression_failure);
+    return LogError::decompression_failure;
   }
-  return dest_span;
+  return LogError::success;
 }
 
 [[nodiscard]] LogExpected<size_t> LiteCompressor::get_decompressed_size(std::span<const std::byte> data)

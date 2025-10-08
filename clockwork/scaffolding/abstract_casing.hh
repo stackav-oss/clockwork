@@ -103,6 +103,29 @@ public:
   virtual jewels::expected<std::shared_ptr<pinion::Observer>, Error>
     try_connect_subscriber(jewels::Uuid<common::EndpointInstanceId>, pinion::SubscriberHandle) = 0;
 
+  /// Set a publisher handle for a specific endpoint
+  ///
+  /// This method allows setting a publisher handle for an endpoint that may not
+  /// be connected to other components. This is useful for non-connected endpoints
+  /// where a handle needs to be provided for optional outputs or testing scenarios.
+  ///
+  /// @param[in] endpoint UUID of the endpoint instance to set the handle for
+  /// @param[in] handle Publisher handle to associate with the endpoint
+  /// @return Success if handle was set successfully, error code otherwise
+  virtual jewels::expected<void, Error>
+  set_publisher_handle(jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::PublisherHandle handle) = 0;
+
+  /// Set a subscriber handle for a specific endpoint
+  ///
+  /// This method allows setting a subscriber handle for an endpoint that may not
+  /// be connected to other components. This is useful for non-connected endpoints
+  /// where a handle needs to be provided for optional inputs or testing scenarios.
+  ///
+  /// @param[in] endpoint UUID of the endpoint instance to set the handle for
+  /// @param[in] handle Subscriber handle to associate with the endpoint
+  /// @return Success if handle was set successfully, error code otherwise
+  virtual jewels::expected<void, Error> set_subscriber(jewels::Uuid<common::EndpointInstanceId> endpoint) = 0;
+
   // Connect a state instance to a Cog instance's state endpoint
   // @param is_shared: True IFF this state is connected to more than one
   //   endpoint.  This informs the Cog that it must perform locking of the state

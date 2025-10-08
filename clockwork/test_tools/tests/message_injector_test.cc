@@ -23,7 +23,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
 
 namespace clockwork
 {
@@ -57,14 +56,14 @@ jewels::expected<std::shared_ptr<MessageType>, jewels::MonoError> as_message(Mul
 
 TEST_CASE("Message Injector System Runner")
 {
-  const auto process_description_path =
-    jewels::fix_clockwork_path("clockwork/test_tools/tests/support/"
-                               "clockwork.clockwork.test_tools.tests.support.addition_test_system_"
-                               "synthetic.addition_system_synthetic.proc.tachyon");
-
-  const auto log_reader_config_path = jewels::fix_clockwork_path(
+  const auto process_description_path = jewels::fix_clockwork_path(
     "clockwork/test_tools/tests/support/"
-    "addition_test_system_synthetic.addition_system_synthetic.TestCpu_log_reader_config.tachyon");
+    "clockwork.clockwork.test_tools.tests.support.addition_test_system_"
+    "synthetic.addition_system_synthetic.proc.tachyon");
+
+  const auto channel_publisher_config_path = jewels::fix_clockwork_path(
+    "clockwork/test_tools/tests/support/"
+    "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_publisher_config.tachyon");
 
   const auto log_writer_config_path = jewels::fix_clockwork_path(
     "clockwork/test_tools/tests/support/"
@@ -79,8 +78,8 @@ TEST_CASE("Message Injector System Runner")
     .process_description_path = process_description_path,
     .start_time = start_time,
     .end_time = end_time,
-    .log_publisher_config_ = log_reader_config_path,
-    .log_writer_config_ = log_writer_config_path};
+    .channel_publisher_config = channel_publisher_config_path,
+    .log_writer_config = log_writer_config_path};
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   auto injector_system_runner = MessageInjectorSystemRunner::create(config, memory_resource);

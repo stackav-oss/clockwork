@@ -25,8 +25,14 @@ void ChannelSpy::subscribe(std::string_view channel_name, const DeserializedMess
   {
     if (channel.get_channel_name() == channel_name)
     {
-      subscribers_.emplace_back(ChannelSpySubscriber::make_subscriber<MessageType>(
-        shm_root_dir_, socket_ns_, channel.get_uuid().to_string(), channel.get_num_slots(), callback_fn));
+      subscribers_.emplace_back(
+        ChannelSpySubscriber::make_subscriber<MessageType>(
+          shm_root_dir_,
+          socket_ns_,
+          channel.get_uuid().to_string(),
+          channel_name,
+          channel.get_num_slots(),
+          callback_fn));
     }
   }
 }

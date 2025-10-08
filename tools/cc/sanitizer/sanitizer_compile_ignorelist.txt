@@ -15,16 +15,16 @@
 [function]
 # Mismatch between function pointer and function signature
 # https://github.com/aws/s2n-tls/issues/4438
-src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/s2n/tls/s2n_cipher_suites.c
-src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/aws-c-common/source/hash_table.c
-src:external/aws_sdk_cpp~/crt/aws-crt-cpp/crt/aws-c-common/source/ref_count.c
-src:external/onnxruntime~/onnxruntime/core/session/provider_bridge_ort.cc
-src:external/pytorch_cpuinfo~/src/linux/multiline.c
+src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/s2n/tls/s2n_cipher_suites.c
+src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/aws-c-common/source/hash_table.c
+src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/aws-c-common/source/ref_count.c
+src:external/onnxruntime+/onnxruntime/core/session/provider_bridge_ort.cc
+src:external/pytorch_cpuinfo+/src/linux/multiline.c
 # [function] end
 
 [function]
 # Mismatch between function pointer and function signature
 # https://github.com/openssl/openssl/issues/22896
-src:external/openssl~/crypto/sparse_array.c
-src:external/openssl~/crypto/stack/stack.c
+src:external/openssl+/crypto/sparse_array.c
+src:external/openssl+/crypto/stack/stack.c
 # [function] end

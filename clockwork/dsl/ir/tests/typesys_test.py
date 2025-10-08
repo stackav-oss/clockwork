@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Test the Cog IR module."""
 
@@ -55,7 +56,7 @@ def test_numerictype_intersect() -> None:
 def test_inferencevar_make(context: node.Module) -> None:
     v0 = typesys.InferenceVar.make(context, None, typesys.NumericType.NONE)
     v1 = typesys.InferenceVar.make(context, None, typesys.NumericType.NONE)
-    assert v0._id != v1._id  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    assert v0._id != v1._id
     assert v0 != v1
     assert v0.resolution() is v0
     assert v1.resolution() is v1
@@ -64,10 +65,10 @@ def test_inferencevar_make(context: node.Module) -> None:
 def test_inferencevar_resolution(context: node.Module, typeval: typesys.TypeVal) -> None:
     v0 = typesys.InferenceVar.make(context, None, typesys.NumericType.NONE)
     v1 = typesys.InferenceVar.make(context, None, typesys.NumericType.NONE)
-    v1._resolution = v0  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    v1._resolution = v0
     assert v0.resolution() is v0
     assert v1.resolution() is v0
-    v0._resolution = typeval  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    v0._resolution = typeval
     assert v0.resolution() is typeval
     assert v1.resolution() is typeval
 

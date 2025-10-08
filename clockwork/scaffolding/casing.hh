@@ -43,7 +43,8 @@ namespace clockwork::scaffolding
 template <typename TypeT, jewels::Uuid<RepresentationTag> uuid_v>
 struct CxxSchema
 {
-  static constexpr jewels::Uuid<RepresentationTag> uuid = uuid_v; // NOLINT(fuchsia-statically-constructed-objects)
+  // NOLINTNEXTLINE(fuchsia-statically-constructed-objects) UUID same for all instances of a type.
+  static constexpr jewels::Uuid<RepresentationTag> uuid = uuid_v;
   using Type = TypeT;
 };
 
@@ -119,7 +120,8 @@ struct Config
   struct Traits<ProtoSchema<ProtoT, uuid_v, Tap<Tachyon<SchemaT>>>>
   {
     using Msg = Tap<Tachyon<SchemaT>>;
-    static constexpr auto uuid = uuid_v; // NOLINT(fuchsia-statically-constructed-objects)
+    // NOLINTNEXTLINE(fuchsia-statically-constructed-objects)  UUID same for all instances of a type.
+    static constexpr auto uuid = uuid_v;
     static ValueT<Msg> create(jewels::memory::MemoryResource memres, std::span<const std::byte> data);
   };
 };
@@ -276,6 +278,29 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
   ///
   jewels::expected<std::shared_ptr<pinion::Observer>, Error>
   try_connect_subscriber(jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::SubscriberHandle handle) override;
+
+  /// Set a publisher handle for a specific endpoint implementation
+  ///
+  /// Implementation of AbstractCasing::set_publisher_handle for the concrete casing.
+  /// Associates the given publisher handle with the specified endpoint, allowing
+  /// non-connected endpoints to have valid handles for optional outputs.
+  ///
+  /// @param[in] endpoint UUID of the endpoint instance to set the handle for
+  /// @param[in] handle Publisher handle to associate with the endpoint
+  /// @return Success if handle was set successfully, error code otherwise
+  jewels::expected<void, Error>
+  set_publisher_handle(jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::PublisherHandle handle) override;
+
+  /// Set a subscriber handle for a specific endpoint implementation
+  ///
+  /// Implementation of AbstractCasing::set_subscriber for the concrete casing.
+  /// Associates the given subscriber handle with the specified endpoint, allowing
+  /// non-connected endpoints to have valid handles for optional inputs.
+  ///
+  /// @param[in] endpoint UUID of the endpoint instance to set the handle for
+  /// @param[in] handle Subscriber handle to associate with the endpoint
+  /// @return Success if handle was set successfully, error code otherwise
+  jewels::expected<void, Error> set_subscriber(jewels::Uuid<common::EndpointInstanceId> endpoint) override;
 
   ///
   /// Connect a state instance to a Cog instance's state endpoint

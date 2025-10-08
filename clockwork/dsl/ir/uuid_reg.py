@@ -11,17 +11,19 @@ from uuid import UUID, uuid5
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.ir.node import enrich_error_if_possible
 from clockwork.dsl.ir.typesys import NamedAttribute, NamedValue, Value
+from typing_extensions import override
 
 
 class UuidRegistry(Context):
     """Registry for entity UUIDs."""
 
-    def __init__(self, name: str | None) -> None:  # pyright: ignore[reportMissingSuperCall] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    def __init__(self, name: str | None) -> None:
         """Create a new, empty UUID registry."""
         self.name = name
         self.key_to_uuid: dict[str, UUID] = {}
         self.uuid_to_ir: dict[UUID, Value] = {}
 
+    @override
     def import_from(self, other: UuidRegistry) -> None:
         """Combine this registry with items from another.
 
@@ -51,6 +53,7 @@ class UuidRegistry(Context):
 class UuidRegistryKey(ContextKey[UuidRegistry]):
     """Compiler context key for UUID registry."""
 
+    @override
     def make_default(self, compiler_context: CompilerContext) -> UuidRegistry:
         """Create a default instance of the registry."""
         return UuidRegistry(compiler_context.name)

@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for module_id library."""
 
@@ -16,10 +17,10 @@ def test_bazel_search_paths() -> None:
     assert runfiles_dir
     assert paths == [
         Path("a/b/c.clk"),
-        Path("external/repo~/a/b/c.clk"),
-        Path("../repo~/a/b/c.clk"),
+        Path("external/repo+/a/b/c.clk"),
+        Path("../repo+/a/b/c.clk"),
         Path(runfiles_dir) / "_main" / "a/b/c.clk",
-        Path(runfiles_dir) / "repo~" / "a/b/c.clk",
+        Path(runfiles_dir) / "repo+" / "a/b/c.clk",
     ]
 
     paths = list(BazelPathResolver().search_paths(ModuleID(ROOT_REPO, "a::b::c")))
@@ -35,14 +36,14 @@ def test_bazel_buildtime_path() -> None:
     path = BazelPathResolver().to_buildtime_path(ModuleID(ROOT_REPO, "a::b::c"))
     assert path == Path("a/b/c.clk")
     path = BazelPathResolver().to_buildtime_path(ModuleID("repo", "a::b::c"))
-    assert path == Path("external/repo~/a/b/c.clk")
+    assert path == Path("external/repo+/a/b/c.clk")
 
 
 def test_bazel_runtime_path() -> None:
     path = BazelPathResolver().to_runtime_path(ModuleID(ROOT_REPO, "a::b::c"))
     assert path == Path("a/b/c.clk")
     path = BazelPathResolver().to_runtime_path(ModuleID("repo", "a::b::c"))
-    assert path == Path("../repo~/a/b/c.clk")
+    assert path == Path("../repo+/a/b/c.clk")
 
 
 def test_find_path() -> None:

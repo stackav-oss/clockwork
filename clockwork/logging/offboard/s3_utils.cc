@@ -362,7 +362,6 @@ namespace
 
   std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource);
   S3ReadStreambuf sbuf(buffer);
-  // std::iostream ios{&sbuf};
 
   const auto range_str = fmt::format("bytes={}-{}", offset, offset + length - 1U);
 

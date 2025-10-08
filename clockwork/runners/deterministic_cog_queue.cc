@@ -57,4 +57,9 @@ CogQueueStats DeterministicCogQueue::stats() const
   return CogQueueStats{.size = queue_.size()};
 }
 
+bool DeterministicCogQueue::is_offline() const
+{
+  return true;
+}
+
 } // namespace clockwork

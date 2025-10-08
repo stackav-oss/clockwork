@@ -1,0 +1,23 @@
+// End of log message
+schema EndOfLog
+{
+    uuid: 5418079c-b6c6-4c48-b518-4ffdcbc2bbc1;
+    fields
+    {
+        // Empty message indicating end of log
+        #1 end_of_log: Bool = true;
+    }
+
+}
+
+cpp_target end_of_log
+{
+    options
+    {
+        namespace clockwork_logging;
+    }
+    schema EndOfLog;
+
+    representation Tachyon<EndOfLog>;
+    interface Tappy<EndOfLog>;
+}

@@ -1,5 +1,6 @@
-use jewels::units::clk::au::MetersD
+use jewels::units::clk::au::{MetersF, MetersD}
 use clockwork::dsl::tests::support::nanobind_bindings_dep
+use clockwork::dsl::tests::support::tapmsg::MyStrongType
 
 some_int_constant: Int32 = 42;
 some_uint_constant: UInt32 = 43;
@@ -13,6 +14,9 @@ untyped_float_constant = 2.2;
 untyped_true_constant = true;
 untyped_false_constant = false;
 untyped_str_constant = "hello";
+au_meters32_constant: MetersF = 22.2;
+au_meters64_constant: MetersD = 22.2;
+integral_strong_type_constant: MyStrongType = 22;
 
 // SubMessage docs
 schema SubMessage
@@ -130,6 +134,11 @@ schema GenericMessage
 {
   uuid: 37ae0fcd-e5c3-4822-af85-1ec043aceaf8;
 
+  options
+  {
+    constructor: source_code_order;
+  }
+
   parameters
   {
     // Doc
@@ -190,6 +199,8 @@ cpp_target nanobindable_messages
   constant some_float32_constant;
   constant some_float64_constant;
   constant some_str_constant;
+  constant au_meters32_constant;
+  constant au_meters64_constant;
 
   enum FooEnum;
 
@@ -231,12 +242,16 @@ nanobind_target nanobindable_messages_clk_nb
   constant some_float32_constant;
   constant some_float64_constant;
   constant some_str_constant;
+  constant integral_strong_type_constant;
 
   constant untyped_int_constant;
   constant untyped_float_constant;
   constant untyped_true_constant;
   constant untyped_false_constant;
   constant untyped_str_constant;
+
+  constant au_meters32_constant;
+  constant au_meters64_constant;
 
   binding FooEnum;
   binding Tappy<SubMessage>;

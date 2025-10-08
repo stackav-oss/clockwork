@@ -10,8 +10,10 @@ py_library(
     srcs = ["context.py"],
     deps = [
         "//clockwork/dsl/bazel:cc_targets",
+        "//clockwork/dsl/bazel:clk_targets",
         "//clockwork/dsl/bazel:targets",
         "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 

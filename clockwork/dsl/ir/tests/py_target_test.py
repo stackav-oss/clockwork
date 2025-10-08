@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for cpp_target."""
 
@@ -38,6 +39,7 @@ def test_non_generic(fs_importer: FilesystemImporter) -> None:
 
         py_target foo
         {
+          representation Tachyon<Schema>;
           interface Tap<Tachyon<Schema>>;
         }
         """,
@@ -82,19 +84,15 @@ def test_generic_missing_repr(fs_importer: FilesystemImporter) -> None:
 
         py_target foo
         {
-          interface Tap<Tachyon<NoReprSchema<0>>>;
+          interface NoReprSchema0: Tap<Tachyon<NoReprSchema<0>>>;
         }
         """,
     )
-    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
-
-    target = module.inner_scope.lookup("foo")
-    assert isinstance(target, py_target.PyTarget)
     with pytest.raises(
         ValueError,
-        match="Representation not registered for interface.",
+        match="Unable to locate representation for interface.",
     ):
-        target.render_to_str()
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
 
 def test_generic_unsupported_param(fs_importer: FilesystemImporter) -> None:
@@ -304,15 +302,11 @@ def test_generic_no_alias(fs_importer: FilesystemImporter) -> None:
         }
         """,
     )
-    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
-
-    target = module.inner_scope.lookup("foo")
-    assert isinstance(target, py_target.PyTarget)
     with pytest.raises(
         ValueError,
-        match="Generics in Python require an alias name.",
+        match="Python interfaces for generic schemas must have an alias.",
     ):
-        target.render_to_str()
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
 
 def test_generic_integral_param(fs_importer: FilesystemImporter) -> None:
@@ -456,7 +450,7 @@ def test_enum_flags(fs_importer: FilesystemImporter) -> None:
 
 @patch("clockwork.dsl.bazel.clk_targets.module_to_clk")
 def test_output_targets(mock_module_to_clk: MagicMock, fs_importer: FilesystemImporter) -> None:
-    mock_module_to_clk.side_effect = lambda _, module_id: Label(  # pyright: ignore[reportUnknownLambdaType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    mock_module_to_clk.side_effect = lambda _, module_id: Label(  # pyright: ignore[reportUnknownLambdaType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         value=f"//{module_id.get_base_path().parent}:{module_id.get_base_path().stem}_clk"
     )
 

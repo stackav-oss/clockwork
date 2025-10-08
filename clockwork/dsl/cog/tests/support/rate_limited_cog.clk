@@ -1,0 +1,28 @@
+use clockwork::dsl::tests::support::hellomsg;
+// Doc.
+cog RateLimitedCog
+{
+    outputs
+    {
+        output_a: Tappy<hellomsg::HelloMsg>;
+        output_b: Tappy<hellomsg::HelloMsg>;
+        output_c: Tappy<hellomsg::HelloMsg>;
+    }
+    execution
+    {
+        rate limit output_a: 1 every 1s;
+        rate limit output_b: 3 every 15ms;
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic;
+    }
+}
+
+cpp_target rate_limited_cog
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog RateLimitedCog;
+}

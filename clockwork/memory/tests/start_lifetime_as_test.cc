@@ -14,7 +14,7 @@ namespace clockwork
 TEST_CASE("start liftime as")
 {
   int value{7};
-  int* ptr = start_lifetime_as<int>(as_writable_bytes(jewels::as_single_item_span(value)));
+  const int* ptr = start_lifetime_as<int>(as_writable_bytes(jewels::as_single_item_span(value)));
   REQUIRE(&value == ptr);
   REQUIRE(*ptr == 7);
   const int* const_ptr = start_lifetime_as<const int>(as_bytes(jewels::as_single_item_span(value)));

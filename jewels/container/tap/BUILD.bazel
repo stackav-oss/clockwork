@@ -1,3 +1,5 @@
+load("//tools/rules:python.bzl", "py_library")
+
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -32,14 +34,25 @@ cc_library(
     deps = [
         ":var_array",
         ":var_string",
+        "//jewels/container:at",
         "//jewels/log_cerr",
         "//jewels/meta:concepts",
         "//jewels/std:expected",
         "//jewels/time:conversions",
         "//jewels/time:sync_time",
         "//jewels/uuid",
-        "@gsl//:util",
         "@protobuf",
+    ],
+)
+
+py_library(
+    name = "py_var_array",
+    srcs = ["py_var_array.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":value_serdes",
+        "//jewels/memory:py_bytes",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -58,6 +71,16 @@ cc_library(
         "//jewels/time:sync_time",
         "//jewels/uuid",
         "@protobuf",
+    ],
+)
+
+py_library(
+    name = "value_serdes",
+    srcs = ["value_serdes.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/memory:py_bytes",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 

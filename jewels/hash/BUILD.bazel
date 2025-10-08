@@ -11,7 +11,11 @@ cc_library(
     ],
     hdrs = ["md5.hh"],
     visibility = ["//visibility:public"],
-    deps = ["@openssl//:ssl"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "@openssl//:ssl",
+    ],
 )
 
 cc_library(

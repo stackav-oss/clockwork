@@ -4,7 +4,6 @@
 #include "clockwork/runners/online_runner.hh"
 
 #include "clockwork/runners/thread_pool.hh"
-#include "jewels/memory/pointers.hh"
 
 #include <stdexcept>
 #include <utility>

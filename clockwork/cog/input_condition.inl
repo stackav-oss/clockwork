@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <ranges>
 #include <utility>
 
@@ -27,6 +28,12 @@ InputCondition<Policy>::InputCondition(pinion::SubscriberHandle subscriber) noex
 }
 
 template <typename Policy>
+InputCondition<Policy>::InputCondition() noexcept
+  : subscriber_(std::nullopt)
+{
+}
+
+template <typename Policy>
 bool InputCondition<Policy>::validate() const
 {
   return true;
@@ -36,7 +43,12 @@ template <typename Policy>
 jewels::expected<std::ranges::subrange<pinion::BufferIterator>, pinion::ProgressError>
 InputCondition<Policy>::available_range() const
 {
-  auto available = subscriber_.available();
+  if (!subscriber_)
+  {
+    return jewels::unexpected(pinion::ProgressError{});
+  }
+
+  auto available = subscriber_->available();
   switch (Policy::condition_type)
   {
   case InputConditionType::any_message:
@@ -53,14 +65,13 @@ InputCondition<Policy>::available_range() const
 template <typename Policy>
 auto InputCondition<Policy>::make_condition() -> ConditionType
 {
-  if (auto range = this->available_range())
+  if (auto range = this->available_range(); subscriber_ && range)
   {
     auto size = static_cast<uint32_t>(range->size());
     auto ready = (size >= bounds_min);
     auto num_messages = std::min(size, bounds_max);
     return MessagePresentCondition<bounds_min, bounds_max>(ready, num_messages);
   }
-
   return MessagePresentCondition<bounds_min, bounds_max>(false, 0);
 }
 

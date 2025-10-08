@@ -36,12 +36,17 @@ py_test(
     data = [
         "//clockwork/tests/support:test_system_description_2_clk",
         "//clockwork/tests/support:test_system_description_clk",
+        "//clockwork/tests/support:test_system_multi_node_clk",
     ],
     main = ":__test__.py",
     deps = [
         ":__test__",
         "//clockwork:logical_system_interface",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
     ],
 )
 
@@ -61,6 +66,7 @@ cc_test(
         "//clockwork/pinion:slot",
         "//clockwork/pinion:subscriber_handle",
         "//clockwork/pinion/tests/support:pub_sub",
+        "//clockwork/scaffolding:end_process_exception",
         "//clockwork/scaffolding:main_impl",
         "//clockwork/scaffolding:offline_scaffolding",  # keep
         "//clockwork/scaffolding/tests/support:runtime_tools",

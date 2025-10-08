@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
@@ -43,6 +44,7 @@ def test_process_description() -> None:
         init_cogs=[],
         log_cog=uuid4(),
         io_connections=[],
+        not_connected_endpoints=[],
     )
     buffer = bytearray(pdf.ProcessDescription.get_tachyon_constraint().size)
     pd1.serialize_tachyon(memoryview(buffer))

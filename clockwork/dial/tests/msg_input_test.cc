@@ -53,6 +53,7 @@ TEST_CASE("View on Empty CircularBuffer")
 {
   TestView test_buffer;
   auto dial = test_buffer.make_input();
+  REQUIRE(dial.num_messages_skipped() == 0U);
   auto view = dial.get_view();
   REQUIRE(view.empty());
   REQUIRE(view.begin() == view.end());
@@ -77,6 +78,7 @@ TEST_CASE("View on non-empty CircularBuffers")
     test_buffer.circular_buffer.emplace_back(&foos[i]);
   }
   auto dial = test_buffer.make_input();
+  REQUIRE(dial.num_messages_skipped() == 0U);
   auto view = dial.get_view();
   REQUIRE_FALSE(view.empty());
   REQUIRE(view.size() == size);

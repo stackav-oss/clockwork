@@ -1,11 +1,11 @@
 diff --git python/private/attributes.bzl python/private/attributes.bzl
-index e62abf9f..9e212c10 100644
+index 8543caba..11f0d8d8 100644
 --- python/private/attributes.bzl
 +++ python/private/attributes.bzl
-@@ -417,6 +417,30 @@ Specifies additional environment variables to set when the target is executed by
-         # The value is required, but varies by rule and/or rule type. Use
-         # create_stamp_attr to create one.
-         "stamp": None,
+@@ -443,6 +443,30 @@ be avoided if possible.
+ """,
+             default = -1,
+         ),
 +        "infer_ld_library_path": attr.bool(
 +            default = False,
 +            doc = """
@@ -31,22 +31,26 @@ index e62abf9f..9e212c10 100644
 +            default = [],
 +        )
      },
-     allow_none = True,
  )
+ 
+diff --git python/private/normalize_name.bzl python/private/normalize_name.bzl
+index 7898222e..66d32050 100644
+--- python/private/normalize_name.bzl
++++ python/private/normalize_name.bzl
+@@ -47,7 +47,7 @@ def normalize_name(name):
+     Returns:
+         a normalized name as a string.
+     """
+-    name = name.replace("-", "_").replace(".", "_").lower()
++    name = name.replace("-", "_").replace(".", "_").replace("%", "_").lower()
+     if "__" not in name:
+         return name
+ 
 diff --git python/private/py_executable.bzl python/private/py_executable.bzl
-index 8c0487d6..9d7ed6ab 100644
+index dd3ad869..9a723c57 100644
 --- python/private/py_executable.bzl
 +++ python/private/py_executable.bzl
-@@ -236,7 +236,7 @@ def py_executable_base_impl(ctx, *, semantics, is_test, inherited_environment =
-             data_runfiles = runfiles_details.data_runfiles.merge(extra_exec_runfiles),
-         )
-     ))
--
-+        
-     return _create_providers(
-         ctx = ctx,
-         executable = executable,
-@@ -863,7 +863,7 @@ def _create_providers(
+@@ -1744,7 +1744,7 @@ def _create_providers(
              ),
          ),
          create_instrumented_files_info(ctx),
@@ -55,7 +59,7 @@ index 8c0487d6..9d7ed6ab 100644
          PyExecutableInfo(
              main = main_py,
              runfiles_without_exe = runfiles_details.runfiles_without_exe,
-@@ -935,7 +935,7 @@ def _create_providers(
+@@ -1817,7 +1817,7 @@ def _create_providers(
      providers.extend(extra_providers)
      return providers
  
@@ -64,7 +68,7 @@ index 8c0487d6..9d7ed6ab 100644
      expanded_env = {}
      for key, value in ctx.attr.env.items():
          expanded_env[key] = _py_builtins.expand_location_and_make_variables(
-@@ -944,6 +944,32 @@ def _create_run_environment_info(ctx, inherited_environment):
+@@ -1826,6 +1826,32 @@ def _create_run_environment_info(ctx, inherited_environment):
              expression = value,
              targets = ctx.attr.data,
          )
@@ -97,21 +101,121 @@ index 8c0487d6..9d7ed6ab 100644
      return RunEnvironmentInfo(
          environment = expanded_env,
          inherited_environment = inherited_environment,
+diff --git python/private/pypi/pkg_aliases.bzl python/private/pypi/pkg_aliases.bzl
+index 28d70ff7..b02eb342 100644
+--- python/private/pypi/pkg_aliases.bzl
++++ python/private/pypi/pkg_aliases.bzl
+@@ -157,26 +157,6 @@ def pkg_aliases(
+     }
+ 
+     actual = multiplatform_whl_aliases(aliases = actual, **kwargs)
+-    if type(actual) == type({}) and "//conditions:default" not in actual:
+-        alias(
+-            name = _INCOMPATIBLE,
+-            actual = select(
+-                {_LABEL_CURRENT_CONFIG_NO_MATCH: _LABEL_NONE},
+-                no_match_error = _NO_MATCH_ERROR_TEMPLATE.format(
+-                    config_settings = render.indent(
+-                        "\n".join(sorted([
+-                            value
+-                            for key in actual
+-                            for value in (key if type(key) == "tuple" else [key])
+-                        ])),
+-                    ).lstrip(),
+-                    current_flags = str(_LABEL_CURRENT_CONFIG),
+-                ),
+-            ),
+-            visibility = ["//visibility:private"],
+-            tags = ["manual"],
+-        )
+-        actual["//conditions:default"] = _INCOMPATIBLE
+ 
+     for name, target_name in target_names.items():
+         if type(actual) == type(""):
+@@ -193,6 +173,16 @@ def pkg_aliases(
+                     ) if repo != _INCOMPATIBLE else repo
+                     for v, repo in actual.items()
+                 },
++                no_match_error = _NO_MATCH_ERROR_TEMPLATE.format(
++                    config_settings = render.indent(
++                        "\n".join(sorted([
++                            value
++                            for key in actual
++                            for value in (key if type(key) == "tuple" else [key])
++                        ])),
++                    ).lstrip(),
++                    current_flags = str(_LABEL_CURRENT_CONFIG),
++                ),
+             )
+         else:
+             fail("The `actual` arg must be a dictionary or a string")
+diff --git python/private/pypi/simpleapi_download.bzl python/private/pypi/simpleapi_download.bzl
+index e8d7d094..886ee5eb 100644
+--- python/private/pypi/simpleapi_download.bzl
++++ python/private/pypi/simpleapi_download.bzl
+@@ -101,6 +101,7 @@ def simpleapi_download(
+                 attr = attr,
+                 cache = cache,
+                 get_auth = get_auth,
++                allow_fail = (attr.extra_index_urls != []),
+                 **download_kwargs
+             )
+             if hasattr(result, "wait"):
+@@ -154,7 +155,7 @@ def simpleapi_download(
+ 
+     return contents
+ 
+-def _read_simpleapi(ctx, url, attr, cache, get_auth = None, **download_kwargs):
++def _read_simpleapi(ctx, url, attr, cache, get_auth = None, allow_fail = True, **download_kwargs):
+     """Read SimpleAPI.
+ 
+     Args:
+@@ -168,6 +169,7 @@ def _read_simpleapi(ctx, url, attr, cache, get_auth = None, **download_kwargs):
+                http_file for docs.
+         cache: A dict for storing the results.
+         get_auth: A function to get auth information. Used in tests.
++        allow_fail: A boolean to indicate whether to allow the download to fail.
+         **download_kwargs: Any extra params to ctx.download.
+             Note that output and auth will be passed for you.
+ 
+@@ -212,7 +214,7 @@ def _read_simpleapi(ctx, url, attr, cache, get_auth = None, **download_kwargs):
+         url = [real_url],
+         output = output,
+         auth = get_auth(ctx, [real_url], ctx_attr = attr),
+-        allow_fail = True,
++        allow_fail = allow_fail,
+         **download_kwargs
+     )
+ 
+diff --git python/private/pypi/whl_repo_name.bzl python/private/pypi/whl_repo_name.bzl
+index 2b3b5418..66f6ace5 100644
+--- python/private/pypi/whl_repo_name.bzl
++++ python/private/pypi/whl_repo_name.bzl
+@@ -58,8 +58,7 @@ def whl_repo_name(filename, sha256):
+         parts.append(sha256[:8])
+     elif version:
+         parts.insert(1, version)
+-
+-    return "_".join(parts)
++    return normalize_name("_".join(parts))
+ 
+ def pypi_repo_name(whl_name, *target_platforms):
+     """Return a valid whl_library given a requirement line.
 diff --git python/private/python_bootstrap_template.txt python/private/python_bootstrap_template.txt
-index 0f9c90b3..6be4db95 100644
+index eb5595f4..d3478b54 100644
 --- python/private/python_bootstrap_template.txt
 +++ python/private/python_bootstrap_template.txt
-@@ -406,6 +406,17 @@ def _RunForCoverage(python_program, main_filename, args, env,
-   with open(rcfile_name, "w") as rcfile:
-     rcfile.write('''[run]
+@@ -432,6 +432,17 @@ def _RunForCoverage(python_program, main_filename, args, env,
  relative_files = True
+ source =
+ \t{source}
 +omit = config-3.py
 +[report]
 +exclude_also =
 +    # Exclude empty list checks (e.g., "if []:")
 +    if\s+\[\s*\]\s*:
-+    # Exclude empty dict checks (e.g., "if {}:")
-+    if\s+\{\s*\}\s*:
++    # Exclude empty dict checks (e.g., "if {{}}:")
++    if\s+\{{\s*\}}\s*:
 +    # Exclude main module checks (e.g., "if __name__ == '__main__':")
 +    if\s+__name__\s*==\s*.__main__.\s*:
 +    # Exclude type checking blocks (e.g., "if TYPE_CHECKING:" or "if typing.TYPE_CHECKING:")

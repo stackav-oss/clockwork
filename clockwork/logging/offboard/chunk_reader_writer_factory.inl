@@ -10,6 +10,7 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <memory_resource>
 #include <span>
 #include <string>
 #include <string_view>

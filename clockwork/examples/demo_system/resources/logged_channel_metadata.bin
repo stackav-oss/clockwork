@@ -1,0 +1,167 @@
+
+ã
+/imuÚèå
+J@clockwork::clockwork::examples::demo_system::imu::imu_message::ImuMessage "xq“‰=L¾¿øo£º‘(2time_of_validity 2x_acceleration_mss 2y_acceleration_mss 2z_acceleration_mss :µ7#„OkÊa^€‡Ìf™B5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢
+÷
+
+/raw_videoè®«
+P@clockwork::clockwork::examples::demo_system::camera::video_message::Yuv411Imageˆé"Ş[¥WN@F|ÕH“P(2€étime_of_validity 2
+data :!HÈÆîƒ«N4ˆcïB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ãG
+E
+.FixedArray€é""129600*mû$ª£t"º;“úƒÑğ2œŸiÜà¾S3*Œ Ü¥13
+1
+.UInt16*W®ïŒ
+İ“šMµ„¹CH2aæ§âR¿ŠP<¬‚U}
+ç
+/logger/message_ratesÍ·´
+S@clockwork::clockwork::logging::writers::channel_message_rates::ChannelMessageRates 
+"/nI-Ç@&¼·âoö"Íc(2ˆ 
+transmit_time 2message_rates :t‘g¬£$ÌNwgö¢wVB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ãB
+@
+	.VarArrayˆ 
+""512*¼NÇ©ò’py«Depd³2•K*©Õ_Hˆ%õöT9ÖÎË
+R@clockwork::clockwork::logging::writers::channel_message_rates::ChannelMessageRateÈ"Ád7A‹ÿB*¡Ù*´1I(2Àrate_status 2¸msg_rate_hz 2channel_name :òr{/Ğ3°ğÓ 1‰£`ûB
+2
+0
+.UInt8*ÈÉ•œ¨`©úU•	‘Ns!m2.0E¾ŞóXp¹w¨€EßI@˜•
+@@clockwork::clockwork::logging::writers::rate_status::RateStatusğ¸òNHèšzšİUÛŸ *unspecified*
+good*	low2ùgBXì«Ù™{Ùz;#n0B4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢>
+<
+
+.VarString¸"300*§L›“
+gõT<z„cCœ÷2ìâ”ecPV1›a.L£›ã
+
+/lidar/sweepŒµ²
+U@clockwork::clockwork::examples::demo_system::lidar::lidar_message::LidarSweepMessageÜ"ŒQÒDÔ“|İY¥W(2ˆÜtime_of_validity 2points :‘¶á&¥\ Y 5Cı–e„B5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ãC
+A
+	.VarArrayˆÜ""8000*œ‹æáèÒ¡-P¿óFä™2•K*©Õ_Hˆ%õöT9Öš
+L@clockwork::clockwork::examples::demo_system::localization::pose_message::R3"ºcĞoRLİ‚0™>ë(2x 2	y 2	z :q°d*£øÍuV+ĞRş¬:B4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢
+›
+
+/lidar/rawŒ—”
+S@clockwork::clockwork::examples::demo_system::lidar::lidar_message::RawLidarMessageğ"‘Dw
+ nLRº|¹¢Ü(2returns :ÈØka+û¤B<æ.:(ÈéBB
+@
+.FixedArrayğ""10*XÉŠ©œ‚‚!=f7C>2œŸiÜà¾S3*Œ Ü¥1ÊÇ
+R@clockwork::clockwork::examples::demo_system::lidar::lidar_message::RawLidarReturnØ"E[}£BY±Ü\fœ:(2Ètime_of_validity 2Ğazimuth_radians 2points :‹T¶×¬-¦”éœ ÌİGB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float32*˜~”Œ!à8¢şû›2fƒ@V¿YĞ¾«ÙdR@
+>
+	.VarArrayÈ""40*8öá$2|mxônA92•K*©Õ_Hˆ%õöT9Ö­ª
+Q@clockwork::clockwork::examples::demo_system::lidar::lidar_message::RawLidarPoint"10ÚİYI³‰ı«tÅ›(2elevation_radians 2range_m :*@H3QzõŞª6‚=ò+B
+é
+/poseßÍÊ
+U@clockwork::clockwork::examples::demo_system::localization::pose_message::PoseMessage8"¿±ŠrŠ~E ºíØéÊË]„(20time_of_validity 2
+location_m 2velocity_m_per_s :Ğ¹xo‘şL†¾8_¨YìB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ãš
+L@clockwork::clockwork::examples::demo_system::localization::pose_message::R3"ºcĞoRLİ‚0™>ë(2x 2	y 2	z :q°d*£øÍuV+ĞRş¬:B4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢
+ó
+/videoè®«
+P@clockwork::clockwork::examples::demo_system::camera::video_message::Yuv444ImageˆÒ"ƒªRf–Lª‚(½¯DI+(2€Òtime_of_validity 2
+data :|ˆJa)å…—6íF[åB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ãG
+E
+.FixedArray€Ò""259200*ÕRÅ¹('<oe!Cx¤2œŸiÜà¾S3*Œ Ü¥13
+1
+.UInt16*W®ïŒ
+İ“šMµ„¹CH2aæ§âR¿ŠP<¬‚U}
+Ê
+/logger/status·ÎË
+D@clockwork::clockwork::logging::writers::logger_status::LoggerStatusø"Íïª§„ÚMj¦bo­Tœ(2ğstate 2À
+drop_count 2Èmax_backlog 2¸status_string 2Ğtransmit_time 2Ømsgs_per_sec 2àbytes_per_sec 2ènum_low_rate_channels 2low_rate_channel_name :¢‡à€Õ>6KLÏ&	‚O¸üB2
+0
+.UInt8*ÈÉ•œ¨`©úU•	‘Ns!m2.0E¾ŞóXp¹w¨€EßI@ÔÑ
+I@clockwork::clockwork::logging::writers::log_writer_state::LogWriterStatea_Îx~O›Ğ‘ú^¿j *unspecified*stopped*logging*degraded*failed*paused2Ù‡=â	|°,¾Å^Ğ$B3
+1
+.UInt64*¨<GĞë)Kåuàx´™2ùÚº¶W/¿a/:Xe`5
+3
+	.Duration*9ülI‘¹Ö'êîUëºR2Ğs–ßnSKƒo2;60h>
+<
+
+.VarStringˆ"128*áÊÊ¬ZÊ[ö^å4Ğ°R2ìâ”ecPV1›a.L£›ã5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢>
+<
+
+.VarString¸"300*§L›“
+gõT<z„cCœ÷2ìâ”ecPV1›a.L£›ã
+¨
+/perception/aligner_config‰áŞ
+G@clockwork::clockwork::dial::approx_aligner_config::ApproxAlignerConfig(">T“,O¬—Œ4xè”(2 	find_type 2minimum_score_threshold 2minimum_wait_time 2maximum_wait_time :¤kKùÖÉH¦c«…ŞÎüAB2
+0
+.UInt8*ÈÉ•œ¨`©úU•	‘Ns!m2.0E¾ŞóXp¹w¨€EßI@
+I@clockwork::clockwork::dial::approx_aligner_config::ApproxAlignerFindTypeóZì:HlHl—Q)g]£ÿÕ *first*
+last2Ü¹UE‘y+n°MuTRB4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢5
+3
+	.Duration*9ülI‘¹Ö'êîUëºR2Ğs–ßnSKƒo2;60h9
+7
+	.Optional"*_*\Ûì?5‹g@÷
+t÷n28ƒ08á\¿¨Íª‰ÁC_2
+0
+.Int64*õ4 z{ğƒkøÉ•lU‹2§ãº‘%\;·Iû‚4ã 
+ç
+/raw_imuÚèå
+J@clockwork::clockwork::examples::demo_system::imu::imu_message::ImuMessage "xq“‰=L¾¿øo£º‘(2time_of_validity 2x_acceleration_mss 2y_acceleration_mss 2z_acceleration_mss :µ7#„OkÊa^€‡Ìf™B5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢
+…
+/logger/configò†ƒ
+D@clockwork::clockwork::logging::writers::logger_config::LoggerConfigè"ÆElËEštçÀwÕ(2log_root_dir 2ˆpinion_shm_root 2pinion_namespace 2Ømax_write_mib_per_sec 2"àmax_log_file_duration_sec :µ‚ªÒô"dš¡.¿6B>
+<
+
+.VarStringˆ"256*øaAbæ]“(<ñ!Jr2ìâ”ecPV1›a.L£›ã<
+:
+
+.VarStringH"64*@‡ÃFæ¦Ã‘8è%n¦2ìâ”ecPV1›a.L£›ã3
+1
+.UInt64*¨<GĞë)Kåuàx´™2ùÚº¶W/¿a/:Xe`2
+0
+.Int64*õ4 z{ğƒkøÉ•lU‹2§ãº‘%\;·Iû‚4ã 
+ƒ
+/perception/debugíú÷
+d@clockwork::clockwork::examples::demo_system::perception::perception_message::PerceptionDebugMessage("NI>ŞŒAG’ŒxbÑß“°(2time_of_validity 2	video_tov 2	lidar_tov 2pose_tov 2 
+tov_spread :¤|¥)b-Îsæ)RB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã5
+3
+	.Duration*9ülI‘¹Ö'êîUëºR2Ğs–ßnSKƒo2;60h
+Õ
+/raw_gpsÈÖÓ
+J@clockwork::clockwork::examples::demo_system::gps::gps_message::GpsMessage "ÕËôDCó­Íò—X[§­(2time_of_validity 2latitude_deg 2longitude_deg 2elevation_m :8Z\©(kÖ'i AÎB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢
+Ñ
+/gpsÈÖÓ
+J@clockwork::clockwork::examples::demo_system::gps::gps_message::GpsMessage "ÕËôDCó­Íò—X[§­(2time_of_validity 2latitude_deg 2longitude_deg 2elevation_m :8Z\©(kÖ'i AÎB5
+3
+	.SyncTime*OG²yy,{íÀ2U2‹¸%(ï3Q@¶	¹îv£ã4
+2
+.Float64*TÀ¿|Mé¦sOŸ;~28•&oükR-­:°MìÎ¢

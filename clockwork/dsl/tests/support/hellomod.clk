@@ -1,6 +1,15 @@
 use clockwork::dsl::tests::support::{hellocog, hellomsg};
 use clockwork::io::var_packet;
-use clockwork::diagnostics::report::Report as DiagnosticsReport;
+use clockwork::diagnostics::report;
+
+// Common diagnostics bus
+channel DiagnosticsChannel
+{
+  name: "/diagnostics";
+  message_type: Tachyon<report::Report>;
+  max_num_messages: 200;
+  publishers: diagnostics;
+}
 
 // Channel for HelloMsg messages
 channel HelloChan
@@ -61,7 +70,7 @@ box HelloBox
 {
     new mem_box: MemBox;
 
-    new hello_cog: hellocog::HelloCog;
+    new hello_cog: hellocog::HelloCogWithMetrics;
     connect mem_box.mem_hello to hello_cog.mem_hello;
 
     new hello_config: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/bar.txtpb");
@@ -89,6 +98,7 @@ box HelloBox
     connect hello_cog.out_goodbye to AnotherChan;
     connect hello_cog.out_multi1 to MultiPublisherChannel;
     connect hello_cog.out_multi2 to MultiPublisherChannel;
+    connect hello_cog.diagnostics to DiagnosticsChannel;
 
     new incoming_udp: IncomingUdpSocket;
     new outgoing_udp: OutgoingUdpSocket;
@@ -165,7 +175,7 @@ cpp_executable helloworld_exe
     {
         interface Tap<Tachyon<hellomsg::HelloMsg>>;
         extern hellocog::CxxState;
-        cog hellocog::HelloCog;
+        cog hellocog::HelloCogWithMetrics;
         udp_socket IncomingUdpSocket;
         udp_socket OutgoingUdpSocket;
         box HelloBox;

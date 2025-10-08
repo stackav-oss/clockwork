@@ -11,6 +11,7 @@
 #include <cerrno>
 #include <ctime>
 #include <stdexcept>
+#include <string>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/timerfd.h>
@@ -26,7 +27,8 @@ jewels::expected<ShmSubscriber, ShmChannel::Error> ShmSubscriber::open(
   jewels::memory::MemoryResource memres,
   const jewels::filesystem::Directory& shm_dir,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view filename,
+  std::string_view channel_name,
   const BufferLayout& layout,
   size_t max_observers,
   SubscriberRole subscriber_role,
@@ -35,7 +37,7 @@ jewels::expected<ShmSubscriber, ShmChannel::Error> ShmSubscriber::open(
   jewels::expected<UnixSocket, ShmChannel::Error> socket{jewels::unexpected(ShmChannel::Error::fatal)};
   if (subscriber_role != SubscriberRole::spy)
   {
-    socket = ShmChannel::open_socket(socket_ns, name, Role::subscriber);
+    socket = ShmChannel::open_socket(socket_ns, filename, Role::subscriber);
     if (!socket)
     {
       return jewels::unexpected(socket.error());
@@ -45,7 +47,7 @@ jewels::expected<ShmSubscriber, ShmChannel::Error> ShmSubscriber::open(
   {
     socket = UnixSocket{{}};
   }
-  auto buffer_map = ShmChannel::open_buffer(memres, shm_dir, name, layout, Role::subscriber, resume_behavior);
+  auto buffer_map = ShmChannel::open_buffer(memres, shm_dir, filename, layout, Role::subscriber, resume_behavior);
   if (!buffer_map)
   {
     return jewels::unexpected(buffer_map.error());
@@ -53,11 +55,12 @@ jewels::expected<ShmSubscriber, ShmChannel::Error> ShmSubscriber::open(
   return ShmSubscriber(
     memres,
     socket_ns,
-    name,
+    filename,
+    channel_name,
     subscriber_role,
     resume_behavior,
     std::move(std::get<BufferPtr>(*buffer_map)),
-    std::move(std::get<MMapRegion>(*buffer_map)),
+    std::move(std::get<jewels::filesystem::MMapRegion>(*buffer_map)),
     std::move(*socket),
     max_observers);
 }
@@ -66,16 +69,16 @@ jewels::expected<ShmSubscriber, ShmChannel::Error> ShmSubscriber::open(
 ShmSubscriber::ShmSubscriber(
   jewels::memory::MemoryResource memres,
   std::string_view socket_ns,
-  std::string_view name,
+  std::string_view filename,
+  std::string_view channel_name,
   SubscriberRole subscriber_role,
   ResumeBehavior resume_behavior,
   BufferPtr buffer,
-  MMapRegion map,
+  jewels::filesystem::MMapRegion map,
   UnixSocket socket,
   size_t max_observers)
-  : ShmChannel(std::move(buffer), std::move(map), std::move(socket), resume_behavior),
-    socket_ns_(socket_ns, memres),
-    name_(name, memres),
+  : ShmChannel(
+      memres, std::move(buffer), std::move(map), std::move(socket), socket_ns, filename, channel_name, resume_behavior),
     subscriber_role_(subscriber_role),
     observers_(memres)
 {
@@ -118,22 +121,29 @@ bool ShmSubscriber::on_readable(AbstractEPollManager& epoll)
         return true;
       }
       jewels::log_cerr_error(
-        "ShmSubscriber failed to read socket for {}: {}", name_, jewels::filesystem::ErrorCode(errno));
+        "ShmSubscriber failed to read socket for {}: {}", channel_name(), jewels::filesystem::ErrorCode(errno));
       if (errno != EINTR && errno != ENOMEM)
       {
         // Only close the socket for fatal errors.
-        jewels::log_cerr_error("Closing socket for {}", name_);
+        jewels::log_cerr_error("Closing socket for {}", channel_name());
         epoll.remove(this->socket());
         close_socket();
         return false;
       }
       return true;
     }
-    jewels::log_cerr_error(
-      "ShmSubscriber read invalid message size for {}: got {} expected {}. Closing socket.",
-      name_,
-      result,
-      sizeof(msg));
+    if (result == 0)
+    {
+      jewels::log_cerr_info("ShmSubscriber read end of file on socket for {}. Closing socket.", channel_name());
+    }
+    else
+    {
+      jewels::log_cerr_error(
+        "ShmSubscriber read invalid message size for {}: got {} expected {}. Closing socket.",
+        channel_name(),
+        result,
+        sizeof(msg));
+    }
     epoll.remove(this->socket());
     close_socket();
     return false;
@@ -150,7 +160,9 @@ void ShmSubscriber::on_reconnect_timer(AbstractEPollManager& epoll)
       return;
     }
     jewels::log_cerr_error(
-      "Internal error: failed to read from reconnect timer for {}: {}", name_, jewels::filesystem::ErrorCode(errno));
+      "Internal error: failed to read from reconnect timer for {}: {}",
+      channel_name(),
+      jewels::filesystem::ErrorCode(errno));
     throw std::runtime_error("Failed to read from reconnect timer");
   }
   if (reconnect())
@@ -166,7 +178,7 @@ void ShmSubscriber::on_reconnect_timer(AbstractEPollManager& epoll)
 
 void ShmSubscriber::create_reconnect_timer(AbstractEPollManager& epoll)
 {
-  jewels::log_cerr_info("Creating reconnect timer for {}", name_);
+  jewels::log_cerr_info("Creating reconnect timer for {}", channel_name());
   timer_fd_ = jewels::filesystem::FileDescriptor{timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK)};
   if (!timer_fd_)
   {
@@ -210,20 +222,20 @@ bool ShmSubscriber::reconnect()
 {
   if (is_connected())
   {
-    jewels::log_cerr_error("Reconnect failed for {}: socket is already connected", name_);
+    jewels::log_cerr_error("Reconnect failed for {}: socket is already connected", channel_name());
     return false;
   }
   if (subscriber_role_ == SubscriberRole::spy)
   {
-    jewels::log_cerr_error("Reconnect failed for {}: subscriber is opened in spy role", name_);
+    jewels::log_cerr_error("Reconnect failed for {}: subscriber is opened in spy role", channel_name());
     return false;
   }
-  auto socket = ShmChannel::open_socket(socket_ns_, name_, Role::subscriber);
+  auto socket = ShmChannel::open_socket(socket_ns(), filename(), Role::subscriber);
   if (!socket)
   {
     return false;
   }
-  jewels::log_cerr_info("Reconnected to publisher for {}", name_);
+  jewels::log_cerr_info("Reconnected to publisher for {}", channel_name());
   this->set_socket(*std::move(socket));
   for (auto& observer : observers_)
   {

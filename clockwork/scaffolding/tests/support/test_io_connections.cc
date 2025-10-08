@@ -14,8 +14,8 @@
 namespace clockwork::testing
 {
 
-jewels::expected<void, pinion::IoConnection::Error>
-TestIoConnection::connect_publisher(pinion::PublisherHandle /*publisher*/)
+jewels::expected<void, pinion::IoConnection::Error> TestIoConnection::connect_publisher(
+  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::PublisherHandle /*publisher*/)
 {
   if (publisher_set)
   {
@@ -39,7 +39,8 @@ jewels::expected<void, pinion::IoConnection::Error> TestIoConnection::connect_di
 }
 
 jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, pinion::IoConnection::Error>
-TestIoConnection::connect_subscriber(pinion::SubscriberHandle /*subscriber*/)
+TestIoConnection::connect_subscriber(
+  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/)
 {
   if (subscriber_set)
   {

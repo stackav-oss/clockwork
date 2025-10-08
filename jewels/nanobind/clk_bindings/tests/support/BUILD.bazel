@@ -28,6 +28,7 @@ cc_library(
         "bind_array_msg_clk_cc.inl",
     ],
     hdrs = ["bind_array_msg_clk_cc.hh"],
+    data = [":bind_array_msg_clk"],
     visibility = ["//jewels/nanobind/tests:__subpackages__"],
     deps = [
         "//clockwork:repr_iface",
@@ -45,6 +46,7 @@ py_cc_binding(
         "bind_array_msg_clk_nb.hh",
         "bind_array_msg_clk_nb.inl",
     ],
+    data = [":bind_array_msg_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
     deps = [
@@ -61,6 +63,7 @@ cc_library(
         "foo.inl",
     ],
     hdrs = ["foo.hh"],
+    data = [":foo_clk"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
@@ -93,6 +96,7 @@ py_cc_binding(
         "foo_clk_nb.hh",
         "foo_clk_nb.inl",
     ],
+    data = [":foo_clk"],
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
     deps = [

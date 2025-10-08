@@ -34,8 +34,11 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_timestamp",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
         "//jewels/log_cerr",
+        "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/std:span",
         "@wise_enum",
     ],
 )
@@ -144,6 +147,7 @@ py_cc_binding(
         "//clockwork/logging:message_encoding",
         "//clockwork/logging:nolint_helper",
         "//clockwork/logging:schema_encoding",
+        "@fmt",
         "@nanobind",
         "@python_3_10//:python_headers",
         "@wise_enum",
@@ -184,6 +188,7 @@ cc_library(
         "//clockwork/logging/onboard:log_format",
         "//clockwork/logging/onboard:reader",
         "//clockwork/logging/onboard:types",
+        "//jewels/container:circular_buffer",
         "//jewels/filesystem",
         "//jewels/filesystem:path",
         "//jewels/math:constants",
@@ -222,12 +227,17 @@ py_library(
     ],
 )
 
+py_library(
+    name = "py_types",
+    srcs = ["py_types.py"],
+    deps = [":nb_types"],
+)
+
 cc_library(
     name = "serialization",
     hdrs = ["serialization.hh"],
     deps = [
         "//clockwork:repr_iface",
-        "//clockwork/logging:message_encoding",
         "@boost//:core",
         "@fmt",
     ],

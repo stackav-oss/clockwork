@@ -11,6 +11,7 @@ package(
 
 exports_files([
     "channel_policy.clk",
+    "channel_publisher_config.clk",
     "log_writer_config.clk",
 ])
 
@@ -21,12 +22,45 @@ clk(
 )
 
 cc_library(
+    name = "channel_publisher_config",
+    srcs = [
+        "channel_publisher_config.cc",
+        "channel_publisher_config.inl",
+    ],
+    hdrs = ["channel_publisher_config.hh"],
+    data = [":channel_publisher_config_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":log_uuid_tag",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "channel_publisher_config_clk",
+    srcs = ["channel_publisher_config.clk"],
+    outs = [
+        "channel_publisher_config.cc",
+        "channel_publisher_config.hh",
+        "channel_publisher_config.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":log_uuid_tag_clk"],
+)
+
+cc_library(
     name = "channel_type",
     srcs = [
         "channel_type.cc",
         "channel_type.inl",
     ],
     hdrs = ["channel_type.hh"],
+    data = [":channel_type_clk"],
     deps = ["@wise_enum"],
 )
 
@@ -55,15 +89,33 @@ cc_library(
 )
 
 cc_library(
+    name = "duplicate_message_filter",
+    srcs = ["duplicate_message_filter.cc"],
+    hdrs = ["duplicate_message_filter.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":log_timestamp",
+        "//jewels/container:circular_buffer",
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@fmt",
+    ],
+)
+
+cc_library(
     name = "lite_compressor",
     srcs = ["lite_compressor.cc"],
     hdrs = ["lite_compressor.hh"],
     deps = [
         ":log_error",
         ":nolint_helper",
+        ":xxh3_checksum",
         "//jewels/aligner",
+        "//jewels/callsig:outparam",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "@xxhash",
     ],
 )
 
@@ -72,6 +124,7 @@ cc_library(
     srcs = ["log_error.inl"],
     hdrs = ["log_error.hh"],
     deps = [
+        "//jewels/callsig:outcome",
         "//jewels/filesystem:error_code",
         "//jewels/std:expected",
         "@wise_enum",
@@ -112,6 +165,7 @@ cc_library(
         "log_uuid_tag.inl",
     ],
     hdrs = ["log_uuid_tag.hh"],
+    data = [":log_uuid_tag_clk"],
 )
 
 clk(
@@ -131,6 +185,7 @@ cc_library(
         "log_writer_config.inl",
     ],
     hdrs = ["log_writer_config.hh"],
+    data = [":log_writer_config_clk"],
     deps = [
         ":channel_type",
         ":log_uuid_tag",
@@ -168,6 +223,7 @@ cc_library(
         "message_encoding.inl",
     ],
     hdrs = ["message_encoding.hh"],
+    data = [":message_encoding_clk"],
     deps = ["@wise_enum"],
 )
 
@@ -199,6 +255,7 @@ cc_library(
         "schema_encoding.inl",
     ],
     hdrs = ["schema_encoding.hh"],
+    data = [":schema_encoding_clk"],
     deps = ["@wise_enum"],
 )
 

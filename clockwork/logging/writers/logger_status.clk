@@ -32,7 +32,7 @@ schema LoggerStatus
     #7 num_low_rate_channels: UInt64;
 
     // Name of a channel with a low message rate
-    #8 low_rate_channel_name: VarString<max_size=127>;
+    #8 low_rate_channel_name: VarString<max_size=300>;
   }
 }
 

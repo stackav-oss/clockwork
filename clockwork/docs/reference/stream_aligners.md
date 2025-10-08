@@ -119,7 +119,6 @@ The `clockwork/dial/approx_aligner_policies.hh` module provides the common polic
 Input policies:
 
 - `TovNanosecondsApproxAlignerInput` - extracts a `time_of_validity` field as int64 nanoseconds.
-- `TovSecondsApproxAlignerInput` - extracts a `time_of_validity` field as double seconds.
 
 Validation functions:
 

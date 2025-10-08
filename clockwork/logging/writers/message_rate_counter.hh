@@ -9,6 +9,7 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/time/sync_time.hh"
 
+#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -38,12 +39,19 @@ class MessageRateCounter
   };
 
 public:
+  /// Default time to allow for the rate counter to warm up at startup
+  static constexpr auto default_warmup_interval = std::chrono::minutes(2);
+
   /// Construct a message rate counter
   /// @param[in] memory_resource Memory resource
   /// @param[in] channel_rate_config Channel message rates configuration
+  /// @param[in] warmup_interval Time to allow for the rate counter to warm up at startup
+  /// @param[in] current_steady_time Current steady time
   MessageRateCounter(
     jewels::memory::MemoryResource memory_resource,
-    const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config);
+    const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config,
+    std::chrono::nanoseconds warmup_interval = default_warmup_interval,
+    jewels::time::SteadyTime current_steady_time = jewels::time::SteadyClock::now());
 
   ~MessageRateCounter() noexcept = default;
 
@@ -56,17 +64,26 @@ public:
   /// in the logged_message_rates signal group.
   /// @param[in] channel_name
   /// @param[in] current_steady_time Current steady time
-  void add_channel(std::string_view channel_name, jewels::time::SteadyTime current_steady_time);
+  void add_channel(
+    std::string_view channel_name, jewels::time::SteadyTime current_steady_time = jewels::time::SteadyClock::now());
 
   /// Increment the message count for a logged channel
   /// @param[in] channel_name
   /// @param[in] current_steady_time Current steady time
   /// @param[in] count Number of messages
-  void update_channel(std::string_view channel_name, jewels::time::SteadyTime current_steady_time, size_t count = 1U);
+  void update_channel(
+    std::string_view channel_name,
+    jewels::time::SteadyTime current_steady_time = jewels::time::SteadyClock::now(),
+    size_t count = 1U);
 
   /// Accessor for the channel rate map
   /// @return Channel rate map
   [[nodiscard]] std::pmr::map<std::string_view, MapEntry>& get_channel_rate_map();
+
+  /// @return True if the rate counter has warmed up
+  /// @param curr_steady_time Current steady time
+  [[nodiscard]] bool
+  is_warmed_up(jewels::time::SteadyTime current_steady_time = jewels::time::SteadyClock::now()) const;
 
 private:
   /// Memory resource
@@ -80,6 +97,9 @@ private:
 
   /// Channel rate map
   std::pmr::map<std::string_view, MapEntry> channel_rate_map_;
+
+  /// Time that the rate counter will have warmed up
+  jewels::time::SteadyTime warmup_time_;
 };
 
 } // namespace clockwork_logging

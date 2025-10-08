@@ -70,7 +70,7 @@ class CppPythonCog:
         cpp_chunk = CppChunk()
         cpp_chunk.append(
             [
-                "::clockwork::python::python_init_once();",
+                "::clockwork::python::throw_if_not_initialized();",
                 "const ::clockwork::python::GilLockGuard gil_guard;",
                 "const auto dial_dict =",
                 "    ::clockwork::python::PythonObject::import_module(",

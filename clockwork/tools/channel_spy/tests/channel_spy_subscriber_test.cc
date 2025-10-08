@@ -23,7 +23,8 @@ namespace clockwork::tools::tests
 namespace
 {
 
-constexpr auto channel_name = "3c0c456d-f5d5-4630-a836-484a9662f629";
+constexpr auto channel_uuid_str = "3c0c456d-f5d5-4630-a836-484a9662f629";
+constexpr auto channel_name = "/test/channel";
 constexpr size_t num_slots = 2U;
 
 TEST_CASE("ChannelSpySubscriber")
@@ -34,12 +35,14 @@ TEST_CASE("ChannelSpySubscriber")
 
   SECTION("No publisher")
   {
-    REQUIRE_THROWS(ChannelSpySubscriber::make_subscriber<Tappy<support::TestMessage>>(
-      test_dir_path,
-      socket_ns,
-      channel_name,
-      num_slots,
-      [](uint64_t, int64_t, std::unique_ptr<Tappy<support::TestMessage>>) {}));
+    REQUIRE_THROWS(
+      ChannelSpySubscriber::make_subscriber<Tappy<support::TestMessage>>(
+        test_dir_path,
+        socket_ns,
+        channel_uuid_str,
+        channel_name,
+        num_slots,
+        [](uint64_t, int64_t, std::unique_ptr<Tappy<support::TestMessage>>) {}));
   }
 
   std::vector<uint64_t> actual_sequence_numbers;
@@ -49,12 +52,13 @@ TEST_CASE("ChannelSpySubscriber")
   std::vector<int64_t> expected_message_times;
   std::vector<Tappy<support::TestMessage>> expected_messages;
 
-  auto publisher_result =
-    support::TestPublisher<Tappy<support::TestMessage>>::open(test_dir_path, socket_ns, channel_name, num_slots);
+  auto publisher_result = support::TestPublisher<Tappy<support::TestMessage>>::open(
+    test_dir_path, socket_ns, channel_uuid_str, channel_name, num_slots);
   REQUIRE(publisher_result);
   auto subscriber = ChannelSpySubscriber::make_subscriber<Tappy<support::TestMessage>>(
     test_dir_path,
     socket_ns,
+    channel_uuid_str,
     channel_name,
     num_slots,
     [&actual_sequence_numbers, &actual_message_times, &actual_messages](

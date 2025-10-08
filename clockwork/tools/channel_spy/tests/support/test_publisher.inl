@@ -43,7 +43,11 @@ TestPublisher<MessageType>::TestPublisher(std::shared_ptr<pinion::ShmPublisher> 
 template <typename MessageType>
   requires TappyType<MessageType>
 [[nodiscard]] std::shared_ptr<TestPublisher<MessageType>> TestPublisher<MessageType>::open(
-  std::string_view pinion_shm_root, std::string_view socket_ns, std::string_view uuid_str, size_t num_slots)
+  std::string_view pinion_shm_root,
+  std::string_view socket_ns,
+  std::string_view uuid_str,
+  std::string_view channel_name,
+  size_t num_slots)
 {
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   auto factory_result = clockwork::pinion::ShmChannelFactory::make(memory_resource, socket_ns, pinion_shm_root);
@@ -55,6 +59,7 @@ template <typename MessageType>
   }
   auto publisher_result = factory_result->open_publisher(
     uuid_str,
+    channel_name,
     clockwork::pinion::BufferLayout{
       .num_slots = num_slots,
       .message_size = sizeof(MessageType),

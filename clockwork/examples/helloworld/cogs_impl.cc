@@ -9,8 +9,6 @@
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include <chrono>
 #include <ranges>
 

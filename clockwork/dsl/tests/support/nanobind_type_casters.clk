@@ -53,6 +53,8 @@ cpp_target foo
   schema Message;
   schema GenericMessage;
   enum FooEnum;
+  representation Tachyon<Message>;
+  representation Tachyon<GenericMessage<Float32>>;
   interface Tappy<Message>;
   interface GenericMessageFloat32: Tappy<GenericMessage<Float32>>;
   nanobind_type_caster for Tappy<Message> from foo_py;

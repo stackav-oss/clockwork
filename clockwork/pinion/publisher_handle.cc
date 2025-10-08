@@ -11,8 +11,6 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -91,13 +89,13 @@ jewels::expected<void, ReserveError> PublisherHandle::hide(size_t count) noexcep
   return {};
 }
 
-jewels::expected<ReservedSlot, ReserveError> PublisherHandle::reserve() noexcept
+jewels::expected<ReservedSlot, ReserveError> PublisherHandle::reserve(bool connected) noexcept
 {
   if (const auto result = hide(1UL); !result)
   {
     return jewels::unexpected{result.error()};
   }
-  return {jewels::in_place, ReservedSlot{jewels::memory::make_non_null_from_ref(*this), head_}};
+  return {jewels::in_place, ReservedSlot{jewels::memory::make_non_null_from_ref(*this), head_, connected}};
 }
 
 jewels::expected<BatchReservedSlot, ReserveError> PublisherHandle::reserve(size_t count) noexcept
@@ -216,8 +214,8 @@ bool ReservationState::operator==(State state) const noexcept
 }
 
 ReservedSlot::ReservedSlot(
-  jewels::memory::ObjectPtr<PublisherHandle> publisher_handle, BufferIndex reserved_index) noexcept
-  : publisher_handle_{publisher_handle}, reserved_index_{reserved_index}
+  jewels::memory::ObjectPtr<PublisherHandle> publisher_handle, BufferIndex reserved_index, bool connected) noexcept
+  : publisher_handle_{publisher_handle}, reserved_index_{reserved_index}, connected_{connected}
 {
 }
 
@@ -225,25 +223,24 @@ ReservedSlot::~ReservedSlot() noexcept(false)
 {
   // When possible, the owner of the slot should call .process() prior
   // to the destructor so the destructor does nothing.
-  switch (state_.get())
+  if (state_.get() != ReservationState::State::ignore)
   {
-  case ReservationState::State::discard:
     if (!discard())
     {
       throw std::runtime_error{"A slot was not explicitly procssed and failed to discard."};
     }
-    break;
-  case ReservationState::State::commit:
-    throw std::runtime_error{"Unable to commit a marked slot without a timestamp."};
-    break;
-  case ReservationState::State::ignore:
-    break;
-  };
+  }
 }
 
 void ReservedSlot::mark_for_commit() noexcept
 {
   state_.set(ReservationState::State::commit);
+}
+
+void ReservedSlot::sim_only_mark_for_commit_with_fake_timestamp(jewels::time::SyncTime publish_time) noexcept
+{
+  mark_for_commit();
+  publish_time_ = publish_time;
 }
 
 void ReservedSlot::mark_for_discard() noexcept
@@ -255,9 +252,14 @@ jewels::expected<void, WriteError> ReservedSlot::process(jewels::time::SyncTime 
 {
   const auto current_state = state_.get();
   state_.set(ReservationState::State::ignore);
+
+  const auto maybe_publish_time = publish_time_;
+  publish_time_ = std::nullopt;
+
   if (current_state == ReservationState::State::commit)
   {
-    return publisher_handle_->commit(reserved_index_, publish_time);
+    const auto time_to_use = maybe_publish_time.value_or(publish_time);
+    return publisher_handle_->commit(reserved_index_, time_to_use);
   }
   if (current_state == ReservationState::State::discard)
   {
@@ -296,24 +298,22 @@ Slot ReservedSlot::slot() const noexcept
   return *BufferIterator{buffer.get(), buffer.layout(), reserved_index_};
 }
 
+bool ReservedSlot::connected() const noexcept
+{
+  return connected_;
+}
+
 BatchReservedSlot::~BatchReservedSlot() noexcept(false)
 {
   // When possible, the owner of the slot should call .process() prior
   // to the destructor so the destructor does nothing.
-  switch (state_.get())
+  if (state_.get() != ReservationState::State::ignore)
   {
-  case ReservationState::State::discard:
     if (!discard())
     {
       throw std::runtime_error{"A slot was not explicitly procssed and failed to discard."};
     }
-    break;
-  case ReservationState::State::commit:
-    throw std::runtime_error{"Unable to commit a marked slot without a timestamp."};
-    break;
-  case ReservationState::State::ignore:
-    break;
-  };
+  }
 }
 
 jewels::expected<void, WriteError> BatchReservedSlot::commit(jewels::time::SyncTime publish_time) noexcept

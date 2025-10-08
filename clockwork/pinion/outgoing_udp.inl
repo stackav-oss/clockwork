@@ -3,12 +3,12 @@
 
 #include "clockwork/pinion/outgoing_udp.hh"
 
+#include "clockwork/common/process_description.hh"
 #include "clockwork/io/var_packet.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -23,6 +23,7 @@
 #include "jewels/networking/socket_address.hh"
 #include "jewels/networking/socket_endpoint.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <boost/iterator/iterator_facade.hpp>
 #include <fmt10/format.h> // IWYU pragma: keep
@@ -43,11 +44,12 @@ namespace clockwork::pinion
 
 template <class Schema>
 OutgoingUdp<Tachyon<Schema>>::OutgoingUdp(
+  jewels::Uuid<common::EndpointClassId> subscriber_id,
   jewels::filesystem::FileDescriptor&& file_descriptor,
   jewels::networking::SocketEndpoint socket_endpoint,
   jewels::networking::SocketAddress address,
   jewels::memory::pmr_unique_ptr<Msg>&& holding_buffer)
-  : OutgoingUdpImpl<Tachyon<Schema>>{std::move(socket_endpoint), address, std::move(holding_buffer)},
+  : OutgoingUdpImpl<Tachyon<Schema>>{subscriber_id, std::move(socket_endpoint), address, std::move(holding_buffer)},
     file_descriptor_{std::move(file_descriptor)}
 {
 }
@@ -57,6 +59,7 @@ template <jewels::networking::SockOption... options>
 jewels::expected<jewels::memory::NonNullSharedPtr<OutgoingUdp<Tachyon<Schema>>>, jewels::filesystem::ErrorCode>
 OutgoingUdp<Tachyon<Schema>>::try_make(
   jewels::memory::MemoryResource memres,
+  jewels::Uuid<common::EndpointClassId> subscriber_id,
   jewels::networking::SocketEndpoint socket_endpoint,
   const SockOptionValue<options>&... sock_option_values)
 {
@@ -80,7 +83,8 @@ OutgoingUdp<Tachyon<Schema>>::try_make(
   auto holding_buffer = jewels::memory::make_pmr_unique<Msg>(memres);
   return jewels::memory::NonNullSharedPtr<OutgoingUdp<Msg>>{jewels::memory::make_pmr_shared<OutgoingUdp<Msg>>(
     memres,
-    OutgoingUdp<Msg>{std::move(file_descriptor), std::move(socket_endpoint), *addr, std::move(holding_buffer)})};
+    OutgoingUdp<Msg>{
+      subscriber_id, std::move(file_descriptor), std::move(socket_endpoint), *addr, std::move(holding_buffer)})};
 }
 
 template <class Schema>
@@ -97,9 +101,10 @@ void OutgoingUdp<Tachyon<Schema>>::write()
 
 template <class Schema>
 jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
-OutgoingUdp<Tachyon<Schema>>::connect_subscriber(pinion::SubscriberHandle subscriber)
+OutgoingUdp<Tachyon<Schema>>::connect_subscriber(
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber)
 {
-  if (auto res = this->connect_subscriber_impl(subscriber); !res)
+  if (auto res = this->connect_subscriber_impl(endpoint_id, subscriber); !res)
   {
     return jewels::unexpected{res.error()};
   }
@@ -209,8 +214,8 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write(
 }
 
 template <class Schema>
-jewels::expected<void, IoConnection::Error>
-OutgoingUdpImpl<Tachyon<Schema>>::connect_subscriber_impl(pinion::SubscriberHandle& subscriber)
+jewels::expected<void, IoConnection::Error> OutgoingUdpImpl<Tachyon<Schema>>::connect_subscriber_impl(
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle& subscriber)
 {
   if (subscriber_)
   {
@@ -220,16 +225,25 @@ OutgoingUdpImpl<Tachyon<Schema>>::connect_subscriber_impl(pinion::SubscriberHand
   {
     return jewels::unexpected{IoConnection::Error::invalid_buffer_layout};
   }
+  if (subscriber_id_ != endpoint_id)
+  {
+    return jewels::unexpected{IoConnection::Error::unexpected_endpoint_id};
+  }
+
   subscriber_.emplace(std::move(subscriber));
   return {};
 }
 
 template <class Schema>
 OutgoingUdpImpl<Tachyon<Schema>>::OutgoingUdpImpl(
+  jewels::Uuid<common::EndpointClassId> subscriber_id,
   jewels::networking::SocketEndpoint socket_endpoint,
   jewels::networking::SocketAddress address,
   jewels::memory::pmr_unique_ptr<Msg>&& holding_buffer)
-  : socket_endpoint_{std::move(socket_endpoint)}, address_{address}, holding_buffer_{std::move(holding_buffer)}
+  : subscriber_id_{subscriber_id},
+    socket_endpoint_{std::move(socket_endpoint)},
+    address_{address},
+    holding_buffer_{std::move(holding_buffer)}
 {
 }
 

@@ -1,0 +1,15 @@
+use clockwork::logging::log_playback::end_of_log::EndOfLog;
+use clockwork::logging::channel_policy::LogReaderPolicy;
+// End of log channel. Name must match the one used in LogMessageFetcher.hh
+channel EndOfLogChannel
+{
+    name: "/clockwork_logging/end_of_log";
+    message_type: Tachyon<EndOfLog>;
+    max_num_messages: 5;
+}
+
+// Our log reader policy
+policy LogReaderPolicy for EndOfLogChannel
+{
+    source_name = "/clockwork_logging/end_of_log";
+}

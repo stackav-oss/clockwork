@@ -4,12 +4,12 @@
 #pragma once
 
 #include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/detail/mmap_region.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/mmap_region.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -45,9 +45,9 @@ public:
   /// @param memres resource used for allocations, only used during construction
   /// @param shm_dir directory to open the shared memory file in
   /// @param socket_ns prefix to apply to the name to create the socket address to listen on
-  /// @param name name of the channel, used as the filename (in shm_dir)
-  /// @param num_slots number of slots to size the buffer for (see BufferLayout)
-  /// @param message_size size of the messages in the channel (see BufferLayout)
+  /// @param filename UUID string name of the channel, used as the filename (in shm_dir)
+  /// @param channel_name Human readable channel name
+  /// @param layout Pinion buffer layout
   /// @param max_observers maximum size of the in-process observer collection
   /// @param max_clients maximum number of the socket connections
   /// @param resume_behavior determines whether/how a channel can be reconnected
@@ -55,7 +55,8 @@ public:
     jewels::memory::MemoryResource memres,
     const jewels::filesystem::Directory& shm_dir,
     std::string_view socket_ns,
-    std::string_view name,
+    std::string_view filename,
+    std::string_view channel_name,
     const BufferLayout& layout,
     size_t max_observers,
     size_t max_clients,
@@ -99,11 +100,13 @@ public:
   void notify(AbstractEPollManager& epoll, int efd, uint32_t events) override;
 
 private:
-  explicit ShmPublisher(
+  ShmPublisher(
     jewels::memory::MemoryResource memres,
-    std::string_view name,
+    std::string_view socket_ns,
+    std::string_view filename,
+    std::string_view channel_name,
     BufferPtr buffer,
-    MMapRegion map,
+    jewels::filesystem::MMapRegion map,
     UnixSocket socket,
     PublisherHandle publisher,
     size_t max_clients,
@@ -117,7 +120,7 @@ private:
   public:
     SocketClients(
       jewels::memory::MemoryResource resource,
-      std::string_view name,
+      std::string_view channel_name,
       size_t max_clients,
       std::shared_ptr<jewels::LogCerrThrottle> log_cerr_throttle);
 
@@ -153,12 +156,11 @@ private:
     notify_client(const Event& event, std::pmr::vector<UnixSocket>::iterator iter);
 
     mutable std::mutex mutex_;
-    std::pmr::string name_;
+    std::pmr::string channel_name_;
     std::pmr::vector<UnixSocket> clients_;
     std::shared_ptr<jewels::LogCerrThrottle> log_cerr_throttle_;
   };
 
-  std::pmr::string name_;
   std::optional<PublisherHandle> publisher_;
   std::shared_ptr<jewels::LogCerrThrottle> log_cerr_throttle_;
   jewels::memory::pmr_unique_ptr<SocketClients> socket_clients_;

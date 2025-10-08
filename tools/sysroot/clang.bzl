@@ -12,7 +12,7 @@ X86_64 = "x86_64"
 AARCH64 = "aarch64"
 
 GCC_VERSION = 10
-CLANG_VERSION = 19
+CLANG_VERSION = 21
 
 def format_versions(input):
     """Format the input string or list with the GCC and Clang versions.
@@ -146,7 +146,12 @@ def _filegroups(arch, target_triple, CLANG_VERSION):
     native.filegroup(
         name = "llvm_compiler_files_" + target_triple,
         srcs = native.glob(
-            [path + "/**" for path in (_INCLUDE_DIRS_X86_64 if arch == X86_64 else _INCLUDE_DIRS_AARCH64)],
+            [path + "/**" for path in (_INCLUDE_DIRS_X86_64 if arch == X86_64 else _INCLUDE_DIRS_AARCH64) + [
+                # Avoids the following build failure, see DX-2729:
+                # this rule is missing dependency declarations for the following files included by 'src/liblzma/common/lzip_decoder.c':
+                #  'external/clang+/usr/lib/llvm-21/lib/clang/21/share/asan_ignorelist.txt'
+                "usr/lib/llvm-{clang}/lib/clang/{clang}/share".format(clang = CLANG_VERSION),
+            ]],
             allow_empty = False,
         ) + [
             "usr/lib/llvm-{}/bin/clang".format(CLANG_VERSION),
@@ -310,7 +315,7 @@ def make_clang_targets(name):
         srcs = native.glob(
             [
                 "lib/x86_64-linux-gnu/libffi.so*",
-                "usr/lib/llvm-{}/lib/libclang-cpp.*".format(CLANG_VERSION),
+                "usr/lib/llvm-{}/lib/libclang-*.*".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libclang.*".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libffi.so.7".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libLLVM*".format(CLANG_VERSION),
@@ -335,7 +340,7 @@ def make_clang_targets(name):
             linker_files = ":llvm_linker_files_" + target_triple,
             objcopy_files = ":llvm_objcopy_files_" + target_triple,
             strip_files = ":llvm_strip_files_" + target_triple,
-            supports_param_files = 1,
+            supports_param_files = True,
             toolchain_config = cc_config_name,
             toolchain_identifier = "clang-toolchain-" + target_triple,
         )
@@ -346,11 +351,11 @@ def make_clang_targets(name):
             name = cc_config_name,
             # Use Ubuntu's dynamic linker on x86_64
             dynamic_linker = "/lib64/ld-linux-x86-64.so.2" if arch == X86_64 else "",
-            sysroot = "external/clang~",
+            sysroot = "external/clang+",
             target = arch + "-unknown-linux-gnu",
             target_flags = X86_FLAGS if arch == X86_64 else AARCH_FLAGS,
             tool_paths = _TOOL_PATHS,
-            cxx_builtin_include_directories = ["%package(@@clang//)%/" + dir for dir in include_dirs] + ["../clang~/" + dir for dir in include_dirs],
+            cxx_builtin_include_directories = ["%package(@@clang//)%/" + dir for dir in include_dirs] + ["../clang+/" + dir for dir in include_dirs],
             includes = ["%{sysroot}/" + dir for dir in include_dirs] +
                        [],
             gcc_install_dir = "%{{sysroot}}/usr/lib/gcc/x86_64-linux-gnu/{}".format(GCC_VERSION) if arch == X86_64 else "%{{sysroot}}/usr/lib/gcc-cross/aarch64-linux-gnu/{}".format(GCC_VERSION),

@@ -17,6 +17,7 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 #include "jewels/uuid/uuid_hasher.hh"
 
@@ -50,12 +51,14 @@ jewels::expected<clockwork_logging::ChannelMap, jewels::MonoError> convert_chann
 /// @param[in] execution_params Execution parameters
 /// @param[in] logging_config Deterministic log writer configuration
 /// @param[in] scaffolding_channel_map Scaffolding channel map
+/// @param[in] init_time The start time for execution
 /// @return Deterministic channel handler or MonoError instance of failure
 jewels::expected<std::shared_ptr<DeterministicChannelHandler>, jewels::MonoError> setup_deterministic_log_writer(
   jewels::memory::MemoryResource memres,
   const ExecutionParams& execution_params,
   const DeterministicLoggingConfig& logging_config,
-  const scaffolding::ChannelMap& scaffolding_channel_map);
+  const scaffolding::ChannelMap& scaffolding_channel_map,
+  jewels::time::SyncTime init_time);
 
 /// Helper function to build the deterministic runner config.
 /// @tparam LogMessageFetcherType Log message fetcher type

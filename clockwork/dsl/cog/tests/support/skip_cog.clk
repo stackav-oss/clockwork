@@ -1,0 +1,28 @@
+use clockwork::dsl::tests::support::hellomsg;
+// Doc.
+cog SkipCog
+{
+    inputs
+    {
+        input_a: Tappy<hellomsg::HelloMsg>;
+        input_b: Tappy<hellomsg::HelloMsg>
+        {
+            skip_threshold: 5;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic;
+    }
+}
+
+cpp_target skip_cog
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog SkipCog;
+}

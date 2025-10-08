@@ -1,12 +1,29 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Tests the LogicalSystemInterface functionality."""
 
 from pathlib import Path
 
+import pytest
+from clockwork.dsl.composition.system import Channel
+from clockwork.dsl.ir.compiler import compile_source_file
+from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.logical_system_interface import CogInterface, LogicalSystemInterface
+
+
+@pytest.fixture()
+def fs_importer() -> FilesystemImporter:
+    return FilesystemImporter(compile_fn=compile_source_file)
+
+
+@pytest.fixture(scope="module")
+def test_system_multi_node() -> LogicalSystemInterface:
+    return LogicalSystemInterface(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/tests/support/test_system_multi_node.clk"))
+    )
 
 
 def check_publisher_cog_expectations(logical_system: LogicalSystemInterface, cog: CogInterface) -> None:
@@ -33,7 +50,7 @@ def check_publisher_cog_expectations(logical_system: LogicalSystemInterface, cog
         assert endpoint.is_log_producer() is False
 
 
-def test_logical_system_interface() -> None:  # noqa: PLR0915
+def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # noqa: PLR0915  For testing only
     """Test the LogicalSystemInterface.
 
     Note:
@@ -42,16 +59,24 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
     # load a system with some cogs
     # input_log -> Chan1 -> subscriber_cog -> Chan2 -> publisher_cog -> Chan3 -> output_log
     logical_system = LogicalSystemInterface(
-        ModuleID.from_path(CLK_REPO, Path("clockwork/tests/support/test_system_description.clk"))
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description.clk"),
+        ),
+        fs_importer,
     )
 
     # load an empty system
     logical_system_2 = LogicalSystemInterface(
-        ModuleID.from_path(CLK_REPO, Path("clockwork/tests/support/test_system_description_2.clk"))
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description_2.clk"),
+        ),
+        fs_importer,
     )
 
     # test getters
-    assert len(logical_system.get_channels()) == 4
+    assert len(logical_system.get_channels()) == 10
     channel_1 = logical_system.get_channel("Chan1")
     assert channel_1 is not None
     assert channel_1.get_name() == "Chan1"
@@ -102,7 +127,7 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
     new_output_channel_name = "some_new_output_channel"
     new_input_channel_name = "some_new_input_channel"
     channel_1.add_log_producer(alternative_output_channel_name=new_output_channel_name)
-    assert len(logical_system.get_channels()) == 5
+    assert len(logical_system.get_channels()) == 11
     new_channel = logical_system.get_channel(new_output_channel_name)
     assert new_channel is not None
     new_channel_producers = new_channel.get_producers()
@@ -130,7 +155,7 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
         for channel in logical_system.get_channels():
             channel_name = channel.get_name()
             for observer in channel.get_observers():
-                if logical_system.is_endpoint_connected_to_cog(observer, cog):
+                if logical_system.is_endpoint_connected_to_cog(observer, cog) and isinstance(channel._channel, Channel):
                     logical_system_2.add_channel(channel)
                     new_channel = logical_system_2.get_channel(channel_name)
                     assert new_channel is not None
@@ -138,13 +163,13 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
                     assert new_channel.get_message_size_bytes() == channel.get_message_size_bytes()
                     logical_system_2.connect_channel_observer(new_channel, observer)
             for producer in channel.get_producers():
-                if logical_system.is_endpoint_connected_to_cog(producer, cog):
+                if isinstance(channel._channel, Channel) and logical_system.is_endpoint_connected_to_cog(producer, cog):
                     logical_system_2.add_channel(channel)
                     new_channel = logical_system_2.get_channel(channel_name)
                     assert new_channel is not None
                     logical_system_2.connect_channel_producer(new_channel, producer)
     assert (  # `some_new_channel` wasn't connected to a cog so didn't get brought over
-        len(logical_system_2.get_channels()) == 4
+        len(logical_system_2.get_channels()) == 10
     )
     assert len(logical_system_2.get_processes()) == 1
     assert len(logical_system_2.get_cogs()) == 3
@@ -163,7 +188,7 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
     assert channel_2 is not None
     logical_system.remove_channel(channel_2)
     assert logical_system.get_channel("Chan2") is None
-    assert len(logical_system.get_channels()) == 4
+    assert len(logical_system.get_channels()) == 10
     logical_system.remove_cog(system_cogs[0])
     assert len(logical_system.get_cogs()) == 2
     logical_system.remove_process(processes[0])
@@ -171,3 +196,72 @@ def test_logical_system_interface() -> None:  # noqa: PLR0915
     assert channel_1.has_log_writer_policy() is True
     logical_system.clear_policies()
     assert channel_1.has_log_writer_policy() is False
+
+
+def test_cog_interface_multi_node(test_system_multi_node: LogicalSystemInterface) -> None:
+    cogs = {cog.get_name(): cog for cog in test_system_multi_node.get_cogs()}
+    assert len(cogs) == 3
+    source_cog_name = f"@{CLK_REPO}::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_1.source_cog"
+    sink_cog_name = f"@{CLK_REPO}::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog"
+    init_cog_name = f"@{CLK_REPO}::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.init_cog"
+    assert {cog_name: cog.is_init() for cog_name, cog in cogs.items()} == {
+        source_cog_name: False,
+        sink_cog_name: False,
+        init_cog_name: True,
+    }
+
+    io_conns = {io_conn.get_name(): io_conn for io_conn in test_system_multi_node.get_io_connections()}
+    assert len(io_conns) == 2
+    source_socket_name = f"@{CLK_REPO}::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_1.source_socket"
+    sink_socket_name = f"@{CLK_REPO}::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_socket"
+    assert list(io_conns.keys()) == [source_socket_name, sink_socket_name]
+
+    cpu_1 = "TestSystemCpu1"
+    cpu_2 = "TestSystemCpu2"
+    assert test_system_multi_node.get_cpu_domain_for_entity(io_conns[source_socket_name].get_uuid()).get_name() == cpu_1
+    assert test_system_multi_node.get_cpu_domain_for_entity(cogs[source_cog_name].get_uuid()).get_name() == cpu_1
+
+    assert test_system_multi_node.get_cpu_domain_for_entity(io_conns[sink_socket_name].get_uuid()).get_name() == cpu_2
+    assert test_system_multi_node.get_cpu_domain_for_entity(cogs[sink_cog_name].get_uuid()).get_name() == cpu_2
+    assert test_system_multi_node.get_cpu_domain_for_entity(cogs[init_cog_name].get_uuid()).get_name() == cpu_2
+
+    channels = {channel.get_name(): channel for channel in test_system_multi_node.get_channels()}
+    assert all(not channel.is_multi_producer() for channel in channels.values())
+
+    source_chan_name = "SourceChan"
+    sink_chan_name = "SinkChan"
+    multi_node_chan_name = "MultiNodeChan"
+    assert (
+        channels[source_chan_name].get_message_repr_name()
+        == f"@{CLK_REPO}::clockwork::tests::support::test_messages_multi_node.SourceMessage"
+    )
+    assert (
+        channels[multi_node_chan_name].get_message_repr_name()
+        == f"@{CLK_REPO}::clockwork::tests::support::test_messages_multi_node.MultiNodeMessage"
+    )
+    assert (
+        channels[sink_chan_name].get_message_repr_name()
+        == f"@{CLK_REPO}::clockwork::tests::support::test_messages_multi_node.SinkMessage"
+    )
+
+    assert io_conns[source_socket_name].get_input_channel_names() == []
+    assert io_conns[source_socket_name].get_output_channel_names() == [source_chan_name]
+    assert cogs[source_cog_name].get_input_channel_names() == [source_chan_name]
+    assert cogs[source_cog_name].get_output_channel_names() == [multi_node_chan_name]
+    assert cogs[sink_cog_name].get_input_channel_names() == [multi_node_chan_name]
+    assert cogs[sink_cog_name].get_output_channel_names() == [sink_chan_name]
+    assert io_conns[sink_socket_name].get_input_channel_names() == [sink_chan_name]
+    assert io_conns[sink_socket_name].get_output_channel_names() == []
+
+    source_cog = cogs[source_cog_name]
+    assert source_cog.get_endpoint_by_input_name("message_output") is None
+    assert (in_endpoint := source_cog.get_endpoint_by_input_name("message_input")) is not None
+    assert (in_channel := in_endpoint.get_connected_channel()) is not None
+    assert in_channel.get_name() == source_chan_name
+
+    assert source_cog.get_endpoint_by_output_name("message_input") is None
+    assert (out_endpoint := source_cog.get_endpoint_by_output_name("message_output")) is not None
+    assert (out_channel := out_endpoint.get_connected_channel()) is not None
+    assert out_channel.get_name() == multi_node_chan_name
+    assert test_system_multi_node.is_endpoint_connected_to_cog(in_endpoint, source_cog)
+    assert test_system_multi_node.is_endpoint_connected_to_cog(out_endpoint, source_cog)

@@ -1,5 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
 
 """Unit tests for pub_sub."""
 
@@ -10,6 +11,7 @@ from typing import Final
 
 import pytest
 from clockwork.dsl.composition import genpd, pdf, system
+from clockwork.dsl.composition.pdf import NotConnectedEndpointType
 from clockwork.dsl.ir import compiler, cpp_target, system_target
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
@@ -30,9 +32,10 @@ def test_hellomod(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
     sys_ir = module.inner_scope.lookup("helloworld", recursive=False)
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
-    logical_system = system.make_system([sys_ir.get_resolved().box_instance], sys_ir.module)
+    logical_system = system.make_system(
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+    )
     physical_system = system.make_physical_system(logical_system)
-    system.add_logging_observers(physical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
     (pd,) = process_descs.values()
     tmp_file: Final = tmp_path / "HelloWorld.tachyon"
@@ -97,3 +100,39 @@ def test_hellomod(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
     (mem_hello_conn,) = pd.memory_resource_graph.connections
     assert mem_hello_conn.memory_resource_id == mem_hello.memory_resource_id
     assert extern_hello.maybe_memory_resource == mem_hello.memory_resource_id
+
+
+def test_gen_not_connected_endpoints(fs_importer: FilesystemImporter) -> None:
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/composition/tests/support/simplesys.clk")), fs_importer
+    )
+
+    sys_ir = module.inner_scope.lookup("system1", recursive=False)
+    assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
+
+    logical_system = system.make_system(
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+    )
+    physical_system = system.make_physical_system(logical_system)
+    process_descs = genpd.gen_pd_sys(physical_system)
+    for pd in process_descs.values():
+        assert len(pd.not_connected_endpoints) == 2
+        assert {endpoint.endpoint_type for endpoint in pd.not_connected_endpoints} == {
+            NotConnectedEndpointType.publisher,
+            NotConnectedEndpointType.subscriber,
+        }
+        for endpoint in pd.not_connected_endpoints:
+            if endpoint.endpoint_type == NotConnectedEndpointType.publisher:
+                assert endpoint.endpoint_id in logical_system.producer_endpoints
+                assert endpoint.endpoint_id in logical_system.ignored_producer_endpoints
+                assert (
+                    endpoint.buffer_layout.message_size
+                    == logical_system.ignored_producer_endpoints[endpoint.endpoint_id]
+                )
+            if endpoint.endpoint_type == NotConnectedEndpointType.subscriber:
+                assert endpoint.endpoint_id in logical_system.observer_endpoints
+                assert endpoint.endpoint_id in logical_system.ignored_observer_endpoints
+                assert (
+                    endpoint.buffer_layout.message_size
+                    == logical_system.ignored_observer_endpoints[endpoint.endpoint_id]
+                )

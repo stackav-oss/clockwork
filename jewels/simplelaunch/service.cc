@@ -17,7 +17,6 @@
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http/error.hpp>
 #include <boost/beast/http/field.hpp>
-#include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/impl/message_generator.hpp>
 #include <boost/beast/http/message_generator.hpp>
 #include <boost/beast/http/read.hpp>
@@ -107,6 +106,26 @@ struct RequestContext
         }
       });
   }
+
+  void blocking_send_response(boost::beast::http::response<boost::beast::http::string_body> response)
+  {
+    response.version(request.version());
+    response.prepare_payload();
+
+    boost::beast::error_code error_code{};
+    boost::beast::write(stream, boost::beast::http::message_generator(std::move(response)), error_code);
+
+    if (error_code)
+    {
+      log_cerr_error("Error responding: {}", error_code.message());
+    }
+
+    // If keep-alive is not enabled close the socket
+    if (!request.keep_alive())
+    {
+      this->close();
+    }
+  }
 };
 
 /// Get the output logs of a process.
@@ -166,7 +185,7 @@ void TaskManagerImpl::get_process_list(
   bool binary_encoding, boost::beast::http::response<boost::beast::http::string_body>& response)
 {
   GetProcessListResponse process_list;
-  const std::lock_guard<std::mutex> guard{child_processes_mutex_};
+  const std::scoped_lock guard{child_processes_mutex_};
   for (const auto& process : std::ranges::views::values(child_processes_))
   {
     *process_list.mutable_process_info()->Add() = process.get_process_info();
@@ -327,7 +346,7 @@ void TaskManagerImpl::sigchld_callback(const boost::system::error_code& error, i
 
   log_cerr_debug("Got SIGCHLD");
 
-  const std::lock_guard<std::mutex> guard{child_processes_mutex_};
+  const std::scoped_lock guard{child_processes_mutex_};
   pid_t pid = 0;
   int status = 0;
   while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
@@ -336,7 +355,7 @@ void TaskManagerImpl::sigchld_callback(const boost::system::error_code& error, i
   }
 }
 
-void TaskManagerImpl::send_signal_to_all(int signal_number, std::string_view signal_name, uint32_t wait_in_s)
+size_t TaskManagerImpl::send_signal_to_all(int signal_number, std::string_view signal_name, uint32_t wait_in_s)
 {
   if (wait_in_s > 0)
   {
@@ -348,7 +367,7 @@ void TaskManagerImpl::send_signal_to_all(int signal_number, std::string_view sig
       req = rem;
     }
   }
-  const std::lock_guard<std::mutex> guard{child_processes_mutex_};
+  const std::scoped_lock guard{child_processes_mutex_};
   // Cleaning up children that may have died without signaling
   pid_t pid = 0;
   int status = 0;
@@ -371,6 +390,7 @@ void TaskManagerImpl::send_signal_to_all(int signal_number, std::string_view sig
     }
   }
   log_cerr_info("Sent SIG{} to {} children, ignoring {} already exited", signal_name, non_exited, exited);
+  return non_exited;
 }
 
 void TaskManagerImpl::quit_callback(const boost::system::error_code& error, int /* signal_number */)
@@ -383,12 +403,32 @@ void TaskManagerImpl::quit_callback(const boost::system::error_code& error, int 
                              { this->quit_callback(next_error, next_signal); });
     return;
   }
+
+  quit();
+}
+
+void TaskManagerImpl::escalating_send_signal_to_all()
+{
   constexpr auto sleep_timeout = 3;
-  send_signal_to_all(SIGINT, "INT");
-  send_signal_to_all(SIGTERM, "TERM", sleep_timeout);
-  send_signal_to_all(SIGABRT, "ABRT", sleep_timeout);
+  if (send_signal_to_all(SIGINT, "INT") == 0U)
+  {
+    return;
+  }
+  if (send_signal_to_all(SIGTERM, "TERM", sleep_timeout) == 0U)
+  {
+    return;
+  }
+  if (send_signal_to_all(SIGABRT, "ABRT", sleep_timeout) == 0U)
+  {
+    return;
+  }
   send_signal_to_all(SIGKILL, "KILL", sleep_timeout);
+}
+
+void TaskManagerImpl::quit()
+{
   tcp_acceptor_.close();
+  escalating_send_signal_to_all();
   io_ctx_ptr_->stop();
 }
 
@@ -505,6 +545,15 @@ void TaskManagerImpl::accept_connection(boost::beast::error_code error_code, boo
       response.set(boost::beast::http::field::access_control_allow_methods, "*");
       response.set(boost::beast::http::field::access_control_allow_headers, "*");
 
+      if (path == "/quit" && method == boost::beast::http::verb::post)
+      {
+        quit();
+        // Use a blocking write here to make sure the response is sent
+        // so the client knows it was acknowledged.
+        request_ctx_ptr->blocking_send_response(std::move(response));
+        return;
+      }
+
       if (path == "/" && method == boost::beast::http::verb::get)
       {
         get_process_list(accepts_binary, response);
@@ -519,7 +568,6 @@ void TaskManagerImpl::accept_connection(boost::beast::error_code error_code, boo
         response.result(boost::beast::http::status::bad_request);
         response.body() = fmt::format("Invalid {} request", std::string_view{boost::beast::http::to_string(method)});
       }
-
       request_ctx_ptr->send_response(std::move(response));
     });
 
@@ -537,7 +585,7 @@ void TaskManagerImpl::register_signal_handlers()
 void TaskManagerImpl::spawn_subprocesses()
 {
   // Now let's kick off all of the currently configured children
-  const std::lock_guard<std::mutex> guard{child_processes_mutex_};
+  const std::scoped_lock guard{child_processes_mutex_};
 
   // First create all the child process descriptions
   for (const auto& app_config : config_.app())

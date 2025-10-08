@@ -100,6 +100,9 @@ class LogProcessor(_NBLogProcessor):
                     _, deserialize = compatibility.create_deserializer(
                         compiler_context, message_type, tachyon_metadata, topic_metadata.type
                     )
+                except RuntimeError as e:
+                    _handle_error(str(e), suppress_errors)
+                    return
                 except ValueError as e:
                     _handle_error(str(e), suppress_errors)
                     return

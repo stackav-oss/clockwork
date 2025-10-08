@@ -45,6 +45,7 @@ TestPublisher::TestPublisher(
   }
   auto publisher_result = factory_result->open_publisher(
     uuid_str,
+    channel_name,
     clockwork::pinion::BufferLayout{
       .num_slots = num_slots,
       .message_size = message_size_b,

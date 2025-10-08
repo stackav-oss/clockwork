@@ -17,6 +17,7 @@
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/schema_encoding.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -436,8 +437,9 @@ TEST_CASE("Log persistent messages")
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time8);
     REQUIRE(interval_result->get_end_timestamp() == message_time8);
-    REQUIRE_FALSE(Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000003.olog").string(), TimeFilterOption::log_time));
+    REQUIRE_FALSE(
+      Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
+        memory_resource, (log_dir / "log_file_000003.olog").string(), TimeFilterOption::log_time));
   }
 
   SECTION("Read all messages")

@@ -76,7 +76,8 @@ class ExampleOutputImpl:
         """
         output_message = TestOutputMessage()
         output_message.time_of_validity = SyncTime(nanoseconds=dial.start_time)
-        output_message.message_strings = [
-            buffer.message.message_string for buffer in dial.inputs.input1.new_msgs_view
-        ] + [buffer.message.message_string for buffer in dial.inputs.input2.new_msgs_view]
+        output_message.message_strings.from_iter(
+            [buffer.message.message_string for buffer in dial.inputs.input1.new_msgs_view]
+            + [buffer.message.message_string for buffer in dial.inputs.input2.new_msgs_view]
+        )
         dial.outputs.output.publish(output_message)

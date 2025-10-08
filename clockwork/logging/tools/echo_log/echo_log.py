@@ -24,7 +24,7 @@ def main(channel_name: str, log_uri: str) -> None:
     config = LogReaderConfig(log_uri)
     processor = py_reader.LogProcessor(config)
 
-    def callback(publish_time: LogTimestamp, message: Any) -> None:  # noqa: ANN401
+    def callback(publish_time: LogTimestamp, message: Any) -> None:  # noqa: ANN401 Needed for runtime polymorphism
         nonlocal channel_name
         print()
         print(f"{channel_name}: {publish_time.nanoseconds}")

@@ -24,6 +24,29 @@ namespace detail
 {
 
 template <typename Vector, typename Value>
+void from_iter(Vector& vec, const nb::typed<nb::iterable, Value>& seq)
+{
+  size_t count = 0;
+  for (const nb::handle handle : seq)
+  {
+    if (count < vec.size())
+    {
+      vec.at(count) = cast_maybe_by_reference<Value>(handle);
+    }
+    else
+    {
+      throw std::length_error(fmt::format("Array of length {} set from too-large iterator.", vec.size()));
+    }
+    count++;
+  }
+  if (count != vec.size())
+  {
+    throw std::length_error(
+      fmt::format("Array of length {} set from iterator with too few elements ({}).", vec.size(), count));
+  }
+}
+
+template <typename Vector, typename Value>
 void bind_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_binding)
 {
   namespace nb = ::nanobind;
@@ -36,26 +59,13 @@ void bind_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_bindi
     [](Vector* vec, nb::typed<nb::iterable, Value> seq)
     {
       new (vec) Vector();
-      size_t count = 0;
-      for (const nb::handle handle : seq)
-      {
-        if (count < vec->size())
-        {
-          vec->at(count) = cast_maybe_by_reference<Value>(handle);
-        }
-        else
-        {
-          throw std::length_error(fmt::format("Array of length {} initialized from too-large iterator.", vec->size()));
-        }
-        count++;
-      }
-      if (count != vec->size())
-      {
-        throw std::length_error(fmt::format(
-          "Array of length {} initialized from iterator with too few elements ({}).", vec->size(), count, count));
-      }
+      from_iter(*vec, seq);
     },
     "Construct from an iterable object");
+  vec_binding.def(
+    "from_iter",
+    [](Vector& vec, nb::typed<nb::iterable, Value> seq) { from_iter(vec, seq); },
+    "Set elements from an iterable object. Length must match exactly.");
 
   nb::implicitly_convertible<nb::iterable, Vector>();
 
@@ -71,8 +81,9 @@ void bind_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_bindi
 
         if (length != value.size())
         {
-          throw nb::index_error("The left and right hand side of the slice "
-                                "assignment have mismatched sizes!");
+          throw nb::index_error(
+            "The left and right hand side of the slice "
+            "assignment have mismatched sizes!");
         }
 
         for (size_t i = 0; i < length; ++i)

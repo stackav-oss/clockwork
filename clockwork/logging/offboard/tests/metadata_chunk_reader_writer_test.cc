@@ -24,6 +24,8 @@
 
 #include <cerrno>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <unordered_map>
@@ -82,27 +84,29 @@ TEST_CASE("Metadata chunk reader/writer")
   SECTION("Chunk with metadata")
   {
     REQUIRE(
-      metadata_writer.add_channel(reader::LoggedChannelInfo{
-        .compression_type = compression_type1,
-        .channel_name = channel_name1,
-        .message_encoding = message_encoding1,
-        .channel_type = channel_type1,
-        .schema_name = schema_name1,
-        .schema_encoding = schema_encoding1,
-        .schema_definition = schema_definition1,
-      }) == 1U);
+      metadata_writer.add_channel(
+        reader::LoggedChannelInfo{
+          .compression_type = compression_type1,
+          .channel_name = channel_name1,
+          .message_encoding = message_encoding1,
+          .channel_type = channel_type1,
+          .schema_name = schema_name1,
+          .schema_encoding = schema_encoding1,
+          .schema_definition = schema_definition1,
+        }) == 1U);
     REQUIRE(metadata_writer.get_channel_id("channel_1") == 1U);
     REQUIRE(metadata_writer.get_compression_type(1U) == compression_type1);
     REQUIRE(
-      metadata_writer.add_channel(reader::LoggedChannelInfo{
-        .compression_type = compression_type2,
-        .channel_name = channel_name2,
-        .message_encoding = message_encoding2,
-        .channel_type = channel_type2,
-        .schema_name = schema_name2,
-        .schema_encoding = schema_encoding2,
-        .schema_definition = schema_definition2,
-      }) == 2U);
+      metadata_writer.add_channel(
+        reader::LoggedChannelInfo{
+          .compression_type = compression_type2,
+          .channel_name = channel_name2,
+          .message_encoding = message_encoding2,
+          .channel_type = channel_type2,
+          .schema_name = schema_name2,
+          .schema_encoding = schema_encoding2,
+          .schema_definition = schema_definition2,
+        }) == 2U);
     REQUIRE(metadata_writer.get_channel_id("channel2") == 2U);
     REQUIRE(metadata_writer.get_compression_type(2U) == compression_type2);
 
@@ -139,25 +143,27 @@ TEST_CASE("Metadata chunk reader/writer")
     SECTION("Duplicate channel")
     {
       REQUIRE(
-        metadata_writer.add_channel(reader::LoggedChannelInfo{
-          .compression_type = compression_type1,
-          .channel_name = channel_name1,
-          .message_encoding = message_encoding1,
-          .channel_type = channel_type1,
-          .schema_name = schema_name1,
-          .schema_encoding = schema_encoding1,
-          .schema_definition = schema_definition1,
-        }) == 1U);
+        metadata_writer.add_channel(
+          reader::LoggedChannelInfo{
+            .compression_type = compression_type1,
+            .channel_name = channel_name1,
+            .message_encoding = message_encoding1,
+            .channel_type = channel_type1,
+            .schema_name = schema_name1,
+            .schema_encoding = schema_encoding1,
+            .schema_definition = schema_definition1,
+          }) == 1U);
       REQUIRE(
-        metadata_writer.add_channel(reader::LoggedChannelInfo{
-          .compression_type = compression_type1,
-          .channel_name = channel_name1,
-          .message_encoding = message_encoding1,
-          .channel_type = channel_type1,
-          .schema_name = schema_name1,
-          .schema_encoding = schema_encoding1,
-          .schema_definition = schema_definition1,
-        }) == jewels::unexpected(LogError::channel_already_exists));
+        metadata_writer.add_channel(
+          reader::LoggedChannelInfo{
+            .compression_type = compression_type1,
+            .channel_name = channel_name1,
+            .message_encoding = message_encoding1,
+            .channel_type = channel_type1,
+            .schema_name = schema_name1,
+            .schema_encoding = schema_encoding1,
+            .schema_definition = schema_definition1,
+          }) == jewels::unexpected(LogError::channel_already_exists));
     }
 
     SECTION("Unknown channel")
@@ -169,43 +175,46 @@ TEST_CASE("Metadata chunk reader/writer")
     SECTION("Channel name too long")
     {
       REQUIRE(
-        metadata_writer.add_channel(reader::LoggedChannelInfo{
-          .compression_type = compression_type1,
-          .channel_name = std::pmr::string{max_name_string_size + 1U, 'X', memory_resource},
-          .message_encoding = message_encoding1,
-          .channel_type = channel_type1,
-          .schema_name = schema_name1,
-          .schema_encoding = schema_encoding1,
-          .schema_definition = schema_definition1,
-        }) == jewels::unexpected(LogError::channel_name_exceeds_max_name_size));
+        metadata_writer.add_channel(
+          reader::LoggedChannelInfo{
+            .compression_type = compression_type1,
+            .channel_name = std::pmr::string{max_name_string_size + 1U, 'X', memory_resource},
+            .message_encoding = message_encoding1,
+            .channel_type = channel_type1,
+            .schema_name = schema_name1,
+            .schema_encoding = schema_encoding1,
+            .schema_definition = schema_definition1,
+          }) == jewels::unexpected(LogError::channel_name_exceeds_max_name_size));
     }
 
     SECTION("Schema name too long")
     {
       REQUIRE(
-        metadata_writer.add_channel(reader::LoggedChannelInfo{
-          .compression_type = compression_type1,
-          .channel_name = channel_name1,
-          .message_encoding = message_encoding1,
-          .channel_type = channel_type1,
-          .schema_name = std::pmr::string{max_name_string_size + 1U, 'X', memory_resource},
-          .schema_encoding = schema_encoding1,
-          .schema_definition = schema_definition1,
-        }) == jewels::unexpected(LogError::schema_name_exceeds_max_name_size));
+        metadata_writer.add_channel(
+          reader::LoggedChannelInfo{
+            .compression_type = compression_type1,
+            .channel_name = channel_name1,
+            .message_encoding = message_encoding1,
+            .channel_type = channel_type1,
+            .schema_name = std::pmr::string{max_name_string_size + 1U, 'X', memory_resource},
+            .schema_encoding = schema_encoding1,
+            .schema_definition = schema_definition1,
+          }) == jewels::unexpected(LogError::schema_name_exceeds_max_name_size));
     }
 
     SECTION("Schema definition too long")
     {
       REQUIRE(
-        metadata_writer.add_channel(reader::LoggedChannelInfo{
-          .compression_type = compression_type1,
-          .channel_name = channel_name1,
-          .message_encoding = message_encoding1,
-          .channel_type = channel_type1,
-          .schema_name = schema_name1,
-          .schema_encoding = schema_encoding1,
-          .schema_definition = std::pmr::string{max_schema_definition_string_size + 1U, 'X', memory_resource},
-        }) == jewels::unexpected(LogError::schema_definition_exceeds_max_size));
+        metadata_writer.add_channel(
+          reader::LoggedChannelInfo{
+            .compression_type = compression_type1,
+            .channel_name = channel_name1,
+            .message_encoding = message_encoding1,
+            .channel_type = channel_type1,
+            .schema_name = schema_name1,
+            .schema_encoding = schema_encoding1,
+            .schema_definition = std::pmr::string{max_schema_definition_string_size + 1U, 'X', memory_resource},
+          }) == jewels::unexpected(LogError::schema_definition_exceeds_max_size));
     }
 
     SECTION("Writer not open")

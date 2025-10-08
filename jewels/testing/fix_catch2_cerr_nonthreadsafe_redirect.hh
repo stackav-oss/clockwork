@@ -3,7 +3,7 @@
 
 #pragma once
 
-#if defined(__has_feature)
+#ifdef __has_feature
 #if __has_feature(thread_sanitizer)
 __attribute__((constructor)) void fix_catch2_cerr_nonthreadsafe_redirect()
 {

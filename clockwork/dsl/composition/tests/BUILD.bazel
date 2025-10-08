@@ -63,6 +63,29 @@ py_test(
 )
 
 py_test(
+    name = "gen_metrics_channel_metadata_config_test",
+    srcs = [
+        "gen_metrics_channel_metadata_config_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_metrics_channel_metadata_configs",
+        "//clockwork/dsl/composition:metrics_channel_metadata_config",
+        "//clockwork/dsl/composition:metrics_channel_metadata_config_proto",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
     name = "gen_multi_subscriber_config_test",
     srcs = [
         "gen_multi_subscriber_config_test.py",
@@ -94,7 +117,10 @@ py_test(
         "genpd_test.py",
         ":__test__",
     ],
-    data = ["//clockwork/dsl/tests/support:hellomod_clk"],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:hellomod_clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
@@ -199,10 +225,15 @@ py_test(
     deps = [
         ":__test__",
         "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/composition:systemgen",
         "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:cog",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:path_resolver",
+        "//clockwork/dsl/ir:system_target",
+        "//clockwork/dsl/ir:uuid_reg",
         "@clockwork_pip//pytest",
     ],
 )

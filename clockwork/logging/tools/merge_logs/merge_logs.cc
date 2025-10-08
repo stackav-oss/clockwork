@@ -88,9 +88,10 @@ int32_t main(int32_t argc, char* argv[])
     std::optional<clockwork_logging::RelativeInterval> maybe_log_interval;
     if (start_offset_s != 0 || end_offset_s != 0)
     {
-      maybe_log_interval.emplace(clockwork_logging::RelativeInterval{
-        .start_offset = std::chrono::seconds(start_offset_s),
-      });
+      maybe_log_interval.emplace(
+        clockwork_logging::RelativeInterval{
+          .start_offset = std::chrono::seconds(start_offset_s),
+        });
       if (end_offset_s != 0)
       {
         maybe_log_interval->end_offset = std::chrono::seconds(end_offset_s);

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 
 namespace clockwork_logging::offboard
 {
@@ -67,7 +68,7 @@ S3ReadStreambuf::seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base
 
 S3ReadStreambuf::pos_type S3ReadStreambuf::seekpos(pos_type pos, std::ios_base::openmode /*mode*/)
 {
-  if (pos != 0 && pos != static_cast<int64_t>(buffer_.size()))
+  if (pos != 0 && std::cmp_not_equal(static_cast<int64_t>(pos), buffer_.size()))
   {
     return pos_type{-1};
   }

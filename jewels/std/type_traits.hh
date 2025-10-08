@@ -10,7 +10,8 @@ namespace jewels
 
 /// Backport of https://en.cppreference.com/w/cpp/types/is_scoped_enum
 template <class T, typename = void>
-struct is_scoped_enum : std::bool_constant<false> // NOLINT(readability-identifier-naming)
+// NOLINTNEXTLINE(readability-identifier-naming) Standard library uses snake case
+struct is_scoped_enum : std::bool_constant<false>
 {
 };
 

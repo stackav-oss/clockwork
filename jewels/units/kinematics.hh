@@ -14,6 +14,7 @@
 #include <au/packs.hh> // IWYU pragma: keep
 #include <au/power_aliases.hh>
 #include <au/unit_of_measure.hh>
+#include <au/units/radians.hh>
 
 namespace au
 {
@@ -52,15 +53,38 @@ using OnePerMeterPerSecondF = au::QuantityF<OnePerMeterPerSecond>;
 using OnePerMeterPerSecondD = au::QuantityD<OnePerMeterPerSecond>;
 constexpr auto one_per_meter_per_second = au::inverse(au::meters) * au::inverse(au::seconds);
 
-using RadsPerSecond = decltype(au::inverse(au::Seconds{}));
+using RadsPerMeter = decltype(au::Radians{} / au::Meters{});
+using RadsPerMeterF = au::QuantityF<RadsPerMeter>;
+using RadsPerMeterD = au::QuantityD<RadsPerMeter>;
+constexpr auto rads_per_meter = au::radians / au::meters;
+
+using RadsPerMeterPerSecond = decltype(au::Radians{} / au::Meters{} / au::Seconds{});
+using RadsPerMeterPerSecondF = au::QuantityF<RadsPerMeterPerSecond>;
+using RadsPerMeterPerSecondD = au::QuantityD<RadsPerMeterPerSecond>;
+constexpr auto rads_per_meter_per_second = au::radians / au::meters / au::seconds;
+
+using RadsPerSecond = decltype(au::Radians{} / au::Seconds{});
 using RadsPerSecondF = au::QuantityF<RadsPerSecond>;
 using RadsPerSecondD = au::QuantityD<RadsPerSecond>;
-constexpr auto rads_per_second = au::inverse(au::seconds);
+constexpr auto rads_per_second = au::radians / au::seconds;
+
+using RadsPerNanosecond = Giga<RadsPerSecond>;
+using RadsPerNanosecondD = au::QuantityD<RadsPerNanosecond>;
+inline constexpr auto rads_per_nanosecond = au::radians / au::nanoseconds;
+
+using NanosecondsPerRad = decltype(au::inverse(RadsPerNanosecond{}));
+using NanosecondsPerRadD = au::QuantityD<NanosecondsPerRad>;
+inline constexpr auto nanoseconds_per_rad = au::nanoseconds / au::radians;
 
 using RadsPerSecondSquared = decltype(au::inverse(au::squared(au::Seconds{})));
 using RadsPerSecondSquaredF = au::QuantityF<RadsPerSecondSquared>;
 using RadsPerSecondSquaredD = au::QuantityD<RadsPerSecondSquared>;
 constexpr auto rads_per_second_squared = au::inverse(au::squared(au::seconds));
+
+using RadsPerSecondCubed = decltype(au::inverse(au::cubed(au::Seconds{})));
+using RadsPerSecondCubedF = au::QuantityF<RadsPerSecondCubed>;
+using RadsPerSecondCubedD = au::QuantityD<RadsPerSecondCubed>;
+constexpr auto rads_per_second_cubed = au::inverse(au::cubed(au::seconds));
 
 using DegreesPerSecond = decltype(au::Degrees{} / au::Seconds{});
 using DegreesPerSecondF = au::QuantityF<DegreesPerSecond>;

@@ -15,8 +15,10 @@ clk(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_allocations.csv",
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_simplelaunch_config.textproto",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.logged_channel_metadata.pbbin",
         "demo_udp_system_exe.cc",
         "demo_udp_system_exe.hh",
         "demo_udp_system_exe.inl",
@@ -59,6 +61,7 @@ cc_library(
         "demo_udp_system_lib.inl",
     ],
     hdrs = ["demo_udp_system_lib.hh"],
+    data = [":demo_udp_system_clk"],
     deps = [
         ":just_a_uint32",
         "//clockwork:repr_iface",
@@ -84,6 +87,7 @@ merge_simplelaunch_config(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_allocations.csv",
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
         ":demo_udp_system_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
@@ -97,6 +101,7 @@ cc_library(
         "just_a_uint32.inl",
     ],
     hdrs = ["just_a_uint32.hh"],
+    data = [":just_a_uint32_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -128,6 +133,8 @@ clk(
     ],
     deps = [
         ":just_a_uint32_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/io:var_packet_clk",
     ],
 )
@@ -139,10 +146,22 @@ cc_library(
         "ping_pong_cog.inl",
     ],
     hdrs = ["ping_pong_cog.hh"],
+    data = [":ping_pong_clk"],
     deps = [
+        ":just_a_uint32",
         ":ping_pong_cog_dial",
         ":ping_pong_cog_impl",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:cog_event_metrics_cpp",
+        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
+        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/io:var_packet",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
     ],
 )
 
@@ -153,6 +172,7 @@ cc_library(
         "ping_pong_cog_dial.inl",
     ],
     hdrs = ["ping_pong_cog_dial.hh"],
+    data = [":ping_pong_clk"],
     deps = [
         ":just_a_uint32",
         "//clockwork/dial:include_common",
@@ -172,7 +192,6 @@ cc_library(
         "//jewels/container:circular_buffer",
         "//jewels/container/tap:var_array",
         "//jewels/memory:bits",
-        "@boost//:iterator",
         "@fmt",
     ],
 )

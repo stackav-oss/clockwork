@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_publishers.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -28,7 +28,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
-#include <utility>
+#include <variant>
 
 namespace clockwork
 {
@@ -61,8 +61,7 @@ bool operator==(const TestMsg2& lhs, const TestMsg2& rhs)
 template <typename... Types, typename... Args>
 auto make_tuple_repeat(Args&... args)
 {
-  // NOLINTNEXTLINE(bugprone-use-after-move) TODO(DX-1794): Fix this
-  return std::tuple<Types...>(Types{std::forward<Args...>(args...)}...);
+  return std::tuple<Types...>(Types{args...}...);
 }
 
 template <typename... Policies>
@@ -71,12 +70,12 @@ struct CogPublishersFixture // NOLINT(clang-analyzer-optin.performance.Padding) 
 {
   static constexpr auto policy_count = sizeof...(Policies);
   static constexpr auto channel_size = 100;
-  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, channel_size>...>;
+  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, channel_size, false>...>;
   using SubscribersArray = std::array<pinion::SubscriberHandle, policy_count>;
 
   CogPublishersFixture()
     : resource(std::pmr::new_delete_resource()),
-      channels(make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, channel_size>...>(resource)),
+      channels(make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, channel_size, false>...>(resource)),
       subscribers(std::apply([](auto&... chls) -> SubscribersArray { return {chls.make_subscriber()...}; }, channels)),
       publisher(resource)
   {

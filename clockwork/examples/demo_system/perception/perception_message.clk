@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::demo_system::perception)]
+
 // Perception debug message
 schema PerceptionDebugMessage
 {
@@ -20,17 +23,4 @@ schema PerceptionDebugMessage
     // Spread between earliest and latest aligned message
     #4 tov_spread: Duration;
   }
-}
-
-cpp_target perception_message
-{
-  options
-  {
-    namespace clockwork::demo_system::perception;
-  }
-
-  schema PerceptionDebugMessage;
-
-  representation Tachyon<PerceptionDebugMessage>;
-  interface Tappy<PerceptionDebugMessage>;
 }

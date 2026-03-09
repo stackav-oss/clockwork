@@ -5,9 +5,8 @@
 #include "clockwork/cog/input_view.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/cond_time_since_last_exec.hh"
-#include "clockwork/dsl/cog/cog_event_metrics_cpp.hh"
-#include "clockwork/dsl/cog/cog_telemetry_metrics_cpp.hh"
-#include "clockwork/dsl/cog/min_max_mean_cpp.hh"
+#include "clockwork/dsl/cog/common_cog_event_metrics_clk_cc.hh"
+#include "clockwork/dsl/cog/common_cog_telemetry_metrics_clk_cc.hh"
 #include "clockwork/dsl/cog/ten_nanosecond_type.hh"
 #include "clockwork/dsl/tests/support/hellocog.hh"
 #include "clockwork/pinion/buffer.hh"
@@ -165,7 +164,7 @@ struct InputViewFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, 5> channel;
+  InMemoryChannel<MsgType, 5, false> channel;
   pinion::PublisherHandle publisher_handle;
   pinion::SubscriberHandle subscriber_handle;
   InputView<Policy> subscriber;

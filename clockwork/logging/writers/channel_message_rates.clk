@@ -1,4 +1,7 @@
-use clockwork::logging::writers::rate_status::RateStatus;
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
+use clockwork::logging::writers::rate_status::{RateStatus};
 
 // Message rates for a logged channel
 schema ChannelMessageRate
@@ -16,16 +19,13 @@ schema ChannelMessageRate
     // Message rate in hz
     #3 msg_rate_hz: Float64;
   }
+
   history
   {
-    versions: [3, 4];
-    fields
-    {
-      #2 channel_name: VarString<max_size=127> -> became #4;
-    }
+    version: 4;
+    legacy_became: [2->4];
   }
 }
-
 
 // Message rates for logged channels
 schema ChannelMessageRates
@@ -36,6 +36,7 @@ schema ChannelMessageRates
     // Max num channels
     #3 max_num_channels = 2046;
   }
+
   fields
   {
     // Transmit time
@@ -44,27 +45,12 @@ schema ChannelMessageRates
     // Channel message rates
     #4 message_rates: VarArray<ChannelMessageRate, max_num_channels>;
   }
+
   history
   {
-    versions: [2, 4];
-    fields
-    {
-      #2 message_rates: VarArray<ChannelMessageRate, max_size=512> -> became #4;
-    }
+    version: 4;
+    legacy_became: [2->4];
   }
 }
 
-cpp_target channel_message_rates
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  schema ChannelMessageRate;
-  schema ChannelMessageRates;
-
-  representation Tachyon<ChannelMessageRate>;
-  representation Tachyon<ChannelMessageRates<>>;
-  interface ChannelMessageRateTap: Tap<Tachyon<ChannelMessageRate>>;
-  interface ChannelMessageRatesTap: Tap<Tachyon<ChannelMessageRates<>>>;
-}
+instantiate ChannelMessageRates<>;

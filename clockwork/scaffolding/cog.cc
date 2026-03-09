@@ -3,7 +3,7 @@
 
 #include "clockwork/scaffolding/cog.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 
 #include <xxh3.h>
@@ -12,7 +12,7 @@
 #include <memory_resource>
 #include <string_view>
 #include <utility>
-#include "clockwork/common/cog_execution_error.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -23,7 +23,7 @@ namespace clockwork::scaffolding
 {
 
 [[nodiscard]] jewels::expected<CogMap, jewels::MonoError> setup_cogs(
-  std::span<const common::CogInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::CogInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   jewels::memory::MemoryResource memres_exec,
   const std::shared_ptr<AbstractCogQueue>& queue,

@@ -1,5 +1,5 @@
 use clockwork::dsl::tests::support::hellomsg;
-use clockwork::diagnostics::report::Report as DiagnosticsReport;
+use clockwork::diagnostics::report::{Report as DiagnosticsReport};
 
 //
 extern_type CxxState;
@@ -74,8 +74,8 @@ cog HelloCog
 
     execution
     {
-        condition any_msg: any_message(latest_hello, min=1);
-        condition new_msg: new_message(min=1, max=2, input=history_of_hellos);
+        condition any_msg: any_message(latest_hello);
+        condition new_msg: new_message(max=2, input=history_of_hellos);
         // Execute at least at 2Hz
         condition periodic: time_since_last_exec(500ms);
 
@@ -95,6 +95,36 @@ cog HelloCog
     metrics_options
     {
         enabled: true;
+    }
+}
+
+// This cog has an execution condition that guarantees there's a message.
+cog HelloCogMinMessages
+{
+    inputs
+    {
+        hello: Tappy<hellomsg::HelloMsg>;
+    }
+
+    execution
+    {
+        condition any_hello: any_message(hello);
+        execute when: any_hello;
+    }
+}
+
+// This cog has an execution condition that guarantees there's a new message.
+cog HelloCogMinNewMessages
+{
+    inputs
+    {
+        hello: Tappy<hellomsg::HelloMsg>;
+    }
+
+    execution
+    {
+        condition new_hello: new_message(hello);
+        execute when: new_hello;
     }
 }
 
@@ -152,8 +182,8 @@ cog HelloCogWithMetrics
 
     execution
     {
-        condition any_msg: any_message(latest_hello, min=1);
-        condition new_msg: new_message(min=1, max=2, input=history_of_hellos);
+        condition any_msg: any_message(latest_hello);
+        condition new_msg: new_message(max=2, input=history_of_hellos);
         // Execute at least at 2Hz
         condition periodic: time_since_last_exec(500ms);
 
@@ -230,4 +260,6 @@ cpp_target hellocog
   cog HelloCogWithMetrics;
   cog HelloInit;
   cog HelloInit2;
+  cog HelloCogMinMessages;
+  cog HelloCogMinNewMessages;
 }

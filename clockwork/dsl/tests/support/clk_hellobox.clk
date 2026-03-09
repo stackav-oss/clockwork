@@ -1,0 +1,8 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::testing::box)]
+use[] clockwork::dsl::tests::support::clk_hellomod;
+
+box HelloBox
+{
+    new hello_box: clk_hellomod::HelloProcs;
+}

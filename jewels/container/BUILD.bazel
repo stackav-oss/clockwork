@@ -25,6 +25,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":circular_buffer_state_clk_cc",
+        "//clockwork:repr_iface",
         "//jewels/memory:aligned_storage",
         "//jewels/memory:memory_resource",
         "//jewels/meta:call",
@@ -42,25 +43,22 @@ clk(
         "circular_buffer_state_clk_cc.cc",
         "circular_buffer_state_clk_cc.hh",
         "circular_buffer_state_clk_cc.inl",
+        "circular_buffer_state_clk_nb.cc",
+        "circular_buffer_state_clk_nb.hh",
+        "circular_buffer_state_clk_nb.inl",
+        "circular_buffer_state_clk_proto.proto",
+        "circular_buffer_state_clk_proto_conv.cc",
+        "circular_buffer_state_clk_proto_conv.hh",
+        "circular_buffer_state_clk_proto_conv.inl",
     ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "proto",
+        "proto_conv",
+    ],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "circular_buffer_state_clk_cc",
-    srcs = [
-        "circular_buffer_state_clk_cc.cc",
-        "circular_buffer_state_clk_cc.inl",
-    ],
-    hdrs = ["circular_buffer_state_clk_cc.hh"],
-    data = [":circular_buffer_state_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 cc_library(

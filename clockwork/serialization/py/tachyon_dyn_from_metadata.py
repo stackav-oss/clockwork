@@ -12,7 +12,7 @@ import math
 import struct
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeAlias, TypeVar, cast
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
@@ -302,6 +302,11 @@ def _try_create_serdes(  # noqa: PLR0913
         if strong_serdes:
             serdeses[type_id] = strong_serdes
         return strong_serdes
+    if isinstance(typ, tachyon_model.SoaType):
+        soa_serdes = _soa_type_factory(compiler_context, type_id, typ, types, serdeses)
+        if soa_serdes:
+            serdeses[type_id] = soa_serdes
+        return soa_serdes
     if isinstance(typ, tachyon_model.SchemaType):
         schema_serdes: SchemaSerDes[Any] = SchemaSerDes.make(
             compiler_context=compiler_context,
@@ -847,6 +852,221 @@ def _optional_factory(
     return OptionalSerDes(compiler_context, type_id, types, serdeses).make_serdes()
 
 
+class SoaSerDes(Generic[T]):
+    """SerDes for Struct-of-Arrays (SoA) types (both FixedSoa and VarSoa).
+
+    SoA layout stores fields as separate contiguous arrays rather than array of structs.
+    For example, FixedSoa<Point3f, 100> stores:
+        x: [x0, x1, ..., x99]
+        y: [y0, y1, ..., y99]
+        z: [z0, z1, ..., z99]
+
+    The Python representation is a dataclass with lists for each field.
+    """
+
+    # Suppressing PLR0913 (too many args) because this is a constructor. Args are kwonly to mitigate confusion.
+    def __init__(  # noqa: PLR0913
+        self,
+        *,
+        compiler_context: CompilerContext,
+        schema_name: str,
+        field_layouts: Sequence[tachyon_model.SchemaField],
+        max_size: int,
+        constraint: tachyon_reg.FieldConstraint,
+        types: Sequence[tachyon_model.ClkType],
+        serdeses: dict[int, SerDes[Any]],
+        size_field_offset: int | None = None,
+        size_field_type_id: int | None = None,
+    ) -> None:
+        """Create a SerDes for SoA types.
+
+        Args:
+            compiler_context: The compiler context.
+            schema_name: Name of the underlying schema (for class name generation).
+            field_layouts: Field layout information from SoaType metadata.
+            max_size: Maximum number of elements (size for FixedSoa, max_size for VarSoa).
+            constraint: Field constraint for the SoA type.
+            types: All types from the metadata.
+            serdeses: Cache of SerDes instances.
+            size_field_offset: Offset of the size field (None for FixedSoa).
+            size_field_type_id: Type ID of the size field (None for FixedSoa).
+        """
+        self.compiler_context = compiler_context
+        self.schema_name = schema_name
+        self.max_size = max_size
+        self.constraint = constraint
+        self.is_var = size_field_offset is not None
+        self.types = types
+        self.serdeses = serdeses
+
+        # Tuple contents: [(field_name, offset, type_id, element_serdes)]
+        self.field_serializers: list[tuple[str, int, int, SerDes[Any]]] = []
+
+        for layout_field in field_layouts:
+            element_serdes = _serdes_for_type(
+                compiler_context=compiler_context,
+                type_id=layout_field.type_id,
+                metadata_name=None,
+                types=types,
+                serdeses=serdeses,
+            )
+            self.field_serializers.append(
+                (layout_field.name, layout_field.offset, layout_field.type_id, element_serdes)
+            )
+
+        self.size_offset: int = 0
+        self.size_field_size: int = 0
+        self.size_serdes: SerDes[int] | None = None
+
+        if self.is_var:
+            assert size_field_offset is not None
+            assert size_field_type_id is not None
+            self.size_offset = size_field_offset
+            size_field_serdes = _serdes_for_type(
+                compiler_context=compiler_context,
+                type_id=size_field_type_id,
+                metadata_name=None,
+                types=types,
+                serdeses=serdeses,
+            )
+            self.size_serdes = cast("SerDes[int]", size_field_serdes)
+            self.size_field_size = size_field_serdes.constraint.size
+
+        self.py_class = self._create_dataclass()
+
+    def _create_dataclass(self) -> type[Any]:
+        """Create a dataclass with field arrays for this SoA type."""
+        # Generate class name using schema name like the IR-based implementation
+        class_name = f"{'Var' if self.is_var else 'Fixed'}Soa_{self.schema_name}_{self.max_size}"
+
+        dataclass_fields: list[tuple[str, Any, Any] | tuple[str, Any]] = []
+        for field_name, _offset, _type_id, element_serdes in self.field_serializers:
+            element_type = element_serdes.type_
+
+            if self.is_var:
+                # VarSoa: default to empty list
+                dataclass_fields.append(
+                    (
+                        field_name,
+                        list[element_type],
+                        field(default_factory=list),
+                    )
+                )
+            else:
+                # FixedSoa: no default, required field
+                dataclass_fields.append(
+                    (
+                        field_name,
+                        list[element_type],
+                    )
+                )
+
+        return dataclasses.make_dataclass(class_name, fields=dataclass_fields, kw_only=True, slots=True, eq=True)
+
+    def serialize(self, obj: object, buffer: memoryview) -> None:
+        """Serialize SoA dataclass to buffer.
+
+        Args:
+            obj: SoA dataclass with field arrays (lists)
+            buffer: Target buffer
+        """
+        if self.field_serializers:
+            first_field_name, _, _, _ = self.field_serializers[0]
+            actual_size = len(getattr(obj, first_field_name))
+        else:
+            actual_size = 0
+
+        if self.is_var:
+            if actual_size > self.max_size:
+                msg = f"{self.py_class.__name__}: SoA size {actual_size} exceeds max_size {self.max_size}"
+                raise ValueError(msg)
+        elif actual_size != self.max_size:
+            msg = (
+                f"{self.py_class.__name__}: FixedSoa field array has wrong size {actual_size}, expected {self.max_size}"
+            )
+            raise ValueError(msg)
+
+        for field_name, offset, _type_id, element_serdes in self.field_serializers:
+            field_array = getattr(obj, field_name)
+            if len(field_array) != actual_size:
+                msg = f"{self.py_class.__name__}: All SoA field arrays must have same size, but {field_name} has {len(field_array)}, expected {actual_size}"
+                raise ValueError(msg)
+
+            element_size = element_serdes.constraint.size
+            for i in range(actual_size):
+                element_offset = offset + i * element_size
+                element_serdes.serializer(field_array[i], buffer[element_offset : element_offset + element_size])
+
+        if self.is_var and self.size_serdes is not None:
+            self.size_serdes.serializer(actual_size, buffer[self.size_offset : self.size_offset + self.size_field_size])
+
+    def deserialize(self, buffer: memoryview) -> object:
+        """Deserialize buffer to SoA dataclass.
+
+        Args:
+            buffer: Source buffer
+
+        Returns:
+            SoA dataclass with lists for each field
+        """
+        if self.is_var and self.size_serdes is not None:
+            actual_size = self.size_serdes.deserializer(
+                buffer[self.size_offset : self.size_offset + self.size_field_size]
+            )
+        else:
+            actual_size = self.max_size
+
+        field_values = {}
+        for field_name, offset, _type_id, element_serdes in self.field_serializers:
+            field_array: list[Any] = [cast("Any", None)] * actual_size
+            element_size = element_serdes.constraint.size
+            for i in range(actual_size):
+                element_offset = offset + i * element_size
+                field_array[i] = element_serdes.deserializer(buffer[element_offset : element_offset + element_size])
+            field_values[field_name] = field_array
+
+        return self.py_class(**field_values)
+
+    def make_serdes(self) -> SerDes[T]:
+        """Create a SerDes for the registry."""
+        return SerDes(
+            type_=self.py_class,
+            fqn="",
+            constraint=self.constraint,
+            serializer=self.serialize,
+            deserializer=self.deserialize,
+        )
+
+
+def _soa_type_factory(
+    compiler_context: CompilerContext,
+    type_id: int,  # noqa: ARG001 required for consistent factory signature
+    soa_type: tachyon_model.SoaType,
+    types: Sequence[tachyon_model.ClkType],
+    serdeses: dict[int, SerDes[Any]],
+) -> SerDes[Any] | None:
+    """SerDes factory for SoaType metadata."""
+    constraint = tachyon_reg.FieldConstraint(size=soa_type.size, alignment=soa_type.alignment)
+
+    # Get the schema name for class name generation
+    schema_type = types[soa_type.schema_type_id]
+    assert isinstance(schema_type, tachyon_model.SchemaType)
+    # Extract the simple name from the FQN (e.g., "Point3f" from "@repo::namespace::Point3f")
+    schema_name = schema_type.fqn.rpartition("::")[-1]
+
+    return SoaSerDes(
+        compiler_context=compiler_context,
+        schema_name=schema_name,
+        field_layouts=soa_type.field_layouts,
+        max_size=soa_type.container_size,
+        constraint=constraint,
+        types=types,
+        serdeses=serdeses,
+        size_field_offset=soa_type.size_field_offset,
+        size_field_type_id=soa_type.size_field_type_id,
+    ).make_serdes()
+
+
 @dataclass
 class SchemaSerDes(Generic[T]):
     """SerDes for a schema type."""
@@ -882,16 +1102,18 @@ class SchemaSerDes(Generic[T]):
         field_serdeses = []
         dataclass_fields = []
 
-        for field in sorted(schema.fields, key=lambda x: x.num):
+        for schema_field in sorted(schema.fields, key=lambda x: x.num):
             serdes = _serdes_for_type(
                 compiler_context=compiler_context,
-                type_id=field.type_id,
+                type_id=schema_field.type_id,
                 metadata_name=None,
                 types=types,
                 serdeses=serdeses,
             )
-            field_serdeses.append((field.name, slice(field.offset, field.offset + serdes.constraint.size), serdes))
-            dataclass_fields.append((field.name, serdes.type_))
+            field_serdeses.append(
+                (schema_field.name, slice(schema_field.offset, schema_field.offset + serdes.constraint.size), serdes)
+            )
+            dataclass_fields.append((schema_field.name, serdes.type_))
         schema_name = schema.fqn.rpartition("::")[-1]
         py_class: Any = dataclasses.make_dataclass(schema_name, fields=dataclass_fields, kw_only=True, slots=True)
         schema_serdes: SchemaSerDes[Any] = SchemaSerDes(

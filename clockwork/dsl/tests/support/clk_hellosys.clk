@@ -1,0 +1,6 @@
+use clockwork::dsl::tests::support::clk_hellomod;
+
+system_target clk_hellosys
+{
+  box: clk_hellomod::HelloBoxSys;
+}

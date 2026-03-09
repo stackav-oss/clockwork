@@ -27,17 +27,24 @@ namespace jewels
     static_assert(std::is_unsigned_v<std::underlying_type_t<name>>); /*NOLINT(bugprone-macro-parentheses)*/ \
   }
 
-/// Alias for std::enable_if<..., Enum> where the expression is enabled if Enum is a scoped enum and a function
+/// Alias for std::enable_if<..., Result> where the expression is enabled if Enum is a scoped enum and a function
 /// `jewels_scoped_enum_is_flags(Enum)` is defined (provided by the JEWELS_ENABLE_ENUM_FLAGS macro)
-template <typename Enum, typename = std::void_t<decltype(jewels_scoped_enum_is_flags(std::declval<Enum>()))>>
-using enable_if_flags_scoped_enum = std::enable_if_t<::jewels::is_scoped_enum_v<Enum>, Enum>;
+template <
+  typename Enum,
+  typename Result,
+  typename = std::void_t<decltype(jewels_scoped_enum_is_flags(std::declval<Enum>()))>>
+using enable_if_flags_scoped_enum_r = std::enable_if_t<::jewels::is_scoped_enum_v<Enum>, Result>;
+
+/// Aliases `enable_if_flags_scoped_enum_r<Enum, Enum>` for the common functions that return Enum
+template <typename Enum>
+using enable_if_flags_scoped_enum = enable_if_flags_scoped_enum_r<Enum, Enum>;
 
 } // namespace jewels
 
 /// Returns the a union of the two flag sets, i.e. the result will a flag set if it's set in either "a" or "b"
 /// E.g. Given a = 0x23, b = 0x11, then a + b = 0x33
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator|(Enum value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator|(Enum value_a, Enum value_b)
 {
   // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<Enum>(::jewels::to_underlying(value_a) | ::jewels::to_underlying(value_b));
@@ -46,7 +53,7 @@ inline ::jewels::enable_if_flags_scoped_enum<Enum> operator|(Enum value_a, Enum 
 /// Returns the a union of the two flag sets, i.e. the result will a flag set if it's set in either "a" or "b"
 /// E.g. Given a = 0x23, b = 0x11, then a + b = 0x33
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator+(Enum value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator+(Enum value_a, Enum value_b)
 {
   return value_a | value_b;
 }
@@ -55,7 +62,7 @@ inline ::jewels::enable_if_flags_scoped_enum<Enum> operator+(Enum value_a, Enum 
 /// present in "b".
 /// E.g. Given a = 0x11, b = 0x01, then a - b = 0x10
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator-(Enum value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator-(Enum value_a, Enum value_b)
 {
   return static_cast<Enum>(
     ::jewels::to_underlying(value_a) & static_cast<std::underlying_type_t<Enum>>(~::jewels::to_underlying(value_b)));
@@ -64,7 +71,7 @@ inline ::jewels::enable_if_flags_scoped_enum<Enum> operator-(Enum value_a, Enum 
 /// Returns the logical "xor" of two sets of flags.  The return value will contain all flags from "a" and "b" that don't
 /// appear in both.
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator^(Enum value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator^(Enum value_a, Enum value_b)
 {
   // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<Enum>(::jewels::to_underlying(value_a) ^ ::jewels::to_underlying(value_b));
@@ -73,42 +80,49 @@ inline ::jewels::enable_if_flags_scoped_enum<Enum> operator^(Enum value_a, Enum 
 /// Returns the logical "and" of two sets of flags.  The return value will contain all flags that appear in both "a" and
 /// "b".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator&(Enum value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator&(Enum value_a, Enum value_b)
 {
   return static_cast<Enum>(::jewels::to_underlying(value_a) & ::jewels::to_underlying(value_b));
 }
 
 /// Updates "a" with the union of the flags in "a" and "b" then returns a reference to "a".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator|=(Enum& value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator|=(Enum& value_a, Enum value_b)
 {
   return value_a = value_a | value_b;
 }
 
 /// Updates "a" with the union of the flags in "a" and "b" then returns a reference to "a".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator+=(Enum& value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator+=(Enum& value_a, Enum value_b)
 {
   return value_a = value_a + value_b;
 }
 
 /// Updates "a" by removing all flags set in "b" then returns a reference to "a".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator-=(Enum& value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator-=(Enum& value_a, Enum value_b)
 {
   return value_a = value_a - value_b;
 }
 
 /// Updates "a" to be the set of flags that are present in "a" and "b" but not both then returns a reference to "a".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator^=(Enum& value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator^=(Enum& value_a, Enum value_b)
 {
   return value_a = value_a ^ value_b;
 }
 
 /// Updates "a" by removing all flags not in "b" then returns a reference to "a".
 template <typename Enum>
-inline ::jewels::enable_if_flags_scoped_enum<Enum> operator&=(Enum& value_a, Enum value_b)
+constexpr ::jewels::enable_if_flags_scoped_enum<Enum> operator&=(Enum& value_a, Enum value_b)
 {
   return value_a = value_a & value_b;
+}
+
+/// Returns `true` if the enum value is 0 (has no bits set)
+template <typename Enum>
+constexpr ::jewels::enable_if_flags_scoped_enum_r<Enum, bool> operator!(Enum value)
+{
+  return ::jewels::to_underlying(value) == 0;
 }

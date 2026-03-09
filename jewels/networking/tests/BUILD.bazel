@@ -46,3 +46,17 @@ cc_test(
         "@fmt",
     ],
 )
+
+cc_test(
+    name = "sockets_test",
+    srcs = ["sockets_test.cc"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/networking:socket_address",
+        "//jewels/networking:sockets",
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)

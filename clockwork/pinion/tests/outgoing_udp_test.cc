@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh" // IWYU pragma: keep
-#include "clockwork/io/network_var_packet.hh"      // IWYU pragma: keep
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/network_var_packet_clk_cc.hh"      // IWYU pragma: keep
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
@@ -72,7 +72,7 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
 
   SECTION("Mismatched message sizes")
   {
-    auto channel = std::make_unique<InMemoryChannel<bool, num_slots>>(memres);
+    auto channel = std::make_unique<InMemoryChannel<bool, num_slots, false>>(memres);
     auto subscriber = channel->make_subscriber();
 
     // Size of message slot and size of UDP packet are not the same.
@@ -81,7 +81,7 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
       jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
   }
 
-  InMemoryChannel<Msg, num_slots> channel{memres};
+  InMemoryChannel<Msg, num_slots, false> channel{memres};
 
   SECTION("Mismatched endpoint id")
   {

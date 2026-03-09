@@ -1,3 +1,6 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::tests)]
+
 // Test schema version 1
 schema SmokeTestSchemaV1
 {
@@ -6,6 +9,25 @@ schema SmokeTestSchemaV1
   {
     // Int8 Field
     #1 int8_field: Int8;
+  }
+}
+
+// Test schema version 1
+schema ParameterizedSchemaV1
+{
+  uuid: f5a4fa18-6a69-4645-924e-d0f08446873e;
+  parameters
+  {
+    // type of values to be stored
+    #1 value_type: Type;
+
+    // maximum number of objects that the store can hold
+    #2 max_size: UInt64;
+  }
+  fields
+  {
+    // Variable array field
+    #3 vararray_field: VarArray<value_type, max_size=max_size>;
   }
 }
 
@@ -38,6 +60,12 @@ schema Int8UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: Int8;
+
+    // Float32 field (in version2)
+    #9 float32_field: Int8;
+
+    // Float64 field (in version2)
+    #10 float64_field: Int8;
   }
 }
 
@@ -70,6 +98,12 @@ schema Int16UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: Int16;
+
+    // Float32 field (in version2)
+    #9 float32_field: Int16;
+
+    // Float64 field (in version2)
+    #10 float64_field: Int16;
   }
 }
 
@@ -102,6 +136,12 @@ schema Int32UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: Int32;
+
+    // Float32 field (in version2)
+    #9 float32_field: Int32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Int32;
   }
 }
 
@@ -134,6 +174,12 @@ schema Int64UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: Int64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Int64;
+
+    // Float64 field (in version2)
+    #10 float64_field: Int64;
   }
 }
 
@@ -166,6 +212,12 @@ schema UInt8UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: UInt8;
+
+    // Float32 field (in version2)
+    #9 float32_field: UInt8;
+
+    // Float64 field (in version2)
+    #10 float64_field: UInt8;
   }
 }
 
@@ -198,6 +250,12 @@ schema UInt16UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: UInt16;
+
+    // Float32 field (in version2)
+    #9 float32_field: UInt16;
+
+    // Float64 field (in version2)
+    #10 float64_field: UInt16;
   }
 }
 
@@ -230,6 +288,12 @@ schema UInt32UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: UInt32;
+
+    // Float32 field (in version2)
+    #9 float32_field: UInt32;
+
+    // Float64 field (in version2)
+    #10 float64_field: UInt32;
   }
 }
 
@@ -262,6 +326,12 @@ schema UInt64UpgradeTestSchemaV1
 
     // UInt64 field (in version2)
     #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: UInt64;
+
+    // Float64 field (in version2)
+    #10 float64_field: UInt64;
   }
 }
 
@@ -313,11 +383,35 @@ schema Float32UpgradeTestSchemaV1
   uuid: e95085a9-76aa-4b1d-b9e6-fb242d493fad;
   fields
   {
+    // Int8 field (in version2)
+    #1 int8_field: Float32;
+
+    // Int16 field (in version2)
+    #2 int16_field: Float32;
+
+    // Int32 field (in version2)
+    #3 int32_field: Float32;
+
+    // Int64 field (in version2)
+    #4 int64_field: Float32;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Float32;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Float32;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Float32;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Float32;
+
     // Float32 field (in version2)
-    #1 float32_field: Float32;
+    #9 float32_field: Float32;
 
     // Float64 field (in version2)
-    #2 float64_field: Float32;
+    #10 float64_field: Float32;
   }
 }
 
@@ -327,11 +421,35 @@ schema Float64UpgradeTestSchemaV1
   uuid: 32e04907-e23c-4133-bf14-8b5528504241;
   fields
   {
+    // Int8 field (in version2)
+    #1 int8_field: Float64;
+
+    // Int16 field (in version2)
+    #2 int16_field: Float64;
+
+    // Int32 field (in version2)
+    #3 int32_field: Float64;
+
+    // Int64 field (in version2)
+    #4 int64_field: Float64;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: Float64;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: Float64;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: Float64;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: Float64;
+
     // Float32 field (in version2)
-    #1 float32_field: Float64;
+    #9 float32_field: Float64;
 
     // Float64 field (in version2)
-    #2 float64_field: Float64;
+    #10 float64_field: Float64;
   }
 }
 
@@ -423,30 +541,35 @@ schema DurationUpgradeTestSchemaV1
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int32)]
 strong_type StrongInt32
 {
   underlying_type: Int32;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int64)]
 strong_type StrongInt64
 {
   underlying_type: Int64;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float32)]
 strong_type StrongFloat32
 {
   underlying_type: Float32;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float64)]
 strong_type StrongFloat64
 {
   underlying_type: Float64;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_byte)]
 strong_type StrongByte
 {
   underlying_type: Byte;
@@ -649,7 +772,7 @@ schema BuildTimeUpgradeFailureTestSchemaV1
   fields
   {
     // Incompatible type (in version 2)
-    #1 float64_field: Int64;
+    #1 float64_field: Int8ValueEnumV1;
   }
 }
 
@@ -1661,307 +1784,207 @@ schema UInt64BitFlagEnumUpgradeTestSchemaV1
   }
 }
 
-py_target py_test_schema_v1
+// SoA element schema version 1
+schema SoaElementSchemaV1
 {
-  enum Int8ValueEnumV1;
-  enum Int16ValueEnumV1;
-  enum Int32ValueEnumV1;
-  enum Int64ValueEnumV1;
-  enum UInt8ValueEnumV1;
-  enum UInt16ValueEnumV1;
-  enum UInt32ValueEnumV1;
-  enum UInt64ValueEnumV1;
-  enum UInt8BitFlagEnumV1;
-  enum UInt16BitFlagEnumV1;
-  enum UInt32BitFlagEnumV1;
-  enum UInt64BitFlagEnumV1;
-
-  interface Tappy<SmokeTestSchemaV1>;
-  interface Tappy<Int8UpgradeTestSchemaV1>;
-  interface Tappy<Int16UpgradeTestSchemaV1>;
-  interface Tappy<Int32UpgradeTestSchemaV1>;
-  interface Tappy<Int64UpgradeTestSchemaV1>;
-  interface Tappy<UInt8UpgradeTestSchemaV1>;
-  interface Tappy<UInt16UpgradeTestSchemaV1>;
-  interface Tappy<UInt32UpgradeTestSchemaV1>;
-  interface Tappy<UInt64UpgradeTestSchemaV1>;
-  interface Tappy<CopyableMemberSchemaTypeV1>;
-  interface Tappy<UpgradedMemberSchemaTypeV1>;
-  interface Tappy<Float32UpgradeTestSchemaV1>;
-  interface Tappy<Float64UpgradeTestSchemaV1>;
-  interface Tappy<PrimitiveUpgradeTestSchemaV1>;
-  interface Tappy<SyncTimeUpgradeTestSchemaV1>;
-  interface Tappy<DurationUpgradeTestSchemaV1>;
-  interface Tappy<StrongTypeUpgradeTestSchemaV1>;
-  interface Tappy<FixedArrayUpgradeTestSchemaV1>;
-  interface Tappy<VarArrayUpgradeTestSchemaV1>;
-  interface Tappy<OptionalUpgradeTestSchemaV1>;
-  interface Tappy<VarStringUpgradeTestSchemaV1>;
-  interface Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
-  interface Tappy<RunTimeUpgradeFailureTestSchemaV1>;
-  interface Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
-}
-
-nanobind_target test_schema_v1_clk_nb
-{
-  binding Int8ValueEnumV1;
-  binding Int16ValueEnumV1;
-  binding Int32ValueEnumV1;
-  binding Int64ValueEnumV1;
-  binding UInt8ValueEnumV1;
-  binding UInt16ValueEnumV1;
-  binding UInt32ValueEnumV1;
-  binding UInt64ValueEnumV1;
-  binding UInt8BitFlagEnumV1;
-  binding UInt16BitFlagEnumV1;
-  binding UInt32BitFlagEnumV1;
-  binding UInt64BitFlagEnumV1;
-
-  binding Tappy<SmokeTestSchemaV1>;
-  binding Tappy<Int8UpgradeTestSchemaV1>;
-  binding Tappy<Int16UpgradeTestSchemaV1>;
-  binding Tappy<Int32UpgradeTestSchemaV1>;
-  binding Tappy<Int64UpgradeTestSchemaV1>;
-  binding Tappy<UInt8UpgradeTestSchemaV1>;
-  binding Tappy<UInt16UpgradeTestSchemaV1>;
-  binding Tappy<UInt32UpgradeTestSchemaV1>;
-  binding Tappy<UInt64UpgradeTestSchemaV1>;
-  binding Tappy<CopyableMemberSchemaTypeV1>;
-  binding Tappy<UpgradedMemberSchemaTypeV1>;
-  binding Tappy<SchemaUpgradeTestSchemaV1>;
-  binding Tappy<Float32UpgradeTestSchemaV1>;
-  binding Tappy<Float64UpgradeTestSchemaV1>;
-  binding Tappy<PrimitiveUpgradeTestSchemaV1>;
-  binding Tappy<SyncTimeUpgradeTestSchemaV1>;
-  binding Tappy<DurationUpgradeTestSchemaV1>;
-  binding Tappy<StrongTypeUpgradeTestSchemaV1>;
-  binding Tappy<FixedArrayUpgradeTestSchemaV1>;
-  binding Tappy<VarArrayUpgradeTestSchemaV1>;
-  binding Tappy<VarStringUpgradeTestSchemaV1>;
-  binding Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
-  binding Tappy<RunTimeUpgradeFailureTestSchemaV1>;
-  binding Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
-  binding Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
-}
-
-cpp_target test_schema_v1
-{
-  options
+  uuid: 8f2a4b91-3c5d-4e8f-9a1b-7d6e5c4f3a2b;
+  options { soa_enabled: true; constructor: source_code_order; }
+  fields
   {
-    namespace clockwork::tests;
-  }
+    // ID field (unchanged in version 2)
+    #1 id: Int32;
 
-  extern
+    // X coordinate (Int32 in version 1, Int64 in version 2)
+    #2 x: Int32;
+
+    // Y coordinate (Float32 in version 1, Float64 in version 2)
+    #3 y: Float32;
+
+    // Z coordinate (removed in version 2)
+    #4 z: Float32;
+
+    // Nested schema member that will upgrade from V1 to V2
+    #6 nested: UpgradedMemberSchemaTypeV1;
+
+    // VarArray of schema types (elements will upgrade from V1 to V2)
+    #7 items: VarArray<UpgradedMemberSchemaTypeV1, max_size=5>;
+  }
+  history
   {
-    header_file: "clockwork/serialization/cpp/tests/support/strong_type_factory.hh";
-    namespace: clockwork::tests;
-
-    type
-    {
-      name: StrongInt32;
-      factory: make_strong_int32;
-    }
-
-    type
-    {
-      name: StrongInt64;
-      factory: make_strong_int64;
-    }
-
-    type
-    {
-      name: StrongFloat32;
-      factory: make_strong_float32;
-    }
-
-    type
-    {
-      name: StrongFloat64;
-      factory: make_strong_float64;
-    }
-
-    type
-    {
-      name: StrongByte;
-      factory: make_strong_byte;
-    }
+    version: 1;
   }
-
-  enum Int8ValueEnumV1;
-  enum Int16ValueEnumV1;
-  enum Int32ValueEnumV1;
-  enum Int64ValueEnumV1;
-  enum UInt8ValueEnumV1;
-  enum UInt16ValueEnumV1;
-  enum UInt32ValueEnumV1;
-  enum UInt64ValueEnumV1;
-  enum UInt8BitFlagEnumV1;
-  enum UInt16BitFlagEnumV1;
-  enum UInt32BitFlagEnumV1;
-  enum UInt64BitFlagEnumV1;
-
-  schema SmokeTestSchemaV1;
-  representation Tachyon<SmokeTestSchemaV1>;
-  interface Tappy<SmokeTestSchemaV1>;
-
-  schema Int8UpgradeTestSchemaV1;
-  representation Tachyon<Int8UpgradeTestSchemaV1>;
-  interface Tappy<Int8UpgradeTestSchemaV1>;
-
-  schema Int16UpgradeTestSchemaV1;
-  representation Tachyon<Int16UpgradeTestSchemaV1>;
-  interface Tappy<Int16UpgradeTestSchemaV1>;
-
-  schema Int32UpgradeTestSchemaV1;
-  representation Tachyon<Int32UpgradeTestSchemaV1>;
-  interface Tappy<Int32UpgradeTestSchemaV1>;
-
-  schema Int64UpgradeTestSchemaV1;
-  representation Tachyon<Int64UpgradeTestSchemaV1>;
-  interface Tappy<Int64UpgradeTestSchemaV1>;
-
-  schema UInt8UpgradeTestSchemaV1;
-  representation Tachyon<UInt8UpgradeTestSchemaV1>;
-  interface Tappy<UInt8UpgradeTestSchemaV1>;
-
-  schema UInt16UpgradeTestSchemaV1;
-  representation Tachyon<UInt16UpgradeTestSchemaV1>;
-  interface Tappy<UInt16UpgradeTestSchemaV1>;
-
-  schema UInt32UpgradeTestSchemaV1;
-  representation Tachyon<UInt32UpgradeTestSchemaV1>;
-  interface Tappy<UInt32UpgradeTestSchemaV1>;
-
-  schema UInt64UpgradeTestSchemaV1;
-  representation Tachyon<UInt64UpgradeTestSchemaV1>;
-  interface Tappy<UInt64UpgradeTestSchemaV1>;
-
-  schema CopyableMemberSchemaTypeV1;
-  representation Tachyon<CopyableMemberSchemaTypeV1>;
-  interface Tappy<CopyableMemberSchemaTypeV1>;
-
-  schema UpgradedMemberSchemaTypeV1;
-  representation Tachyon<UpgradedMemberSchemaTypeV1>;
-  interface Tappy<UpgradedMemberSchemaTypeV1>;
-
-  schema SchemaUpgradeTestSchemaV1;
-  representation Tachyon<SchemaUpgradeTestSchemaV1>;
-  interface Tappy<SchemaUpgradeTestSchemaV1>;
-
-  schema Float32UpgradeTestSchemaV1;
-  representation Tachyon<Float32UpgradeTestSchemaV1>;
-  interface Tappy<Float32UpgradeTestSchemaV1>;
-
-  schema Float64UpgradeTestSchemaV1;
-  representation Tachyon<Float64UpgradeTestSchemaV1>;
-  interface Tappy<Float64UpgradeTestSchemaV1>;
-
-  schema PrimitiveUpgradeTestSchemaV1;
-  representation Tachyon<PrimitiveUpgradeTestSchemaV1>;
-  interface Tappy<PrimitiveUpgradeTestSchemaV1>;
-
-  schema SyncTimeUpgradeTestSchemaV1;
-  representation Tachyon<SyncTimeUpgradeTestSchemaV1>;
-  interface Tappy<SyncTimeUpgradeTestSchemaV1>;
-
-  schema DurationUpgradeTestSchemaV1;
-  representation Tachyon<DurationUpgradeTestSchemaV1>;
-  interface Tappy<DurationUpgradeTestSchemaV1>;
-
-  schema StrongTypeUpgradeTestSchemaV1;
-  representation Tachyon<StrongTypeUpgradeTestSchemaV1>;
-  interface Tappy<StrongTypeUpgradeTestSchemaV1>;
-
-  schema FixedArrayUpgradeTestSchemaV1;
-  representation Tachyon<FixedArrayUpgradeTestSchemaV1>;
-  interface Tappy<FixedArrayUpgradeTestSchemaV1>;
-
-  schema VarArrayUpgradeTestSchemaV1;
-  representation Tachyon<VarArrayUpgradeTestSchemaV1>;
-  interface Tappy<VarArrayUpgradeTestSchemaV1>;
-
-  schema OptionalUpgradeTestSchemaV1;
-  representation Tachyon<OptionalUpgradeTestSchemaV1>;
-  interface Tappy<OptionalUpgradeTestSchemaV1>;
-
-  schema VarStringUpgradeTestSchemaV1;
-  representation Tachyon<VarStringUpgradeTestSchemaV1>;
-  interface Tappy<VarStringUpgradeTestSchemaV1>;
-
-  schema BuildTimeUpgradeFailureTestSchemaV1;
-  representation Tachyon<BuildTimeUpgradeFailureTestSchemaV1>;
-  interface Tappy<BuildTimeUpgradeFailureTestSchemaV1>;
-
-  schema RunTimeUpgradeFailureTestSchemaV1;
-  representation Tachyon<RunTimeUpgradeFailureTestSchemaV1>;
-  interface Tappy<RunTimeUpgradeFailureTestSchemaV1>;
-
-  schema Int8ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<Int8ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int8ValueEnumUpgradeTestSchemaV1>;
-
-  schema Int16ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<Int16ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int16ValueEnumUpgradeTestSchemaV1>;
-
-  schema Int32ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<Int32ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int32ValueEnumUpgradeTestSchemaV1>;
-
-  schema Int64ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<Int64ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<Int64ValueEnumUpgradeTestSchemaV1>;
-
-  schema UInt8ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt8ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV1>;
-
-  schema UInt16ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt16ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV1>;
-
-  schema UInt32ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt32ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV1>;
-
-  schema UInt64ValueEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt64ValueEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV1>;
-
-  schema UInt8BitFlagEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt8BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV1>;
-
-  schema UInt16BitFlagEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt16BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV1>;
-
-  schema UInt32BitFlagEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt32BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV1>;
-
-  schema UInt64BitFlagEnumUpgradeTestSchemaV1;
-  representation Tachyon<UInt64BitFlagEnumUpgradeTestSchemaV1>;
-  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV1>;
 }
+
+// Test schema version 1 with FixedSoa
+schema FixedSoaUpgradeTestSchemaV1
+{
+  uuid: 9f3b5c92-4d6e-5f9a-0b2c-8e7f6d5e4b3c;
+  fields
+  {
+    // FixedSoa field with 5 elements
+    #1 soa_field: FixedSoa<SoaElementSchemaV1, size=5>;
+  }
+}
+
+// Test schema version 1 with VarSoa
+schema VarSoaUpgradeTestSchemaV1
+{
+  uuid: 0a4c6d93-5e7f-6a0b-1c3d-9f8a7b6c5d4e;
+  fields
+  {
+    // VarSoa field with max 10 elements
+    #1 soa_field: VarSoa<SoaElementSchemaV1, max_size=10>;
+  }
+}
+
+// Test schema for FixedSoa -> VarSoa conversion (version 1)
+schema FixedToVarSoaConversionTestSchemaV1
+{
+  uuid: 5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b;
+  fields
+  {
+    // FixedSoa with 3 elements
+    #1 soa_field: FixedSoa<SoaElementSchemaV1, size=3>;
+  }
+}
+
+// Test schema for VarSoa -> FixedSoa conversion (version 1)
+schema VarToFixedSoaConversionTestSchemaV1
+{
+  uuid: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c;
+  fields
+  {
+    // VarSoa with max 5 elements
+    #1 soa_field: VarSoa<SoaElementSchemaV1, max_size=5>;
+  }
+}
+
+// Test schema for FixedArray -> FixedSoa conversion (version 1)
+// Uses FixedArray in V1, converted to FixedSoa in V2
+schema FixedArrayToFixedSoaTestSchemaV1
+{
+  uuid: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d;
+  fields
+  {
+    // FixedArray of schema elements
+    #1 array_field: FixedArray<SoaElementSchemaV1, size=3>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for VarArray -> VarSoa conversion (version 1)
+// Uses VarArray in V1, converted to VarSoa in V2
+schema VarArrayToVarSoaTestSchemaV1
+{
+  uuid: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e;
+  fields
+  {
+    // VarArray of schema elements
+    #1 array_field: VarArray<SoaElementSchemaV1, max_size=5>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for FixedSoa -> FixedArray conversion (version 1)
+// Uses FixedSoa in V1, converted to FixedArray in V2
+schema FixedSoaToFixedArrayTestSchemaV1
+{
+  uuid: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f;
+  fields
+  {
+    // FixedSoa of schema elements
+    #1 soa_field: FixedSoa<SoaElementSchemaV1, size=3>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for VarSoa -> VarArray conversion (version 1)
+// Uses VarSoa in V1, converted to VarArray in V2
+schema VarSoaToVarArrayTestSchemaV1
+{
+  uuid: 4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a;
+  fields
+  {
+    // VarSoa of schema elements
+    #1 soa_field: VarSoa<SoaElementSchemaV1, max_size=5>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for Optional -> FixedSoa conversion (version 1)
+// Uses Optional in V1, converted to FixedSoa in V2
+schema OptionalToFixedSoaTestSchemaV1
+{
+  uuid: 5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b;
+  fields
+  {
+    // Optional schema element
+    #1 optional_field: Optional<SoaElementSchemaV1>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for Optional -> VarSoa conversion (version 1)
+// Uses Optional in V1, converted to VarSoa in V2
+schema OptionalToVarSoaTestSchemaV1
+{
+  uuid: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c;
+  fields
+  {
+    // Optional schema element
+    #1 optional_field: Optional<SoaElementSchemaV1>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for FixedSoa -> Optional conversion (version 1)
+// Uses FixedSoa in V1, converted to Optional in V2
+schema FixedSoaToOptionalTestSchemaV1
+{
+  uuid: 7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d;
+  fields
+  {
+    // FixedSoa with size=1 (can convert to Optional)
+    #1 soa_field: FixedSoa<SoaElementSchemaV1, size=1>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+
+// Test schema for VarSoa -> Optional conversion (version 1)
+// Uses VarSoa in V1, converted to Optional in V2
+schema VarSoaToOptionalTestSchemaV1
+{
+  uuid: 8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e;
+  fields
+  {
+    // VarSoa with max_size=1 (can convert to Optional)
+    #1 soa_field: VarSoa<SoaElementSchemaV1, max_size=1>;
+  }
+  history
+  {
+    version: 1;
+  }
+}
+instantiate ParameterizedSchemaV1_3: ParameterizedSchemaV1<SmokeTestSchemaV1, 3>;
+instantiate ParameterizedSchemaV1_4: ParameterizedSchemaV1<SmokeTestSchemaV1, 4>;

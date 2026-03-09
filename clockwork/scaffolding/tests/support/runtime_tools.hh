@@ -5,7 +5,7 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/exec_tools.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/common/tests/support/fake_cog.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
@@ -16,6 +16,7 @@
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -30,7 +31,6 @@
 #include <chrono>
 #include <cstdlib>
 #include <fcntl.h>
-#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <memory_resource>
@@ -42,16 +42,16 @@ namespace clockwork::testing
 {
 
 template <typename T>
-void write_schema(const std::filesystem::path& path, const Tappy<T>& data)
+void write_schema(const jewels::filesystem::Path& path, const Tappy<T>& data)
 {
   const auto bytes = std::as_bytes(jewels::as_single_item_span(data));
-  const jewels::filesystem::File file{path.native(), O_CREAT | O_WRONLY};
+  const jewels::filesystem::File file{path, O_CREAT | O_WRONLY};
   REQUIRE(::write(file.descriptor(), bytes.data(), bytes.size()) == static_cast<ssize_t>(bytes.size()));
 }
 
-inline void write_schema(const std::filesystem::path& path, const google::protobuf::Message& data)
+inline void write_schema(const jewels::filesystem::Path& path, const google::protobuf::Message& data)
 {
-  std::ofstream file{path};
+  std::ofstream file{path.c_str()};
   google::protobuf::io::OstreamOutputStream file_output(&file);
   REQUIRE(google::protobuf::TextFormat::Print(data, &file_output));
 }
@@ -60,11 +60,12 @@ inline void write_schema(const std::filesystem::path& path, const google::protob
 /// @return the subscriber or nullptr if unsuccessful
 template <typename Tag>
 std::shared_ptr<pinion::ShmSubscriber> make_snooper(
-  pinion::ShmChannelFactory& factory, jewels::Uuid<Tag> chan_id, const common::PinionBufferLayoutTap& buffer_desc)
+  pinion::ShmChannelFactory& factory, jewels::Uuid<Tag> chan_id, const Tappy<common::PinionBufferLayout>& buffer_desc)
 {
   const pinion::BufferLayout layout{
     .num_slots = buffer_desc.get_num_slots(),
     .message_size = buffer_desc.get_message_size(),
+    .is_published_once = buffer_desc.get_is_published_once(),
   };
   if (auto open = factory.open_subscriber(chan_id.to_string(), "snooper", layout, 0); open)
   {

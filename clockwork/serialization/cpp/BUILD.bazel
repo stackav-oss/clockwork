@@ -19,12 +19,16 @@ cc_library(
     srcs = ["clk_builtin_type.cc"],
     hdrs = ["clk_builtin_type.hh"],
     deps = [
+        ":clk_schema_type_lib",
         ":clk_type",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/memory:bits",
         "//jewels/memory:pointers",
         "//jewels/uuid",
         "@fmt",
+        "@protobuf",
     ],
 )
 
@@ -49,8 +53,22 @@ cc_library(
     srcs = ["clk_schema_type.cc"],
     hdrs = ["clk_schema_type.hh"],
     deps = [
+        ":clk_schema_type_lib",
         ":clk_type",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/memory:pointers",
+    ],
+)
+
+cc_library(
+    name = "clk_schema_type_lib",
+    srcs = ["clk_schema_type_lib.cc"],
+    hdrs = ["clk_schema_type_lib.hh"],
+    deps = [
+        ":clk_type",
+        "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/memory:pointers",
         "//jewels/uuid",
         "@fmt",

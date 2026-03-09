@@ -1,3 +1,7 @@
+#![generate(cpp, nanobind, proto, proto_conv)]
+#![cpp(namespace=jewels::container)]
+#![proto(package=jewels.container.proto)]
+
 // Representation of state for a circular buffer
 schema CircularBufferState
 {
@@ -16,16 +20,4 @@ schema CircularBufferState
     // Size of the circular buffer.
     #1 size: UInt64;
   }
-}
-
-cpp_target circular_buffer_state_clk_cc
-{
-  options
-  {
-    namespace jewels::container;
-  }
-
-  schema CircularBufferState;
-  representation Tachyon<CircularBufferState>;
-  interface TappyCircularBufferState: Tap<Tachyon<CircularBufferState>>;
 }

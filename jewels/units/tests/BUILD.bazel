@@ -53,6 +53,18 @@ cc_test(
 )
 
 cc_test(
+    name = "meters_test",
+    srcs = ["meters_test.cc"],
+    deps = [
+        "//jewels/units:io",
+        "//jewels/units:meters",
+        "//jewels/units:quantity",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "time_test",
     srcs = ["time_test.cc"],
     deps = [

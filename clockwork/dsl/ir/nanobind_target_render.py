@@ -24,7 +24,7 @@ from clockwork.dsl.ir.strongtypes import StrongType
 from clockwork.dsl.ir.typesys import TypeVal
 from clockwork.dsl.serialization import tachyon_reg
 from clockwork.dsl.serialization.tap import (
-    _to_cpp_type,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    to_cpp_type,
     to_schema_instantiation,
 )
 from typing_extensions import override
@@ -326,6 +326,8 @@ def _make_raw_string(doc: str) -> str:
 
     Fail if we can't sanitize the string.
     """
+    doc = doc.replace('"', "'")  # replace double quotes with single quotes to prevent escaping inside """docstrings""".
+
     # if the delimiter shows up, try increasingly unlikely delimiters
     for delimiter in ["", *[delim * k for k in range(1, 16) for delim in ["|", "_", "#"]]]:
         if f'){delimiter}"' not in doc:
@@ -341,7 +343,7 @@ def _render_optional_field_prop_rw(
 ) -> str:
     """Render a nb::def_prop_rw field property for an Optional field type."""
     optional_element_type = _get_optional_element_type(field.type_info)
-    optional_contained_type = _to_cpp_type(compiler_context, optional_element_type).render("")
+    optional_contained_type = to_cpp_type(compiler_context, optional_element_type).render("")
 
     if _is_optional_element_passed_as_pointer(optional_element_type):
         maybe_take_address = "&"
@@ -391,7 +393,7 @@ def _render_field_prop_rw(  # noqa: PLR0913 (See above)
 
     Different field types are set differently, so getter/setter renderers are passed in as arguments.
     """
-    field_cpp_type = _to_cpp_type(compiler_context, field.type_info)
+    field_cpp_type = to_cpp_type(compiler_context, field.type_info)
     rendered_field_type = field_cpp_type.render("")
 
     rendered_extras = "".join([",\n      " + extra for extra in extras])
@@ -452,10 +454,10 @@ def _python_array_or_list_type_expr(
         msg = f"Can't get array type expression: type is not VarArray or FixedArray: {type_val}"
         raise ValueError(msg)
 
-    cpp_type = _to_cpp_type(compiler_context, type_val).render("")
+    cpp_type = to_cpp_type(compiler_context, type_val).render("")
     py_cpp_type = f"::jewels::nanobind::python_type_name<{cpp_type}>()"
     if use_union_type:
-        elem_cpp_type = _to_cpp_type(compiler_context, elem_type).render("")
+        elem_cpp_type = to_cpp_type(compiler_context, elem_type).render("")
         py_cpp_element_type = f"::jewels::nanobind::python_type_name<{elem_cpp_type}>()"
         return f'{py_cpp_type} + " | list[" + {py_cpp_element_type} + "]"'
     return py_cpp_type
@@ -475,7 +477,7 @@ def _get_python_type_expr(compiler_context: CompilerContext, type_val: typesys.T
         )
     if _is_var_array_type(type_val) or _is_fixed_array_type(type_val):
         return _python_array_or_list_type_expr(compiler_context, type_val, use_union_type=use_union_type)
-    cpp_type = _to_cpp_type(compiler_context, type_val).render("")
+    cpp_type = to_cpp_type(compiler_context, type_val).render("")
     return f"::jewels::nanobind::python_type_name<{cpp_type}>()"
 
 
@@ -539,7 +541,7 @@ def _render_fixed_array_field_prop_rw(
     compiler_context: CompilerContext, field: schema.InstantiatedFieldDef, tappy_cpp_type: str
 ) -> str:
     """Render a nb::def_prop_rw field property for a FixedArray field type."""
-    field_cpp_type = _to_cpp_type(compiler_context, field.type_info)
+    field_cpp_type = to_cpp_type(compiler_context, field.type_info)
     rendered_field_type = field_cpp_type.render("")
 
     def render_getter(value: str) -> str:
@@ -591,12 +593,12 @@ def _render_constructor(
         param_name = f"arg{k}__{field.cur_name}"
 
         if not _is_optional_type(field.type_info):
-            cpp_type = _to_cpp_type(compiler_context, field.type_info).render("") + "&"
+            cpp_type = to_cpp_type(compiler_context, field.type_info).render("") + "&"
             init_expr = param_name
             extra = f'nb::arg("{field.cur_name}")'
         else:
             elem_type = _get_optional_element_type(field.type_info)
-            elem_cpp_type = _to_cpp_type(compiler_context, elem_type).render("")
+            elem_cpp_type = to_cpp_type(compiler_context, elem_type).render("")
             extra = f'nb::arg("{field.cur_name}").none()'
             maybe_ptr = "*" if _is_optional_element_passed_as_pointer(elem_type) else ""
             # Always set Optionals to nullopt, maybe we'll set them afterwards.
@@ -676,7 +678,7 @@ def sanitize_uniqpath(uniq_path: str) -> str:
     return uniq_path
 
 
-def _sanitized_element_type_name(type_val: TypeVal, compiler_context: CompilerContext) -> str:
+def _sanitized_element_type_name(type_val: TypeVal, compiler_context: CompilerContext) -> str:  # noqa: PLR0911 (One return for each type)
     """Form a sanitized name for a non-container type.
 
     Used for naming container bindings - for example this would be the Foo in "VarArray_Foo_22" or the Int32 in "FixedArray_Int32_20".
@@ -687,6 +689,14 @@ def _sanitized_element_type_name(type_val: TypeVal, compiler_context: CompilerCo
     if isinstance(type_val, clkenum.ResolvedEnum):
         assert type_val.inner_scope.uniq_path.endswith(type_val.name)
         return sanitize_uniqpath(type_val.inner_scope.uniq_path).replace("::", "_")
+
+    if isinstance(type_val, schema.InstantiateStmt):
+        # use the generic alias if there is one
+        target_info = nanobinding_registry.lookup_binding(type_val, compiler_context)
+        if target_info and target_info.maybe_generic_alias is not None:
+            return target_info.maybe_generic_alias
+        uniq_path = type_val.module.inner_scope.uniq_path + f"::{type_val.name}"
+        return sanitize_uniqpath(uniq_path).replace("::", "_")
 
     if isinstance(type_val, schema.InstantiatedSchema):
         assert type_val.schema.inner_scope.uniq_path.endswith(type_val.schema.name)
@@ -749,8 +759,8 @@ def _render_bind_vectors_and_arrays(
     # This is what gives us the same mutability and ownership semantics as native python dataclasses.
     rv_policy = "nb::rv_policy::reference_internal"
 
-    rendered_element_cpp_type = _to_cpp_type(compiler_context, element_type).render("")
-    rendered_cpp_type = _to_cpp_type(compiler_context, type_val).render("")
+    rendered_element_cpp_type = to_cpp_type(compiler_context, element_type).render("")
+    rendered_cpp_type = to_cpp_type(compiler_context, type_val).render("")
     if array_is_fixed_length:
         size = _get_fixed_array_size(type_val)
         py_type_name = f"FixedArray_{inner_expr}_{size}"
@@ -785,7 +795,7 @@ class SchemaInfo:
         self._schema_ir = to_schema_instantiation(binding_original_type)
         self._class_name = binding_alias_name or self._schema_ir.schema_name
         self._class_binding_variable = f"class_def_{self._class_name}"
-        self._tappy_cpp_type = _to_cpp_type(self._compiler_context, self._schema_ir)
+        self._tappy_cpp_type = to_cpp_type(self._compiler_context, self._schema_ir)
         self._rendered_tappy_cpp_type = self._tappy_cpp_type.render("")
 
     def render_declaration(self) -> str:

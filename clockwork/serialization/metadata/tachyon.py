@@ -165,13 +165,16 @@ class Builder:
         """Create a TachyonMetadata."""
         return model.TachyonMetadata(outer_type_id=outer_type_id, types=self.types[:])
 
-    def handle_type(self, typ: typesys.TypeVal) -> int:
+    def handle_type(self, typ: typesys.TypeVal) -> int:  # noqa: PLR0911 (need to handle all the types)
         """Register a type if needed and return the type ID."""
         key = typ.value_key()
         try:
             return self.value_key_to_id[key]
         except KeyError:
             pass
+        if isinstance(typ, schema.InstantiateStmt):
+            assert isinstance(typ.typespec, typesys.Instantiation)
+            return self._handle_schema(schema.InstantiatedSchema.from_typespec(typ.typespec), key)
         if isinstance(typ, schema.InstantiatedSchema):
             return self._handle_schema(typ, key)
         if isinstance(typ, clkenum.ResolvedEnum):
@@ -185,6 +188,11 @@ class Builder:
         if builtin_type is not inner:
             msg = f"Unrecognized type {key} {type(typ)}"
             raise TypeError(msg)
+        if isinstance(typ, typesys.Instantiation) and typ.instantiates in (
+            clkbuiltins.FIXED_SOA,
+            clkbuiltins.VAR_SOA,
+        ):
+            return self._handle_soa(typ, key)
         return self._handle_builtin(typ, key)
 
     def _handle_builtin(self, typ: typesys.TypeVal, key: str) -> int:
@@ -233,14 +241,6 @@ class Builder:
             raise ValueError(msg)
         constraint = tachyon_reg.constraint_for_type(self.compiler_context, schema_ir)
         layout = tachyon_layout_reg.layout_for_type(self.compiler_context, schema_ir)
-        removed: set[int] = set()
-        became: dict[int, int] = {}
-        versions: set[int] = set(schema_ir.history.versions)
-        for field_history in schema_ir.history.fields.values():
-            if field_history.removed_in_version is not None:
-                removed.add(field_history.num)
-            if field_history.became_field_num is not None:
-                became[field_history.num] = field_history.became_field_num
         if constraint is None or layout is None:
             msg = f"No Tachyon representation for {key}"
             raise ValueError(msg)
@@ -250,14 +250,21 @@ class Builder:
             alignment=constraint.alignment,
             schema_uuid=schema_ir.schema_uuid,
             version=schema_ir.cur_version(),
+            arguments=(),
             fields=(),
-            removed=removed,
-            became=became,
-            versions=versions,
+            removed=schema_ir.history.removed,
+            became=schema_ir.history.legacy_became,
         )
         type_id = len(self.types)
         self.types.append(result)
         self.value_key_to_id[key] = type_id
+        args = []
+        if schema_ir.arguments:
+            for schema_arg in schema_ir.arguments:
+                arg = schema_ir.arguments[schema_arg]
+                arg_val: int | str = self.handle_type(arg) if isinstance(arg, typesys.TypeVal) else arg.value_key()
+                args.append(arg_val)
+        result.arguments = tuple(args)
         fields = []
         for field_span in layout.field_number_order_fields():
             fld = schema_ir.fields[field_span.field_num]
@@ -281,14 +288,6 @@ class Builder:
         values = []
         for fld_num, value in sorted(enum_ir.values.items()):
             values.append(model.EnumValue(num=fld_num, value=value.integer_value, name=value.name))
-        removed: set[int] = set()
-        became: dict[int, int] = {}
-        versions: set[int] = set(enum_ir.history.versions)
-        for value_history in enum_ir.history.values.values():
-            if value_history.removed_in_version is not None:
-                removed.add(value_history.field_num)
-            if value_history.became_field_num is not None:
-                became[value_history.field_num] = value_history.became_field_num
         result = model.ClkEnumType(
             fqn=enum_ir.value_key(),
             options=model.ClkEnumType.Options.flags if enum_ir.bit_flags else model.ClkEnumType.Options(0),
@@ -296,9 +295,8 @@ class Builder:
             enum_uuid=enum_ir.uuid,
             version=enum_ir.cur_version(),
             values=tuple(values),
-            removed=removed,
-            became=became,
-            versions=versions,
+            removed=enum_ir.history.removed,
+            became=enum_ir.history.legacy_became,
         )
         type_id = len(self.types)
         self.types.append(result)
@@ -320,6 +318,79 @@ class Builder:
         result = model.TagType(
             fqn=tag.value_key(),
         )
+        type_id = len(self.types)
+        self.types.append(result)
+        self.value_key_to_id[key] = type_id
+        result.get_hash(self.types)
+        return type_id
+
+    def _handle_soa(self, typ: typesys.Instantiation, key: str) -> int:
+        """Handle SoA types (FixedSoa and VarSoa)."""
+        inner = _get_inner_typedef(typ)
+        assert inner.scope is clkbuiltins.BUILTINS_SCOPE
+        assert isinstance(inner, clkbuiltins.SerializableBuiltin)
+
+        element_type = typ.arguments["type"]
+        if not isinstance(element_type, schema.InstantiatedSchema):
+            msg = f"SoA element type must be a schema, got {element_type.value_key()}"
+            raise TypeError(msg)
+
+        is_var = typ.instantiates is clkbuiltins.VAR_SOA
+        size_arg = typ.arguments["max_size" if is_var else "size"]
+        if not isinstance(size_arg, primitive.DecimalValue):
+            msg = f"Bad value type for size parameter: {size_arg}"
+            raise TypeError(msg)
+        container_size = primitive.unsigned_decimal_to_int(size_arg)
+
+        constraint = tachyon_reg.constraint_for_type(self.compiler_context, typ)
+        if constraint is None:
+            msg = f"No Tachyon representation for {key}"
+            raise ValueError(msg)
+
+        layout_info = tachyon_reg.compute_soa_layout(
+            self.compiler_context, element_type, container_size, include_size_field=is_var
+        )
+
+        # Make sure the non-SoA version of the schema is recorded first.
+        schema_type_id = self.handle_type(element_type)
+
+        # And then we separately record the SoA layout.
+        field_layouts = []
+        size_field_offset = None
+        size_field_type_id = None
+
+        for field_layout in layout_info.field_layouts:
+            if field_layout.field_num == tachyon_reg.SIZE_FIELD_NUM:
+                size_field_offset = field_layout.offset
+                size_type_val, _ = tachyon_reg.get_compact_size_type_info(container_size)
+                size_field_type_id = self.handle_type(size_type_val)
+                continue
+
+            schema_field = element_type.fields[field_layout.field_num]
+            field_type_id = self.handle_type(schema_field.type_info)
+
+            field_layouts.append(
+                model.SchemaField(
+                    offset=field_layout.offset,
+                    num=field_layout.field_num,
+                    name=schema_field.cur_name,
+                    type_id=field_type_id,
+                    init_value=None,  # Init metadata already stored in schema metadata
+                )
+            )
+
+        result = model.SoaType(
+            fqn=inner.fqn,
+            uuid=inner.uuid,
+            size=constraint.size,
+            alignment=constraint.alignment,
+            schema_type_id=schema_type_id,
+            container_size=container_size,
+            field_layouts=tuple(field_layouts),
+            size_field_offset=size_field_offset,
+            size_field_type_id=size_field_type_id,
+        )
+
         type_id = len(self.types)
         self.types.append(result)
         self.value_key_to_id[key] = type_id
@@ -373,8 +444,12 @@ def _schema_to_protobuf(
         pb_desc.schema.history.removed.append(removed)
     for old_num, new_num in type_desc.became.items():
         pb_desc.schema.history.became[old_num] = new_num
-    for version in sorted(type_desc.versions):
-        pb_desc.schema.history.versions.append(version)
+    for arg in type_desc.arguments:
+        pb_arg = pb_desc.schema.arguments.add()
+        if isinstance(arg, int):
+            pb_arg.type_id = arg
+        else:
+            pb_arg.value = arg
 
 
 def _enum_to_protobuf(
@@ -396,8 +471,28 @@ def _enum_to_protobuf(
         pb_desc.clk_enum.history.removed.append(removed)
     for old_num, new_num in type_desc.became.items():
         pb_desc.clk_enum.history.became[old_num] = new_num
-    for version in sorted(type_desc.versions):
-        pb_desc.clk_enum.history.versions.append(version)
+
+
+def _soa_to_protobuf(metadata: model.TachyonMetadata, type_desc: model.SoaType, pb_desc: model_pb2.TypeDesc) -> None:
+    """Convert a SoaType to Protobuf."""
+    pb_desc.soa_type.fqn = type_desc.fqn
+    pb_desc.soa_type.uuid = type_desc.uuid.bytes
+    pb_desc.soa_type.size = type_desc.size
+    pb_desc.soa_type.alignment = type_desc.alignment
+    pb_desc.soa_type.schema_type_id = type_desc.schema_type_id
+    pb_desc.soa_type.container_size = type_desc.container_size
+    pb_desc.soa_type.hash = type_desc.get_hash(metadata.types)
+    for fld in type_desc.field_layouts:
+        pb_fld = pb_desc.soa_type.field_layouts.add()
+        pb_fld.offset = fld.offset
+        pb_fld.num = fld.num
+        pb_fld.name = fld.name
+        pb_fld.type_id = fld.type_id
+        # Note: init_value is always None for SoA fields, so we don't serialize it
+    if type_desc.size_field_offset is not None:
+        pb_desc.soa_type.size_field_offset = type_desc.size_field_offset
+    if type_desc.size_field_type_id is not None:
+        pb_desc.soa_type.size_field_type_id = type_desc.size_field_type_id
 
 
 def to_protobuf(metadata: model.TachyonMetadata) -> model_pb2.TachyonMetadata:
@@ -415,10 +510,12 @@ def to_protobuf(metadata: model.TachyonMetadata) -> model_pb2.TachyonMetadata:
         elif isinstance(type_desc, model.TagType):
             pb_desc.tag.fqn = type_desc.fqn
             pb_desc.tag.hash = type_desc.get_hash(metadata.types)
-        elif isinstance(type_desc, model.StrongType):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        elif isinstance(type_desc, model.StrongType):
             pb_desc.strong_type.fqn = type_desc.fqn
             pb_desc.strong_type.underlying_type_id = type_desc.underlying_type_id
             pb_desc.strong_type.hash = type_desc.get_hash(metadata.types)
+        elif isinstance(type_desc, model.SoaType):  # pyright: ignore[reportUnnecessaryIsInstance] # For error reporting
+            _soa_to_protobuf(metadata, type_desc, pb_desc)
         else:
             msg = f"Unrecognized metadata type {type(type_desc)}"
             raise NotImplementedError(msg)
@@ -460,6 +557,7 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                     schema_uuid=UUID(bytes=pb_desc.schema.schema_uuid),
                     version=pb_desc.schema.version,
                     hash=pb_desc.schema.hash,
+                    arguments=tuple(_from_pb_arg(pb_arg) for pb_arg in pb_desc.schema.arguments),
                     fields=tuple(
                         model.SchemaField(
                             offset=pb_fld.offset,
@@ -472,7 +570,6 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                     ),
                     became=dict(pb_desc.schema.history.became.items()),
                     removed=set(pb_desc.schema.history.removed),
-                    versions=set(pb_desc.schema.history.versions),
                 )
             )
         elif pb_desc.HasField("clk_enum"):
@@ -490,7 +587,6 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                     ),
                     became=dict(pb_desc.clk_enum.history.became.items()),
                     removed=set(pb_desc.clk_enum.history.removed),
-                    versions=set(pb_desc.clk_enum.history.versions),
                 )
             )
         elif pb_desc.HasField("tag"):
@@ -501,6 +597,34 @@ def from_protobuf(pb_metadata: model_pb2.TachyonMetadata) -> model.TachyonMetada
                     fqn=pb_desc.strong_type.fqn,
                     underlying_type_id=pb_desc.strong_type.underlying_type_id,
                     hash=pb_desc.strong_type.hash,
+                )
+            )
+        elif pb_desc.HasField("soa_type"):
+            types.append(
+                model.SoaType(
+                    fqn=pb_desc.soa_type.fqn,
+                    uuid=UUID(bytes=pb_desc.soa_type.uuid),
+                    size=pb_desc.soa_type.size,
+                    alignment=pb_desc.soa_type.alignment,
+                    schema_type_id=pb_desc.soa_type.schema_type_id,
+                    container_size=pb_desc.soa_type.container_size,
+                    hash=pb_desc.soa_type.hash,
+                    field_layouts=tuple(
+                        model.SchemaField(
+                            offset=pb_fld.offset,
+                            num=pb_fld.num,
+                            name=pb_fld.name,
+                            type_id=pb_fld.type_id,
+                            init_value=None,  # SoA fields don't have init values
+                        )
+                        for pb_fld in pb_desc.soa_type.field_layouts
+                    ),
+                    size_field_offset=pb_desc.soa_type.size_field_offset
+                    if pb_desc.soa_type.HasField("size_field_offset")
+                    else None,
+                    size_field_type_id=pb_desc.soa_type.size_field_type_id
+                    if pb_desc.soa_type.HasField("size_field_type_id")
+                    else None,
                 )
             )
         else:

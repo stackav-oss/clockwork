@@ -22,7 +22,7 @@ namespace
 {
 
 jewels::expected<BufferIndex, BufferIndex>
-increment_index(boost::atomic_ref<BufferIndex> index, BufferIndex current, size_t count) noexcept
+increment_index(std::atomic_ref<BufferIndex> index, BufferIndex current, size_t count) noexcept
 {
   const BufferIndex next{current + count};
   // This is very unlikely to ever happen with 64 bits.
@@ -52,7 +52,8 @@ uint64_t to_position(BufferIndex index, BufferLayout layout) noexcept
 
 } // namespace detail
 
-BufferIterator::BufferIterator(AlignedPtr<Slot::slot_alignment> buffer, BufferLayout layout, BufferIndex index) noexcept
+BufferIterator::BufferIterator(
+  AlignedBytePtr<Slot::slot_alignment> buffer, BufferLayout layout, BufferIndex index) noexcept
   : buffer_{buffer}, layout_{layout}, index_{index}
 {
 }
@@ -117,7 +118,7 @@ jewels::expected<Buffer, InitError> Buffer::try_make(std::span<std::byte> bytes,
   }
 
   const auto maybe_aligned_ptr =
-    AlignedPtr<Slot::slot_alignment>::try_make(jewels::memory::ObjectPtr<std::byte>{bytes.data()});
+    AlignedBytePtr<Slot::slot_alignment>::try_make(jewels::memory::ObjectPtr<std::byte>{bytes.data()});
   if (!maybe_aligned_ptr)
   {
     return jewels::unexpected{InitError::invalid_alignment};
@@ -126,7 +127,7 @@ jewels::expected<Buffer, InitError> Buffer::try_make(std::span<std::byte> bytes,
   return Buffer{*maybe_aligned_ptr, layout};
 }
 
-Buffer::Buffer(AlignedPtr<Slot::slot_alignment> buffer, BufferLayout layout) noexcept
+Buffer::Buffer(AlignedBytePtr<Slot::slot_alignment> buffer, BufferLayout layout) noexcept
   : buffer_{buffer}, layout_{layout}
 {
 }
@@ -139,6 +140,11 @@ BufferIndex Buffer::head() const noexcept
 
 jewels::expected<BufferIndex, BufferIndex> Buffer::increment_head(BufferIndex current, size_t count) noexcept
 {
+  // If published once, only allow a single increment at initialization
+  if (is_published_once() && (current > 0 || count > 1))
+  {
+    return jewels::unexpected{head()};
+  }
   return increment_index(head_ref(), current, count);
 }
 
@@ -155,6 +161,12 @@ BufferIndex Buffer::tail() const noexcept
 
 jewels::expected<BufferIndex, BufferIndex> Buffer::increment_tail(BufferIndex current, size_t count) noexcept
 {
+  // If this is only for a single publish, the tail should never update since the tail should only move once the buffer
+  // is full.
+  if (is_published_once() && (current > 0 || count > 0))
+  {
+    return jewels::unexpected{tail()};
+  }
   return increment_index(tail_ref(), current, count);
 }
 
@@ -163,7 +175,7 @@ BufferIterator Buffer::end() const noexcept
   return BufferIterator{buffer_, layout_, head()};
 }
 
-AlignedPtr<Slot::slot_alignment> Buffer::get() const noexcept
+AlignedBytePtr<Slot::slot_alignment> Buffer::get() const noexcept
 {
   return buffer_;
 }
@@ -178,18 +190,37 @@ const BufferLayout& Buffer::layout() const noexcept
   return layout_;
 }
 
-boost::atomic_ref<BufferIndex> Buffer::head_ref() const noexcept
+std::atomic_ref<BufferIndex> Buffer::head_ref() const noexcept
 {
   const auto head_span = std::span<std::byte, sizeof(BufferIndex)>{
     std::next(buffer_.get(), static_cast<std::ptrdiff_t>(head_offset(layout_))), sizeof(BufferIndex)};
-  return boost::atomic_ref<BufferIndex>{*detail::marshal_as<BufferIndex>(head_span)};
+  return std::atomic_ref<BufferIndex>{*detail::marshal_as<BufferIndex>(head_span)};
 }
 
-boost::atomic_ref<BufferIndex> Buffer::tail_ref() const noexcept
+std::atomic_ref<BufferIndex> Buffer::tail_ref() const noexcept
 {
   const auto tail_span = std::span<std::byte, sizeof(BufferIndex)>{
     std::next(buffer_.get(), static_cast<std::ptrdiff_t>(tail_offset(layout_))), sizeof(BufferIndex)};
-  return boost::atomic_ref<BufferIndex>{*detail::marshal_as<BufferIndex>(tail_span)};
+  return std::atomic_ref<BufferIndex>{*detail::marshal_as<BufferIndex>(tail_span)};
+}
+
+bool Buffer::is_published_once() const noexcept
+{
+  return layout_.is_published_once;
+}
+
+size_t Buffer::get_publish_count() const noexcept
+{
+  return static_cast<size_t>(head());
+}
+
+[[nodiscard]] bool Buffer::still_available(const BufferIterator& iterator) const
+{
+  if (is_sentinel_iterator(iterator))
+  {
+    return false;
+  }
+  return std::begin(*this) <= iterator && std::end(*this) > iterator;
 }
 
 } // namespace clockwork::pinion

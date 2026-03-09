@@ -71,7 +71,7 @@ def compile_test_schema_v2() -> tuple[node.Module, schema.InstantiatedSchema]:
       }
       history
       {
-        versions: [2, 3];
+        version: 3;
       }
     }
 

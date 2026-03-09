@@ -1,3 +1,8 @@
+#![generate(cpp, proto, proto_conv)]
+#![cpp(namespace=clockwork)]
+#![proto(package=clockwork.proto)]
+#![proto_conv(tap_to_protobuf=false)]
+
 // Enumeration of the different find choices for the approximate message aligner.
 enum ApproxAlignerFindType
 {
@@ -40,7 +45,6 @@ enum ApproxAlignerStateType
   }
 }
 
-
 // Runtime configuration for the approximate message aligner.
 schema ApproxAlignerConfig
 {
@@ -73,43 +77,4 @@ schema ApproxAlignerState
     // Timestamp of the last alignment commit().
     #0 last_commit_timestamp: SyncTime;
   }
-}
-
-cpp_target approx_aligner_config
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  enum ApproxAlignerFindType;
-  enum ApproxAlignerStateType;
-  schema ApproxAlignerConfig;
-  schema ApproxAlignerState;
-
-  representation Tachyon<ApproxAlignerConfig>;
-  interface Tap<Tachyon<ApproxAlignerConfig>>;
-  representation Tachyon<ApproxAlignerState>;
-  interface Tap<Tachyon<ApproxAlignerState>>;
-}
-
-proto_target approx_aligner_config_proto
-{
-    options
-    {
-        package clockwork.proto;
-    }
-
-    enum ApproxAlignerFindType;
-    representation Protobuf<ApproxAlignerConfig>;
-}
-
-cpp_target approx_aligner_config_proto_conv
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  converter ProtobufToTap<Protobuf<ApproxAlignerConfig>, Tap<Tachyon<ApproxAlignerConfig>>>;
 }

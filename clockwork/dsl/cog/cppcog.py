@@ -9,6 +9,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Final
 
+from clockwork.dsl.cog.cppdial_signals import (
+    BatchedReportGroupInfo,
+    PostAggregatedReportGroupInfo,
+    collect_batched_report_groups,
+    collect_post_aggregated_report_groups,
+)
 from clockwork.dsl.cog.pycog import (
     AnyMessageCondition,
     ConditionBase,
@@ -25,6 +31,7 @@ from clockwork.dsl.cog.pycog import (
     OutputsStruct,
     Resource,
     ResourcesStruct,
+    SignalsStruct,
     State,
     StatesStruct,
     TimeSinceLastExecCondition,
@@ -65,12 +72,12 @@ if TYPE_CHECKING:
 
 _UUID_TEMPLATE = CppTemplate([Header(JEWELS_REPO, "jewels/uuid/uuid/hh")], "Uuid", "jewels")
 _COG_CLASS_TYPE = CppType(
-    [Header(CLK_REPO, "clockwork/common/process_description.hh")],
+    [Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
     "CogClassId",
     CLOCKWORK_NAMESPACE + "::common",
 )
 _ENDPOINT_TYPE = CppType(
-    [Header(CLK_REPO, "clockwork/common/process_description.hh")],
+    [Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
     "EndpointClassId",
     CLOCKWORK_NAMESPACE + "::common",
 )
@@ -709,6 +716,8 @@ class InputHandler:
            static constexpr auto endpoint_id = uuid***;
            static constexpr ::std::string_view name = ***;
            static constexpr auto max_view_size = ***;
+           static constexpr auto min_msgs = ***;
+           static constexpr auto min_new_msgs = ***;
            static constexpr std::optional<::ssize_t> safety_margin = ***;
            static constexpr std::optional<size_t> skip_threshold = ***;
            static constexpr auto copy_inputs = ***;
@@ -732,6 +741,8 @@ class InputHandler:
         # Parse parameters
         msg_type = self.cog_input.msg_type.render("")
         max_view_size = f"{self.cog_input.max_msgs}U"
+        min_msgs = f"{self.cog_input.min_msgs}U"
+        min_new_msgs = f"{self.cog_input.min_new_msgs}U"
         safety_margin = "std::nullopt" if self.cog_input.safety_margin is None else f"{self.cog_input.safety_margin}"
         skip_threshold = (
             "std::nullopt" if self.cog_input.skip_threshold is None else f"{self.cog_input.skip_threshold}U"
@@ -744,6 +755,8 @@ class InputHandler:
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
             _gen_const_str([self.cog_name, policy_name]),
             f"static constexpr auto max_view_size = {max_view_size};",
+            f"static constexpr auto min_msgs = {min_msgs};",
+            f"static constexpr auto min_new_msgs = {min_new_msgs};",
             f"static constexpr std::optional<::ssize_t> safety_margin = {safety_margin};",
             f"static constexpr std::optional<size_t> skip_threshold = {skip_threshold};",
             f"static constexpr auto copy_inputs = {str(self.cog_input.copy_inputs).lower()};",
@@ -965,6 +978,8 @@ class PublisherHandler:
     cog_name: str
     rate_limit: cog.ResolvedRateLimitSpec | None
     metrics_log_type: cog.MetricsLogType
+    cog_metrics_output: bool
+    is_report_group: bool
 
     @classmethod
     def make(cls: type[PublisherHandler], output: Output, cog_name: str, index: int) -> PublisherHandler:
@@ -981,6 +996,8 @@ class PublisherHandler:
             cog_name=cog_name,
             rate_limit=output.rate_limit,
             metrics_log_type=output.metrics_log_type,
+            cog_metrics_output=output.cog_metrics_output,
+            is_report_group=output.is_report_group,
         )
 
     def render_policy_struct(self) -> CppChunk:
@@ -1003,11 +1020,14 @@ class PublisherHandler:
                 *self.msg_type.includes,
             ]
         )
+        # Report group publishers never participate in infra diagnostics (frequency signals),
+        # so has_diagnostics must be false for them regardless of metrics_log_type.
+        has_diag = not self.is_report_group and self.metrics_log_type == cog.MetricsLogType.none
         body = [
             f"using MsgType = {self.msg_type.render('')};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
             _gen_const_str([self.cog_name, self.policy_name]),
-            f"static constexpr bool has_diagnostics = {'true' if self.metrics_log_type == cog.MetricsLogType.none else 'false'};",
+            f"static constexpr bool has_diagnostics = {'true' if has_diag else 'false'};",
         ]
         if self.rate_limit:
             period_ns = int(self.rate_limit.period_s * 1e9)
@@ -1061,24 +1081,30 @@ class Publishers:
         chunk.append(f"using PublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{policy_template_args}>;")
         # create a constexpr index for each of the metrics logging publishers in the registry
         for publisher in self.publisher_registry:
-            if publisher.metrics_log_type == cog.MetricsLogType.telemetry:
+            if publisher.cog_metrics_output and publisher.metrics_log_type == cog.MetricsLogType.telemetry:
                 chunk.append(_gen_const_size(publisher.index, "telemetry_metrics_index"))
-            elif publisher.metrics_log_type == cog.MetricsLogType.event:
+            elif publisher.cog_metrics_output and publisher.metrics_log_type == cog.MetricsLogType.event:
                 chunk.append(_gen_const_size(publisher.index, "event_metrics_index"))
+        # create a constexpr index for each report group publisher
+        for publisher in self.publisher_registry:
+            if publisher.is_report_group:
+                chunk.append(_gen_const_size(publisher.index, f"{publisher.output_name}_index"))
         # get the template arguments for the non metrics publishers
         non_metrics_template_args = [
             publisher.policy_name
             for publisher in self.publisher_registry
             if publisher.metrics_log_type not in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+            and not publisher.is_report_group
         ]
         chunk.append(
             f"using OutputPublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{', '.join(non_metrics_template_args)}>;"
         )
-        # get the template arguments for the metrics publishers
+        # get the template arguments for the metrics publishers (only cog_metrics_output=True, excludes report groups)
         metrics_template_args = [
             publisher.policy_name
             for publisher in self.publisher_registry
-            if publisher.metrics_log_type in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+            if publisher.cog_metrics_output
+            and publisher.metrics_log_type in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
         ]
         chunk.append(
             f"using MetricsPublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{', '.join(metrics_template_args)}>;"
@@ -1367,6 +1393,7 @@ class Cog:
     publishers: Publishers | None = None
     diagnostics: Diagnosticses | None = None
     infra_diags: InfraDiagnostics | None = None
+    signals_struct: SignalsStruct | None = None
 
     cog_policy_name: str = ""
 
@@ -1455,6 +1482,19 @@ class Cog:
             f"using CogDial = {dial_type.render(self.cpp_namespace)};",
             indent=1,
         )
+
+        self.signals_struct = SignalsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.report_groups)
+        has_batched_signals = any(signal.is_batched for signal in self.signals_struct.signals.values())
+        cpp_mod.header_chunk.append(
+            f"static constexpr auto has_signals = {'true' if has_batched_signals else 'false'};",
+            indent=1,
+        )
+
+        cpp_mod.header_chunk.append(
+            f"using SignalApiType = {self.dial_name}SignalApi;",
+            indent=1,
+        )
+
         cpp_mod.header_chunk.append(
             f"static constexpr auto cog_id = {UuidHandler(_COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.cog_ir.module.context, self.cog_ir)).render_from_string_func()};",
             indent=1,
@@ -1472,7 +1512,7 @@ class Cog:
         cpp_mod.header_chunk.append(self.timers.render_timers(), indent=1)
 
         self.inputs = Inputs.make(
-            InputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.inputs),
+            InputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.inputs, self.cog_ir.execution_spec),
             cog_fqn,
         )
         cpp_mod.header_chunk.append(self.inputs.render_inputs(), indent=1)
@@ -1484,7 +1524,7 @@ class Cog:
         )
         cpp_mod.header_chunk.append(self.input_conditions.render_input_conditions(), indent=1)
 
-        output_dict = self.cog_ir.outputs | self.cog_ir.metrics_outputs
+        output_dict = self.cog_ir.outputs | self.cog_ir.metrics_outputs | self.cog_ir.report_groups
         self.publishers = Publishers.make(
             OutputsStruct.from_ir(self.cog_ir.module.context, output_dict, self.cog_ir.rate_limits),
             cog_fqn,
@@ -1515,6 +1555,8 @@ class Cog:
         cpp_mod.append(self._generate_execute_method())
         if self.cog_ir.metrics_options.metrics_enabled:
             self._append_metrics_methods(cpp_mod)
+        cpp_mod.append(self._generate_publish_report_groups_method())
+        cpp_mod.append(self._generate_signal_infra_methods())
         cpp_mod.header_chunk.append("};")
 
         cpp_mod.header_chunk.append(
@@ -1862,6 +1904,15 @@ class Cog:
             ["typename"],
         )
 
+        arg_signals = CppNamedType(
+            CppType(
+                [],
+                "SignalApiType&",
+                None,
+            ),
+            "signals",
+        )
+
         def make_obj_ptr(statement: str) -> str:
             return f"::jewels::memory::make_non_null_from_ref({statement})"
 
@@ -1956,7 +2007,9 @@ class Cog:
         outputs_inner_chunk.append(f"{self.dial_name}Outputs(")
         if self.publishers:
             non_metrics_publishers = [
-                publisher for publisher in self.publishers if publisher.metrics_log_type == cog.MetricsLogType.none
+                publisher
+                for publisher in self.publishers
+                if publisher.metrics_log_type == cog.MetricsLogType.none and not publisher.is_report_group
             ]
             if non_metrics_publishers:
                 outputs_inner_chunk.append(
@@ -1983,7 +2036,12 @@ class Cog:
                     indent=1,
                 )
             diagnostics_inner_chunk.append(")")
+        diagnostics_inner_chunk.append(",")
         body.append(diagnostics_inner_chunk, indent=1)
+
+        signals_inner_chunk = CppChunk()
+        signals_inner_chunk.append(f"{arg_signals.argument_name}")
+        body.append(signals_inner_chunk, indent=1)
 
         body.append(");")
         body.context.add_includes(
@@ -1993,21 +2051,24 @@ class Cog:
             ]
         )
 
+        arguments = [
+            arg_params,
+            arg_resources,
+            arg_configs,
+            arg_states,
+            arg_inputs,
+            arg_publishables,
+            arg_timer_conditions,
+            arg_input_conditions,
+            arg_diagnostics,
+            arg_signals,
+        ]
+
         make_dial_method = CppMethod(
             name="make_dial",
             doc=None,
             return_type=return_type,
-            arguments=[
-                arg_params,
-                arg_resources,
-                arg_configs,
-                arg_states,
-                arg_inputs,
-                arg_publishables,
-                arg_timer_conditions,
-                arg_input_conditions,
-                arg_diagnostics,
-            ],
+            arguments=arguments,
             leading_qualifiers=[],
             trailing_qualifiers=[],
             body=body,
@@ -2251,7 +2312,7 @@ class Cog:
             output_publishers = [
                 publisher
                 for publisher in self.publishers.publisher_registry
-                if publisher.metrics_log_type == cog.MetricsLogType.none
+                if publisher.metrics_log_type == cog.MetricsLogType.none and not publisher.is_report_group
             ]
 
         arg_event_metrics = CppNamedType(
@@ -2331,11 +2392,11 @@ class Cog:
         """Generate populate_output_telemetry_metrics."""
         output_publishers = []
         if self.publishers:
-            # Filter out metrics publishers to get only actual output publishers
+            # Filter out metrics publishers and report groups to get only actual output publishers
             output_publishers = [
                 publisher
                 for publisher in self.publishers.publisher_registry
-                if publisher.metrics_log_type == cog.MetricsLogType.none
+                if publisher.metrics_log_type == cog.MetricsLogType.none and not publisher.is_report_group
             ]
 
         arg_telemetry_metrics = CppNamedType(
@@ -2484,6 +2545,107 @@ class Cog:
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
 
+    def _generate_publish_report_groups_method(self) -> CppModuleChunks:
+        """Generate publish_report_groups method to publish report group data from signals API.
+
+        For each report group:
+        1. Check if should_publish_{group}() returns true
+        2. Get the publishable from the tuple using the constexpr index
+        3. Populate the message fields from the signals API
+        4. Mark the publishable for publish
+        5. Reset the signals data
+
+        Always generates the method, even if no report groups exist (in which case it just returns success).
+
+        Returns:
+            CppModuleChunks containing the generated method.
+        """
+        arg_signals = CppNamedType(
+            CppType([], "SignalApiType", None, const=False, ref=Ref.L),
+            "signals",
+        )
+
+        arg_publishables = CppNamedType(
+            CppType(
+                [],
+                "typename PublishersType::PublishablesTuple",
+                None,
+                const=False,
+                ref=Ref.L,
+            ),
+            argument_name="publishables",
+        )
+
+        body = CppChunk()
+
+        # Check if we have signals and report groups to process
+        has_report_groups = False
+        if self.signals_struct is not None and self.publishers is not None:
+            # Get report group publishers
+            report_group_publishers = [
+                publisher for publisher in self.publishers.publisher_registry if publisher.is_report_group
+            ]
+            has_report_groups = len(report_group_publishers) > 0
+
+            if has_report_groups:
+                for publisher in report_group_publishers:
+                    group_name = publisher.output_name
+                    group_index = f"{group_name}_index"
+
+                    # Find the report group and its signals
+                    report_group = self.signals_struct.report_groups.get(group_name)
+                    if report_group is None:
+                        continue
+
+                    # Check if this is a batched or post-aggregated group
+                    is_batched = (
+                        report_group.report_group_config is not None
+                        and report_group.report_group_config.reporting_strategy.value == "batched"
+                    )
+
+                    # Generate the should_publish check
+                    body.append(f"if (signals.should_publish_{group_name}()) {{")
+
+                    # Get the publishable and message
+                    body.append(f"    auto {group_name}_publishable = std::get<{group_index}>(publishables);")
+                    body.append(f"    auto& {group_name}_msg = {group_name}_publishable.message();")
+
+                    if is_batched:
+                        # For batched: populate from signal API and reset
+                        body.append(f"    signals.populate_{group_name}({group_name}_msg);")
+                        body.append(f"    signals.reset_batch_{group_name}();")
+                    else:
+                        # For post-aggregated: populate from signal API and reset
+                        body.append(f"    signals.populate_{group_name}({group_name}_msg);")
+                        body.append(f"    signals.reset_{group_name}();")
+
+                    body.append(f"    {group_name}_publishable.mark_for_publish();")
+                    body.append("}")  # end if should_publish
+
+        # Always add the return statement (will be the only statement if no report groups)
+        if not has_report_groups:
+            body.append("// No report groups defined")
+            body.append("(void)signals;")
+            body.append("(void)publishables;")
+
+        body.append("return ::jewels::success;")
+
+        publish_report_groups_method = CppMethod(
+            name="publish_report_groups",
+            doc="Publish report group data from the signals API.",
+            return_type=CppType([], "::jewels::BinaryOutcome", None),
+            arguments=[arg_signals, arg_publishables],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=True,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+        return publish_report_groups_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
     def _generate_execute_method(self) -> CppModuleChunks:
         """Generate execute."""
         arg_dial = CppNamedType(CppType([], "CogDial&", None), "dial")
@@ -2509,3 +2671,273 @@ class Cog:
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace if self.cpp_namespace is not None else ""  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
         return execute_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+    def _collect_signal_group_info(
+        self,
+    ) -> tuple[dict[str, BatchedReportGroupInfo], dict[str, PostAggregatedReportGroupInfo], list[str]]:
+        """Collect report group information from the signals struct.
+
+        Returns:
+            Tuple of (batched_groups, post_agg_groups, all_group_names).
+        """
+        batched_groups: dict[str, BatchedReportGroupInfo] = {}
+        post_agg_groups: dict[str, PostAggregatedReportGroupInfo] = {}
+        all_group_names: list[str] = []
+
+        if self.signals_struct is not None:
+            batched_groups = collect_batched_report_groups(self.signals_struct)
+            post_agg_groups = collect_post_aggregated_report_groups(self.signals_struct)
+            all_group_names = list(batched_groups.keys()) + list(post_agg_groups.keys())
+
+        return batched_groups, post_agg_groups, all_group_names
+
+    def _generate_aggregate_signal_lifecycle_methods(
+        self,
+        all_group_names: list[str],
+        ctx: _SignalMethodGenerationContext,
+    ) -> CppModuleChunks:
+        """Generate aggregate start_of_execution_signals and end_of_execution_signals methods.
+
+        These methods call the corresponding method on all report groups.
+
+        Args:
+            all_group_names: List of all report group names.
+            ctx: Context with argument types and rendering parameters.
+
+        Returns:
+            CppModuleChunks containing both lifecycle methods.
+        """
+        cpp_mod = CppModuleChunks()
+        has_report_groups = len(all_group_names) > 0
+
+        start_body = CppChunk()
+        if has_report_groups:
+            for group_name in all_group_names:
+                start_body.append(f"signals.start_of_execution_{group_name}(current_time);")
+        else:
+            start_body.append("(void)signals;")
+            start_body.append("(void)current_time;")
+
+        start_method = CppMethod(
+            name="start_of_execution_signals",
+            doc="Begin the observation window for all report groups.",
+            return_type=VOID,
+            arguments=[ctx.arg_signals, ctx.arg_current_time],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=start_body,
+            no_discard=False,
+            static=True,
+        )
+        cpp_mod.append(start_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+        end_body = CppChunk()
+        if has_report_groups:
+            for group_name in all_group_names:
+                end_body.append(f"signals.end_of_execution_{group_name}(current_time);")
+        else:
+            end_body.append("(void)signals;")
+            end_body.append("(void)current_time;")
+
+        end_method = CppMethod(
+            name="end_of_execution_signals",
+            doc="End the observation window for all report groups.",
+            return_type=VOID,
+            arguments=[ctx.arg_signals, ctx.arg_current_time],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=end_body,
+            no_discard=False,
+            static=True,
+        )
+        cpp_mod.append(end_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+        return cpp_mod
+
+    def _generate_per_group_signal_forwarding_methods(
+        self,
+        all_group_names: list[str],
+        batched_groups: dict[str, BatchedReportGroupInfo],
+        ctx: _SignalMethodGenerationContext,
+    ) -> CppModuleChunks:
+        """Generate per-group forwarding methods for signal operations.
+
+        For each report group, generates:
+        - start_of_execution_<group>
+        - end_of_execution_<group>
+        - should_publish_<group>
+        - populate_<group>
+        - reset_<group> or reset_batch_<group>
+
+        Args:
+            all_group_names: List of all report group names.
+            batched_groups: Dictionary of batched report group info (to determine if group is batched).
+            ctx: Context with argument types and rendering parameters.
+
+        Returns:
+            CppModuleChunks containing all per-group forwarding methods.
+        """
+        cpp_mod = CppModuleChunks()
+
+        for group_name in all_group_names:
+            is_batched = group_name in batched_groups
+
+            # start_of_execution_<group>
+            fwd_start_body = CppChunk()
+            fwd_start_body.append(f"signals.start_of_execution_{group_name}(current_time);")
+            fwd_start = CppMethod(
+                name=f"start_of_execution_{group_name}",
+                doc=None,
+                return_type=VOID,
+                arguments=[ctx.arg_signals, ctx.arg_current_time],
+                leading_qualifiers=[],
+                trailing_qualifiers=[],
+                body=fwd_start_body,
+                no_discard=False,
+                static=True,
+            )
+            cpp_mod.append(fwd_start.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+            # end_of_execution_<group>
+            fwd_end_body = CppChunk()
+            fwd_end_body.append(f"signals.end_of_execution_{group_name}(current_time);")
+            fwd_end = CppMethod(
+                name=f"end_of_execution_{group_name}",
+                doc=None,
+                return_type=VOID,
+                arguments=[ctx.arg_signals, ctx.arg_current_time],
+                leading_qualifiers=[],
+                trailing_qualifiers=[],
+                body=fwd_end_body,
+                no_discard=False,
+                static=True,
+            )
+            cpp_mod.append(fwd_end.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+            # should_publish_<group>
+            fwd_sp_body = CppChunk()
+            fwd_sp_body.append(f"return signals.should_publish_{group_name}();")
+            fwd_sp = CppMethod(
+                name=f"should_publish_{group_name}",
+                doc=None,
+                return_type=CppType([], "bool", None),
+                arguments=[ctx.arg_signals_const],
+                leading_qualifiers=[],
+                trailing_qualifiers=[],
+                body=fwd_sp_body,
+                no_discard=True,
+                static=True,
+            )
+            cpp_mod.append(fwd_sp.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+            # populate_<group>
+            arg_msg = CppNamedType(CppType([], "auto", None, ref=Ref.L), "msg")
+            fwd_pop_body = CppChunk()
+            fwd_pop_body.append(f"signals.populate_{group_name}(msg);")
+            fwd_pop = CppMethod(
+                name=f"populate_{group_name}",
+                doc=None,
+                return_type=VOID,
+                arguments=[ctx.arg_signals_const, arg_msg],
+                leading_qualifiers=["inline"],
+                trailing_qualifiers=[],
+                body=fwd_pop_body,
+                no_discard=False,
+                static=True,
+            )
+            cpp_mod.append(fwd_pop.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+            # reset_<group> / reset_batch_<group>
+            if is_batched:
+                fwd_reset_body = CppChunk()
+                fwd_reset_body.append(f"signals.reset_batch_{group_name}();")
+                fwd_reset = CppMethod(
+                    name=f"reset_batch_{group_name}",
+                    doc=None,
+                    return_type=VOID,
+                    arguments=[ctx.arg_signals],
+                    leading_qualifiers=[],
+                    trailing_qualifiers=[],
+                    body=fwd_reset_body,
+                    no_discard=False,
+                    static=True,
+                )
+            else:
+                fwd_reset_body = CppChunk()
+                fwd_reset_body.append(f"signals.reset_{group_name}();")
+                fwd_reset = CppMethod(
+                    name=f"reset_{group_name}",
+                    doc=None,
+                    return_type=VOID,
+                    arguments=[ctx.arg_signals],
+                    leading_qualifiers=[],
+                    trailing_qualifiers=[],
+                    body=fwd_reset_body,
+                    no_discard=False,
+                    static=True,
+                )
+            cpp_mod.append(fwd_reset.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+        return cpp_mod
+
+    def _generate_signal_infra_methods(self) -> CppModuleChunks:
+        """Generate signal infrastructure methods on the Policy.
+
+        Generates:
+        - start_of_execution_signals: Calls start_of_execution for all report groups.
+        - end_of_execution_signals: Calls end_of_execution for all report groups.
+        - Per-group forwarding methods for infra operations (start, end, should_publish, populate, reset).
+
+        These methods provide the only access path to the private infra methods on the SignalApi.
+
+        Returns:
+            CppModuleChunks containing all generated signal infra methods.
+        """
+        cpp_mod = CppModuleChunks()
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        enclosing_namespace = self.cpp_namespace
+
+        # Set up common argument types
+        arg_signals = CppNamedType(
+            CppType([], "SignalApiType", None, const=False, ref=Ref.L),
+            "signals",
+        )
+        arg_signals_const = CppNamedType(
+            CppType([], "SignalApiType", None, const=True, ref=Ref.L),
+            "signals",
+        )
+        sync_time_type = CppType(
+            includes=[Header(CLK_REPO, "jewels/time/sync_time.hh")],
+            type_name="SyncTime",
+            cpp_namespace="jewels::time",
+        )
+        arg_current_time = CppNamedType(argument_type=sync_time_type, argument_name="current_time")
+
+        batched_groups, _, all_group_names = self._collect_signal_group_info()
+
+        ctx = _SignalMethodGenerationContext(
+            arg_signals=arg_signals,
+            arg_signals_const=arg_signals_const,
+            arg_current_time=arg_current_time,
+            parent_type=parent_type,
+            enclosing_namespace=enclosing_namespace,
+        )
+
+        cpp_mod.append(self._generate_aggregate_signal_lifecycle_methods(all_group_names, ctx))
+        cpp_mod.append(self._generate_per_group_signal_forwarding_methods(all_group_names, batched_groups, ctx))
+
+        return cpp_mod
+
+
+@dataclass
+class _SignalMethodGenerationContext:
+    """Context for generating signal infrastructure methods.
+
+    Groups related parameters to reduce function argument counts.
+    """
+
+    arg_signals: CppNamedType
+    arg_signals_const: CppNamedType
+    arg_current_time: CppNamedType
+    parent_type: CppType
+    enclosing_namespace: str

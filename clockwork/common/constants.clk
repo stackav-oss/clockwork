@@ -1,0 +1,4 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::common)]
+
+MAX_CHANNEL_NAME_SIZE: UInt64 = 350;

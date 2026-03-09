@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
@@ -27,7 +29,6 @@
 #include <chrono>
 #include <cstdint>
 #include <fcntl.h>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <optional>
@@ -47,10 +48,10 @@ TEST_CASE("Read deterministic logging config from files")
   constexpr auto publisher_channel_name = "publisher_channel";
   constexpr auto writer_channel_name = "writer_channel";
 
-  const std::shared_ptr<clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config =
-    std::make_shared<clockwork_logging::ChannelPublisherConfigTap>();
-  const std::shared_ptr<clockwork_logging::LogWriterConfigTap> log_writer_config =
-    std::make_shared<clockwork_logging::LogWriterConfigTap>();
+  const std::shared_ptr<Tappy<clockwork_logging::ChannelPublisherConfig<>>> channel_publisher_config =
+    std::make_shared<Tappy<clockwork_logging::ChannelPublisherConfig<>>>();
+  const std::shared_ptr<Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config =
+    std::make_shared<Tappy<clockwork_logging::LogWriterConfig<>>>();
 
   channel_publisher_config->get_underlying_channels().resize(1);
   channel_publisher_config->get_underlying_channels().at(0).get_underlying_channel_name().set_truncate(
@@ -60,13 +61,13 @@ TEST_CASE("Read deterministic logging config from files")
   log_writer_config->get_underlying_channels().at(0).get_underlying_channel_name().set_truncate(writer_channel_name);
 
   const auto publisher_bytes = std::as_bytes(jewels::as_single_item_span(*channel_publisher_config));
-  const jewels::filesystem::File publisher_file{publisher_config_path.native(), O_CREAT | O_WRONLY};
+  const jewels::filesystem::File publisher_file{publisher_config_path, O_CREAT | O_WRONLY};
   REQUIRE(
     ::write(publisher_file.descriptor(), publisher_bytes.data(), publisher_bytes.size()) ==
     static_cast<ssize_t>(publisher_bytes.size()));
 
   const auto writer_bytes = std::as_bytes(jewels::as_single_item_span(*log_writer_config));
-  const jewels::filesystem::File writer_file{writer_config_path.native(), O_CREAT | O_WRONLY};
+  const jewels::filesystem::File writer_file{writer_config_path, O_CREAT | O_WRONLY};
   REQUIRE(
     ::write(writer_file.descriptor(), writer_bytes.data(), writer_bytes.size()) ==
     static_cast<ssize_t>(writer_bytes.size()));
@@ -75,8 +76,8 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::deterministic,
-      .channel_publisher_config_path = publisher_config_path,
-      .log_writer_config_path = writer_config_path};
+      .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
+      .log_writer_config_path = std::string{writer_config_path.c_str()}};
 
     auto logging_config = get_deterministic_logging_config(params);
     REQUIRE(logging_config);
@@ -87,7 +88,8 @@ TEST_CASE("Read deterministic logging config from files")
   SECTION("Publisher specified, not writer")
   {
     auto params = ExecutionParams{
-      .execution_mode = ExecutionMode::deterministic, .channel_publisher_config_path = publisher_config_path};
+      .execution_mode = ExecutionMode::deterministic,
+      .channel_publisher_config_path = std::string{publisher_config_path.c_str()}};
 
     auto logging_config = get_deterministic_logging_config(params);
 
@@ -101,7 +103,7 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::deterministic,
-      .channel_publisher_config_path = publisher_config_path,
+      .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
       .log_writer_config_path = "/dsajf"};
 
     auto logging_config = get_deterministic_logging_config(params);
@@ -113,8 +115,8 @@ TEST_CASE("Read deterministic logging config from files")
   {
     auto params = ExecutionParams{
       .execution_mode = ExecutionMode::online,
-      .channel_publisher_config_path = publisher_config_path,
-      .log_writer_config_path = writer_config_path};
+      .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
+      .log_writer_config_path = std::string{writer_config_path.c_str()}};
 
     auto logging_config = get_deterministic_logging_config(params);
 

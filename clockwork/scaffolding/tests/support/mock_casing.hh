@@ -34,7 +34,7 @@ public:
 
   MAKE_MOCK3(
     try_instantiate_cog,
-    (jewels::expected<std::shared_ptr<AbstractCog>, Error>)(const common::CogInstanceDescriptionTap&,
+    (jewels::expected<std::shared_ptr<AbstractCog>, Error>)(const Tappy<common::CogInstanceDescription<>>&,
                                                             std::shared_ptr<AbstractCogQueue>,
                                                             jewels::memory::MemoryResource),
     override);
@@ -44,6 +44,14 @@ public:
     (jewels::expected<void, Error>)(jewels::Uuid<common::StateInstanceId>,
                                     jewels::Uuid<RepresentationTag>,
                                     pinion::PublisherHandle),
+    override);
+
+  MAKE_MOCK4(
+    try_instantiate_state,
+    (Outcome)(jewels::Uuid<common::StateInstanceId>,
+              jewels::Uuid<RepresentationTag>,
+              pinion::PublisherHandle,
+              std::span<const std::byte>),
     override);
 
   MAKE_MOCK3(
@@ -67,6 +75,11 @@ public:
                                     jewels::Uuid<RepresentationTag>,
                                     std::span<const std::byte>,
                                     jewels::memory::MemoryResource),
+    override);
+
+  MAKE_MOCK3(
+    try_deserialize_data,
+    (Outcome)(jewels::Uuid<RepresentationTag>, std::span<const std::byte>, std::span<std::byte>),
     override);
 
   MAKE_MOCK2(
@@ -109,6 +122,8 @@ public:
     try_connect_memory_resource,
     (jewels::expected<void, Error>)(jewels::Uuid<common::EndpointInstanceId>, jewels::memory::MemoryResource),
     override);
+
+  MAKE_MOCK1(try_configure_snapshot, (SnapshotConfigOutcome)(const Tappy<common::SnapshotConfig>&), override);
 
   MAKE_MOCK4(
     try_instantiate_io_connection,

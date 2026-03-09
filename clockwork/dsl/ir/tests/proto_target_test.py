@@ -60,6 +60,46 @@ def test_proto_target(fs_importer: FilesystemImporter) -> None:
     assert len(composition_ir.enums[0].enum_ir.values) == 5
 
 
+def test_clk_proto_target(fs_importer: FilesystemImporter) -> None:
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/clk_protomsg.clk")), fs_importer
+    )
+    proto_target_ir = module.inner_scope.lookup("clk_protomsg_clk_proto", recursive=False)
+    assert proto_target_ir is not None
+    assert isinstance(proto_target_ir, proto_target.ProtoTarget)
+    assert len(proto_target_ir.representations) == 5
+    assert len(proto_target_ir.enums) == 1
+    assert isinstance(proto_target_ir.enums[0].enum_ir, ClkEnum)
+    assert len(proto_target_ir.enums[0].enum_ir.values) == 5
+    representation = proto_target_ir.representations[0]
+    assert not representation.is_generic
+    assert representation.get_resolved().schema_ir.schema.source is module.inner_scope.lookup("GenericMsg")
+    assert isinstance(representation.typespec, typesys.Instantiation)
+    representation = proto_target_ir.representations[1]
+    assert not representation.is_generic
+    assert representation.get_resolved().schema_ir.schema.source is module.inner_scope.lookup("GenericMsg")
+    assert isinstance(representation.typespec, typesys.Instantiation)
+    representation = proto_target_ir.representations[2]
+    assert not representation.is_generic
+    assert representation.get_resolved().schema_ir.schema.source is module.inner_scope.lookup("ProtoTester")
+    assert isinstance(representation.typespec, typesys.Instantiation)
+    assert representation.typespec.instantiates is clkbuiltins.PROTOBUF
+    assert representation.typespec.arguments["schema"] is representation.get_resolved().schema_ir.schema.source
+    repr_info = RepresentationReference.from_typespec(representation.typespec)
+    assert isinstance(repr_info, RepresentationReference)
+    repr_lookup = schema_reg.lookup_representation(module.context, repr_info)
+    assert repr_lookup is not None
+    assert repr_lookup.representation_ir is representation.get_resolved()
+    representation = proto_target_ir.representations[3]
+    assert not representation.is_generic
+    assert representation.get_resolved().schema_ir.schema.source is module.inner_scope.lookup("DependencyTester")
+    assert isinstance(representation.typespec, typesys.Instantiation)
+    representation = proto_target_ir.representations[4]
+    assert not representation.is_generic
+    assert representation.get_resolved().schema_ir.schema.source is module.inner_scope.lookup("BetterThanInheritance")
+    assert isinstance(representation.typespec, typesys.Instantiation)
+
+
 def test_generic_with_no_alias(fs_importer: FilesystemImporter) -> None:
     source = """
         // Array size
@@ -278,6 +318,7 @@ def test_adding_messages() -> None:
     proto_module = proto_target.ProtoModule(
         package="test.package",
         go_package="go_package.com",
+        prefix_enum_value_names=True,
         messages=[],
         enums=[],
         imports=set(),
@@ -293,6 +334,7 @@ def test_adding_messages() -> None:
                     import_location="test/test1",
                     package_name="",
                     type_name="type_one",
+                    go_dep_label=None,
                     validate_fields=False,
                 ),
             )
@@ -308,6 +350,7 @@ def test_adding_messages() -> None:
                     import_location="test/test2",
                     package_name="",
                     type_name="type_two",
+                    go_dep_label=None,
                     validate_fields=False,
                 ),
             ),
@@ -318,6 +361,7 @@ def test_adding_messages() -> None:
                     import_location="test/test3",
                     package_name="",
                     type_name="type_three",
+                    go_dep_label=None,
                     validate_fields=False,
                 ),
             ),
@@ -481,6 +525,7 @@ def test_output_targets(fs_importer: FilesystemImporter) -> None:
                 Label("//a/b/c:base_target_go_library"),
                 Label("@org_golang_google_protobuf//reflect/protoreflect"),
                 Label("@org_golang_google_protobuf//runtime/protoimpl"),
+                Label("@org_golang_google_protobuf//types/known/durationpb"),
             ],
             importpath=Label(value="foo_bar.com"),
         ),
@@ -615,7 +660,7 @@ def test_output_targets_no_go_package(fs_importer: FilesystemImporter) -> None:
 
 def test_output_targets_cross_repo(fs_importer: FilesystemImporter) -> None:
     source = """
-        use @clockwork::clockwork::dsl::tests::support::hellomsg::HelloMsg;
+        use @clockwork::clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 
         // Doc
         schema Base

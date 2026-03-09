@@ -1,4 +1,4 @@
-use clockwork::tests::support::exec_time::ExecState;
+use clockwork::tests::support::exec_time::{ExecState};
 
 cpu_domain LocalCpu;
 
@@ -181,7 +181,7 @@ cog StressSubscriberCog
     condition new_exec_state3: new_message(exec_state3, min=5, max=7);
     condition new_exec_state5: new_message(exec_state5, min=3, max=5);
     condition new_exec_state7: new_message(exec_state7, min=2, max=3);
-    condition new_exec_state11: new_message(exec_state11, min=1, max=2);
+    condition new_exec_state11: new_message(exec_state11, max=2);
     execute when: new_exec_state2 or new_exec_state3 or new_exec_state5 or new_exec_state7 or new_exec_state11;
   }
 }

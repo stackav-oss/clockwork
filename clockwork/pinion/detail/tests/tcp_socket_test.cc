@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/detail/tcp_socket.hh"
+#include "jewels/filesystem/error_code.hh"
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/expected.hh"
 

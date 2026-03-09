@@ -4,7 +4,9 @@
 #pragma once
 
 #include "clockwork/cog/cog_diagnostics.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/cog/unit_test_support.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
@@ -30,6 +32,7 @@ template <typename Policy>
 class CogInfraDiagnostics : public CogDiagnosticsImpl<CogInfraDiagnosticsLazyPolicyWrapper<Policy>>
 {
 public:
+  using UnitTestOutputViewPolicyType = testing::UnitTestCogOutputViewPolicy<Tappy<diagnostics::Report>, Policy>;
 
   /// Construct the diagnostics helper.
   /// @param[in] instance_id The id of the cog instance, to be used as the reporter id

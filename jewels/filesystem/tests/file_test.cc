@@ -3,6 +3,7 @@
 
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -16,7 +17,6 @@
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
-#include <filesystem>
 #include <memory_resource>
 #include <span>
 #include <string>

@@ -1,11 +1,15 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
-
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
-load("//tools/rules:cc.bzl", "cc_binary")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 
 package(default_testonly = True)
+
+exports_files([
+    "signals_test_system_target.clk",
+    "signals_test_system.clk",
+])
 
 merge_simplelaunch_config(
     name = "cpu1.textproto",
@@ -23,6 +27,7 @@ merge_simplelaunch_config(
         "simplesys.system1.Cpu1_channel_spy_config.tachyon",
         "simplesys.system1.Cpu1_event_logger_config.tachyon",
         "simplesys.system1.Cpu1_metrics_channel_metadata_config.tachyon",
+        "simplesys.system1.Cpu1_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
         ":exe",
@@ -44,6 +49,7 @@ merge_simplelaunch_config(
         "simplesys.system1.Cpu2_channel_spy_config.tachyon",
         "simplesys.system1.Cpu2_event_logger_config.tachyon",
         "simplesys.system1.Cpu2_metrics_channel_metadata_config.tachyon",
+        "simplesys.system1.Cpu2_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
         ":exe",
@@ -97,6 +103,7 @@ merge_simplelaunch_config(
         "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
         "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
         ":logsim_exe",
@@ -118,6 +125,7 @@ clk(
         "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_simplelaunch_config.textproto",
         "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
         "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
@@ -130,6 +138,76 @@ clk(
         "//clockwork/dsl/tests/support:hellomsg_clk",
         "//clockwork/logging:channel_policy_clk",
     ],
+)
+
+clk(
+    name = "signals_test_system_clk",
+    srcs = ["signals_test_system.clk"],
+    outs = [
+        "signals_test_system_clk_cc.cc",
+        "signals_test_system_clk_cc.hh",
+        "signals_test_system_clk_cc.inl",
+        "signals_test_system_clk_cc_dial.cc",
+        "signals_test_system_clk_cc_dial.hh",
+        "signals_test_system_clk_cc_dial.inl",
+        "signals_test_system_clk_exe.cc",
+        "signals_test_system_clk_exe.hh",
+        "signals_test_system_clk_exe.inl",
+    ],
+    cpp_deps = ["//std:signals_clk_cc"],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//std:signals_clk"],
+)
+
+cc_library(
+    name = "signals_test_system_clk_cc_impl",
+    srcs = ["signals_test_system_clk_cc_impl.cc"],
+    visibility = ["//visibility:public"],
+    deps = [":signals_test_system_clk_cc_dial"],
+)
+
+cc_library(
+    name = "signals_test_system_lib",
+    srcs = [
+        "signals_test_system_clk_exe.cc",
+        "signals_test_system_clk_exe.inl",
+    ],
+    hdrs = ["signals_test_system_clk_exe.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":signals_test_system_clk_cc",
+        ":signals_test_system_clk_cc_impl",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+clk(
+    name = "signals_test_system_target_clk",
+    srcs = ["signals_test_system_target.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.composition.tests.support.signals_test_system_target.SignalTestSystem.proc.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_channel_allocations.csv",
+        "signals_test_system_target.SignalTestSystem.TestCpu_channel_spy_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_event_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_metrics_channel_metadata_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_signal_metadata_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_simplelaunch_config.textproto",
+        "signals_test_system_target.SignalTestSystem.TestCpu_telemetry_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.diagnostics_database_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.logged_channel_metadata.pbbin",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":signals_test_system_clk"],
 )
 
 clk(
@@ -147,6 +225,7 @@ clk(
         "simplesys.system1.Cpu1_channel_spy_config.tachyon",
         "simplesys.system1.Cpu1_event_logger_config.tachyon",
         "simplesys.system1.Cpu1_metrics_channel_metadata_config.tachyon",
+        "simplesys.system1.Cpu1_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu1_simplelaunch_config.textproto",
         "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
         "simplesys.system1.Cpu2.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan1_config.tachyon",
@@ -155,6 +234,7 @@ clk(
         "simplesys.system1.Cpu2_channel_spy_config.tachyon",
         "simplesys.system1.Cpu2_event_logger_config.tachyon",
         "simplesys.system1.Cpu2_metrics_channel_metadata_config.tachyon",
+        "simplesys.system1.Cpu2_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu2_simplelaunch_config.textproto",
         "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
@@ -166,5 +246,25 @@ clk(
         "//clockwork/dsl/tests/support:hellocog_clk",
         "//clockwork/dsl/tests/support:hellomsg_clk",
         "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "testcpu.textproto",
+    srcs = [
+        "signals_test_system_target.SignalTestSystem.TestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.composition.tests.support.signals_test_system_target.SignalTestSystem.proc.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_channel_allocations.csv",
+        "signals_test_system_target.SignalTestSystem.TestCpu_channel_spy_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_event_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_metrics_channel_metadata_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_signal_metadata_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_telemetry_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.diagnostics_database_config.tachyon",
+        ":signals_test_system_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )

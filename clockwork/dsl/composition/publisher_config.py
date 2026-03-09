@@ -11,7 +11,7 @@ import publisher_config_proto instead.
 from pathlib import Path
 from typing import Final
 
-from clockwork.dsl.composition import publisher_config_proto
+from clockwork.dsl.composition import constants, publisher_config_proto
 from clockwork.dsl.ir import compiler
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
@@ -30,8 +30,8 @@ PublishedChannelConfig: Final[type[publisher_config_proto.PublishedChannelConfig
         CPC_MODULE.context,
         CPC_MODULE,
         "PublishedChannelConfig",
-        max_channel_name_size=300,
-        max_schema_definition_size=20000,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
+        max_schema_definition_size=30000,
         max_module_name_size=31,
         max_path_name_size=511,
         max_class_name_size=63,
@@ -43,8 +43,8 @@ ChannelPublisherConfig: Final[type[publisher_config_proto.ChannelPublisherConfig
         CPC_MODULE.context,
         CPC_MODULE,
         "ChannelPublisherConfig",
-        max_channel_name_size=300,
-        max_schema_definition_size=20000,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
+        max_schema_definition_size=30000,
         max_module_name_size=31,
         max_path_name_size=511,
         max_class_name_size=63,

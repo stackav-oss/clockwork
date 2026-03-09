@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <cstddef>
@@ -50,8 +49,7 @@ public:
     uint64_t sequence_number_in,
     int64_t message_time_in,
     std::span<const std::byte> data_in,
-    const pinion::SubscriberHandle& subscriber_handle_in,
-    pinion::BufferIterator buffer_iter_in);
+    pinion::SlotRef slot_ref_in);
 
   ~PythonCallbackHandle() noexcept = default;
   PythonCallbackHandle(const PythonCallbackHandle&) = default;
@@ -71,11 +69,8 @@ public:
   /// Message data size
   size_t data_size;
 
-  /// Pinion subscriber handle
-  jewels::memory::ObjectPtr<const pinion::SubscriberHandle> subscriber_handle;
-
   /// Pinion buffer iterator
-  pinion::BufferIterator buffer_iter;
+  pinion::SlotRef slot_ref;
 };
 
 /// Raw message callback function

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
 #include "clockwork/logging/writers/rate_filter.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"

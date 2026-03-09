@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "clockwork/test_tools/synthetic_message_fetcher.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -19,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace clockwork
 {
@@ -86,7 +91,7 @@ public:
   jewels::expected<void, ClockworkSystemRunnerError> run();
 
 private:
-  static jewels::expected<std::shared_ptr<common::ProcessDescriptionTap>, ClockworkSystemRunnerError>
+  static jewels::expected<std::shared_ptr<Tappy<common::ProcessDescription<>>>, ClockworkSystemRunnerError>
   load_process_description(std::string_view process_description_path);
 
   /// Simulation start time.
@@ -96,7 +101,7 @@ private:
   jewels::time::SyncTime end_time_;
 
   /// The process description
-  std::shared_ptr<common::ProcessDescriptionTap> process_description_;
+  std::shared_ptr<Tappy<common::ProcessDescription<>>> process_description_;
 
   /// Path to the log publisher config
   std::optional<std::string> channel_publisher_config_;
@@ -150,9 +155,35 @@ public:
   void add_message(const MessageType& message, jewels::time::SyncTime publish_time, std::string_view channel_name);
 
   /// Get the next message that was recorded after running the system runner.
-  /// @return std::optional<MultiMessageInfoData> The message info of the next message recorded, this is fifo. Return
+  /// Pops the next available message off of the FIFO message queue and returns it.
+  /// @return std::optional<MultiMessageInfoData> The message info of the next message recorded. Return
   /// nullopt if there are none to return.
   std::optional<MultiMessageInfoData> try_pop_message();
+
+  /// Get all of the messages that were published to the given channel after running the system runner.
+  /// The recorded messages are scanned and parsed, no recorded messages are removed from the internal message queue.
+  /// Any messages removed with @ref try_pop_message are no longer available and will not be included in the output.
+  /// @tparam MessageType Tappy type of the message associated with the channel.
+  /// @param channel_name Name of the channel to read messages from.
+  /// @param[out] messages Messages read from the given channel.
+  /// @return OK if messages was updated successfully (including if there were no messages found for the given channel).
+  template <typename MessageType>
+  jewels::BinaryOutcome get_messages_from_channel(
+    std::string_view channel_name,
+    jewels::Out<std::pmr::vector<jewels::memory::pmr_unique_ptr<MessageType>>> messages) const;
+
+  /// Get all of the messages and associated metadata that were published to the given channel after running the system
+  /// runner. The recorded messages are scanned and parsed, no recorded messages are removed from the internal message
+  /// queue. Any messages removed with @ref try_pop_message are no longer available and will not be included in the
+  /// output.
+  /// @tparam MessageType Tappy type of the message associated with the channel.
+  /// @param channel_name Name of the channel to read messages from.
+  /// @param[out] messages Messages with metadata read from the given channel.
+  /// @return OK if messages was updated successfully (including if there were no messages found for the given channel).
+  template <typename MessageType>
+  jewels::BinaryOutcome get_messages_and_metadata_from_channel(
+    std::string_view channel_name,
+    jewels::Out<std::pmr::vector<testing::MessageWithMetadata<MessageType>>> messages) const;
 
 private:
   MessageInjectorSystemRunner(

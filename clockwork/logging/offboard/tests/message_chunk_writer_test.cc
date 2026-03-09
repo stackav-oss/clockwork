@@ -16,6 +16,7 @@
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/wrapping_counter.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -33,7 +34,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <span>

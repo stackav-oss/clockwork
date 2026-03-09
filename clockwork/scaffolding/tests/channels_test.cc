@@ -1,7 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/observer.hh"
@@ -14,6 +14,7 @@
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/epoll_manager.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/channels.hh"
@@ -25,7 +26,6 @@
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <trompeloeil/catch2.hpp> // IWYU pragma: keep (registers catch2 as the error handler)
 #include <trompeloeil/mock.hpp>
@@ -102,7 +102,7 @@ TEST_CASE("setup_channels")
   jewels::memory::MonitorResource memory;
   jewels::memory::MemoryResource memres{memory};
 
-  std::vector<common::PublishEndpointTap> endpoints;
+  std::vector<Tappy<common::PublishEndpoint<>>> endpoints;
   endpoints.emplace_back();
   endpoints.back().get_mutable_process_id() = process_id_1;
   endpoints.back().get_mutable_publisher_id() = channel_1_id;
@@ -125,7 +125,7 @@ TEST_CASE("setup_channels")
 
   // setup_channels blocks until all subscribed publishers are created so this test needs threading
   std::thread thread_1(
-    [&]()
+    [&channels_1, &channels_1_ready, &endpoints, &memres, &process_id_1, &channel_factory]()
     {
       channels_1 = setup_channels(endpoints, memres, process_id_1, channel_factory);
       channels_1_ready = true;
@@ -138,7 +138,8 @@ TEST_CASE("setup_channels")
   // However, process_1's publisher should be created so this should fail immediately.
   CHECK(!setup_channels(endpoints, memres, process_id_1, channel_factory));
 
-  std::thread thread_2([&]() { channels_2 = setup_channels(endpoints, memres, process_id_2, channel_factory); });
+  std::thread thread_2([&channels_2, &endpoints, &memres, &process_id_2, &channel_factory]()
+                       { channels_2 = setup_channels(endpoints, memres, process_id_2, channel_factory); });
 
   // process_2 should be able to subscribe to the channel_1 publisher created by process_1 and will unblock process_1 by
   // creating the channel_2 publisher.  Now everything should be able to finish
@@ -175,7 +176,7 @@ TEST_CASE("setup_channels")
 
   std::shared_ptr<pinion::Observer> fake_observer = std::make_shared<testing::FakeObserver>();
   {
-    std::vector<common::PubSubConnectionTap> connections;
+    std::vector<Tappy<common::PubSubConnection>> connections;
     connections.emplace_back();
     connections.back().get_mutable_subscriber_process_id() = process_id_2;
     connections.back().get_mutable_publisher_id() = channel_1_id;
@@ -261,7 +262,7 @@ TEST_CASE("setup deterministic channels")
   jewels::memory::MonitorResource memory;
   const jewels::memory::MemoryResource memres{memory};
 
-  std::vector<common::PublishEndpointTap> endpoints;
+  std::vector<Tappy<common::PublishEndpoint<>>> endpoints;
   endpoints.emplace_back();
   endpoints.back().get_mutable_process_id() = process_id_1;
   endpoints.back().get_mutable_publisher_id() = channel_1_id;
@@ -304,10 +305,7 @@ TEST_CASE("bind_channels_to_epoll")
   constexpr auto* channel_name = "/channel";
   const auto pub_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto sub_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
-  const pinion::BufferLayout layout{
-    .num_slots = 2,
-    .message_size = sizeof(Msg),
-  };
+  const pinion::BufferLayout layout{.num_slots = 2, .message_size = sizeof(Msg), .is_published_once = false};
   auto pub = channel_factory.open_publisher(pub_id.to_string(), channel_name, layout, 1).value();
   auto sub = channel_factory.open_subscriber(pub_id.to_string(), channel_name, layout, 1).value();
 
@@ -346,7 +344,7 @@ TEST_CASE("setup_non_connected_channels")
   jewels::memory::MonitorResource memory;
   const jewels::memory::MemoryResource memres{memory};
 
-  std::vector<common::NotConnectedEndpointTap> endpoints;
+  std::vector<Tappy<common::NotConnectedEndpoint>> endpoints;
 
   // Add a publisher endpoint
   endpoints.emplace_back();
@@ -398,7 +396,7 @@ TEST_CASE("setup_non_connected_channels error cases")
   {
     const auto subscriber_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-    std::vector<common::NotConnectedEndpointTap> endpoints;
+    std::vector<Tappy<common::NotConnectedEndpoint>> endpoints;
     endpoints.emplace_back();
     endpoints.back().get_mutable_endpoint_id() = subscriber_id;
     endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::subscriber;
@@ -416,7 +414,7 @@ TEST_CASE("setup_non_connected_channels error cases")
   {
     const auto publisher_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-    std::vector<common::NotConnectedEndpointTap> endpoints;
+    std::vector<Tappy<common::NotConnectedEndpoint>> endpoints;
     endpoints.emplace_back();
     endpoints.back().get_mutable_endpoint_id() = publisher_id;
     endpoints.back().get_mutable_endpoint_type() = common::NotConnectedEndpointType::publisher;

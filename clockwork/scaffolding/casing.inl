@@ -8,13 +8,14 @@
 #include "clockwork/cog/factory.hh"
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -36,6 +37,7 @@
 #include <iterator>
 #include <memory>
 #include <memory_resource>
+#include <new>
 #include <optional>
 #include <span>
 #include <tuple>
@@ -82,8 +84,9 @@ auto detail::Config::Traits<Tap<Tachyon<SchemaT>>>::create(
     jewels::log_cerr_error("config file size mismatch: got {}, expected {}", data.size(), sizeof(Msg));
     return nullptr;
   }
-  auto config = jewels::memory::make_pmr_shared<CogConfigDataImpl<Msg>>(memres);
-  std::memcpy(&config->data, data.data(), data.size());
+  auto config =
+    jewels::memory::make_pmr_shared<CogConfigDataImpl<Msg>>(memres, jewels::memory::make_pmr_shared<Msg>(memres));
+  std::memcpy(config->data.get(), data.data(), data.size());
   return config;
 }
 
@@ -98,8 +101,9 @@ auto detail::Config::Traits<ProtoSchema<ProtoT, uuid_v, Tap<Tachyon<SchemaT>>>>:
     jewels::log_cerr_error("protobuf failed to parse (type={})", typeid(SchemaT).name());
     return nullptr;
   }
-  auto config = jewels::memory::make_pmr_shared<CogConfigDataImpl<Msg>>(memres);
-  if (!protobuf_to_tap(config->data, proto))
+  auto config =
+    jewels::memory::make_pmr_shared<CogConfigDataImpl<Msg>>(memres, jewels::memory::make_pmr_shared<Msg>(memres));
+  if (!protobuf_to_tap(*config->data, proto))
   {
     return nullptr;
   }
@@ -140,7 +144,7 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
 jewels::expected<std::shared_ptr<AbstractCog>, AbstractCasing::Error>
 CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_instantiate_cog(
-  const common::CogInstanceDescriptionTap& description,
+  const Tappy<common::CogInstanceDescription<>>& description,
   std::shared_ptr<AbstractCogQueue> runner_queue,
   jewels::memory::MemoryResource execution_resource)
 {
@@ -169,6 +173,29 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 {
   return detail::factory_make<CogStateFactory>(repr_id, memres_, std::move(publisher))
     .transform([&](auto&& state) { states_[instance_id] = std::forward<decltype(state)>(state); });
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+auto CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_instantiate_state(
+  jewels::Uuid<common::StateInstanceId> instance_id,
+  jewels::Uuid<RepresentationTag> repr_id,
+  pinion::PublisherHandle publisher,
+  std::span<const std::byte> data) -> Outcome
+{
+  auto factory_result = detail::factory_make<CogStateFactory>(repr_id, memres_, std::move(publisher));
+  if (!factory_result)
+  {
+    return static_cast<OutcomeEnum>(factory_result.error());
+  }
+
+  auto& state = *factory_result;
+  if (jewels::fails(state->set_from_bytes(data)))
+  {
+    return OutcomeEnum::buffer_error;
+  }
+  states_[instance_id] = std::move(state);
+
+  return OutcomeEnum::success;
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
@@ -205,6 +232,75 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
+auto CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_deserialize_data(
+  jewels::Uuid<RepresentationTag> repr_id, std::span<const std::byte> input_data, std::span<std::byte> output_data)
+  -> Outcome
+{
+  Outcome result{OutcomeEnum::invalid_class_uuid};
+  auto maybe_deserialize = [this, &result, &repr_id, &input_data, &output_data]<typename SchemaT>() mutable
+  {
+    // This gets marked as unused if the if-constexpr is false
+    (void)this;
+    using Traits = detail::Config::template Traits<SchemaT>;
+    if constexpr (!std::is_same_v<typename Traits::Msg, void>)
+    {
+      if (Traits::uuid == repr_id)
+      {
+        result = try_deserialize_schema<SchemaT>(input_data, output_data);
+        return true;
+      }
+    }
+    return false;
+  };
+  // Errors are returned via the `result` variable
+  // The lambda's return is used only for short-circuiting in the fold expression.
+  std::ignore = (maybe_deserialize.template operator()<Schemas>() || ...);
+  return result;
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+template <typename SchemaT>
+auto CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_deserialize_schema(
+  std::span<const std::byte> input_data, std::span<std::byte> output_data) -> Outcome
+{
+  using Traits = detail::Config::template Traits<SchemaT>;
+  using MsgType = typename Traits::Msg;
+
+  // Check if output buffer is the right size
+  if (sizeof(MsgType) != output_data.size())
+  {
+    return OutcomeEnum::buffer_error;
+  }
+
+  // Only ProtoSchema types can be deserialized from protobuf
+  // Detect this using the is_proto_schema trait
+  if constexpr (requires { Traits::is_proto_schema; })
+  {
+    using ProtoT = typename Traits::Proto;
+
+    google::protobuf::io::ArrayInputStream stream{input_data.data(), static_cast<int>(input_data.size())};
+    ProtoT proto;
+    if (!google::protobuf::TextFormat::Parse(&stream, &proto))
+    {
+      jewels::log_cerr_error("protobuf failed to parse for deserialization");
+      return OutcomeEnum::init_failure;
+    }
+
+    // Construct tachyon message in the output buffer using placement new
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)  - Buffer managed by caller
+    auto* tachyon_msg = new (output_data.data()) MsgType{};
+    if (!protobuf_to_tap(*tachyon_msg, proto))
+    {
+      return OutcomeEnum::init_failure;
+    }
+
+    return OutcomeEnum::success;
+  }
+  // Not a ProtoSchema type, cannot deserialize
+  return OutcomeEnum::invalid_class_uuid;
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
 template <typename Thing, typename... Types, typename InstanceId, typename TypeId, typename... Args>
 jewels::expected<void, AbstractCasing::Error>
 CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::
@@ -214,7 +310,7 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
     Args&&... args) // NOLINT(cppcoreguidelines-missing-std-forward)
 {
   jewels::expected<void, AbstractCasing::Error> result = jewels::unexpected(AbstractCasing::Error::invalid_class_uuid);
-  auto maybe_instantiate = [&]<typename Type>() mutable
+  auto maybe_instantiate = [this, &instance_id, &result, &type_id, &args...]<typename Type>() mutable
   {
     using Traits = Thing::template Traits<Type>;
     if constexpr (detail::is_create_callable<Traits, Args...>)
@@ -365,6 +461,28 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
   jewels::Uuid<common::EndpointInstanceId> endpoint, jewels::memory::MemoryResource memres)
 {
   return set_handle<void>(endpoint, memres);
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+AbstractCasing::SnapshotConfigOutcome
+CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_configure_snapshot(
+  const Tappy<common::SnapshotConfig>& snapshot_config)
+{
+  auto endpoint_it = endpoints_.find(snapshot_config.get_endpoint_id());
+  if (endpoint_it == endpoints_.end())
+  {
+    return AbstractCasing::SnapshotConfigResult::endpoint_not_found;
+  }
+
+  auto& [cog, endpoint_class_id] = endpoint_it->second;
+
+  const auto result = cog->set_snapshot_config(endpoint_class_id, snapshot_config);
+  if (jewels::fails(result))
+  {
+    return AbstractCasing::SnapshotConfigResult::set_handle_failed;
+  }
+
+  return AbstractCasing::SnapshotConfigResult::success;
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>

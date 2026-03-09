@@ -26,7 +26,7 @@ auto unwrap_try_make(Args&&... args);
 ///
 /// Helper class to make in memory channels easier to instantiate.
 ///
-template <typename MsgType, size_t num_slots>
+template <typename MsgType, size_t num_slots, bool is_published_once>
 class InMemoryChannel
 {
 public:
@@ -39,11 +39,14 @@ public:
 
   [[nodiscard]] pinion::PublisherHandle make_publisher(size_t num_observers);
   [[nodiscard]] pinion::SubscriberHandle make_subscriber();
+  [[nodiscard]] pinion::Buffer& buffer();
+  [[nodiscard]] const pinion::Buffer& buffer() const;
 
 private:
   static constexpr pinion::BufferLayout layout{
     .num_slots = num_slots,
     .message_size = sizeof(MsgType),
+    .is_published_once = is_published_once,
   };
 
   struct Storage

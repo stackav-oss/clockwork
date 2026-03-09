@@ -5,18 +5,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.bazel import clk_targets
 from clockwork.dsl.bazel.py_targets import PyLibrary
 from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
+    cog,
     expr,
     node,
     primitive,
@@ -29,7 +30,7 @@ from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.interface import InterfaceInstantiation
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.dsl.ir.python_cog_dial import PythonCogDial
-from clockwork.dsl.ir.representation import ReprInstantiation
+from clockwork.dsl.ir.representation import ReprInstantiation, ResolvedReprInstantiation
 from clockwork.dsl.ir.statement import ImmutableBinding
 from clockwork.dsl.python import py_context
 from clockwork.dsl.python import typereg as py_typereg
@@ -51,7 +52,7 @@ SUPPORTED_TYPES: Final[list[node.NamedEntity]] = [
 ]
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from clockwork.dsl.compiler_context import CompilerContext
 
@@ -98,6 +99,16 @@ class PyImportLookup:
         )
 
 
+@dataclass(slots=True)
+class PyGeneratedEntities:
+    """Structure for entities passed to PyTarget.from_generate_py."""
+
+    schemas: list[schema.Schema] = field(default_factory=list)
+    enums: list[clkenum.ClkEnum] = field(default_factory=list)
+    constants: list[ImmutableBinding] = field(default_factory=list)
+    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+
+
 @dataclass
 class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget]):
     """IR for PyTargets.
@@ -110,10 +121,10 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
 
     """
 
-    representations: list[ReprInstantiation]
+    representations: list[ReprInstantiation | ResolvedReprInstantiation]
     interfaces: list[InterfaceInstantiation]
     enums: list[EnumTarget]
-    constants: dict[str, node.Deferrable[ImmutableBinding]]
+    constants: dict[str, node.Deferrable[ImmutableBinding] | ImmutableBinding]
     python_cog_dials: list[PythonCogDial]
     use_v2: bool
 
@@ -128,7 +139,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
         representations = []
         interfaces = []
         enums = []
-        constants: dict[str, node.Deferrable[ImmutableBinding]] = {}
+        constants: dict[str, node.Deferrable[ImmutableBinding] | ImmutableBinding] = {}
         python_cog_dials = []
 
         use_v2 = bool(cst_node.maybe_py_target_v2_flag())
@@ -177,6 +188,79 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
             use_v2=use_v2,
         )
 
+    @classmethod
+    def from_generate_py(cls: type[PyTarget], module: node.Module, entities: PyGeneratedEntities) -> PyTarget:
+        """Generate an IR PyTarget from the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_py"
+
+        constants: dict[str, node.Deferrable[ImmutableBinding] | ImmutableBinding] = {
+            constant.name: constant for constant in entities.constants
+        }
+
+        enums: list[EnumTarget] = [EnumTarget(enum_ir) for enum_ir in entities.enums]
+
+        representations: list[ReprInstantiation | ResolvedReprInstantiation] = []
+        interfaces: list[InterfaceInstantiation] = []
+
+        for instantiation in entities.instantiations:
+            assert isinstance(instantiation.typespec, typesys.Instantiation)
+            assert isinstance(instantiation.typespec.instantiates, schema.Schema)
+            representations.append(ResolvedReprInstantiation.from_schema(instantiation.typespec, module))
+            interfaces.append(
+                InterfaceInstantiation.from_schema(
+                    instantiation.typespec,
+                    module,
+                    instantiation.name or instantiation.typespec.instantiates.name,
+                )
+            )
+
+        for schema_ir in entities.schemas:
+            if schema_ir.programmatically_generated or schema_ir.parameters:
+                # Skipping programatically generated metrics schemas.
+                # Parameterized schemas are handled by instantiations.
+                continue
+            representations.append(ResolvedReprInstantiation.from_schema(schema_ir, module))
+            interfaces.append(InterfaceInstantiation.from_schema(schema_ir, module, schema_ir.name))
+
+        return cls(
+            module=module,
+            cst_node=None,
+            doc=module.doc,
+            name=name,
+            scope=module.inner_scope,
+            representations=representations,
+            interfaces=interfaces,
+            enums=enums,
+            constants=constants,
+            python_cog_dials=[],
+            use_v2=False,
+        )
+
+    @classmethod
+    def from_generate_py_cog(cls: type[PyTarget], module: node.Module, cogs: Sequence[cog.Cog]) -> PyTarget:
+        """Generate an IR PyTarget for python cog dials from the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_py_dial"
+
+        assert module.inner_attrs is not None
+        python_cog_dials = [
+            PythonCogDial.from_generate_py_cog(module, cog_ir, module.inner_attrs.get_py_cog_wrapper_type())
+            for cog_ir in cogs
+        ]
+
+        return cls(
+            module=module,
+            cst_node=None,
+            doc=module.doc,
+            name=name,
+            scope=module.inner_scope,
+            representations=[],
+            interfaces=[],
+            enums=[],
+            constants={},
+            python_cog_dials=python_cog_dials,
+            use_v2=False,
+        )
+
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         for entity in chain(self.representations, self.interfaces, self.enums, self.python_cog_dials):
@@ -218,11 +302,11 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
                 arguments = resolved_repr.get_schema().arguments
                 assert arguments is not None
 
-                param_args, module_lookups = _render_generic_parameters(
+                param_args, module_lookups = _render_instantiation_parameters(
                     interface,
                     arguments,
                     generic_parameters,
-                    self.module.inner_scope,
+                    self.module,
                 )
                 python_chunks.impl.extend(module_lookups)
 
@@ -238,7 +322,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
 
             else:
                 schema_name = interface.representation.schema_ir.schema_name
-                name = interface.name if interface.name else schema_name
+                name = interface.name or schema_name
                 python_chunks.impl.append(
                     f'{name}, _{name} = clockwork.serialization.py.tachyon_dyn.get_schema_dataclass(_module.context, _module, "{schema_name}")'
                 )
@@ -357,44 +441,119 @@ class EnumTarget:
         self.enum_ir = typespec
 
 
+def _render_scope_lookup_arguments(
+    instantiation: typesys.Instantiation,
+    module: node.Module,
+    module_lookups: dict[str, str],
+) -> str:
+    """Render the parameters to a ScopeLookup for a parameterized schema."""
+    schema_ir = instantiation.instantiates
+    assert isinstance(schema_ir, (schema.Schema, schema.ResolvedSchema))
+    iface = InterfaceInstantiation.from_schema(instantiation, module)
+    assert iface.representation
+    generic_parameters = iface.representation.schema_ir.schema.generic_parameters()
+    assert generic_parameters is not None
+    repr_info = schema_reg.lookup_representation(module.context, iface.representation)
+    if repr_info is None:
+        msg = iface.append_error_line("Representation not registered for interface.")
+        raise ValueError(msg)
+    resolved_repr = repr_info.representation_ir
+    arguments = resolved_repr.get_schema().arguments
+    assert arguments is not None
+    generic_args = _render_generic_parameters(iface, arguments, generic_parameters, module, module_lookups)
+    map_entries = [f'"{name}": {value}' for name, value in generic_args.items()]
+    return "{" + ", ".join(map_entries) + "}"
+
+
+def _render_parameter(
+    interface: InterfaceInstantiation,
+    param: typesys.Parameter,
+    arg: typesys.Value,
+    module: node.Module,
+    module_lookups: dict[str, str],
+) -> tuple[str, str]:
+    if isinstance(param.type_bound, clkbuiltins.IntegerPrimitiveType):
+        return f"{param.name}", f"{arg.value_key()}"
+
+    assert param.type_bound == clkbuiltins.TYPE_TYPE
+    lookup_module: node.Module | None = None
+    param_args = None
+    if isinstance(arg, schema.InstantiateStmt):
+        assert isinstance(arg.typespec, typesys.Instantiation)
+        assert isinstance(arg.typespec.instantiates, schema.Schema)
+        param_args = _render_scope_lookup_arguments(arg.typespec, module, module_lookups)
+        lookup_name, lookup_module = arg.typespec.instantiates.name, arg.typespec.instantiates.module
+    elif isinstance(arg, node.NamedEntity) and arg in SUPPORTED_TYPES:
+        lookup_name = arg.name
+    elif isinstance(arg, strongtypes.StrongType):
+        lookup_name, lookup_module = arg.name, arg.module
+    elif isinstance(arg, schema.InstantiatedSchema):
+        instantiation_or_schema = arg.as_instantiation_or_resolved_schema()
+        if isinstance(instantiation_or_schema, typesys.Instantiation):
+            param_args = _render_scope_lookup_arguments(instantiation_or_schema, module, module_lookups)
+        lookup_name, lookup_module = arg.schema_name, arg.schema.module
+    elif isinstance(arg, clkenum.ResolvedEnum):
+        lookup_name, lookup_module = arg.name, arg.module
+    else:
+        msg = interface.append_error_line(f"Unsupported parameter type: {type(arg)}")
+        raise NotImplementedError(msg)
+
+    module_name = _make_lookup_module_name(lookup_module, module.inner_scope, module_lookups)
+
+    if param_args:
+        return (
+            f"{param.name}",
+            f'clockwork.serialization.py.tachyon_dyn.ScopeLookup("{lookup_name}", module={module_name}, arguments={param_args})',
+        )
+    return (
+        f"{param.name}",
+        f'clockwork.serialization.py.tachyon_dyn.ScopeLookup("{lookup_name}", module={module_name})',
+    )
+
+
 def _render_generic_parameters(
     interface: InterfaceInstantiation,
     arguments: Mapping[str, typesys.Value],
     generic_parameters: list[typesys.Parameter],
-    enclosing_scope: node.Scope,
-) -> tuple[list[str], list[str]]:
-    """Returns a list of code fragments for parameter lookups and a list of fragments for modules to load."""
-    param_args = []
-    module_lookups: dict[str, str] = {}
+    module: node.Module,
+    module_lookups: dict[str, str],
+) -> dict[str, str]:
+    """Returns a list of code fragments for parameter lookups."""
+    param_args = {}
     for param in generic_parameters:
         arg = arguments[param.name]
-        if isinstance(param.type_bound, clkbuiltins.IntegerPrimitiveType):
-            param_args.append(f"{param.name} = {arg.value_key()}")
-        elif param.type_bound == clkbuiltins.TYPE_TYPE:
-            lookup_module: node.Module | None = None
-            if isinstance(arg, node.NamedEntity) and arg in SUPPORTED_TYPES:
-                lookup_name = arg.name
-            elif isinstance(arg, strongtypes.StrongType):
-                lookup_name, lookup_module = arg.name, arg.module
-            elif isinstance(arg, schema.InstantiatedSchema):
-                lookup_name, lookup_module = arg.schema_name, arg.schema.module
-            else:
-                msg = interface.append_error_line(f"Unsupported parameter type: {type(arg)}")
-                raise NotImplementedError(msg)
+        name, value = _render_parameter(interface, param, arg, module, module_lookups)
+        param_args[name] = value
+    return param_args
 
-            module_name = "None"
-            if lookup_module and lookup_module.inner_scope.uniq_path != enclosing_scope.uniq_path:
-                repo_name = lookup_module.module_id.repo
-                module_path = lookup_module.module_id.name
-                module_name = f"_module_{module_path.replace('::', '_').replace('@', '')}"
-                if module_name not in module_lookups:
-                    clk_path = Path(module_path.replace("::", "/").replace("@", "")).with_suffix(".clk")
-                    module_lookups[module_name] = (
-                        f'{module_name} = clockwork.dsl.ir.compiler.compile_source_file(ModuleID.from_path("{repo_name}", pathlib.Path("{clk_path}")), clockwork.dsl.ir.importer.FilesystemImporter(compile_fn=clockwork.dsl.ir.compiler.compile_source_file))'
-                    )
 
-            param_args.append(
-                f'{param.name} = clockwork.serialization.py.tachyon_dyn.ScopeLookup("{lookup_name}", module={module_name})'
-            )
-
+def _render_instantiation_parameters(
+    interface: InterfaceInstantiation,
+    arguments: Mapping[str, typesys.Value],
+    generic_parameters: list[typesys.Parameter],
+    module: node.Module,
+) -> tuple[list[str], list[str]]:
+    """Returns a list of code fragments for parameter lookups and a list of fragments for modules to load."""
+    module_lookups: dict[str, str] = {}
+    generic_args = _render_generic_parameters(interface, arguments, generic_parameters, module, module_lookups)
+    param_args = []
+    for name, value in generic_args.items():
+        param_args.append(f"{name} = {value}")
     return param_args, list(module_lookups.values())
+
+
+def _make_lookup_module_name(
+    lookup_module: node.Module | None, enclosing_scope: node.Scope, module_lookups: dict[str, str]
+) -> str:
+    """Create a module lookup name and update module_lookups if needed."""
+    module_name = "None"
+    if lookup_module and lookup_module.inner_scope.uniq_path != enclosing_scope.uniq_path:
+        repo_name = lookup_module.module_id.repo
+        module_path = lookup_module.module_id.name
+        module_name = f"_module_{module_path.replace('::', '_').replace('@', '')}"
+        if module_name not in module_lookups:
+            clk_path = Path(module_path.replace("::", "/").replace("@", "")).with_suffix(".clk")
+            module_lookups[module_name] = (
+                f'{module_name} = clockwork.dsl.ir.compiler.compile_source_file(ModuleID.from_path("{repo_name}", pathlib.Path("{clk_path}")), clockwork.dsl.ir.importer.FilesystemImporter(compile_fn=clockwork.dsl.ir.compiler.compile_source_file))'
+            )
+    return module_name

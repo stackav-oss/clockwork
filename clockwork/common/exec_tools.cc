@@ -63,6 +63,14 @@ jewels::expected<pinion::ShmChannelFactory, jewels::MonoError> PinionArgs::make_
 
 ExecutionArgs::ExecutionArgs(TCLAP::ArgContainer& parser)
   : deterministic_runner_("", "deterministic-runner", "Use the deterministic runner", parser, false),
+    playback_speed_(
+      "",
+      "playback-speed",
+      "Playback speed multiplier (1.0 = real-time, 0.5 = half speed, 2.0 = double speed, 0.0 = unlimited)",
+      false,
+      0.0,
+      "double",
+      parser),
     input_log_uri_("", "input-log-uri", "input log file uri for log publisher", false, "", "string", parser),
     output_log_uri_("", "output-log-uri", "Simulation output log file uri", false, "", "string", parser),
     channel_publisher_config_path_(
@@ -90,6 +98,11 @@ jewels::expected<ExecutionParams, jewels::MonoError> ExecutionArgs::make_executi
   auto execution_params = ExecutionParams{
     .execution_mode = (deterministic_runner_.getValue() ? ExecutionMode::deterministic : ExecutionMode::online),
   };
+
+  if (playback_speed_.isSet())
+  {
+    execution_params.playback_speed.emplace(playback_speed_.getValue());
+  }
 
   if (start_time_ns_.isSet())
   {

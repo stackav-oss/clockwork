@@ -1,6 +1,6 @@
 use clockwork::scaffolding::tests::support::test_msgs;
 use clockwork::scaffolding::tests::support::test_cogs;
-use clockwork::diagnostics::channels::DiagnosticsChannel;
+use clockwork::diagnostics::channels::{DiagnosticsChannel};
 
 // Channel for cog1->cog2
 channel Chan1

@@ -11,14 +11,12 @@ from typing import TypeVar
 from unittest.mock import MagicMock
 
 import pytest
+from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_parser as parser
 from clockwork.dsl import compiler_context
 from clockwork.dsl.ir import clkbuiltins, expr, node, typesys
 from clockwork.dsl.ir.module_id import ModuleID
 from fltk.fegen.pyrt import errors, memo, terminalsrc
-
-# These generated files must be imported on a separate line from the source file import above due to a pyright limitation:
-# https://github.com/microsoft/pyright/issues/3630
-from clockwork.dsl import cst, parser  # isort: skip
 
 
 @pytest.fixture()
@@ -31,6 +29,8 @@ def mock_module() -> node.Module:
         cst_node=None,
         unresolved_imports=[],
         context=compiler_context.CompilerContext(),
+        generates=None,
+        inner_attrs=None,
     )
 
 
@@ -40,7 +40,7 @@ CstType = TypeVar("CstType")
 def _parse_as(
     source: str,
     cst_type: type[CstType],
-    parse_fn: Callable[[parser.Parser, int], memo.ApplyResult[int, CstType] | None],  # pyright: ignore[reportInvalidTypeArguments] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    parse_fn: Callable[[parser.Parser, int], memo.ApplyResult[int, CstType] | None],
 ) -> tuple[CstType, terminalsrc.TerminalSource]:
     """Parse a source string as a particular CST node type."""
     terminals = terminalsrc.TerminalSource(source + "\n")

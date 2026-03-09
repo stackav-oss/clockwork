@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/hash/md5.hh"
-#include "jewels/memory/pointers.hh"
 
 #include <catch2/catch_test_macros.hpp>
 

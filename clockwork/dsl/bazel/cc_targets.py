@@ -19,6 +19,7 @@ class CcLibrary(Target):
     srcs: Sequence[Path]
     deps: MutableSequence[Label]
     data: Sequence[Path | Label]
+    testonly: bool
 
     @property
     @override

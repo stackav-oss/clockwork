@@ -6,12 +6,12 @@
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/common/tests/support/fake_cog.hh"
-#include "clockwork/io/network_var_packet.hh" // IWYU pragma: keep
-#include "clockwork/io/var_packet.hh"
-#include "clockwork/logging/channel_publisher_config.hh" // IWYU pragma: keep
-#include "clockwork/logging/log_writer_config.hh"        // IWYU pragma: keep
+#include "clockwork/io/network_var_packet_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/var_packet_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/logging/log_writer_config_clk_cc.hh"        // IWYU pragma: keep
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
@@ -37,6 +37,7 @@
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/bits.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -48,7 +49,6 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 #include <trompeloeil/catch2.hpp> // IWYU pragma: keep (registers catch2 as the error handler)
@@ -60,7 +60,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <mutex>
@@ -258,7 +257,7 @@ TEST_CASE("scaffolding_run")
 
   testing::write_schema(tmpdir.get_path() / "config1.dat", Tappy<int>{1});
 
-  common::ProcessDescriptionTap desc;
+  Tappy<common::ProcessDescription<>> desc;
   auto& cog1_desc = desc.get_underlying_cog_instances().emplace_back();
   cog1_desc.get_mutable_cog_class_id() = cog1_class;
   cog1_desc.get_mutable_cog_instance_id() = cog1_inst;
@@ -294,11 +293,16 @@ TEST_CASE("scaffolding_run")
   state_conn2.get_mutable_state_id() = state1_id;
   state_conn2.get_mutable_endpoint_id() = cog2_ep_state1;
 
+  // Create data source for config
+  auto& data_source1 = desc.get_underlying_data_sources().emplace_back();
+  data_source1.get_mutable_representation_id() = config1_schema;
+  data_source1.get_mutable_data_source_type() = common::DataSourceType::file;
+  data_source1.get_underlying_source_path_or_name().set_truncate(tmpdir.get_path() / "config1.dat");
+
   auto& config1_desc = desc.get_mutable_config_graph().get_underlying_config_instances().emplace_back();
-  config1_desc.get_mutable_representation_id() = config1_schema;
   config1_desc.get_mutable_config_instance_id() = config1_id;
   config1_desc.get_underlying_instance_path_name().set_truncate("config1");
-  config1_desc.get_underlying_config_file_path().set_truncate((tmpdir.get_path() / "config1.dat").native());
+  config1_desc.set_init_data_source(0);
   auto& config_conn1 = desc.get_mutable_config_graph().get_underlying_connections().emplace_back();
   config_conn1.get_mutable_config_id() = config1_id;
   config_conn1.get_mutable_endpoint_id() = cog1_ep_config1;
@@ -360,10 +364,10 @@ TEST_CASE("scaffolding_run")
 
   constexpr uint32_t timer_cycles = 4;
 
-  auto do_run = [&](bool deterministic)
+  auto do_run = [&init_mutex, &cog2, &init_lock, &desc, &casing, &channel_factory](bool deterministic)
   {
     testing::RunStopper exec(
-      [&]()
+      [&init_mutex, &cog2, &exec]()
       {
         const std::unique_lock lock(init_mutex);
         if (cog2->run_count >= timer_cycles)
@@ -372,7 +376,7 @@ TEST_CASE("scaffolding_run")
         }
       });
 
-    const gsl::final_action ud_cleanup{[&]
+    const gsl::final_action ud_cleanup{[&init_lock]
                                        {
                                          if (init_lock)
                                          {
@@ -452,7 +456,7 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   outgoing_udp_endpoint.set_endpoint_class_id(*outgoing_udp_endpoint_class);
   outgoing_udp_endpoint.set_endpoint_instance_id(*outgoing_udp_endpoint_instance);
 
-  common::ProcessDescriptionTap desc;
+  Tappy<common::ProcessDescription<>> desc;
   auto& incoming_io_connection_desc = desc.get_underlying_io_connections().emplace_back();
   incoming_io_connection_desc.set_class_id(*incoming_udp_class);
   incoming_io_connection_desc.set_instance_id(*incoming_udp_inst);
@@ -529,7 +533,7 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   uint32_t read_payload{0};
   REQUIRE(read_payload != payload);
 
-  testing::RunStopper exec{[&]()
+  testing::RunStopper exec{[&receiver, &read_payload, &exec]()
                            {
                              const auto read_bytes = receiver->read<sizeof(payload)>();
                              if (read_bytes)

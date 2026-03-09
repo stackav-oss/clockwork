@@ -1,7 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
 #include "clockwork/logging/writers/rate_filter.hh"
 #include "clockwork/repr_iface.hh"

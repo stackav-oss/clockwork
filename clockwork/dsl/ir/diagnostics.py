@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header, MaybeHeader
 from clockwork.dsl.ir import (

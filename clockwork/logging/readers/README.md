@@ -28,7 +28,7 @@ The template parameter to `add_callback` provides the class corresponding to the
 The log processor handles deserialization and automatically upgrades messages from the schema in the log to the current schema using the metadata stored in the log.
 
 ```cpp
-processor.template add_callback<Tappy<YourClockworkClass>>(
+processor.template add_callback<clockwork::Tappy<YourClockworkClass>>(
     "channel_name", [](const auto& msg) { /* process the message */ });
 ```
 

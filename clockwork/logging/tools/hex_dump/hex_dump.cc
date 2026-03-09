@@ -11,8 +11,8 @@
 #include "jewels/callsig/outcome.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/ranges.h>
+#include <fmt/base.h>
+#include <fmt/ranges.h>
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
 #include <tclap/UnlabeledValueArg.h>

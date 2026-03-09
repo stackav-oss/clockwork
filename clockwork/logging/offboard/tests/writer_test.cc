@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/reader.hh"
@@ -15,10 +15,14 @@
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
-#include "clockwork/logging/schema_encoding.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -28,7 +32,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
 #include <algorithm>
@@ -37,7 +41,6 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -62,7 +65,8 @@ TEST_CASE("Writer, offload interface")
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
+  const jewels::filesystem::Filesystem vfs{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
   Writer writer{memory_resource, message_chunk_index_format};
@@ -189,11 +193,11 @@ TEST_CASE("Writer, offload interface")
 
     if (multi_file_flag)
     {
-      REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
-      REQUIRE(std::filesystem::exists(test_log_path / "channel2_0.slog"));
+      REQUIRE(vfs.exists(test_log_path / "channel1_0.slog").value_or(false));
+      REQUIRE(vfs.exists(test_log_path / "channel2_0.slog").value_or(false));
       REQUIRE(
-        write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channel1_0.slog") +
-                                      std::filesystem::file_size(test_log_path / "channel2_0.slog"));
+        write_metrics.byte_count ==
+        *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel2_0.slog"));
 
       REQUIRE(log_metadata_proto.log_writer_metadata().size() == 2U);
       for (const auto& log_writer_metadata : log_metadata_proto.log_writer_metadata())
@@ -223,8 +227,8 @@ TEST_CASE("Writer, offload interface")
     }
     else
     {
-      REQUIRE(std::filesystem::exists(test_log_path / "channels_0.slog"));
-      REQUIRE(write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channels_0.slog"));
+      REQUIRE(vfs.exists(test_log_path / "channels_0.slog").value_or(false));
+      REQUIRE(write_metrics.byte_count == *vfs.get_size(test_log_path / "channels_0.slog"));
 
       REQUIRE(log_metadata_proto.log_writer_metadata().size() == 1U);
       const auto& log_writer_metadata = log_metadata_proto.log_writer_metadata(0);
@@ -370,15 +374,14 @@ TEST_CASE("Writer, offload interface")
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
     REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
-    REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel1_1.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel2_0.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel2_1.slog"));
+    REQUIRE(vfs.exists(test_log_path / "channel1_0.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel1_1.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel2_0.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel2_1.slog").value_or(false));
     REQUIRE(
-      write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channel1_0.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel1_1.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel2_0.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel2_1.slog"));
+      write_metrics.byte_count ==
+      *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel1_1.slog") +
+        *vfs.get_size(test_log_path / "channel2_0.slog") + *vfs.get_size(test_log_path / "channel2_1.slog"));
 
     ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
     const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
@@ -546,7 +549,7 @@ TEST_CASE("Writer, offload interface")
 
     SECTION("Log exists")
     {
-      std::filesystem::create_directories(test_log_path);
+      REQUIRE(vfs.create_directories(test_log_path).has_value());
       REQUIRE(writer.open(test_log_path.string()) == jewels::unexpected(LogError::log_already_exists));
     }
   }
@@ -559,7 +562,8 @@ TEST_CASE("Writer, tachyon interface")
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
+  const jewels::filesystem::Filesystem vfs{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
   Writer writer{memory_resource, message_chunk_index_format};
@@ -646,11 +650,11 @@ TEST_CASE("Writer, tachyon interface")
 
     if (multi_file_flag)
     {
-      REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
-      REQUIRE(std::filesystem::exists(test_log_path / "channel2_0.slog"));
+      REQUIRE(vfs.exists(test_log_path / "channel1_0.slog").value_or(false));
+      REQUIRE(vfs.exists(test_log_path / "channel2_0.slog").value_or(false));
       REQUIRE(
-        write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channel1_0.slog") +
-                                      std::filesystem::file_size(test_log_path / "channel2_0.slog"));
+        write_metrics.byte_count ==
+        *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel2_0.slog"));
 
       REQUIRE(log_metadata_proto.log_writer_metadata().size() == 2U);
       for (const auto& log_writer_metadata : log_metadata_proto.log_writer_metadata())
@@ -680,8 +684,8 @@ TEST_CASE("Writer, tachyon interface")
     }
     else
     {
-      REQUIRE(std::filesystem::exists(test_log_path / "channels_0.slog"));
-      REQUIRE(write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channels_0.slog"));
+      REQUIRE(vfs.exists(test_log_path / "channels_0.slog").value_or(false));
+      REQUIRE(write_metrics.byte_count == *vfs.get_size(test_log_path / "channels_0.slog"));
 
       REQUIRE(log_metadata_proto.log_writer_metadata().size() == 1U);
       const auto& log_writer_metadata = log_metadata_proto.log_writer_metadata(0);
@@ -806,15 +810,14 @@ TEST_CASE("Writer, tachyon interface")
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
     REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
-    REQUIRE(std::filesystem::exists(test_log_path / "channel1_0.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel1_1.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel2_0.slog"));
-    REQUIRE(std::filesystem::exists(test_log_path / "channel2_1.slog"));
+    REQUIRE(vfs.exists(test_log_path / "channel1_0.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel1_1.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel2_0.slog").value_or(false));
+    REQUIRE(vfs.exists(test_log_path / "channel2_1.slog").value_or(false));
     REQUIRE(
-      write_metrics.byte_count == std::filesystem::file_size(test_log_path / "channel1_0.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel1_1.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel2_0.slog") +
-                                    std::filesystem::file_size(test_log_path / "channel2_1.slog"));
+      write_metrics.byte_count ==
+      *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel1_1.slog") +
+        *vfs.get_size(test_log_path / "channel2_0.slog") + *vfs.get_size(test_log_path / "channel2_1.slog"));
 
     ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
     const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(

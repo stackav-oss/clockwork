@@ -3,10 +3,10 @@
 
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/nolint_helper.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "clockwork/logging/zstd_helper.hh"
 #include "jewels/container/at.hh"
@@ -14,15 +14,15 @@
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <fcntl.h>
-#include <filesystem>
 #include <fstream> // IWYU pragma: keep
 #include <functional>
 #include <iostream>
@@ -33,7 +33,6 @@
 #include <random>
 #include <string>
 #include <sys/types.h>
-#include <system_error>
 #include <utility>
 
 namespace clockwork_logging::onboard::tests
@@ -53,13 +52,14 @@ void dump_data_span(std::string_view label, std::span<const std::byte> data)
 [[nodiscard]] jewels::expected<std::vector<char>, jewels::MonoError> try_read_file(std::string_view file_path)
 {
   const std::string path_str{file_path};
-  std::error_code err;
-  const auto file_size = std::filesystem::file_size(path_str, err);
-  if (err)
+  const auto maybe_file_size =
+    jewels::filesystem::Filesystem{jewels::memory::get_default_memory_resource()}.get_size(file_path);
+  if (!maybe_file_size)
   {
-    jewels::log_cerr_error("Failed get size of '{}': {}", path_str, err.message());
+    jewels::log_cerr_error("Failed to get size of '{}'", file_path);
     return jewels::unexpected(jewels::MonoError{});
   }
+  const auto file_size = *maybe_file_size;
   std::ifstream ifs(path_str, std::ios::binary);
   if (!ifs)
   {

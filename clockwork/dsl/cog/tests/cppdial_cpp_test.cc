@@ -74,7 +74,8 @@ template <
   typename Conditions,
   typename Inputs,
   typename Outputs,
-  typename Diagnostics>
+  typename Diagnostics,
+  typename Signals>
 concept CogDial = requires(
   jewels::time::SyncTime start_time,
   Resources resources,
@@ -84,9 +85,10 @@ concept CogDial = requires(
   Inputs inputs,
   Outputs outputs,
   Diagnostics diagnostics,
+  Signals signals,
   T& dial) {
   // Constructor requirement
-  T(start_time, resources, configs, states, conditions, inputs, outputs, diagnostics);
+  T(start_time, resources, configs, states, conditions, inputs, outputs, diagnostics, signals);
 
   // Getter methods
   { dial.get_start_time() } -> std::same_as<jewels::time::SyncTime&>;
@@ -192,7 +194,8 @@ TEST_CASE("GoodbyeCog dial structures satisfy empty dial concepts")
                 GoodbyeCogDialConditions,
                 GoodbyeCogDialInputs,
                 GoodbyeCogDialOutputs,
-                GoodbyeCogDialDiagnostics>);
+                GoodbyeCogDialDiagnostics,
+                GoodbyeCogDialSignalApi>);
 
   // Test execute_cog function exists
   static_assert(clockwork::testing::concepts::HasExecuteCog<GoodbyeCogDial>);

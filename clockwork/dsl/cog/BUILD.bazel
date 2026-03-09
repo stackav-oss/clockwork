@@ -25,51 +25,17 @@ py_library(
     ],
 )
 
-cc_library(
-    name = "cog_event_metrics_cpp",
-    srcs = [
-        "cog_event_metrics_cpp.cc",
-        "cog_event_metrics_cpp.inl",
-    ],
-    hdrs = ["cog_event_metrics_cpp.hh"],
-    data = [":common_cog_event_metrics_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":ten_nanoseconds",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
-cc_library(
-    name = "cog_telemetry_metrics_cpp",
-    srcs = [
-        "cog_telemetry_metrics_cpp.cc",
-        "cog_telemetry_metrics_cpp.inl",
-    ],
-    hdrs = ["cog_telemetry_metrics_cpp.hh"],
-    data = [":common_cog_telemetry_metrics_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":min_max_mean_cpp",
-        ":ten_nanoseconds",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "common_cog_event_metrics_clk",
     srcs = ["common_cog_event_metrics.clk"],
     outs = [
-        "cog_event_metrics_cpp.cc",
-        "cog_event_metrics_cpp.hh",
-        "cog_event_metrics_cpp.inl",
+        "common_cog_event_metrics_clk_cc.cc",
+        "common_cog_event_metrics_clk_cc.hh",
+        "common_cog_event_metrics_clk_cc.inl",
     ],
+    cpp_deps = [":ten_nanosecond_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
     deps = [":ten_nanosecond_clk"],
 )
@@ -78,13 +44,13 @@ clk(
     name = "common_cog_telemetry_metrics_clk",
     srcs = ["common_cog_telemetry_metrics.clk"],
     outs = [
-        "cog_telemetry_metrics_cpp.cc",
-        "cog_telemetry_metrics_cpp.hh",
-        "cog_telemetry_metrics_cpp.inl",
-        "min_max_mean_cpp.cc",
-        "min_max_mean_cpp.hh",
-        "min_max_mean_cpp.inl",
+        "common_cog_telemetry_metrics_clk_cc.cc",
+        "common_cog_telemetry_metrics_clk_cc.hh",
+        "common_cog_telemetry_metrics_clk_cc.inl",
     ],
+    cpp_deps = [":ten_nanosecond_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
     deps = [":ten_nanosecond_clk"],
 )
@@ -102,9 +68,21 @@ py_library(
 )
 
 py_library(
+    name = "cpp_test_cog",
+    srcs = ["cpp_test_cog.py"],
+    deps = [
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
+py_library(
     name = "cppcog",
     srcs = ["cppcog.py"],
     deps = [
+        ":cppdial_signals",
         ":pycog",
         "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/cpp:context",
@@ -128,6 +106,7 @@ py_library(
     name = "cppdial",
     srcs = ["cppdial.py"],
     deps = [
+        ":cppdial_signals",
         ":pycog",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:types",
@@ -137,21 +116,17 @@ py_library(
     ],
 )
 
-cc_library(
-    name = "min_max_mean_cpp",
-    srcs = [
-        "min_max_mean_cpp.cc",
-        "min_max_mean_cpp.inl",
-    ],
-    hdrs = ["min_max_mean_cpp.hh"],
-    data = [":common_cog_telemetry_metrics_clk"],
-    visibility = ["//visibility:public"],
+py_library(
+    name = "cppdial_signals",
+    srcs = ["cppdial_signals.py"],
     deps = [
-        ":ten_nanoseconds",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
+        ":pycog",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:signal",
+        "//clockwork/dsl/ir:units",
     ],
 )
 
@@ -172,20 +147,50 @@ py_library(
         "//clockwork/dsl/ir:extern_type",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:report_group",
+        "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:schema_reg",
+        "//clockwork/dsl/ir:signal",
+        "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:units",
         "//clockwork/dsl/ir:uuid_reg",
     ],
+)
+
+py_library(
+    name = "report_group_policy",
+    srcs = ["report_group_policy.py"],
+    data = ["//std:signals.clk"],
+    deps = [
+        ":report_group_policy_proto",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "report_group_policy_proto",
+    srcs = ["report_group_policy_proto.py"],
+    deps = ["//clockwork/serialization/py:protocol"],
 )
 
 clk(
     name = "ten_nanosecond_clk",
     srcs = ["ten_nanosecond.clk"],
     outs = [
-        "ten_nanoseconds.cc",
-        "ten_nanoseconds.hh",
-        "ten_nanoseconds.inl",
+        "ten_nanosecond_clk_cc.cc",
+        "ten_nanosecond_clk_cc.hh",
+        "ten_nanosecond_clk_cc.inl",
     ],
+    cpp_deps = [":ten_nanosecond_type"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
 )
 
@@ -194,16 +199,4 @@ cc_library(
     srcs = ["ten_nanosecond_type.cc"],
     hdrs = ["ten_nanosecond_type.hh"],
     visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "ten_nanoseconds",
-    srcs = [
-        "ten_nanoseconds.cc",
-        "ten_nanoseconds.inl",
-    ],
-    hdrs = ["ten_nanoseconds.hh"],
-    data = [":ten_nanosecond_clk"],
-    visibility = ["//visibility:public"],
-    deps = [":ten_nanosecond_type"],
 )

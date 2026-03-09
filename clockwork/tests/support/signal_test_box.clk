@@ -1,0 +1,41 @@
+#![generate(cpp_exe)]
+
+use clockwork::tests::support::signal_cog::{SignalCog};
+use clockwork::tests::support::signal_tester_cog::{SignalTesterCog};
+use clockwork::tests::support::signal_messages::{TriggerMessage, AckMessage};
+
+// Channel for trigger messages from tester to signal cog
+channel TriggerChannel
+{
+    message_type: Tachyon<TriggerMessage>;
+    max_num_messages: 10;
+}
+
+// Channel for ack messages from signal cog to tester
+channel AckChannel
+{
+    message_type: Tachyon<AckMessage>;
+    max_num_messages: 10;
+}
+
+box SignalTestBox
+{
+    new signal_cog: SignalCog;
+    new signal_tester_cog: SignalTesterCog;
+
+    connect signal_tester_cog.trigger to TriggerChannel;
+    connect TriggerChannel to signal_cog.trigger;
+
+    connect signal_cog.ack to AckChannel;
+    connect AckChannel to signal_tester_cog.ack;
+}
+
+cpu_domain SignalTestCpu;
+
+box SignalTestSystem
+{
+    new box: SignalTestBox;
+    new proc: Process(executable=signal_test_box_clk_exe);
+    apply HostProcess(process=proc) in box;
+    apply HostCpuDomain(cpu_domain=SignalTestCpu) to proc;
+}

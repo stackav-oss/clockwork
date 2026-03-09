@@ -108,7 +108,7 @@ def test_pop() -> None:
     assert len(var_array) == 0
     assert var_array._buf == make_buffer(0, 0, 0, size=0)
 
-    with pytest.raises(IndexError, match="Cannot pop from an empty VarArray."):
+    with pytest.raises(IndexError, match=r"Cannot pop from an empty VarArray\."):
         var_array.pop()
 
 
@@ -144,35 +144,35 @@ def test_get_set() -> None:
     var_array: py_var_array.VarArray[int] = py_var_array.VarArray(_UINT32_VAR_ARRAY_CAPACITY, int_serdes)
 
     # Test errors when empty
-    with pytest.raises(IndexError, match="Tried to get element 0 of VarArray with size 0."):
+    with pytest.raises(IndexError, match=r"Tried to get element 0 of VarArray with size 0\."):
         var_array[0]
 
-    with pytest.raises(IndexError, match="Tried to set element 0 of VarArray with size 0."):
+    with pytest.raises(IndexError, match=r"Tried to set element 0 of VarArray with size 0\."):
         var_array[0] = 0
 
-    with pytest.raises(IndexError, match="Tried to get element -1 of VarArray with size 0."):
+    with pytest.raises(IndexError, match=r"Tried to get element -1 of VarArray with size 0\."):
         var_array[-1]
 
-    with pytest.raises(IndexError, match="Tried to set element -1 of VarArray with size 0."):
+    with pytest.raises(IndexError, match=r"Tried to set element -1 of VarArray with size 0\."):
         var_array[-1] = 0
 
     var_array.append(1)
     var_array.append(2)
 
     # Test errors when not full
-    with pytest.raises(IndexError, match="Tried to get element 2 of VarArray with size 2."):
+    with pytest.raises(IndexError, match=r"Tried to get element 2 of VarArray with size 2\."):
         var_array[2]
 
-    with pytest.raises(IndexError, match="Tried to set element 2 of VarArray with size 2."):
+    with pytest.raises(IndexError, match=r"Tried to set element 2 of VarArray with size 2\."):
         var_array[2] = 0
 
     var_array.append(3)
 
     # Test errors when full
-    with pytest.raises(IndexError, match="Tried to get element 3 of VarArray with size 3."):
+    with pytest.raises(IndexError, match=r"Tried to get element 3 of VarArray with size 3\."):
         var_array[3]
 
-    with pytest.raises(IndexError, match="Tried to set element 3 of VarArray with size 3."):
+    with pytest.raises(IndexError, match=r"Tried to set element 3 of VarArray with size 3\."):
         var_array[3] = 0
 
     assert var_array[0] == 1

@@ -157,3 +157,127 @@ def test_proto_message_has_optional_vararray(fs_importer: FilesystemImporter) ->
         ),
     ):
         protobuf.render("", proto_target_ir.representations[0].typespec, module.context)
+
+
+def test_proto_message_layout_with_soa(fs_importer: FilesystemImporter) -> None:
+    """Verify SoA fields render as repeated message fields in protobuf."""
+    source = """
+        // Element schema
+        schema PointSchema
+        {
+            uuid: cbe6ee0b-ec41-40ce-8587-fb3583e53870;
+            options
+            {
+                soa_enabled: true;
+                constructor: source_code_order;
+            }
+            fields
+            {
+                // X coordinate
+                #1 x: Float32;
+                // Y coordinate
+                #2 y: Float32;
+            }
+        }
+
+        // Container schema
+        schema ContainerSchema
+        {
+            uuid: cbe6ee0b-ec41-40ce-8587-fb3583e53871;
+            fields
+            {
+                // Variable-size SoA
+                #1 var_points: VarSoa<PointSchema, 100>;
+                // Fixed-size SoA
+                #2 fixed_points: FixedSoa<PointSchema, 4>;
+            }
+        }
+
+        proto_target point_proto
+        {
+          options
+          {
+            package test;
+          }
+          representation Protobuf<PointSchema>;
+        }
+
+        proto_target container_proto
+        {
+          options
+          {
+            package test;
+          }
+          representation Protobuf<ContainerSchema>;
+        }
+        """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
+    proto_target_ir = module.inner_scope.lookup("container_proto", recursive=False)
+    assert isinstance(proto_target_ir, proto_target.ProtoTarget)
+    assert len(proto_target_ir.representations) == 1
+    assert isinstance(proto_target_ir.representations[0].typespec, typesys.Instantiation)
+    message_layout = protobuf.render("", proto_target_ir.representations[0].typespec, module.context)
+    assert len(message_layout.fields) == 2
+    for field in message_layout.fields:
+        rendered = field.render()
+        assert rendered.startswith("repeated "), f"SoA field should be repeated: {rendered}"
+
+
+def test_proto_message_has_nested_varsoa(fs_importer: FilesystemImporter) -> None:
+    """Verify that VarSoa nested inside a VarArray raises TypeError."""
+    source = """
+        // Inner schema
+        schema InnerSchema
+        {
+            uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5386a;
+            options
+            {
+                soa_enabled: true;
+                constructor: source_code_order;
+            }
+            fields
+            {
+                // X coordinate
+                #1 x: Float32;
+            }
+        }
+
+        // Doc
+        schema TestSchema4
+        {
+            uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5386b;
+            fields
+            {
+                // Test nested SoA
+                #1 data: VarArray<VarSoa<InnerSchema, 10>, 5>;
+            }
+        }
+
+        proto_target inner_proto
+        {
+          options
+          {
+            package foo;
+          }
+          representation Protobuf<InnerSchema>;
+        }
+
+        proto_target foo
+        {
+          options
+          {
+            package foo;
+          }
+          representation Protobuf<TestSchema4>;
+        }
+        """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
+    proto_target_ir = module.inner_scope.lookup("foo", recursive=False)
+    assert isinstance(proto_target_ir, proto_target.ProtoTarget)
+    assert len(proto_target_ir.representations) == 1
+    assert isinstance(proto_target_ir.representations[0].typespec, typesys.Instantiation)
+    with pytest.raises(
+        TypeError,
+        match=re.escape("Cannot resolve the contained type in a VarArray"),
+    ):
+        protobuf.render("", proto_target_ir.representations[0].typespec, module.context)

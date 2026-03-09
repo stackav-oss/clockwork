@@ -1,0 +1,6 @@
+use clockwork::logging::writers::standalone_logger::standalone_logger;
+
+system_target standalone_logger_sys
+{
+  box: standalone_logger::StandaloneLoggerSystem;
+}

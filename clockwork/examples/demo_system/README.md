@@ -143,7 +143,7 @@ cog GpsDriverCog
 
   execution
   {
-    condition new_raw_gps: new_message(raw_gps, min=1, max=1);
+    condition new_raw_gps: new_message(raw_gps, max=1);
     execute when: new_raw_gps;
   }
 }
@@ -192,7 +192,7 @@ cog ImuDriverCog
 
   execution
   {
-    condition new_raw_imu: new_message(raw_imu, min=1, max=1);
+    condition new_raw_imu: new_message(raw_imu, max=1);
     execute when: new_raw_imu;
   }
 }
@@ -255,7 +255,7 @@ cog LocalizationGpsCog
 
   execution
   {
-    condition new_gps: new_message(gps, min=1, max=1);
+    condition new_gps: new_message(gps, max=1);
     execute when: new_gps;
   }
 }
@@ -292,7 +292,7 @@ cog LocalizationImuCog
 
   execution
   {
-    condition new_imu: new_message(imu, min=1, max=1);
+    condition new_imu: new_message(imu, max=1);
 
     execute when: new_imu;
   }
@@ -422,7 +422,7 @@ cog CameraDriverCog
 
   execution
   {
-    condition new_raw_camera: new_message(raw_camera, min=1, max=1);
+    condition new_raw_camera: new_message(raw_camera, max=1);
     execute when: new_raw_camera;
   }
 }
@@ -510,8 +510,8 @@ cog PerceptionCog
 
   execution
   {
-    condition new_video: new_message(min=1, input=video);
-    condition new_lidar: new_message(min=1, input=lidar);
+    condition new_video: new_message(input=video);
+    condition new_lidar: new_message(input=lidar);
     execute when: new_video or new_lidar;
   }
 }

@@ -52,7 +52,7 @@ Path& Path::operator=(const Path& other)
   return path_.c_str();
 }
 
-[[nodiscard]] const std::pmr::string& Path::string() const noexcept
+[[nodiscard]] std::pmr::string Path::string() const noexcept
 {
   return path_;
 }

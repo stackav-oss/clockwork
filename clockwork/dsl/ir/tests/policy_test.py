@@ -188,7 +188,7 @@ policy TestPolicy for false
 
 def test_policy_inst_missing_fields(fs_importer: FilesystemImporter) -> None:
     source_text = """
-use clockwork::dsl::tests::support::testpolicy
+use clockwork::dsl::tests::support::testpolicy;
 
 policy testpolicy::TestPolicy for testpolicy::TestChan
 {
@@ -200,7 +200,7 @@ policy testpolicy::TestPolicy for testpolicy::TestChan
 
 def test_policy_inst_bad_value(fs_importer: FilesystemImporter) -> None:
     source_text = """
-use clockwork::dsl::tests::support::testpolicy
+use clockwork::dsl::tests::support::testpolicy;
 
 policy testpolicy::TestPolicy for testpolicy::TestChan
 {
@@ -217,7 +217,7 @@ policy testpolicy::TestPolicy for testpolicy::TestChan
 
 def test_policy_inst_duplicate(fs_importer: FilesystemImporter) -> None:
     source_text = """
-use clockwork::dsl::tests::support::testpolicy
+use clockwork::dsl::tests::support::testpolicy;
 
 policy testpolicy::TestPolicy for testpolicy::TestChan
 {
@@ -284,7 +284,7 @@ def test_log_reader_policy(fs_importer: FilesystemImporter) -> None:
     another_chan = hellomod.inner_scope.lookup("AnotherChan")
     assert isinstance(another_chan, pubsub.Channel)
 
-    reader_policy_class = logger_config.get_log_reader_policy()
+    reader_policy_class = logger_config.get_log_reader_policy(system_module.context)
     hello_reader_policy = policy.lookup_policy(system_module, reader_policy_class, hello_chan)
     assert isinstance(hello_reader_policy, policy.PolicyData)
     assert isinstance(hello_reader_policy.data.data["source_name"], clkbuiltins.Nullopt)

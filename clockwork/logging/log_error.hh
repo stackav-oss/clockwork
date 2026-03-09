@@ -7,6 +7,7 @@
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/std/expected.hh"
 
+#include <aws/s3/S3Errors.h>
 #include <wise_enum.h>
 
 #include <cstdint>
@@ -263,7 +264,9 @@ WISE_ENUM_CLASS(
   // RPC call failed
   rpc_call_failed,
   // Bad checksum
-  bad_checksum)
+  bad_checksum,
+  // Aborted
+  aborted)
 
 /// Logging expected type
 /// @tparam T Expected return type
@@ -277,6 +280,11 @@ using LogOutcome = jewels::Outcome<LogError, LogError::success>;
 /// @param[in] error_code System error code
 /// @return LogError corresponding to the system error
 [[nodiscard]] inline LogError to_log_error(jewels::filesystem::ErrorCode error_code);
+
+/// Convert an S3 error to a LogError
+/// @param[in] s3_error S3 Error
+/// @return LogError value
+[[nodiscard]] inline LogError to_log_error(Aws::S3::S3Errors s3_error);
 
 /// Output stream insertion operator for log errors
 /// @param[in] ostream Output stream

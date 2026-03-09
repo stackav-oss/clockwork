@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
@@ -60,10 +60,14 @@ class ImmutableBinding(
 
     value: typesys.Value | expr.Expr
     typespec: expr.TypeExpression | None
+    attributes: node.ClkAttributes | None
 
     @classmethod
     def from_cst(
-        cls: type[ImmutableBinding], cst_node: cst.AssignmentStmt, module: node.Module, scope: node.Scope
+        cls: type[ImmutableBinding],
+        cst_node: cst.AssignmentStmt,
+        module: node.Module,
+        scope: node.Scope,
     ) -> ImmutableBinding:
         """Construct an IR node from a CST node."""
         if module.terminals is None:
@@ -71,7 +75,7 @@ class ImmutableBinding(
             raise ValueError(msg)
         doc = node.Doc.maybe_from_cst(cst_node.maybe_doc(), module)
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
-
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
         type_info = typesys.InferenceVar.make(module, cst_node)
         rhs = expr.Expr.from_cst(cst_node.child_rhs(), module)
         typesys.unify(type_info, rhs.type_info)
@@ -89,6 +93,7 @@ class ImmutableBinding(
             cst_node=cst_node,
             value=rhs,
             typespec=typespec,
+            attributes=attributes,
         )
         scope.define(name, result, module.terminals)
         return result

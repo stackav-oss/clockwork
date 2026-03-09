@@ -1,14 +1,18 @@
-use clockwork::logging::log_uuid_tag::LogUuidTag;
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
+use clockwork::logging::log_uuid_tag::{LogUuidTag};
+use[] clockwork::common::constants;
 
 // Published channel configuration
 schema PublishedChannelConfig {
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema definition size
-    #1 max_schema_definition_size = 20000;
+    #1 max_schema_definition_size = 30000;
 
     // Max module name size
     #2 max_module_name_size = 31;
@@ -45,6 +49,9 @@ schema PublishedChannelConfig {
 
     // Schema class name
     #12 class_name: VarString<max_class_name_size>;
+
+    // Set to true if channel is published once
+    #13 is_published_once: Bool;
   }
 }
 
@@ -53,10 +60,10 @@ schema ChannelPublisherConfig {
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema definition size
-    #1 max_schema_definition_size = 20000;
+    #1 max_schema_definition_size = 30000;
 
     // Max module name size
     #2 max_module_name_size = 31;
@@ -85,18 +92,5 @@ schema ChannelPublisherConfig {
   }
 }
 
-cpp_target channel_publisher_config
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-
-  schema PublishedChannelConfig;
-  representation Tachyon<PublishedChannelConfig<>>;
-  interface PublishedChannelConfigTap: Tap<Tachyon<PublishedChannelConfig<>>>;
-
-  schema ChannelPublisherConfig;
-  representation Tachyon<ChannelPublisherConfig<>>;
-  interface ChannelPublisherConfigTap: Tap<Tachyon<ChannelPublisherConfig<>>>;
-}
+instantiate PublishedChannelConfig<>;
+instantiate ChannelPublisherConfig<>;

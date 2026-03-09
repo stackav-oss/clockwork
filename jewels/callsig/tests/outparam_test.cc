@@ -48,12 +48,13 @@ struct NonDefaultConstructible
   }
 };
 
-TEST_CASE("Out construction and basic usage")
+template <template <typename> class OutLike>
+void test_outlike_construction_and_usage()
 {
   SECTION("Construction from reference")
   {
     int value = 42;
-    Out<int> out_param(value);
+    OutLike<int> out_param(value);
 
     REQUIRE(out_param.get() == &value);
     REQUIRE(*out_param == 42);
@@ -62,7 +63,7 @@ TEST_CASE("Out construction and basic usage")
   SECTION("Modification through Out")
   {
     int value = 10;
-    Out<int> out_param(value);
+    OutLike<int> out_param(value);
 
     *out_param = 20;
     REQUIRE(value == 20);
@@ -72,7 +73,7 @@ TEST_CASE("Out construction and basic usage")
   SECTION("Complex type access")
   {
     TestData data{.value = 42, .name = "test"};
-    Out<TestData> out_param(data);
+    OutLike<TestData> out_param(data);
 
     REQUIRE(out_param->value == 42);
     REQUIRE(out_param->name == "test");
@@ -85,34 +86,66 @@ TEST_CASE("Out construction and basic usage")
   }
 }
 
-TEST_CASE("Out deduction guide")
+TEST_CASE("Out construction and basic usage")
+{
+  test_outlike_construction_and_usage<Out>();
+}
+
+TEST_CASE("InOut construction and basic usage")
+{
+  test_outlike_construction_and_usage<InOut>();
+
+  SECTION("Reading input from InOut")
+  {
+    int value = 10;
+    InOut<int> in_out_param(value);
+
+    REQUIRE(*in_out_param == 10);
+  }
+}
+
+template <template <typename> class OutLike>
+void test_deduction_guide()
 {
   SECTION("Automatic type deduction")
   {
     int value = 42;
-    auto out_param = Out{value}; // Should deduce Out<int>
+    auto out_param = OutLike{value};
 
-    static_assert(std::is_same_v<decltype(out_param), Out<int>>);
+    static_assert(std::is_same_v<decltype(out_param), OutLike<int>>);
     REQUIRE(*out_param == 42);
   }
 
   SECTION("Complex type deduction")
   {
     TestData data{.value = 42, .name = "test"};
-    auto out_param = Out{data}; // Should deduce Out<TestData>
+    auto out_param = OutLike{data};
 
-    static_assert(std::is_same_v<decltype(out_param), Out<TestData>>);
+    static_assert(std::is_same_v<decltype(out_param), OutLike<TestData>>);
     REQUIRE(out_param->value == 42);
     REQUIRE(out_param->name == "test");
   }
 }
 
-TEST_CASE("OptionalOut construction and basic usage")
+TEST_CASE("Out deduction guide")
+{
+  test_deduction_guide<Out>();
+}
+
+TEST_CASE("InOut deduction guide")
+{
+  test_deduction_guide<InOut>();
+}
+
+template <template <typename> class OptionalOutLike>
+// This works around the limitation that TEMPLATE_TEST_CASE can't take template-template parameters.
+// NOLINTNEXTLINE(readability-function-size)
+void test_optional_outlike_construction_and_usage()
 {
   SECTION("Construction with reference (output desired)")
   {
     int value = 42;
-    OptionalOut<int> opt_out(value);
+    OptionalOutLike<int> opt_out(value);
 
     REQUIRE(opt_out.has_value());
     REQUIRE(static_cast<bool>(opt_out));
@@ -122,7 +155,7 @@ TEST_CASE("OptionalOut construction and basic usage")
 
   SECTION("Construction with nullopt (output not desired)")
   {
-    OptionalOut<int> opt_out(std::nullopt);
+    OptionalOutLike<int> opt_out(std::nullopt);
 
     REQUIRE_FALSE(opt_out.has_value());
     REQUIRE_FALSE(static_cast<bool>(opt_out));
@@ -132,7 +165,7 @@ TEST_CASE("OptionalOut construction and basic usage")
   SECTION("Modification through OptionalOut when output is desired")
   {
     int value = 10;
-    OptionalOut<int> opt_out(value);
+    OptionalOutLike<int> opt_out(value);
 
     *opt_out = 20;
     REQUIRE(value == 20);
@@ -146,7 +179,7 @@ TEST_CASE("OptionalOut construction and basic usage")
     {
       const int value{18};
       maybe_value.emplace(value);
-      OptionalOut<int> opt_out(maybe_value);
+      OptionalOutLike<int> opt_out(maybe_value);
 
       REQUIRE(opt_out.has_value());
       REQUIRE(static_cast<bool>(opt_out));
@@ -157,8 +190,46 @@ TEST_CASE("OptionalOut construction and basic usage")
 
     SECTION("without value (output not desired)")
     {
-      OptionalOut<int> opt_out(maybe_value);
+      OptionalOutLike<int> opt_out(maybe_value);
 
+      REQUIRE_FALSE(opt_out.has_value());
+      REQUIRE_FALSE(static_cast<bool>(opt_out));
+      REQUIRE(opt_out.get() == nullptr);
+    }
+  }
+
+  SECTION("Construction from another OptionalOut (output may or may not be desired)")
+  {
+    SECTION("with value (output desired)")
+    {
+      // make an OptionalOut with a value
+      int value{18};
+      OptionalOutLike<int> original_opt_out(value);
+
+      // sanity check
+      REQUIRE(original_opt_out.has_value());
+      REQUIRE(original_opt_out.get() == &value);
+      REQUIRE(*original_opt_out == 18);
+
+      // construct from the other one
+      OptionalOutLike<int> opt_out(original_opt_out);
+      REQUIRE(opt_out.has_value());
+      REQUIRE(opt_out.get() == &value);
+      REQUIRE(*opt_out == 18);
+    }
+
+    SECTION("without value (output not desired)")
+    {
+      // make an empty OptionalOut
+      OptionalOutLike<int> original_opt_out(std::nullopt);
+
+      // sanity check
+      REQUIRE_FALSE(original_opt_out.has_value());
+      REQUIRE_FALSE(static_cast<bool>(original_opt_out));
+      REQUIRE(original_opt_out.get() == nullptr);
+
+      // construct from the other one
+      OptionalOutLike<int> opt_out(original_opt_out);
       REQUIRE_FALSE(opt_out.has_value());
       REQUIRE_FALSE(static_cast<bool>(opt_out));
       REQUIRE(opt_out.get() == nullptr);
@@ -166,14 +237,33 @@ TEST_CASE("OptionalOut construction and basic usage")
   }
 }
 
-TEST_CASE("OptionalOut deduction guide")
+TEST_CASE("OptionalOut construction and basic usage")
+{
+  test_optional_outlike_construction_and_usage<OptionalOut>();
+}
+
+TEST_CASE("OptionalInOut construction and basic usage")
+{
+  test_optional_outlike_construction_and_usage<OptionalInOut>();
+
+  SECTION("Reading input from OptionalInOut")
+  {
+    int value = 10;
+    OptionalInOut<int> opt_in_out(value);
+
+    REQUIRE(*opt_in_out == 10);
+  }
+}
+
+template <template <typename> class OptionalOutLike>
+void test_optional_outlike_deduction_guide()
 {
   SECTION("Automatic type deduction with reference")
   {
     int value = 42;
-    auto opt_out = OptionalOut{value}; // Should deduce OptionalOut<int>
+    auto opt_out = OptionalOutLike{value};
 
-    static_assert(std::is_same_v<decltype(opt_out), OptionalOut<int>>);
+    static_assert(std::is_same_v<decltype(opt_out), OptionalOutLike<int>>);
     REQUIRE(opt_out.has_value());
     REQUIRE(*opt_out == 42);
   }
@@ -181,13 +271,23 @@ TEST_CASE("OptionalOut deduction guide")
   SECTION("Complex type deduction")
   {
     TestData data{.value = 42, .name = "test"};
-    auto opt_out = OptionalOut{data}; // Should deduce OptionalOut<TestData>
+    auto opt_out = OptionalOutLike{data};
 
-    static_assert(std::is_same_v<decltype(opt_out), OptionalOut<TestData>>);
+    static_assert(std::is_same_v<decltype(opt_out), OptionalOutLike<TestData>>);
     REQUIRE(opt_out.has_value());
     REQUIRE(opt_out->value == 42);
     REQUIRE(opt_out->name == "test");
   }
+}
+
+TEST_CASE("OptionalOut deduction guide")
+{
+  test_optional_outlike_deduction_guide<OptionalOut>();
+}
+
+TEST_CASE("OptionalInOut deduction guide")
+{
+  test_optional_outlike_deduction_guide<OptionalInOut>();
 }
 
 TEST_CASE("FactoryResult construction and basic usage")
@@ -376,11 +476,15 @@ TEST_CASE("Type traits")
   SECTION("is_out_param_type_v trait")
   {
     static_assert(is_out_param_type_v<Out<int>>);
+    static_assert(is_out_param_type_v<InOut<int>>);
     static_assert(is_out_param_type_v<OptionalOut<int>>);
+    static_assert(is_out_param_type_v<OptionalInOut<int>>);
     static_assert(is_out_param_type_v<MaybeOut<int>>);
     static_assert(is_out_param_type_v<FactoryOut<int>>);
     static_assert(is_out_param_type_v<Out<TestData>>);
+    static_assert(is_out_param_type_v<InOut<TestData>>);
     static_assert(is_out_param_type_v<OptionalOut<TestData>>);
+    static_assert(is_out_param_type_v<OptionalInOut<TestData>>);
     static_assert(is_out_param_type_v<FactoryOut<TestData>>);
 
     static_assert(!is_out_param_type_v<int>);
@@ -391,11 +495,15 @@ TEST_CASE("Type traits")
   SECTION("OutParamType concept")
   {
     static_assert(OutParamType<Out<int>>);
+    static_assert(OutParamType<InOut<int>>);
     static_assert(OutParamType<OptionalOut<int>>);
+    static_assert(OutParamType<OptionalInOut<int>>);
     static_assert(OutParamType<MaybeOut<int>>);
     static_assert(OutParamType<FactoryOut<int>>);
     static_assert(OutParamType<Out<TestData>>);
+    static_assert(OutParamType<InOut<TestData>>);
     static_assert(OutParamType<OptionalOut<TestData>>);
+    static_assert(OutParamType<OptionalInOut<TestData>>);
     static_assert(OutParamType<FactoryOut<TestData>>);
 
     static_assert(!OutParamType<int>);
@@ -409,6 +517,12 @@ TEST_CASE("Type traits")
 BinaryOutcome example_function_with_out(Out<int> result_out)
 {
   *result_out = 42;
+  return success;
+}
+
+BinaryOutcome example_function_with_in_out(InOut<int> in_out)
+{
+  *in_out = *in_out + 42;
   return success;
 }
 
@@ -427,6 +541,24 @@ BinaryOutcome example_function_with_optional_out(int input, OptionalOut<std::str
   }
 
   *message_out = "Non-positive input";
+  return failure;
+}
+
+BinaryOutcome example_function_with_optional_in_out(OptionalInOut<int> state)
+{
+  if (!state.has_value())
+  {
+    // If no output is desired, just return success
+    return success;
+  }
+
+  if (*state > 0)
+  {
+    *state *= 2;
+    return success;
+  }
+
+  *state = 0;
   return failure;
 }
 
@@ -452,6 +584,15 @@ TEST_CASE("Example usage scenarios")
     REQUIRE(result == 42);
   }
 
+  SECTION("Standard input/output parameter usage")
+  {
+    int state = 1000;
+    auto outcome = example_function_with_in_out(InOut{state});
+
+    REQUIRE(ok(outcome));
+    REQUIRE(state == 1042); // 1000 + 42
+  }
+
   SECTION("Optional output parameter - output desired")
   {
     std::string message;
@@ -467,6 +608,32 @@ TEST_CASE("Example usage scenarios")
 
     REQUIRE(ok(outcome));
     // No output to check since it wasn't requested
+  }
+
+  SECTION("Optional input/output parameter - output desired")
+  {
+    int state = 5;
+    auto outcome = example_function_with_optional_in_out(OptionalInOut{state});
+
+    REQUIRE(ok(outcome));
+    REQUIRE(state == 10); // 5 * 2
+  }
+
+  SECTION("Optional input/output parameter - output not desired")
+  {
+    auto outcome = example_function_with_optional_in_out(std::nullopt);
+
+    REQUIRE(ok(outcome));
+    // No output to check since it wasn't requested
+  }
+
+  SECTION("Optional input/output parameter with failure case")
+  {
+    int state = -1;
+    auto outcome = example_function_with_optional_in_out(OptionalInOut{state});
+
+    REQUIRE(fails(outcome));
+    REQUIRE(state == 0);
   }
 
   SECTION("Function call with failure case")
@@ -514,6 +681,19 @@ TEST_CASE("Const correctness")
     // *out_param = 100; // This should not compile
   }
 
+  SECTION("InOut const access")
+  {
+    int value = 42;
+    const InOut<int> in_out_param(value);
+
+    // Should be able to read through const InOut
+    REQUIRE(*in_out_param == 42);
+    REQUIRE(in_out_param.get() == &value);
+
+    // But modification should not compile (this is checked by the compiler)
+    // *in_out_param = 100; // This should not compile
+  }
+
   SECTION("OptionalOut const access")
   {
     int value = 42;
@@ -526,6 +706,20 @@ TEST_CASE("Const correctness")
 
     // But modification should not compile (this is checked by the compiler)
     // *opt_out = 100; // This should not compile
+  }
+
+  SECTION("OptionalInOut const access")
+  {
+    int value = 42;
+    const OptionalInOut<int> opt_in_out(value);
+
+    // Should be able to read through const OptionalInOut
+    REQUIRE(opt_in_out.has_value());
+    REQUIRE(*opt_in_out == 42);
+    REQUIRE(opt_in_out.get() == &value);
+
+    // But modification should not compile (this is checked by the compiler)
+    // *opt_in_out = 100; // This should not compile
   }
 }
 

@@ -107,6 +107,11 @@ jewels::expected<BatchReservedSlot, ReserveError> PublisherHandle::reserve(size_
   return {jewels::in_place, BatchReservedSlot{jewels::memory::make_non_null_from_ref(*this), head_, count}};
 }
 
+[[nodiscard]] const Buffer& PublisherHandle::buffer() const noexcept
+{
+  return *buffer_;
+}
+
 jewels::expected<void, WriteError>
 PublisherHandle::commit(BufferIndex reserved_slot, jewels::time::SyncTime publish_time) noexcept
 {

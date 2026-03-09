@@ -4,6 +4,7 @@
 #include "clockwork/pinion/detail/tcp_socket.hh"
 
 #include "clockwork/pinion/detail/socket_common.hh"
+#include "jewels/filesystem/error_code.hh"
 
 #include <cerrno>
 #include <string>
@@ -97,7 +98,7 @@ jewels::filesystem::FileDescriptor TcpSocket::release_descriptor()
 [[nodiscard]] jewels::expected<jewels::networking::SocketAddress, std::errc>
 TcpSocket::get_bound_address() const noexcept
 {
-  auto sockaddr = jewels::networking::SocketAddress::create("0.0.0.0", 0);
+  auto sockaddr = jewels::networking::SocketAddress::create(std::string{"0.0.0.0"}, 0);
   if (!sockaddr)
   {
     return jewels::unexpected(std::errc::bad_address);

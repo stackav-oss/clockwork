@@ -10,7 +10,7 @@
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>    // IWYU pragma: keep
 #include <nanobind/stl/shared_ptr.h>  // IWYU pragma: keep
@@ -60,8 +60,10 @@ NB_MODULE(nb_test_helper, mod)
   nb::class_<TestHelperType>(mod, "TestHelper")
     .def_static(
       "make_test_helper",
-      [](std::string_view pinion_shm_root, std::string_view socket_ns) -> std::shared_ptr<TestHelperType>
-      { return TestHelperType::make_test_helper(pinion_shm_root, socket_ns); },
+      [](std::string_view pinion_shm_root, std::string_view tmp_dir, std::string_view socket_ns)
+        -> std::shared_ptr<TestHelperType>
+      { return TestHelperType::make_test_helper(pinion_shm_root, tmp_dir, socket_ns); },
+      nb::arg(),
       nb::arg(),
       nb::arg())
     .def(

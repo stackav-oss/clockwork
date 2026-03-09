@@ -1,0 +1,163 @@
+#![generate(proto, go_proto, cpp, proto_conv)]
+#![cpp(namespace=clockwork::testing)]
+#![proto(go_package=github.com/stack-av-llc/av/clockwork/testing/proto)]
+
+// Proto Tester message
+schema ProtoTester
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Test stuff
+    #1 seqno: Int64;
+
+    // More of it
+    #2 other_number: Int32;
+  }
+}
+// Make sure that when this is used as part of a generic the includes are generated properly
+schema DependencyTester
+{
+  uuid: 8b87e174-6280-4a5c-b609-15a1919404b9;
+
+  fields
+  {
+    // Optional field
+    #1 an_optional: Optional<Int16>;
+  }
+}
+
+// Hello, composition!
+schema BetterThanInheritance
+{
+  uuid: d1cec84c-7fd4-4db6-80c9-c5e2dc5a6c30;
+
+  fields
+  {
+    // Hi
+    #3 hello: VarArray<ProtoTester, 100>;
+
+    // yet another field
+    #4 a_field: Int64;
+
+    // A generic
+    #5 my_generic: GenericMsg<Float32, 32>;
+
+    // An optional
+    #6 my_optional: Optional<Int64>;
+
+    // A UUID
+    #7 my_uuid: Uuid<BetterThanInheritance>;
+
+    // A var string
+    #8 my_string: VarString<100>;
+
+    // A var array bytes
+    #9 my_bytes: VarArray<Byte,100>;
+
+    // Composition in a var array
+    #10 composition_var: VarArray<ProtoTester, 200>;
+
+    // Composition in an optional
+    #11 opt_composition: Optional<ProtoTester>;
+
+    // A duration
+    #12 my_duration: Duration;
+
+    // Array of enums
+    #13 enum_arr: VarArray<HelloEnum, 100>;
+
+    // Array of duration
+    #14 duration_ar: VarArray<Duration,32>;
+
+    // Fixed Array of enums
+    #15 fixed_enum_arr: FixedArray<HelloEnum, 2>;
+
+    // Array of duration
+    #16 fixed_duration_ar: FixedArray<Duration,2>;
+
+    // A fixed array bytes
+    #17 fixed_bytes: FixedArray<Byte,100>;
+
+    // Composition in a fixed array
+    #18 fixed_composition: FixedArray<ProtoTester, 2>;
+
+    // Fixed array of primitives
+    #19 fixed_primitive: FixedArray<Int64, 2>;
+
+    // Another generic
+    #20 another_generic: GenericMsg<UInt64, 16>;
+
+    // A non-native int type
+    #21 funny_number: Int16;
+
+    // Optional of a sync time
+    #22 sync_time: Optional<SyncTime>;
+
+    // Optional of a duration
+    #23 opt_duration: Optional<Duration>;
+
+    // Optional of a UUID
+    #24 opt_uuid: Optional<Uuid<BetterThanInheritance>>;
+
+    // Optional dependency
+    #25 opt_dependency: Optional<DependencyTester>;
+
+    // Var array of small int
+    #26 var_array_of_small_int: VarArray<Int8, 10>;
+
+    // Fixed array of small int
+    #27 fixed_array_of_small_int: FixedArray<Int8, 3>;
+  }
+}
+
+// Hello templates
+schema GenericMsg
+{
+  uuid: b1c8dbe4-9c30-4acd-b66f-3f8aec2c6d90;
+
+  parameters
+  {
+    // Type of array elements
+    #1 data_type: Type;
+
+    // Number of elements
+    #2 data_size = 3;
+  }
+
+  fields
+  {
+    // Some data
+    #3 data: VarArray<data_type, max_size=data_size>;
+
+    // An enum
+    #4 my_hello: Optional<HelloEnum>;
+  }
+}
+
+// Enum
+#[proto(prefix_enum_value_names=true)]
+enum HelloEnum
+{
+  uuid: bea931ce-fba6-4abd-941c-16ab44088aec;
+  values
+  {
+    // Normal greeting
+    #1 hi default;
+
+    // A bit more formal
+    #2 hello;
+
+    // Spanish
+    #3 hola;
+
+    // Mandarin
+    #4 ni_hao;
+
+    // Hindi
+    #5 namaste;
+  }
+}
+
+instantiate GenericMsg<Float32, 32>;
+instantiate GenericMsgUInt64: GenericMsg<UInt64, 16>;

@@ -20,6 +20,7 @@ def _gen_multi_subscriber_configs_domain(
                     buffer_layout=pdf.PinionBufferLayout(
                         message_size=buffer.layout.message_size,
                         num_slots=buffer.layout.num_slots,
+                        is_published_once=buffer.layout.is_published_once,
                     ),
                     publisher_ids=[],
                 )

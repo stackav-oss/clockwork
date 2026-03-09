@@ -31,6 +31,7 @@ concept CogPolicy = requires(
   typename T::InputsType::InputDialTuple& inputs,
   typename T::PublishersType::PublishablesTuple publishables,
   typename T::DiagnosticsType::ReporterType& diagnostics,
+  typename T::SignalApiType& signals,
   typename T::CogDial& dial) {
   // Type requirements
   { T::name } -> std::convertible_to<std::string_view>;
@@ -49,7 +50,7 @@ concept CogPolicy = requires(
   // Function requirements
   { T::is_ready(stats, timers, conditions) } -> std::same_as<bool>;
   {
-    T::make_dial(params, resources, configs, states, inputs, publishables, timers, conditions, diagnostics)
+    T::make_dial(params, resources, configs, states, inputs, publishables, timers, conditions, diagnostics, signals)
   } -> std::same_as<typename T::CogDial>;
   { T::execute(dial) } -> std::same_as<void>;
 };

@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/writers/channel_message_rates.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
-#include "clockwork/logging/writers/logger_config.hh"
-#include "clockwork/logging/writers/logger_status.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
+#include "clockwork/logging/writers/logger_config_clk_cc.hh"
+#include "clockwork/logging/writers/logger_status_clk_cc.hh"
 #include "clockwork/logging/writers/message_writer.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -42,8 +42,8 @@ public:
   /// @param[in] channel_rates_config Channel message rates config
   Logger(
     jewels::memory::MemoryResource memory_resource,
-    const LogWriterConfigTap& log_writer_config,
-    const LoggerConfigTap& logger_config,
+    const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+    const clockwork::Tappy<LoggerConfig>& logger_config,
     const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config);
 
   /// Destructor shuts down the writer thread
@@ -61,12 +61,12 @@ public:
 
   /// Generate a logger status message from the current state
   /// @param[out] message Logger status message
-  void get_logger_status_message(LoggerStatusTap& message);
+  void get_logger_status_message(clockwork::Tappy<LoggerStatus>& message);
 
   /// Generate a channel rate message from the current state
   /// @param[out] message Channel rate message
   /// @return True if the message should be published
-  [[nodiscard]] bool get_channel_rates_message(ChannelMessageRatesTap& message);
+  [[nodiscard]] bool get_channel_rates_message(clockwork::Tappy<ChannelMessageRates<>>& message);
 
   /// Get the message counts by channel
   /// @note This method *MAY* be called by the thread that reports the writer state

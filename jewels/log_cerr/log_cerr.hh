@@ -4,10 +4,11 @@
 #pragma once
 
 #include "jewels/log_cerr/log_level.hh"
+#include "jewels/log_cerr/log_time.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/core.h> // IWYU pragma: export
+#include <fmt/base.h>
+#include <fmt/core.h> // IWYU pragma: export
 
 #include <array>
 #include <chrono>
@@ -28,6 +29,11 @@ bool should_print_in_color();
 
 LogLevel get_log_threshold();
 
+EpochTime get_log_time();
+
+/// Configure the log message to use an external clock object for timestamps.
+void set_log_time_clock(const ::jewels::LogClockPtr& log_clock);
+
 /// Convert a log level to a string view for message formatting (converts to upper case)
 constexpr std::string_view log_level_name(LogLevel log_level) noexcept;
 
@@ -39,7 +45,6 @@ constexpr std::string_view log_level_name(LogLevel log_level) noexcept;
 /// @param[in] args Message arguments
 /// @tparam TimePolicy Time policy
 /// @return string view for the formatted message (string is null terminated)
-template <typename TimePolicy>
 [[nodiscard]] std::string_view log_message_to_buffer(
   std::array<char, log_message_buffer_size>& buffer,
   LogLevel log_level,

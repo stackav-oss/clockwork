@@ -4,11 +4,12 @@
 #include "clockwork/cog/cog_conditions.hh"
 #include "clockwork/cog/cog_inputs.hh"
 #include "clockwork/cog/input_condition.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -38,7 +39,7 @@
 #include <sys/types.h>
 #include <tuple>
 #include <type_traits>
-#include <utility>
+#include <variant>
 
 namespace clockwork
 {
@@ -70,8 +71,7 @@ public:
 template <typename... Types, typename... Args>
 auto make_tuple_repeat(Args&... args)
 {
-  // NOLINTNEXTLINE(bugprone-use-after-move) TODO(DX-1794): Fix this
-  return std::tuple<Types...>(Types{std::forward<Args...>(args...)}...);
+  return std::tuple<Types...>(Types{args...}...);
 }
 
 template <typename InputType>
@@ -93,18 +93,38 @@ struct NewMin1Policy
   }
 };
 
+template <typename InputType, uint32_t min = 1, uint32_t max = std::numeric_limits<uint32_t>::max()>
+struct NewMinMaxPolicy
+{
+  using MsgType = TestMsg1;
+  static constexpr auto endpoint_id = InputType::endpoint_id;
+  static constexpr std::string_view name = "NewInputPolicy";
+  static constexpr auto bounds_min = min;
+  static constexpr auto bounds_max = max;
+  static constexpr auto condition_type = InputConditionType::new_message;
+  // Testing only
+  using ConditionType = MessagePresentCondition<bounds_min, bounds_max>;
+  static ConditionType make_active_cond()
+  {
+    constexpr auto active = true;
+    constexpr auto num_msgs = bounds_max;
+    return ConditionType(active, num_msgs);
+  }
+};
+
 template <typename... Policies>
 struct CogInputsFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test code performance is not a concern.
 {
   static constexpr auto policy_count = sizeof...(Policies);
-  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size>...>;
+  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>...>;
   using PublishersArray = std::array<pinion::PublisherHandle, policy_count>;
   using ConditionsType = CogConditions<NewMin1Policy<Policies>...>;
   using ConditionsTuple = typename ConditionsType::ConditionsTuple;
 
   CogInputsFixture()
     : resource(std::pmr::new_delete_resource()),
-      channels(make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size>...>(resource)),
+      channels(
+        make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>...>(resource)),
       publishers(
         std::apply([](auto&... channel) -> PublishersArray { return {channel.make_publisher(1)...}; }, channels)),
       subscriber(resource, false)
@@ -140,6 +160,8 @@ struct NoCopyInputPolicy
     jewels::Uuid<common::EndpointClassId>::from_string("b6e2b628-62ba-4c73-b07e-b2ce77a742b4").value();
   static constexpr std::string_view name = "NoCopyInputPolicy";
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -152,7 +174,9 @@ struct CopyInputPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("789e340c-556f-4cf0-a3b9-73632ba75a7c").value();
   static constexpr std::string_view name = "CopyInputPolicy";
-  static constexpr auto max_view_size = 3U;
+  static constexpr auto max_view_size = 5U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -286,6 +310,70 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   }
 }
 
+TEST_CASE_METHOD(InputPolicyFixture, "unit test operation", "[cog_inputs]")
+{
+  // Make publishers
+
+  auto& publisher1 = publishers.at(0);
+  auto& publisher2 = publishers.at(1);
+
+  subscriber.template set_unit_test_input<0, TestCog>(std::get<0>(channels).make_subscriber());
+  subscriber.template set_unit_test_input<1, TestCog>(std::get<1>(channels).make_subscriber());
+  REQUIRE(subscriber.validate());
+
+  // Empty views before receiving any messages
+  auto conds = make_active_conds();
+  auto inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
+  REQUIRE(inputs);
+  REQUIRE(std::get<0>(*inputs).get_cursor_view().empty());
+  REQUIRE(std::get<1>(*inputs).get_cursor_view().empty());
+
+  // Publish message to channel 1
+
+  auto msg1 = TestMsg1{.value = 1};
+  publish(publisher1, msg1);
+
+  {
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
+    REQUIRE(inputs);
+    REQUIRE(1 == std::get<0>(*inputs).get_cursor_view().size());
+    REQUIRE(std::get<1>(*inputs).get_cursor_view().empty());
+  }
+
+  // Publish message to channel 2
+
+  auto msg2 = TestMsg2{.value = 2};
+  publish(publisher2, msg2);
+
+  {
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
+    REQUIRE(inputs);
+
+    const auto& input0 = std::get<0>(*inputs);
+    REQUIRE(1 == input0.get_cursor_view().size());
+    REQUIRE(input0.get_cursor() == input0.get_first_new());
+
+    const auto& input1 = std::get<1>(*inputs);
+    REQUIRE(1 == input1.get_cursor_view().size());
+    REQUIRE(input1.get_cursor() == input1.get_first_new());
+  }
+
+  // update last consumed
+
+  std::ignore = subscriber.commit(*inputs);
+
+  inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
+  REQUIRE(inputs);
+
+  const auto& input0 = std::get<0>(*inputs);
+  REQUIRE(input0.get_cursor_view().empty());
+  REQUIRE(input0.end() == input0.get_first_new());
+
+  const auto& input1 = std::get<1>(*inputs);
+  REQUIRE(input1.get_cursor_view().empty());
+  REQUIRE(input1.end() == input1.get_first_new());
+}
+
 using ZeroInputsPolicyFixture = CogInputsFixture<>;
 
 TEST_CASE_METHOD(ZeroInputsPolicyFixture, "zero subscribers", "[cog_inputs]")
@@ -302,6 +390,44 @@ TEST_CASE_METHOD(ZeroInputsPolicyFixture, "zero subscribers", "[cog_inputs]")
 
   std::ignore = subscriber.commit(*inputs);
   REQUIRE_FALSE(subscriber.is_overrun());
+}
+
+TEST_CASE("get_default_unit_test_slot_counts")
+{
+  SECTION("No conditions")
+  {
+    constexpr auto num_slots =
+      CogInputs<NoCopyInputPolicy, CopyInputPolicy>::get_default_unit_test_slot_counts<CogConditions<>>();
+    STATIC_REQUIRE(num_slots == std::array{3U, 5U});
+  }
+
+  SECTION("Default max conditions")
+  {
+    constexpr auto num_slots = CogInputs<NoCopyInputPolicy, CopyInputPolicy>::get_default_unit_test_slot_counts<
+      CogConditions<NewMinMaxPolicy<NoCopyInputPolicy>, NewMinMaxPolicy<CopyInputPolicy>>>();
+    STATIC_REQUIRE(num_slots == std::array{3U, 5U});
+  }
+
+  SECTION("Max=1 conditions")
+  {
+    constexpr auto num_slots = CogInputs<NoCopyInputPolicy, CopyInputPolicy>::get_default_unit_test_slot_counts<
+      CogConditions<NewMinMaxPolicy<NoCopyInputPolicy, 1U, 1U>, NewMinMaxPolicy<CopyInputPolicy, 1U, 1U>>>();
+    STATIC_REQUIRE(num_slots == std::array{3U, 5U});
+  }
+
+  SECTION("Max=4 conditions")
+  {
+    constexpr auto num_slots = CogInputs<NoCopyInputPolicy, CopyInputPolicy>::get_default_unit_test_slot_counts<
+      CogConditions<NewMinMaxPolicy<NoCopyInputPolicy, 1U, 4U>, NewMinMaxPolicy<CopyInputPolicy, 1U, 4U>>>();
+    STATIC_REQUIRE(num_slots == std::array{4U, 5U});
+  }
+
+  SECTION("Max=6 conditions")
+  {
+    constexpr auto num_slots = CogInputs<NoCopyInputPolicy, CopyInputPolicy>::get_default_unit_test_slot_counts<
+      CogConditions<NewMinMaxPolicy<NoCopyInputPolicy, 1U, 6U>, NewMinMaxPolicy<CopyInputPolicy, 1U, 6U>>>();
+    STATIC_REQUIRE(num_slots == std::array{6U, 6U});
+  }
 }
 
 } // namespace

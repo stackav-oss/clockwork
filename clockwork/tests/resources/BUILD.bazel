@@ -10,4 +10,7 @@ exports_files([
     "test_system_init_config.textproto",
     "test_system_init_config.tachyon",
     "test_system_config.textproto",
+    "snapshot_test_config.textproto",
+    "restore_test_state.textproto",
+    "restore_test_config.textproto",
 ])

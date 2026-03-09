@@ -12,16 +12,18 @@ from clockwork.dsl.ir import clkbuiltins
 from clockwork.serialization.metadata import tachyon_model
 from clockwork.serialization.py import common
 from clockwork.serialization.py.tests.support import (
-    py_simple_schema_v1,
-    py_simple_schema_v2,
     simple_schema_v1_clk_nb,
+    simple_schema_v1_clk_py,
     simple_schema_v2_clk_nb,
+    simple_schema_v2_clk_py,
 )
 
 
-@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+@pytest.mark.parametrize(
+    "expected_class", [simple_schema_v2_clk_py.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2]
+)
 def test_validate_tachyon_types_compatibility_same_version(
-    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    expected_class: type[simple_schema_v2_clk_py.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Test validation when metadata versions match."""
     expected_metadata = expected_class.get_tachyon_metadata()
@@ -32,12 +34,14 @@ def test_validate_tachyon_types_compatibility_same_version(
     assert result is False  # No upgrade needed
 
 
-@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+@pytest.mark.parametrize(
+    "expected_class", [simple_schema_v2_clk_py.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2]
+)
 def test_validate_tachyon_types_compatibility_older_version(
-    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    expected_class: type[simple_schema_v2_clk_py.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Test validation when incoming metadata is older version."""
-    incoming_class = py_simple_schema_v1.SimpleSchemaV1
+    incoming_class = simple_schema_v1_clk_py.SimpleSchemaV1
 
     expected_metadata = expected_class.get_tachyon_metadata()
     assert isinstance(expected_metadata, tachyon_model.TachyonMetadata)
@@ -48,25 +52,27 @@ def test_validate_tachyon_types_compatibility_older_version(
     assert result is True  # Upgrade needed
 
 
-@pytest.mark.parametrize("expected_class", [py_simple_schema_v1.SimpleSchemaV1, simple_schema_v1_clk_nb.SimpleSchemaV1])
+@pytest.mark.parametrize(
+    "expected_class", [simple_schema_v1_clk_py.SimpleSchemaV1, simple_schema_v1_clk_nb.SimpleSchemaV1]
+)
 def test_validate_tachyon_types_compatibility_newer_version(
-    expected_class: type[py_simple_schema_v1.SimpleSchemaV1] | type[simple_schema_v1_clk_nb.SimpleSchemaV1],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    expected_class: type[simple_schema_v1_clk_py.SimpleSchemaV1] | type[simple_schema_v1_clk_nb.SimpleSchemaV1],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Test validation when incoming metadata is newer version."""
-    incoming_class = py_simple_schema_v2.SimpleSchemaV2
+    incoming_class = simple_schema_v2_clk_py.SimpleSchemaV2
 
     expected_metadata = expected_class.get_tachyon_metadata()
     assert isinstance(expected_metadata, tachyon_model.TachyonMetadata)
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
     # Newer version should raise ValueError
-    with pytest.raises(ValueError, match="Incoming version for .* is beyond latest version"):
+    with pytest.raises(ValueError, match=r"Incoming version for .* is beyond latest version"):
         common.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
 
 
 def test_validate_tachyon_types_compatibility_different_uuid() -> None:
     """Test validation when schemas have different UUIDs."""
-    expected_metadata = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_metadata()
+    expected_metadata = simple_schema_v2_clk_py.SimpleSchemaV2.get_tachyon_metadata()
 
     # Create a modified metadata with different UUID
     incoming_metadata = tachyon_model.TachyonMetadata(
@@ -82,18 +88,19 @@ def test_validate_tachyon_types_compatibility_different_uuid() -> None:
         size=schema_type.size,
         alignment=schema_type.alignment,
         hash=schema_type.hash,
+        arguments=schema_type.arguments,
         fields=schema_type.fields,
     )
     cast("list[Any]", incoming_metadata.types)[incoming_metadata.outer_type_id] = modified_schema_type
 
     # Different UUID should raise ValueError
-    with pytest.raises(ValueError, match="Tachyon metadata UUID mismatch"):
+    with pytest.raises(ValueError, match=r"Tachyon metadata UUID mismatch"):
         common.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)
 
 
 def test_validate_tachyon_types_compatibility_non_schema() -> None:
     """Test validation when outer type is not a schema."""
-    expected_class = py_simple_schema_v2.SimpleSchemaV2
+    expected_class = simple_schema_v2_clk_py.SimpleSchemaV2
 
     expected_metadata = expected_class.get_tachyon_metadata()
 
@@ -108,5 +115,5 @@ def test_validate_tachyon_types_compatibility_non_schema() -> None:
     )
 
     # Non-schema type should raise TypeError
-    with pytest.raises(TypeError, match="Expected incoming type to be a schema"):
+    with pytest.raises(TypeError, match=r"Expected incoming type to be a schema"):
         common.validate_tachyon_types_compatibility(expected=expected_metadata, incoming=incoming_metadata)

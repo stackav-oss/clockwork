@@ -5,10 +5,12 @@
 #include "jewels/std/expected.hh"
 
 #include <arpa/inet.h>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstdint>
+#include <memory_resource> // IWYU pragma: keep
 #include <netinet/in.h>
 #include <string>
 #include <sys/socket.h>
@@ -16,9 +18,9 @@
 namespace jewels::networking
 {
 
-TEST_CASE("SocketAddress")
+TEMPLATE_TEST_CASE("SocketAddress", "", std::string, std::pmr::string)
 {
-  const std::string host{"127.0.0.1"};
+  const TestType host{"127.0.0.1"};
   // It's okay to specify a port here.  We're not actually opening a socket so no risk of collisions.
   auto address = SocketAddress::create(host, uint16_t{123}, AF_INET);
   REQUIRE(address);

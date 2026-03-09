@@ -4,7 +4,6 @@
 
 """Unit tests for schema upgrade functionality."""
 
-import re
 from typing import Any, cast
 
 import pytest
@@ -69,12 +68,9 @@ def compile_schema_v2(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [4, 6];
-        fields
-        {
-          #3 old_name: Float32 -> became #5;
-          #4 to_be_removed: Byte -> removed #5;
-        }
+        version: 6;
+        legacy_became: [3->5];
+        removed: [4];
       }
     }
 
@@ -140,14 +136,8 @@ def compile_container_schema_v2(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [4, 8];
-        fields
-        {
-          #3 opt_to_array: Optional<VarString<max_size=32>> -> became #5;
-          #4 array_to_opt: VarArray<Int32, max_size=5> -> became #6;
-          #2 array_field: VarArray<Byte, max_size=32> -> became #7;
-          #1 optional_field: Optional<Int32> -> became #8;
-        }
+        version: 8;
+        legacy_became: [3->5, 4->6, 2->7, 1->8];
       }
     }
 
@@ -231,12 +221,9 @@ def compile_nested_schemas(importer: FilesystemImporter) -> tuple[node.Module, n
       }
       history
       {
-        versions: [4, 6];
-        fields
-        {
-          #3 old_name: Float32 -> became #5;
-          #4 to_be_removed: Byte -> removed #5;
-        }
+        version:  6;
+        legacy_became: [3->5];
+        removed: [4];
       }
     }
 
@@ -255,11 +242,8 @@ def compile_nested_schemas(importer: FilesystemImporter) -> tuple[node.Module, n
       }
       history
       {
-        versions: [1, 3, 4];
-        fields
-        {
-          #3 old_inner_schema: TestSchema -> became #4;
-        }
+        version: 4;
+        legacy_became: [3->4];
       }
     }
 
@@ -360,7 +344,7 @@ def compile_enum_schemas(importer: FilesystemImporter) -> tuple[node.Module, nod
       }
       history
       {
-        versions: [2, 3];
+        version: 3;
       }
     }
 
@@ -468,7 +452,7 @@ def compile_complex_schema_v2(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [2, 3];
+        version: 3;
       }
     }
 
@@ -513,20 +497,8 @@ def compile_complex_schema_v2(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [11, 111];
-        fields
-        {
-          #1 int_array: VarArray<Int32, max_size=10> -> became #101;
-          #2 opt_float: Optional<Float32> -> became #102;
-          #4 multi_step_field: Int8 -> became #104;
-          #5 str_to_bytes: VarString<max_size=16> -> became #105;
-          #6 growing_string: VarString<max_size=8> -> became #106;
-          #7 int_to_duration: Int64 -> became #107;
-          #8 int_to_synctime: Int32 -> became #108;
-          #9 direct_to_optional: Int16 -> became #109;
-          #10 string_to_bytes: VarString<max_size=12> -> became #110;
-          #11 schema_array: VarArray<BasicSchema, max_size=3> -> became #111;
-        }
+        version: 111;
+        legacy_became: [1->101, 2->102, 4->104, 5->105, 6->106, 7->107, 8->108, 9->109, 10->110, 11->111];
       }
     }
 
@@ -562,7 +534,7 @@ def compile_complex_schema_v3(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [2, 3];
+        version: 3;
       }
     }
 
@@ -607,28 +579,9 @@ def compile_complex_schema_v3(importer: FilesystemImporter) -> node.Module:
       }
       history
       {
-        versions: [11, 111, 211];
-        fields
-        {
-          #1 int_array: VarArray<Int32, max_size=10> -> became #101;
-          #2 opt_float: Optional<Float32> -> became #102;
-          #4 multi_step_field: Int8 -> became #104;
-          #5 str_to_bytes: VarString<max_size=16> -> became #105;
-          #6 growing_string: VarString<max_size=8> -> became #106;
-          #7 int_to_duration: Int64 -> became #107;
-          #8 int_to_synctime: Int32 -> became #108;
-          #9 direct_to_optional: Int16 -> became #109;
-          #10 string_to_bytes: VarString<max_size=12> -> became #110;
-          #11 schema_array: VarArray<BasicSchema, max_size=3> -> became #111;
-          #104 multi_step_renamed: Int16 -> became #204;
-          #105 bytes_array: VarArray<Byte, max_size=16> -> became #205;
-          #106 growing_string: VarString<max_size=16> -> became #206;
-          #107 duration_field: Duration -> became #207;
-          #108 synctime_field: SyncTime -> became #208;
-          #109 optional_value: Optional<Int32> -> became #209;
-          #110 byte_array: VarArray<Byte, max_size=12> -> became #210;
-          #111 schema_array: VarArray<BasicSchema, max_size=3> -> became #211;
-        }
+        version: 211;
+        legacy_became: [1->101, 2->102, 4->104, 5->105, 6->106, 7->107, 8->108, 9->109, 10->110, 11->111,
+                        104->204, 105->205, 106->206, 107->207, 108->208, 109->209, 110->210, 111->211];
       }
     }
 
@@ -791,7 +744,7 @@ def test_array_to_optional_edge_cases() -> None:
     )
 
     # This should raise ValueError about multi-element list
-    with pytest.raises(ValueError, match="Cannot convert multi-element list to Optional"):
+    with pytest.raises(ValueError, match=r"Cannot convert multi-element list to Optional"):
         tachyon_dyn.upgrade_schema(module_v2.context, schema_v2, multi_array_instance)
 
 
@@ -1154,7 +1107,7 @@ def test_schema_to_container_upgrade() -> None:
       }
       history
       {
-        versions: [1, 2];
+        version: 2;
       }
     }
 
@@ -1169,11 +1122,8 @@ def test_schema_to_container_upgrade() -> None:
       }
       history
       {
-        versions: [1, 2];
-        fields
-        {
-          #1 nested: NestedSchema -> became #2;
-        }
+        version: 2;
+        legacy_became: [1->2];
       }
     }
 
@@ -1307,7 +1257,7 @@ def test_static_parent_with_upgraded_child() -> None:  # noqa: PLR0915 For testi
       }
       history
       {
-        versions: [2, 3];
+        version: 3;
       }
     }
 
@@ -1543,16 +1493,9 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [6, 9];
-        values
-        {
-          // removed value
-          #4 to_be_removed -> removed #7;
-          // renamed value
-          #5 to_be_renamed -> became #7;
-          // multi-step change
-          #6 multi_step1 -> became #8;
-        }
+        version: 9;
+        legacy_became: [5->7, 6->8];
+        removed: [4];
       }
     }
 
@@ -1573,12 +1516,8 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [4, 5];
-        values
-        {
-          // explicit change
-          #4 explicit_change { underlying_value: 30; } -> became #5;
-        }
+        version: 5;
+        legacy_became: [4->5];
       }
     }
 
@@ -1599,12 +1538,8 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [4, 101];
-        fields
-        {
-          // integer promotion
-          #1 integer_field: Int32 -> became #101;
-        }
+        version: 101;
+        legacy_became: [1->101];
       }
     }
 
@@ -1643,18 +1578,9 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [6, 9, 10];
-        values
-        {
-          // removed
-          #4 to_be_removed -> removed #7;
-          // renamed
-          #5 to_be_renamed -> became #7;
-          // multi-step
-          #6 multi_step1 -> became #8;
-          // multi-step final
-          #8 multi_step2 -> became #10;
-        }
+        version: 10;
+        legacy_became: [5->7, 6->8, 8->10];
+        removed: [4];
       }
     }
 
@@ -1675,14 +1601,8 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [4, 5, 6];
-        values
-        {
-          // explicit change
-          #4 explicit_change { underlying_value: 30; } -> became #5;
-          // explicit change
-          #5 explicit_change { underlying_value: 40; } -> became #6;
-        }
+        version: 6;
+        legacy_became: [4->5, 5->6];
       }
     }
 
@@ -1703,12 +1623,8 @@ def compile_enum_upgrade_schemas(importer: FilesystemImporter) -> tuple[node.Mod
       }
       history
       {
-        versions: [4, 101];
-        fields
-        {
-          // integer promotion
-          #1 integer_field: Int32 -> became #101;
-        }
+        version: 101;
+        legacy_became: [1->101];
       }
     }
 
@@ -1859,14 +1775,14 @@ def test_removed_enum_value() -> None:
     )
 
     # This should raise ValueError about the removed enum value
-    with pytest.raises(ValueError, match="Cannot upgrade enum value.*removed"):
+    with pytest.raises(ValueError, match=r"Cannot upgrade enum value TestEnum\.to_be_removed.*"):
         tachyon_dyn.upgrade_schema(module_enum_v2.context, schema_enum_v2, instance_v1)
 
 
 def test_container_of_enums_upgrade() -> None:
     """Test upgrading a container of enum values."""
     # Compile schemas
-    module_enum_v1, module_enum_v2, module_enum_v3 = compile_enum_upgrade_schemas(fs_importer())  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    module_enum_v1, _module_enum_v2, module_enum_v3 = compile_enum_upgrade_schemas(fs_importer())
 
     # Get schema objects and create instantiated schemas
     schema_ir_enum_v1 = module_enum_v1.inner_scope.lookup("EnumSchema")
@@ -2025,11 +1941,8 @@ def test_unmodified_synctime_field() -> None:
       }
       history
       {
-        versions: [2, 3];
-        fields
-        {
-          #1 integer_field: Int32 -> became #3;
-        }
+        version: 3;
+        legacy_became: [1->3];
       }
     }
 
@@ -2162,11 +2075,8 @@ def test_child_parameter_change() -> None:
       }
       history
       {
-        versions: [1, 2];
-        fields
-        {
-          #1 container: Container<Int32, size=3> -> became #2;
-        }
+        version: 2;
+        legacy_became: [1->2];
       }
     }
     cpp_target test
@@ -2175,53 +2085,6 @@ def test_child_parameter_change() -> None:
         schema Container;
         schema Parent;
         representation Tachyon<Container<UInt8, 5>>;
-        representation Tachyon<Parent>;
-    }
-    """
-
-    # Schema v2 but with disallowed change of Int32 to Float32
-    schema_v2_disallowed_source = """
-    // Container
-    schema Container
-    {
-      uuid: 6995014b-b265-44be-be58-4777fedbbfa3;
-      parameters
-      {
-        // Value type
-        #1 value_type: Type;
-        // Size of the container
-        #2 size: UInt64;
-      }
-      fields
-      {
-        // Array of given type
-        #3 integers: VarArray<value_type, max_size=size>;
-      }
-    }
-    // Schema version 2
-    schema Parent
-    {
-      uuid: 53c6ee0b-ec41-40ce-8587-fb3583e5385f;
-      fields
-      {
-        // Container
-        #2 container: Container<Float32, size=5>;
-      }
-      history
-      {
-        versions: [1, 2];
-        fields
-        {
-          #1 container: Container<Int32, size=3> -> became #2;
-        }
-      }
-    }
-    cpp_target test
-    {
-        options { namespace test; }
-        schema Container;
-        schema Parent;
-        representation Tachyon<Container<Float32, 5>>;
         representation Tachyon<Parent>;
     }
     """
@@ -2276,14 +2139,3 @@ def test_child_parameter_change() -> None:
     # Deserialize and verify
     instance_v2_copy = serdes_v2.py_class.deserialize_tachyon(memoryview(buffer))
     assert instance_v2_copy.container.integers == [1, 2, 3, 4, 5]
-
-    # Test disallowed change of Int32 to Float32
-    with pytest.raises(
-        ValueError,
-        match=re.escape(
-            "Incompatible type change in schema Parent: field container (type @clockwork::container_param_test::Container<value_type=::Int32,size=3>) became field container (type @clockwork::container_param_test::Container<value_type=::Float32,size=5>)"
-        ),
-    ):
-        compiler.compile_source_text(
-            schema_v2_disallowed_source, ModuleID(CLK_REPO, "container_param_test"), importer=fs_importer()
-        )

@@ -309,10 +309,14 @@ def test_to_cpp_struct_non_generic(tapmsg_module: node.Module) -> None:
         typereg.get_cpp_type(tapmsg_module.context, clkbuiltins.SCHEMA_TAG_TYPE)
     ]
     assert len(struct.template_param) == 1
-    assert struct.template_param[0].argument_name == "signed_value"
-    arg_type = struct.template_param[0].argument_type
+    assert struct.template_param[0].named_type.argument_name == "signed_value"
+    arg_type = struct.template_param[0].named_type.argument_type
     assert isinstance(arg_type, types.CppType)
     assert arg_type.type_name == "int32_t"
+    assert isinstance(struct.template_param[0].default, types.CppValue)
+    arg_value = struct.template_param[0].default.value
+    assert isinstance(arg_value, str)
+    assert arg_value == "234"
 
 
 def test_to_cpp_fields_non_generic(fs_importer: importer.FilesystemImporter) -> None:

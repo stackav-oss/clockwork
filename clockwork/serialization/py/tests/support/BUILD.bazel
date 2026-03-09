@@ -2,255 +2,85 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
 
 package(default_testonly = True)
-
-cc_library(
-    name = "broken_schema_v1",
-    srcs = [
-        "broken_schema_v1.cc",
-        "broken_schema_v1.inl",
-    ],
-    hdrs = ["broken_schema_v1.hh"],
-    data = [":broken_schema_v1_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:optional",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-        "@wise_enum",
-    ],
-)
 
 clk(
     name = "broken_schema_v1_clk",
     srcs = ["broken_schema_v1.clk"],
     outs = [
-        "broken_schema_v1.cc",
-        "broken_schema_v1.hh",
-        "broken_schema_v1.inl",
+        "broken_schema_v1_clk_cc.cc",
+        "broken_schema_v1_clk_cc.hh",
+        "broken_schema_v1_clk_cc.inl",
         "broken_schema_v1_clk_nb.cc",
         "broken_schema_v1_clk_nb.hh",
         "broken_schema_v1_clk_nb.inl",
-        "py_broken_schema_v1.py",
+        "broken_schema_v1_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "py",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "broken_schema_v1_clk_nb",
-    srcs = [
-        "broken_schema_v1_clk_nb.cc",
-        "broken_schema_v1_clk_nb.hh",
-        "broken_schema_v1_clk_nb.inl",
-    ],
-    data = [":broken_schema_v1_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":broken_schema_v1",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
-)
-
-cc_library(
-    name = "broken_schema_v2",
-    srcs = [
-        "broken_schema_v2.cc",
-        "broken_schema_v2.inl",
-    ],
-    hdrs = ["broken_schema_v2.hh"],
-    data = [":broken_schema_v2_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:optional",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-        "@wise_enum",
-    ],
 )
 
 clk(
     name = "broken_schema_v2_clk",
     srcs = ["broken_schema_v2.clk"],
     outs = [
-        "broken_schema_v2.cc",
-        "broken_schema_v2.hh",
-        "broken_schema_v2.inl",
+        "broken_schema_v2_clk_cc.cc",
+        "broken_schema_v2_clk_cc.hh",
+        "broken_schema_v2_clk_cc.inl",
         "broken_schema_v2_clk_nb.cc",
         "broken_schema_v2_clk_nb.hh",
         "broken_schema_v2_clk_nb.inl",
-        "py_broken_schema_v2.py",
+        "broken_schema_v2_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "py",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "broken_schema_v2_clk_nb",
-    srcs = [
-        "broken_schema_v2_clk_nb.cc",
-        "broken_schema_v2_clk_nb.hh",
-        "broken_schema_v2_clk_nb.inl",
-    ],
-    data = [":broken_schema_v2_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":broken_schema_v2",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
-)
-
-py_library(
-    name = "py_broken_schema_v1",
-    srcs = ["py_broken_schema_v1.py"],
-    data = [":broken_schema_v1_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_broken_schema_v2",
-    srcs = ["py_broken_schema_v2.py"],
-    data = [":broken_schema_v2_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_simple_schema_v1",
-    srcs = ["py_simple_schema_v1.py"],
-    data = [":simple_schema_v1_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_simple_schema_v2",
-    srcs = ["py_simple_schema_v2.py"],
-    data = [":simple_schema_v2_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-cc_library(
-    name = "simple_schema_v1",
-    srcs = [
-        "simple_schema_v1.cc",
-        "simple_schema_v1.inl",
-    ],
-    hdrs = ["simple_schema_v1.hh"],
-    data = [":simple_schema_v1_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "simple_schema_v1_clk",
     srcs = ["simple_schema_v1.clk"],
     outs = [
-        "py_simple_schema_v1.py",
-        "simple_schema_v1.cc",
-        "simple_schema_v1.hh",
-        "simple_schema_v1.inl",
+        "simple_schema_v1_clk_cc.cc",
+        "simple_schema_v1_clk_cc.hh",
+        "simple_schema_v1_clk_cc.inl",
         "simple_schema_v1_clk_nb.cc",
         "simple_schema_v1_clk_nb.hh",
         "simple_schema_v1_clk_nb.inl",
+        "simple_schema_v1_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "py",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "simple_schema_v1_clk_nb",
-    srcs = [
-        "simple_schema_v1_clk_nb.cc",
-        "simple_schema_v1_clk_nb.hh",
-        "simple_schema_v1_clk_nb.inl",
-    ],
-    data = [":simple_schema_v1_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":simple_schema_v1",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
-)
-
-cc_library(
-    name = "simple_schema_v2",
-    srcs = [
-        "simple_schema_v2.cc",
-        "simple_schema_v2.inl",
-    ],
-    hdrs = ["simple_schema_v2.hh"],
-    data = [":simple_schema_v2_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "simple_schema_v2_clk",
     srcs = ["simple_schema_v2.clk"],
     outs = [
-        "py_simple_schema_v2.py",
-        "simple_schema_v2.cc",
-        "simple_schema_v2.hh",
-        "simple_schema_v2.inl",
+        "simple_schema_v2_clk_cc.cc",
+        "simple_schema_v2_clk_cc.hh",
+        "simple_schema_v2_clk_cc.inl",
         "simple_schema_v2_clk_nb.cc",
         "simple_schema_v2_clk_nb.hh",
         "simple_schema_v2_clk_nb.inl",
+        "simple_schema_v2_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "py",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "simple_schema_v2_clk_nb",
-    srcs = [
-        "simple_schema_v2_clk_nb.cc",
-        "simple_schema_v2_clk_nb.hh",
-        "simple_schema_v2_clk_nb.inl",
-    ],
-    data = [":simple_schema_v2_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":simple_schema_v2",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
 )

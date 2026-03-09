@@ -1,4 +1,7 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::tools)]
 
+use[] clockwork::common::constants;
 use clockwork::common::process_description;
 
 // Metrics channel metadata
@@ -8,7 +11,7 @@ schema MetricsChannelMetadata
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
   }
 
@@ -35,7 +38,7 @@ schema MetricsChannelMetadataReport
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum channel name size
     #1 max_num_channels = 2046;
@@ -49,11 +52,8 @@ schema MetricsChannelMetadataReport
   }
   history
   {
-    versions: [2, 3];
-    fields
-    {
-      #2 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size=300>, 1023> -> became #3;
-    }
+    version: 3;
+    legacy_became: [2->3];
   }
 }
 
@@ -63,7 +63,7 @@ schema MetricsChannelMetadataConfig
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum number of channels
     #1 max_num_channels = 2046;
@@ -72,7 +72,7 @@ schema MetricsChannelMetadataConfig
     #4 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #5 max_schema_definition_size = 20000;
+    #5 max_schema_definition_size = 30000;
   }
 
   fields
@@ -93,30 +93,11 @@ schema MetricsChannelMetadataConfig
 
   history
   {
-    versions: [2, 3, 7];
-    fields
-    {
-      #2 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size=300>, 1023> -> became #3;
-    }
+    version: 7;
+    legacy_became: [2->3];
   }
 }
 
-cpp_target metrics_channel_metadata_config
-{
-  options
-  {
-    namespace clockwork::tools;
-  }
-
-  schema MetricsChannelMetadata;
-  representation Tachyon<MetricsChannelMetadata<>>;
-  interface MetricsChannelMetadataTap: Tap<Tachyon<MetricsChannelMetadata<>>>;
-
-  schema MetricsChannelMetadataReport;
-  representation MetricsChannelMetadataReportTach: Tachyon<MetricsChannelMetadataReport<>>;
-  interface MetricsChannelMetadataReportTap: Tap<Tachyon<MetricsChannelMetadataReport<>>>;
-
-  schema MetricsChannelMetadataConfig;
-  representation MetricsChannelMetadataConfigTach: Tachyon<MetricsChannelMetadataConfig<>>;
-  interface MetricsChannelMetadataConfigTap: Tap<Tachyon<MetricsChannelMetadataConfig<>>>;
-}
+instantiate MetricsChannelMetadata<>;
+instantiate MetricsChannelMetadataReport<>;
+instantiate MetricsChannelMetadataConfig<>;

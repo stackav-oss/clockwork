@@ -3,7 +3,7 @@
 
 #include "clockwork/scaffolding/timer.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/runners/deterministic_timer.hh"
 #include "clockwork/runners/timerfd_timer.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
@@ -25,8 +25,8 @@
 namespace clockwork::scaffolding
 {
 
-[[nodiscard]] jewels::expected<TimerMap, jewels::MonoError>
-setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels::memory::MemoryResource memres_sys)
+[[nodiscard]] jewels::expected<TimerMap, jewels::MonoError> setup_timers(
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs, jewels::memory::MemoryResource memres_sys)
 {
   TimerMap timers(memres_sys);
   for (const auto& desc : descs)
@@ -38,7 +38,7 @@ setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels:
 
 [[nodiscard]] jewels::expected<TimerMap, jewels::MonoError> setup_deterministic_timers(
   const ExecutionParams& /*execution_params*/,
-  std::span<const common::TimerInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys)
 {
   TimerMap timers(memres_sys);
@@ -50,7 +50,7 @@ setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels:
 }
 
 [[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::MonoError> connect_timers(
-  std::span<const common::TimerInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres,
   const TimerMap& timers,
   AbstractCasing& casing)

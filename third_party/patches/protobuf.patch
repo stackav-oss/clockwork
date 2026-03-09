@@ -1,8 +1,8 @@
 diff --git MODULE.bazel MODULE.bazel
-index 400186b53..48e9ef629 100644
+index 1978a18b8..c8b4b372c 100644
 --- MODULE.bazel
 +++ MODULE.bazel
-@@ -47,10 +47,7 @@ bazel_dep(name = "platforms", version = "0.0.10")
+@@ -139,17 +139,13 @@ register_toolchains("//bazel/private/toolchains/prebuilt:all")
  register_toolchains("//bazel/private/toolchains:all")
  
  SUPPORTED_PYTHON_VERSIONS = [
@@ -10,20 +10,19 @@ index 400186b53..48e9ef629 100644
      "3.10",
 -    "3.11",
 -    "3.12",
+-    "3.13",
  ]
  
- # TODO: Support hermetic / system python in bzlmod.
-@@ -72,7 +69,7 @@ use_repo(
-     system_python = "python_{}".format(SUPPORTED_PYTHON_VERSIONS[-1].replace(".", "_")),
- )
- 
--pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip", dev_dependency = True)
-+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
- 
- [
-     pip.parse(
+ # TODO: Replace system_python with hermetic_python.
+ # TODO: Remove dev_dependency once system_python is no longer used and we support
+ # python/upb in Bazel.
+-system_python = use_extension("//python/dist:system_python.bzl", "system_python_extension", dev_dependency = True)
++system_python = use_extension("//python/dist:system_python.bzl", "system_python_extension")
+ system_python.find(
+     name = "system_python",
+     minimum = "3.9",
 diff --git python/BUILD.bazel python/BUILD.bazel
-index 3a13a97e3..2b2dc1a13 100644
+index e8c94aecf..dea9ee017 100644
 --- python/BUILD.bazel
 +++ python/BUILD.bazel
 @@ -15,6 +15,8 @@ build_targets(name = "python")
@@ -36,10 +35,10 @@ index 3a13a97e3..2b2dc1a13 100644
      default_applicable_licenses = ["//:license"],
      default_visibility = ["//python/dist:__pkg__"],
 diff --git python/build_targets.bzl python/build_targets.bzl
-index b62d5f05d..14b3eba17 100644
+index ae39c98e5..d900d39ab 100644
 --- python/build_targets.bzl
 +++ python/build_targets.bzl
-@@ -40,6 +40,7 @@ def build_targets(name):
+@@ -41,6 +41,7 @@ def build_targets(name):
              ":python_srcs",
              ":well_known_types_py_pb2",
          ],
@@ -47,7 +46,7 @@ index b62d5f05d..14b3eba17 100644
      )
  
      native.config_setting(
-@@ -206,7 +207,7 @@ def build_targets(name):
+@@ -205,7 +206,7 @@ def build_targets(name):
      py_library(
          name = "python_srcs",
          srcs = [":python_src_files"],
@@ -56,7 +55,7 @@ index b62d5f05d..14b3eba17 100644
          srcs_version = "PY2AND3",
          visibility = [
              "//:__pkg__",
-@@ -224,7 +225,7 @@ def build_targets(name):
+@@ -223,7 +224,7 @@ def build_targets(name):
              "//python/google/protobuf/internal/numpy:__init__.py",
              "//python/google/protobuf/internal/numpy:numpy_test.py",
          ],
@@ -65,7 +64,7 @@ index b62d5f05d..14b3eba17 100644
          srcs_version = "PY3",
          visibility = [
              "//:__pkg__",
-@@ -327,7 +328,7 @@ def build_targets(name):
+@@ -346,7 +347,7 @@ def build_targets(name):
              "google/protobuf/internal/import_test_package/__init__.py",
              "google/protobuf/internal/test_util.py",
          ],
@@ -75,18 +74,10 @@ index b62d5f05d..14b3eba17 100644
          visibility = ["//python:__subpackages__"],
          deps = [
 diff --git python/dist/BUILD.bazel python/dist/BUILD.bazel
-index e7d32cb1f..3cf8d3c50 100644
+index c3da3d096..3ad391a55 100644
 --- python/dist/BUILD.bazel
 +++ python/dist/BUILD.bazel
-@@ -11,7 +11,6 @@ load("@protobuf_pip_deps//:requirements.bzl", "requirement")
- load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
- load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
- load("@rules_python//python:packaging.bzl", "py_wheel")
--load("@system_python//:version.bzl", "SYSTEM_PYTHON_VERSION")
- load("//:protobuf_version.bzl", "PROTOBUF_PYTHON_VERSION")
- load(":dist.bzl", "py_dist", "py_dist_module")
- load(":py_proto_library.bzl", "py_proto_library")
-@@ -360,7 +359,7 @@ py_wheel(
+@@ -366,7 +366,7 @@ py_wheel(
      python_tag = selects.with_or({
          ("//python:limited_api_3.9", "//python:full_api_3.9"): "cp39",
          "//python:limited_api_3.10": "cp310",
@@ -96,18 +87,10 @@ index e7d32cb1f..3cf8d3c50 100644
      # LINT.ThenChange(
      #    :full_api_version,
 diff --git python/dist/dist.bzl python/dist/dist.bzl
-index 7c9095e26..8aa26917b 100644
+index 7c9095e26..c1158f3b0 100644
 --- python/dist/dist.bzl
 +++ python/dist/dist.bzl
-@@ -1,7 +1,6 @@
- """Rules to create python distribution files and properly name them"""
- 
- load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
--load("@system_python//:version.bzl", "SYSTEM_PYTHON_VERSION")
- 
- def _get_suffix(limited_api, python_version, cpu):
-     """Computes an ABI version tag for an extension module per PEP 3149."""
-@@ -17,7 +16,7 @@ def _get_suffix(limited_api, python_version, cpu):
+@@ -17,7 +17,7 @@ def _get_suffix(limited_api, python_version, cpu):
          return ".cp{}-{}.{}".format(python_version, abi, "pyd")
  
      if python_version == "system":
@@ -116,11 +99,40 @@ index 7c9095e26..8aa26917b 100644
          if int(python_version) < 38:
              python_version += "m"
          abis = {
+diff --git python/google/__init__.py python/google/__init__.py
+deleted file mode 100644
+index b36383a61..000000000
+--- python/google/__init__.py
++++ /dev/null
+@@ -1,3 +0,0 @@
+-from pkgutil import extend_path
+-
+-__path__ = extend_path(__path__, __name__)
+diff --git src/google/protobuf/descriptor_database.cc src/google/protobuf/descriptor_database.cc
+index fb77f5778..ab51d63c7 100644
+--- src/google/protobuf/descriptor_database.cc
++++ src/google/protobuf/descriptor_database.cc
+@@ -590,6 +590,15 @@ bool EncodedDescriptorDatabase::Add(
+     const void* PROTOBUF_NONNULL encoded_file_descriptor, int size) {
+   FileDescriptorProto file;
+   if (file.ParseFromArray(encoded_file_descriptor, size)) {
++    std::pair<const void*, int> existing = index_->FindFile(file.name());
++    if (existing.first) {
++      if (existing.second == size && memcmp(existing.first, encoded_file_descriptor, size) == 0) {
++        return true;
++      }
++      else {
++        ABSL_LOG(ERROR) << "File descriptor " << file.name() << " is already registered, but descriptor contents are different";
++      }
++    }
+     return index_->AddFile(file, std::make_pair(encoded_file_descriptor, size));
+   } else {
+     ABSL_LOG(ERROR) << "Invalid file descriptor data passed to "
 diff --git src/google/protobuf/extension_set.cc src/google/protobuf/extension_set.cc
-index 00b2c4841..f35f1e01e 100644
+index d71c5ed40..9d1cc88c0 100644
 --- src/google/protobuf/extension_set.cc
 +++ src/google/protobuf/extension_set.cc
-@@ -95,7 +95,7 @@ void Register(const ExtensionInfo& info) {
+@@ -98,7 +98,7 @@ void Register(const ExtensionInfo& info) {
    static auto local_static_registry = OnShutdownDelete(new ExtensionRegistry);
    global_registry = local_static_registry;
    if (!local_static_registry->insert(info).second) {
@@ -129,8 +141,21 @@ index 00b2c4841..f35f1e01e 100644
                      << info.message->GetTypeName() << "\", field number "
                      << info.number << ".";
    }
+diff --git src/google/protobuf/message.cc src/google/protobuf/message.cc
+index 4e5527511..1332d9c8f 100644
+--- src/google/protobuf/message.cc
++++ src/google/protobuf/message.cc
+@@ -349,7 +349,7 @@ GeneratedMessageFactory* GeneratedMessageFactory::singleton() {
+ void GeneratedMessageFactory::RegisterFile(
+     const google::protobuf::internal::DescriptorTable* table) {
+   if (!files_.insert(table).second) {
+-    ABSL_LOG(FATAL) << "File is already registered: " << table->filename;
++    ABSL_LOG(INFO) << "File is already registered: " << table->filename;
+   }
+ }
+ 
 diff --git src/google/protobuf/repeated_ptr_field.h src/google/protobuf/repeated_ptr_field.h
-index 52032a7d7..cac0edd87 100644
+index ab4388852..27e809a82 100644
 --- src/google/protobuf/repeated_ptr_field.h
 +++ src/google/protobuf/repeated_ptr_field.h
 @@ -18,6 +18,8 @@

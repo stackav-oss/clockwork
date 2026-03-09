@@ -127,6 +127,8 @@ BUILTINS_MODULE: Final = node.Module(
     cst_node=None,
     unresolved_imports=[],
     context=compiler_context.CompilerContext(),
+    generates=None,
+    inner_attrs=None,
 )
 
 
@@ -210,6 +212,25 @@ VAR_ARRAY: Final = BuiltinSerializableGenericTypeDef(
     type_info=TYPE_TYPE,
 )
 
+FIXED_SOA: Final = BuiltinSerializableGenericTypeDef(
+    scope=BUILTINS_SCOPE,
+    name="FixedSoa",
+    parameters=(
+        typesys.Parameter(name="type", type_bound=TYPE_TYPE, default=None),
+        typesys.Parameter(name="size", type_bound=UINT64, default=None),
+    ),
+    type_info=TYPE_TYPE,
+)
+
+VAR_SOA: Final = BuiltinSerializableGenericTypeDef(
+    scope=BUILTINS_SCOPE,
+    name="VarSoa",
+    parameters=(
+        typesys.Parameter(name="type", type_bound=TYPE_TYPE, default=None),
+        typesys.Parameter(name="max_size", type_bound=UINT64, default=None),
+    ),
+    type_info=TYPE_TYPE,
+)
 
 VAR_STRING: Final = BuiltinSerializableGenericTypeDef(
     scope=BUILTINS_SCOPE,
@@ -337,38 +358,60 @@ FALSE_VALUE: Final = typesys.NamedValue(scope=BUILTINS_SCOPE, name="false", type
 TRUE_VALUE: Final = typesys.NamedValue(scope=BUILTINS_SCOPE, name="true", type_info=BOOL)
 
 #
+# Exposed entity types
+#
+# These types are exposed in the DSL but generally not usable in schemas. They
+# are for working with DSL entities themselves.
+# keep-sorted start block=yes
+COG_CONFIG_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceConfigEndpoint", type_info=TYPE_TYPE
+)
+COG_STATE_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceStateEndpoint", type_info=TYPE_TYPE
+)
+# keep-sorted end
+
+#
 # Internal Types
 #
 # These types are not directly exposed to users within the DSL (i.e., you can't
 # declare a schema field or parameter of these types), but are used within the
 # compiler as the types of DSL constructs.
 #
-# Keep this list alphabetically sorted to reduce merge conflicts.
+# keep-sorted start block=yes
 AUDIO_SOURCE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="AudioSource", type_info=TYPE_TYPE)
 BOX_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Box", type_info=TYPE_TYPE)
 CHANNEL_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Channel", type_info=TYPE_TYPE)
 COG_CONDITION_INSTANCE_TYPE: Final = typesys.TypeDef(
-    scope=BUILTINS_SCOPE, name="ConditionInstance", type_info=TYPE_TYPE
+    scope=BUILTINS_SCOPE, name="CogInstanceCondition", type_info=TYPE_TYPE
 )
 COG_CONDITION_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Condition", type_info=TYPE_TYPE)
-COG_RESOURCE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ResourceInstance", type_info=TYPE_TYPE)
-COG_RESOURCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Resource", type_info=TYPE_TYPE)
-COG_CONFIG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ConfigInstance", type_info=TYPE_TYPE)
 COG_CONFIG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Config", type_info=TYPE_TYPE)
-COG_STATE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="StateInstance", type_info=TYPE_TYPE)
-COG_STATE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="State", type_info=TYPE_TYPE)
-COG_INPUT_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="InputInstance", type_info=TYPE_TYPE)
-COG_INPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Input", type_info=TYPE_TYPE)
-COG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="CogInstance", type_info=TYPE_TYPE)
-COG_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="OutputInstance", type_info=TYPE_TYPE)
-COG_METRICS_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
-    scope=BUILTINS_SCOPE, name="MetricsOutputInstance", type_info=TYPE_TYPE
-)
-COG_OUTPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Output", type_info=TYPE_TYPE)
-COG_METRICS_OUTPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="MetricsOutput", type_info=TYPE_TYPE)
 COG_DIAGNOSTICS_INSTANCE_TYPE: Final = typesys.TypeDef(
     scope=BUILTINS_SCOPE, name="CogDiagnosticsInstance", type_info=TYPE_TYPE
 )
+COG_INPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceInputEndpoint", type_info=TYPE_TYPE
+)
+COG_INPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="InputEndpoint", type_info=TYPE_TYPE)
+COG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="CogInstance", type_info=TYPE_TYPE)
+COG_METRICS_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceMetricsOutputEndpoint", type_info=TYPE_TYPE
+)
+COG_METRICS_OUTPUT_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="MetricsOutputEndpoint", type_info=TYPE_TYPE
+)
+COG_OUTPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceOutputEndpoint", type_info=TYPE_TYPE
+)
+COG_OUTPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="OutputEndpoint", type_info=TYPE_TYPE)
+COG_REPORT_GROUP_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogReportGroupEndpoint", type_info=TYPE_TYPE
+)
+COG_RESOURCE_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceResourceEndpoint", type_info=TYPE_TYPE
+)
+COG_RESOURCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Resource", type_info=TYPE_TYPE)
 CONFIG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ConfigInstance", type_info=TYPE_TYPE)
 CPU_DOMAIN_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="CpuDomain", type_info=TYPE_TYPE)
 DIAGNOSTICS_INSTANCE_TYPE: Final = typesys.TypeDef(
@@ -381,43 +424,54 @@ MEMORY_RESOURCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Memory
 POLICY_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="PolicyInstance", type_info=TYPE_TYPE)
 POLICY_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Policy", type_info=TYPE_TYPE)
 PROCESS_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Process", type_info=TYPE_TYPE)
-SCHEMA_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="SchemaTag", type_info=TYPE_TYPE)
-SYSTEM_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="System", type_info=TYPE_TYPE)
-STATE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="StateInstance", type_info=TYPE_TYPE)
+REPORT_GROUP_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ReportGroup", type_info=TYPE_TYPE)
 REPRESENTATION_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="RepresentationTag", type_info=TYPE_TYPE)
-UDP_SOCKET_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketInstance", type_info=TYPE_TYPE)
-UDP_SOCKET_ENDPOINT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketEndpoint", type_info=TYPE_TYPE)
+SCHEMA_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="SchemaTag", type_info=TYPE_TYPE)
+SIGNAL_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Signal", type_info=TYPE_TYPE)
+STATE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="StateInstance", type_info=TYPE_TYPE)
+SYSTEM_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="System", type_info=TYPE_TYPE)
 UDP_SOCKET_ENDPOINT_INSTANCE_TYPE: Final = typesys.TypeDef(
     scope=BUILTINS_SCOPE, name="UdpSocketEndpointInstance", type_info=TYPE_TYPE
 )
+UDP_SOCKET_ENDPOINT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketEndpoint", type_info=TYPE_TYPE)
+UDP_SOCKET_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketInstance", type_info=TYPE_TYPE)
+# keep-sorted end
 
 for typ in (
+    # keep-sorted start
     BITS,
     BOOL,
     BYTE,
     BYTES,
     CHANNEL_TYPE,
+    COG_CONFIG_INSTANCE_TYPE,
     COG_INSTANCE_TYPE,
+    COG_STATE_INSTANCE_TYPE,
     DURATION,
     FALSE_VALUE,
     FIXED_ARRAY,
+    FIXED_SOA,
     FLOAT32,
     FLOAT64,
     INT16,
     INT32,
     INT64,
     INT8,
-    OPTIONAL,
     NULLOPT_VALUE,
+    OPTIONAL,
     POD,
     PROTOBUF,
+    PROTOBUF_TO_TAP,
+    REPORT_GROUP_TYPE,
+    REPRESENTATION_TAG_TYPE,
+    SCHEMA_TAG_TYPE,
+    SIGNAL_TYPE,
     STRING,
     SYNC_TIME,
     TACHYON,
     TAP,
     TAPPY,
     TAP_TO_PROTOBUF,
-    PROTOBUF_TO_TAP,
     TRUE_VALUE,
     TYPE_TYPE,
     UINT16,
@@ -426,8 +480,8 @@ for typ in (
     UINT8,
     UUID,
     VAR_ARRAY,
+    VAR_SOA,
     VAR_STRING,
-    SCHEMA_TAG_TYPE,
-    REPRESENTATION_TAG_TYPE,
+    # keep-sorted end
 ):
     BUILTINS_SCOPE.define(typ.name, typ, None)

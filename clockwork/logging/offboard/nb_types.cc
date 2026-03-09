@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/offboard/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>         // IWYU pragma: keep

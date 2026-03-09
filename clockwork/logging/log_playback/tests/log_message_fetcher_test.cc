@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/log_interval.hh"
-#include "clockwork/logging/log_playback/end_of_log.hh"
+#include "clockwork/logging/log_playback/end_of_log_clk_cc.hh"
 #include "clockwork/logging/log_playback/log_message_fetcher.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/log_uuid.hh"
@@ -11,12 +11,13 @@
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -29,7 +30,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <optional>
@@ -43,8 +43,8 @@ namespace clockwork_logging::tests
 namespace
 {
 
-// Helper to append the end_of_log channel metadata to a ChannelPublisherConfigTap.
-void add_end_of_log_channel(jewels::Out<ChannelPublisherConfigTap> config)
+// Helper to append the end_of_log channel metadata to a ChannelPublisherConfig.
+void add_end_of_log_channel(jewels::Out<clockwork::Tappy<ChannelPublisherConfig<>>> config)
 {
   using EndOfLogMessageType = clockwork::Tappy<clockwork_logging::EndOfLog>;
   auto& eol_channel = config->get_underlying_channels().emplace_back();

@@ -7,12 +7,15 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/simplelaunch/config.hh"
 #include "jewels/simplelaunch/service_definition.hh"
+#include "jewels/time/sync_time.hh"
 
-#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace jewels::simplelaunch
 {
@@ -59,7 +62,8 @@ public:
   void stop_process();
 
   /// Start the child process.
-  void start() noexcept;
+  /// @param[in] process_args Extra arguments to pass to the client process
+  void start(std::vector<std::string> process_args) noexcept;
 
   /// Get the name for the log file.
   [[nodiscard]] const filesystem::Path& get_log_file() const noexcept;
@@ -87,6 +91,6 @@ private:
   /// Information for gRPC status reporting.
   ProcessInfo process_info_;
   /// Timer for process exits.
-  std::optional<boost::asio::deadline_timer> maybe_timer_{};
+  std::optional<boost::asio::basic_waitable_timer<jewels::time::SteadyClock>> maybe_timer_{};
 };
 } // namespace jewels::simplelaunch

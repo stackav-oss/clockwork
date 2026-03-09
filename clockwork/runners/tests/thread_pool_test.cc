@@ -52,7 +52,7 @@ TEST_CASE("execute", "[ThreadPool]")
   auto pool = ThreadPool(config);
 
   auto executed_msgs = boost::lockfree::queue<std::optional<TestMsg>>(0);
-  auto execute_cb = [&](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
+  auto execute_cb = [&executed_msgs](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
   { executed_msgs.push(msg); };
 
   auto msg0 = TestMsg{.value = 0};
@@ -79,7 +79,7 @@ TEST_CASE("execute", "[ThreadPool]")
     EPOLLIN | EPOLLET,
     AbstractEPollCallback::make(
       resource,
-      [&](AbstractEPollManager& epollcb, int efd, uint32_t events)
+      [&epoll_event, &epoll_ran, &epoll](AbstractEPollManager& epollcb, int efd, uint32_t events)
       {
         CHECK(efd == *epoll_event);
         CHECK(events == EPOLLIN);

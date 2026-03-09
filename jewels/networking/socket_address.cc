@@ -6,7 +6,6 @@
 #include <arpa/inet.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <cstring>
 #include <netinet/in.h>
 #include <span>
@@ -14,25 +13,20 @@
 
 namespace jewels::networking
 {
-jewels::expected<SocketAddress, filesystem::ErrorCode>
-SocketAddress::create(const std::string& host, uint16_t port, sa_family_t family) noexcept
-{
-  ::sockaddr_in addr{};
-  ::memset(&addr, 0, sizeof(addr));
-  addr.sin_family = family;
-  addr.sin_port = ::htons(port);
-
-  if (::inet_pton(family, host.c_str(), &addr.sin_addr.s_addr) != 1)
-  {
-    return jewels::unexpected(filesystem::make_error_code(errno));
-  }
-
-  return {SocketAddress{addr}};
-}
 
 SocketAddress::SocketAddress(sockaddr_in addr) noexcept
   : addr_{addr}
 {
+}
+
+SocketAddress SocketAddress::create_any_address(uint16_t port) noexcept
+{
+  ::sockaddr_in addr{};
+  ::memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = ::htons(port);
+  addr.sin_addr.s_addr = ::htonl(INADDR_ANY);
+  return SocketAddress{addr};
 }
 
 const ::sockaddr* SocketAddress::ptr() const noexcept

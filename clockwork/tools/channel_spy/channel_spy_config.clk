@@ -1,4 +1,8 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::tools)]
+
 use clockwork::common::process_description;
+use[] clockwork::common::constants;
 
 // Published channel metadata
 schema PublishedChannelMetadata
@@ -6,13 +10,13 @@ schema PublishedChannelMetadata
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 20000;
+    #2 max_schema_definition_size = 30000;
   }
 
   fields
@@ -43,13 +47,13 @@ schema ChannelSpyConfig
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 20000;
+    #2 max_schema_definition_size = 30000;
 
     // Maximum number of channels
     #3 max_num_channels = 2048;
@@ -67,18 +71,5 @@ schema ChannelSpyConfig
   }
 }
 
-cpp_target channel_spy_config
-{
-  options
-  {
-    namespace clockwork::tools;
-  }
-
-  schema PublishedChannelMetadata;
-  representation Tachyon<PublishedChannelMetadata<>>;
-  interface PublishedChannelMetadataTap: Tap<Tachyon<PublishedChannelMetadata<>>>;
-
-  schema ChannelSpyConfig;
-  representation Tachyon<ChannelSpyConfig<>>;
-  interface ChannelSpyConfigTap: Tap<Tachyon<ChannelSpyConfig<>>>;
-}
+instantiate PublishedChannelMetadata<>;
+instantiate ChannelSpyConfig<>;

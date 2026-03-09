@@ -3,9 +3,9 @@
 
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/scaffolding/tests/support/test_cogs_dial.hh"
-#include "clockwork/scaffolding/tests/support/test_msgs.hh"
+#include "clockwork/scaffolding/tests/support/test_msgs_clk_cc.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 

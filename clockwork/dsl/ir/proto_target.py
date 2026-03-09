@@ -5,18 +5,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import cast
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.bazel import proto_targets
 from clockwork.dsl.bazel.targets import Label
-from clockwork.dsl.ir import clkenum, expr, node
+from clockwork.dsl.composition.str_manip import upper_snake_from_camel
+from clockwork.dsl.ir import clkenum, expr, node, schema
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
-from clockwork.dsl.ir.representation import ReprInstantiation
+from clockwork.dsl.ir.representation import ReprInstantiation, ResolvedReprInstantiation
 from clockwork.dsl.ir.typesys import Instantiation
 from clockwork.dsl.serialization import protobuf
 
@@ -35,12 +36,21 @@ def write_to_file(rendered_proto_mod: ProtoModule, root_dir: Path, include_dir: 
         f.write(rendered_proto_mod.render())
 
 
+@dataclass(slots=True)
+class ProtoGeneratedEntities:
+    """Structure for entities passed to ProtoTarget.from_generate_proto."""
+
+    schemas: list[schema.Schema] = field(default_factory=list)
+    enums: list[clkenum.ClkEnum] = field(default_factory=list)
+    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+
+
 @dataclass
 class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTarget]):
     """IR for ProtoTargets."""
 
     options: ProtoTargetOptions
-    representations: list[ReprInstantiation]
+    representations: list[ReprInstantiation | ResolvedReprInstantiation]
     enums: list[EnumTarget]
 
     @classmethod
@@ -63,7 +73,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
                 if representation.name:
                     module.inner_scope.define(representation.name, representation, module.terminals)
             elif enum_cst := statement.maybe_proto_enum():
-                enums.append(EnumTarget.from_cst(enum_cst, module))
+                enums.append(EnumTarget.from_cst(enum_cst, module, options.prefix_enum_value_names))
             else:
                 unknown_statement = get_span(statement.span, module.terminals)
                 msg = f"ProtoTarget unable to convert statement to IR: '{unknown_statement}'"
@@ -80,11 +90,81 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
             enums=enums,
         )
 
+    @classmethod
+    def from_generate_proto(
+        cls: type[ProtoTarget], module: node.Module, entities: ProtoGeneratedEntities
+    ) -> ProtoTarget:
+        """Generate an IR ProtoTarget from the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_proto"
+
+        assert module.generates is not None
+        assert module.inner_attrs is not None
+
+        package = module.inner_attrs.get_proto_package()
+        if package is None:
+            package = ".".join(
+                [
+                    module.module_id.repo,
+                    *(module.module_id.name.split("::")[:-1]),
+                    name,
+                ]
+            )
+
+        go_package = module.inner_attrs.get_proto_go_package()
+        if node.GenerateTarget.go_proto in module.generates and go_package is None:
+            msg = node.append_error_line(
+                module.cst_node, module, "Generating go_proto but proto go_package attribute is not set"
+            )
+            raise ValueError(msg)
+
+        options = ProtoTargetOptions(
+            module=module,
+            cst_node=None,
+            package=package,
+            go_package=go_package,
+            validate_proto=module.inner_attrs.get_proto_validate(),
+            prefix_enum_value_names=False,
+        )
+
+        enums: list[EnumTarget] = []
+        for enum_ir in entities.enums:
+            assert enum_ir.attributes
+            enums.append(EnumTarget(enum_ir, enum_ir.attributes.get_proto_prefix_enum_value_names()))
+
+        representations: list[ReprInstantiation | ResolvedReprInstantiation] = []
+
+        for instantiation in entities.instantiations:
+            assert isinstance(instantiation.typespec, Instantiation)
+            assert isinstance(instantiation.typespec.instantiates, schema.Schema)
+            representations.append(
+                ResolvedReprInstantiation.from_proto_schema(
+                    instantiation.typespec,
+                    module,
+                    instantiation.name or instantiation.typespec.instantiates.name,
+                )
+            )
+
+        for schema_ir in entities.schemas:
+            if schema_ir.programmatically_generated or schema_ir.parameters:
+                continue
+            representations.append(ResolvedReprInstantiation.from_proto_schema(schema_ir, module, schema_ir.name))
+
+        return cls(
+            module=module,
+            cst_node=None,
+            doc=module.doc,
+            name=name,
+            scope=module.inner_scope,
+            options=options,
+            representations=representations,
+            enums=enums,
+        )
+
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         for entity in chain(self.enums, self.representations):
             # mypy can't/won't reason through chain
-            cast("EnumTarget | ReprInstantiation", entity).resolve()  # pyright: ignore[reportUnnecessaryCast] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            cast("EnumTarget | ReprInstantiation", entity).resolve()
 
     def render_and_write(self, root_dir: Path) -> None:
         """Convert to protobuf and write output to files."""
@@ -92,6 +172,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
         proto_module = ProtoModule(
             self.options.package,
             self.options.go_package,
+            self.options.prefix_enum_value_names,
             messages=[],
             imports=set(),
             enums=self.enums,
@@ -115,15 +196,18 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
         )
         deps: set[protobuf.ProtobufDep] = set()
         protobuf_deps: set[protobuf.ProtobufDep] = set()
+        go_dep_labels: set[str] = set()
         for entity in self.representations:
             if not isinstance(entity.typespec, Instantiation):
                 msg = "Representation must be resolved before rendering"
                 raise TypeError(msg)
-            for dep in protobuf.render(entity.name, entity.typespec, entity.module.context).deps:
+            proto_layout = protobuf.render(entity.name, entity.typespec, entity.module.context)
+            for dep in proto_layout.deps:
                 if dep.path.parent == proto_targets.PROTOBUF_PATH:
                     protobuf_deps.add(dep)
                 elif dep.path != module_file_name:
                     deps.add(dep)
+            go_dep_labels.update(proto_layout.go_dep_labels)
         proto_library_name = path_gen.to_proto_library(path_gen.target).name
         proto_cc_library_name = path_gen.to_proto_cc_library(path_gen.target).name
         proto_py_library_name = path_gen.to_proto_py_library(path_gen.target).name
@@ -186,6 +270,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
                             Label("@org_golang_google_protobuf//reflect/protoreflect"),
                             Label("@org_golang_google_protobuf//runtime/protoimpl"),
                             *map(path_gen.to_proto_go_library, deps),
+                            *map(Label, go_dep_labels),
                         ]
                     ),
                     importpath=Label(value=f"{self.options.go_package}"),
@@ -201,6 +286,7 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
     package: str
     go_package: str | None
     validate_proto: bool
+    prefix_enum_value_names: bool
 
     @classmethod
     def from_cst(
@@ -213,10 +299,13 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
         package = None
         go_package = None
         validate_proto = None
+        prefix_enum_value_names = None
 
         # parse the options block if it exists
         if cst_node is not None:
-            package, go_package, validate_proto = ProtoTargetOptions._extract_options(cst_node, module)
+            package, go_package, validate_proto, prefix_enum_value_names = ProtoTargetOptions._extract_options(
+                cst_node, module
+            )
 
         # default package
         if package is None:
@@ -241,15 +330,24 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
         if validate_proto is None:
             validate_proto = True
 
+        # default validate_proto
+        if prefix_enum_value_names is None:
+            prefix_enum_value_names = False
+
         return cls(
-            package=package, go_package=go_package, validate_proto=validate_proto, module=module, cst_node=cst_node
+            package=package,
+            go_package=go_package,
+            validate_proto=validate_proto,
+            prefix_enum_value_names=prefix_enum_value_names,
+            module=module,
+            cst_node=cst_node,
         )
 
     @staticmethod
     def _extract_options(
         cst_node: cst.ProtoTargetOptions,
         module: node.Module,
-    ) -> tuple[str | None, str | None, bool | None]:
+    ) -> tuple[str | None, str | None, bool | None, bool | None]:
         """Parse the options from the CST node without constructing defaults.
 
         If an option is not specified, return None.
@@ -261,6 +359,7 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
         package = None
         go_package = None
         validate_proto = None
+        prefix_enum_value_names = None
 
         for option in cst_node.children_proto_package_option():
             if package is not None:
@@ -277,8 +376,17 @@ class ProtoTargetOptions(node.CstNode[cst.ProtoTargetOptions]):
                 msg = node.append_error_line(cst_node, module, "proto validation option specified twice")
                 raise ValueError(msg)
             validate_proto = get_span(validation_option.child_boolean().span, module.terminals) == "true"
+        for prefix_enum_value_names_option in cst_node.children_proto_prefix_enum_value_names_option():
+            if prefix_enum_value_names is not None:
+                msg = node.append_error_line(
+                    prefix_enum_value_names_option, module, "prefix_enum_value_names option specified twice"
+                )
+                raise ValueError(msg)
+            prefix_enum_value_names = (
+                get_span(prefix_enum_value_names_option.child_boolean().span, module.terminals) == "true"
+            )
 
-        return package, go_package, validate_proto
+        return package, go_package, validate_proto, prefix_enum_value_names
 
 
 @dataclass(eq=True, slots=True)
@@ -286,19 +394,21 @@ class EnumTarget:
     """Instantiates an enum type inside proto_target."""
 
     enum_ir: clkenum.ClkEnum | expr.Expr
+    prefix_enum_value_names: bool
 
     @classmethod
     def from_cst(
         cls: type[EnumTarget],
         cst_node: cst.ProtoEnum,
         module: node.Module,
+        prefix_enum_value_names: bool,
     ) -> EnumTarget:
         """Create an IR node from a CST node."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
         typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
-        return cls(enum_ir=typespec)
+        return cls(enum_ir=typespec, prefix_enum_value_names=prefix_enum_value_names)
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
@@ -321,7 +431,12 @@ class EnumTarget:
         for value in self.enum_ir.values.values():
             assert isinstance(value.integer_value, int)
             assert value.integer_value >= 0
-            lines.append(f"{protobuf.INDENT}{value.name} = {value.integer_value};")
+            if self.prefix_enum_value_names:
+                lines.append(
+                    f"{protobuf.INDENT}{upper_snake_from_camel(self.enum_ir.name + '_' + value.name)} = {value.integer_value};"
+                )
+            else:
+                lines.append(f"{protobuf.INDENT}{value.name} = {value.integer_value};")
         lines.append("}")
         return "\n".join(line for line in lines)
 
@@ -332,6 +447,7 @@ class ProtoModule:
 
     package: str
     go_package: str | None
+    prefix_enum_value_names: bool
     messages: list[protobuf.ProtobufMsgLayout]
     enums: list[EnumTarget]
     imports: set[str]

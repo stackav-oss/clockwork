@@ -2,9 +2,9 @@
 #pragma once
 #include "clockwork/tools/channel_spy/tests/support/test_support.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/uuid/uuid.hh"
@@ -21,9 +21,9 @@ namespace clockwork::tools::tests::support
 /// @return Generated configuration
 template <typename MessageType>
   requires TappyType<MessageType>
-[[nodiscard]] std::unique_ptr<ChannelSpyConfigTap> gen_channel_spy_config()
+[[nodiscard]] std::unique_ptr<Tappy<ChannelSpyConfig<>>> gen_channel_spy_config()
 {
-  auto config = std::make_unique<ChannelSpyConfigTap>();
+  auto config = std::make_unique<Tappy<ChannelSpyConfig<>>>();
 
   auto& channel1 = config->get_underlying_channels().emplace_back();
   channel1.set_uuid(jewels::Uuid<common::EndpointInstanceId>::random_uuid());

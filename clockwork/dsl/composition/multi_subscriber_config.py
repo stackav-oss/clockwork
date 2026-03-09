@@ -29,6 +29,6 @@ MultiSubscriberConfig: Final[type[multi_subscriber_config_proto.MultiSubscriberC
         MSC_MODULE.context,
         MSC_MODULE,
         "MultiSubscriberConfig",
-        max_publishers=256,
+        max_publishers=1024,
     )[0]
 )

@@ -54,6 +54,9 @@ public:
   /// Get the layout of the underlying buffer.
   [[nodiscard]] const BufferLayout& layout() const noexcept;
 
+  /// Get the underlying buffer
+  [[nodiscard]] const Buffer& buffer() const noexcept;
+
   /// Add an observer (e.g., a subscriber) to be notified whenever a
   /// new message is committed.
   /// @note This does not take ownership of the observer.
@@ -287,49 +290,6 @@ private:
 
   /// Number reserved.
   size_t count_;
-};
-
-/// A typed wrapper around ReservedSlot that can be passed to a cog.
-template <class Message>
-class Publishable
-{
-public:
-  /// Try to construct a publishable message.
-  /// @note Will only return a valid message if marshal_as(...) would
-  /// return a valid pointer.
-  /// @param reserved_slot The reserved slot to construct from.
-  [[nodiscard]] static jewels::expected<Publishable<Message>, jewels::MonoError>
-  try_make(jewels::memory::ObjectPtr<ReservedSlot> reserved_slot) noexcept;
-
-  /// Get the underlying message.
-  [[nodiscard]] Message& message() const noexcept;
-
-  /// Ask the infrastructure to publish the message.
-  /// @note Publish does not happen at the time of calling this.  The
-  /// actual publish is taken care of by the underlying reserved slot.
-  /// @note This is a no-op if !connected().
-  void mark_for_publish() noexcept;
-
-  /// Ask the infrastructure to publish the message with a fake time (sim only).
-  /// @note Publish does not happen at the time of calling this.  The
-  /// actual publish is taken care of by the underlying reserved slot.
-  /// @note This should only be used in simulation or testing.
-  /// @param fake_time The fake time to use for the publish timestamp.
-  void sim_only_mark_for_publish_with_fake_timestamp(jewels::time::SyncTime fake_time) noexcept;
-
-  /// Check if this publishable is marked for publish.
-  [[nodiscard]] bool is_marked_for_publish() const noexcept;
-
-  /// Check if this publishable is connected to a channel.
-  [[nodiscard]] bool connected() const noexcept;
-
-private:
-  /// Construct a publishable message.
-  /// @param reserved_slot The reserved slot.
-  explicit Publishable(jewels::memory::ObjectPtr<ReservedSlot> reserved_slot) noexcept;
-
-  /// The underlying reserved slot.
-  jewels::memory::ObjectPtr<ReservedSlot> reserved_slot_;
 };
 
 /// Process marked slots (either for commit or discard).

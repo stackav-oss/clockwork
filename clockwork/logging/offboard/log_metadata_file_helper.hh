@@ -41,7 +41,7 @@ public:
 
   /// @see LogMetadataHelperInterface::initialize
   [[nodiscard]] LogExpected<void>
-  initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory& chunk_reader_factory) override;
+  initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory<>& chunk_reader_factory) override;
 
   /// @see LogMetadataHelperInterface::list_log_files
   [[nodiscard]] LogExpected<std::pmr::vector<std::pmr::string>> list_log_files(
@@ -95,10 +95,10 @@ private:
 /// @param[in] memory_resource Memory resource
 /// @param[in] log_metadata_uri Log metadata file file URI
 /// @param[in] chunk_reader_factory Chunk reader factory
-/// @return Pointer to a log metadata file helper of LogError on failure
+/// @return Pointer to a log metadata file helper or LogError on failure
 [[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_metadata_file_helper(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& log_metadata_uri,
-  ChunkReaderWriterFactory& chunk_reader_factory);
+  ChunkReaderWriterFactory<>& chunk_reader_factory);
 
 } // namespace clockwork_logging::offboard

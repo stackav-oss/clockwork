@@ -1,23 +1,9 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 // TenNanoseconds strong type
+#[cpp(type_header="clockwork/dsl/cog/ten_nanosecond_type.hh", type_namespace=clockwork, type_factory=ten_nanoseconds_factory)]
 strong_type TenNanoseconds
 {
   underlying_type: UInt32;
-}
-
-cpp_target ten_nanoseconds
-{
-  options
-  {
-    namespace unused;
-  }
-  extern
-  {
-    header_file: "clockwork/dsl/cog/ten_nanosecond_type.hh";
-    namespace: clockwork;
-    type
-    {
-        name: TenNanoseconds;
-        factory: ten_nanoseconds_factory;
-    }
-  }
 }

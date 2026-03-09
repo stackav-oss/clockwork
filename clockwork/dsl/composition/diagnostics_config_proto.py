@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from clockwork.serialization.py.protocol import Tachyon
+from clockwork.serialization.py.protocol import Protocol, Tachyon
 
 
 @dataclass(kw_only=True)

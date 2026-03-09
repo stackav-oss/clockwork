@@ -4,6 +4,7 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/v1/writer_config.pb.h"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -12,7 +13,6 @@
 #include <google/protobuf/repeated_ptr_field.h>
 #include <google/protobuf/text_format.h>
 
-#include <filesystem>
 #include <fstream>
 #include <memory_resource>
 #include <span>
@@ -42,7 +42,7 @@ TEST_CASE("File URIs")
   REQUIRE(factory.create_directories(sub_dir_path.string()));
   REQUIRE(factory.exists(sub_dir_path.string()) == true);
   REQUIRE(factory.list_log_files(sub_dir_path.string()) == std::pmr::vector<std::pmr::string>{});
-  std::ofstream ofs(log_file_path.string());
+  std::ofstream ofs{std::string(log_file_path)};
   REQUIRE(ofs);
   ofs.close();
   REQUIRE(

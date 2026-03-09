@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/shm_subscriber.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/tools/channel_spy/types.hh"
@@ -28,11 +28,7 @@ class ChannelSpySubscriber
 {
   /// Generic callback function
   using GenericCallbackFunction = std::function<void(
-    uint64_t sequence_number,
-    int64_t message_time,
-    std::span<const std::byte> data,
-    const pinion::SubscriberHandle& subscriber_handle,
-    pinion::BufferIterator buffer_iter)>;
+    uint64_t sequence_number, int64_t message_time, std::span<const std::byte> data, pinion::SlotRef slot_ref)>;
 
 public:
   /// Make a channel spy subscriber to receive raw message data
@@ -129,8 +125,8 @@ private:
   /// Pinion subscriber handle
   pinion::SubscriberHandle subscriber_handle_;
 
-  /// Last message buffer iterator
-  pinion::BufferIterator last_iter_;
+  /// Last message iterator
+  pinion::SlotRef last_iter_;
 
   /// Callback function
   GenericCallbackFunction callback_fn_;

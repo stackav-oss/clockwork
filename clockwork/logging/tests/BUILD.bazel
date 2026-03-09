@@ -34,7 +34,6 @@ cc_test(
         "//clockwork/logging:log_error",
         "//clockwork/logging:xxh3_checksum",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
         "//jewels/std:expected",
         "@catch2//:catch2_main",
     ],
@@ -65,6 +64,28 @@ cc_test(
     deps = [
         "//clockwork/logging:log_timestamp",
         "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "message_encoding_test",
+    srcs = ["message_encoding_test.cc"],
+    deps = [
+        "//clockwork/logging:cpp_message_encoding",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//jewels/testing:wise_enum_sync",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "schema_encoding_test",
+    srcs = ["schema_encoding_test.cc"],
+    deps = [
+        "//clockwork/logging:cpp_schema_encoding",
+        "//clockwork/logging:schema_encoding_clk_cc",
+        "//jewels/testing:wise_enum_sync",
         "@catch2//:catch2_main",
     ],
 )

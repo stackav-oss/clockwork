@@ -5,7 +5,7 @@
 
 #include "clockwork/repr_iface.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string_view.h>
@@ -38,10 +38,11 @@ std::span<uint8_t, sizeof(clockwork::Tappy<SchemaT>)> make_tappy_span(clockwork:
 template <typename SchemaT>
 std::span<const uint8_t, sizeof(clockwork::Tappy<SchemaT>)> make_tappy_span(const clockwork::Tappy<SchemaT>& message)
 {
-  // It's cleaner to just reinterpret cast because nb::ndarray uses uint8_t, and std::as_bytes/as_writable_bytes require
-  // std::byte. NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   return std::span<const uint8_t, sizeof(clockwork::Tappy<SchemaT>)>(
-    reinterpret_cast<const uint8_t*>(&message), sizeof(message));
+    // It's cleaner to just reinterpret cast because nb::ndarray uses uint8_t, and std::as_bytes/as_writable_bytes
+    // require std::byte. NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    reinterpret_cast<const uint8_t*>(&message),
+    sizeof(message));
 }
 
 template <int64_t nbytes>
@@ -190,27 +191,30 @@ void bind_tachyon_constraint_and_metadata(
     },
     nb::sig("def get_tachyon_metadata_name() -> str"));
 
-  // deserialize the metadata to clockwork::TachyonMetadata and store it as a class attribute
-  nb::bytes metadata_bytes(
-    ::clockwork::LoggingTraits<clockwork::Tappy<SchemaT>>::schema_definition.data(),
-    ::clockwork::LoggingTraits<clockwork::Tappy<SchemaT>>::schema_definition.size());
-  setattr(
-    cls,
-    "__tachyon_metadata",
-    nb::module_::import_("clockwork.serialization.metadata.tachyon")
-      .attr("get_metadata_from_protobuf")(metadata_bytes));
+  if constexpr (::clockwork::LoggingTraits<clockwork::Tappy<SchemaT>>::has_metadata)
+  {
+    // deserialize the metadata to clockwork::TachyonMetadata and store it as a class attribute
+    nb::bytes metadata_bytes(
+      ::clockwork::LoggingTraits<clockwork::Tappy<SchemaT>>::schema_definition.data(),
+      ::clockwork::LoggingTraits<clockwork::Tappy<SchemaT>>::schema_definition.size());
+    setattr(
+      cls,
+      "__tachyon_metadata",
+      nb::module_::import_("clockwork.serialization.metadata.tachyon")
+        .attr("get_metadata_from_protobuf")(metadata_bytes));
 
-  // Define get_tachyon_metadata(), which simply retrieves the metadata
-  cls.def_static(
-    "get_tachyon_metadata",
-    []() -> nb::object
-    {
-      nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
-      return nb::getattr(class_handle, "__tachyon_metadata");
-    },
-    nb::sig(
-      "def get_tachyon_metadata() -> "
-      "clockwork.serialization.metadata.tachyon_model.TachyonMetadata"));
+    // Define get_tachyon_metadata(), which simply retrieves the metadata
+    cls.def_static(
+      "get_tachyon_metadata",
+      []() -> nb::object
+      {
+        nb::handle class_handle = nb::type<clockwork::Tappy<SchemaT>>();
+        return nb::getattr(class_handle, "__tachyon_metadata");
+      },
+      nb::sig(
+        "def get_tachyon_metadata() -> "
+        "clockwork.serialization.metadata.tachyon_model.TachyonMetadata"));
+  }
 
   // Define get_tachyon_constraint(), which forms the constraint on demand
   cls.def_static(

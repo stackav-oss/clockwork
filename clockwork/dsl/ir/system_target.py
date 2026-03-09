@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from clockwork.dsl import cst
-from clockwork.dsl.ir import box, clkbuiltins, expr, node, typesys
+from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl.ir import box, clkbuiltins, expr, node, signal_policy_validation, typesys
 from clockwork.dsl.ir.cst_util import get_span
 
 
@@ -71,6 +71,8 @@ class UnresolvedSystemTarget(node.CstNode[cst.SystemTarget], node.DocableEntity,
         box_instance = box_template.make_instance(
             cst_node=None, module=self.module, scope=self.scope, name=self.name, doc=self.doc
         )
+
+        signal_policy_validation.validate_signal_policies(self.module)
         self.resolved = SystemTarget(
             name=self.name,
             scope=self.scope,

@@ -1,4 +1,4 @@
-use clockwork::python::python_state::PythonState;
+use clockwork::python::python_state::{PythonState};
 use clockwork::python::tests::support::test_config;
 use clockwork::python::tests::support::test_input_message;
 use clockwork::python::tests::support::test_output_message;
@@ -65,8 +65,8 @@ cog PythonCog
 
   execution
   {
-    condition new_input1: new_message(input1, min=1, max=1);
-    condition new_input2: new_message(input2, min=1, max=1);
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=1);
     execute when: new_input1 or new_input2;
   }
 
@@ -97,11 +97,11 @@ py_target py_python_cog_dial
 
   python_cog_dial PythonCog
   {
-    configs.config: "clockwork.python.tests.support.py_test_config.TestConfig";
+    configs.config: "clockwork.python.tests.support.test_config_clk_py.TestConfig";
     states.state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
-    inputs.input1: "clockwork.python.tests.support.py_test_input_message.TestInputMessage";
+    inputs.input1: "clockwork.python.tests.support.test_input_message_clk_py.TestInputMessage";
     inputs.input2: "clockwork.python.tests.support.test_input_message_clk_nb.TestInputMessage";
-    outputs.output1: "clockwork.python.tests.support.py_test_output_message.TestOutputMessage";
+    outputs.output1: "clockwork.python.tests.support.test_output_message_clk_py.TestOutputMessage";
     outputs.output2: "clockwork.python.tests.support.test_output_message_clk_nb.TestOutputMessage";
   }
 }

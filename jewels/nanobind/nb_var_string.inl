@@ -3,7 +3,7 @@
 
 #include "jewels/container/tap/var_string.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string_view.h> // IWYU pragma: keep
 

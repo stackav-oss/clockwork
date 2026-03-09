@@ -1,3 +1,6 @@
+#![generate(cpp, py, nanobind)]
+#![cpp(namespace=clockwork_logging::tests)]
+
 // TestMessage
 schema TestMessage
 {
@@ -8,27 +11,4 @@ schema TestMessage
     // Test message string
     #1 message_string: VarString<255>;
   }
-}
-
-cpp_target test_message
-{
-  options
-  {
-    namespace clockwork_logging::tests;
-  }
-
-  schema TestMessage;
-
-  representation Tachyon<TestMessage>;
-  interface Tappy<TestMessage>;
-}
-
-py_target py_test_message
-{
-    interface Tappy<TestMessage>;
-}
-
-nanobind_target test_message_clk_nb
-{
-    binding Tappy<TestMessage>;
 }

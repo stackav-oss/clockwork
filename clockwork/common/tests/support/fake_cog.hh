@@ -5,7 +5,7 @@
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/file.hh"

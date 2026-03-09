@@ -4,12 +4,14 @@
 
 """Unit tests for tachyon_reg module."""
 
+from decimal import Decimal
 from typing import Final
 from unittest.mock import MagicMock
 
 import pytest
 from clockwork.dsl.compiler_context import CompilerContext
-from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, importer, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, importer, primitive, schema, typesys
+from clockwork.dsl.ir.module_id import ModuleID
 from clockwork.dsl.serialization import tachyon_reg
 
 
@@ -71,6 +73,7 @@ def test_constraint_for_enum(context: CompilerContext) -> None:
         underlying_type=clkbuiltins.UINT8,
         resolved=None,
         history=None,
+        attributes=None,
         linter_overrides=set(),
         has_explicit_underlying_type=False,
     )
@@ -114,12 +117,8 @@ def test_constraint_for_enum(context: CompilerContext) -> None:
         bit_flags=False,
         underlying_type=clkbuiltins.UINT8,
         source=typ,
-        history=clkenum.ResolvedEnumHistory(
-            versions=[],
-            pseudoversions=[],
-            values={},
-            options=None,
-        ),
+        history=clkenum.EnumHistory(version=1, legacy_became={}, removed=set()),
+        attributes=None,
         linter_overrides=set(),
         has_explicit_values=False,
         has_explicit_underlying_type=False,
@@ -197,3 +196,284 @@ def test_field_constraint_optional(
 
     expected: Final = tachyon_reg.FieldConstraint(size=expected_size, alignment=expected_alignment)
     assert result == expected
+
+
+def test_soa_size_field_uint8() -> None:
+    """Test that VarSoa with max_size <= 255 uses UInt8 for size field."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // X coordinate
+        #1 x: Float32;
+        // Y coordinate
+        #2 y: Float32;
+        // Z coordinate
+        #3 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_resolved = point3f_schema.get_resolved()
+
+    # VarSoa<Point3f, 100>: should use UInt8 size field (1 byte)
+    var_soa_100 = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.VAR_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(point3f_resolved),
+            "max_size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(100)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, var_soa_100)
+    assert constraint is not None
+    # 3 fields * 100 elements * 4 bytes = 1200 bytes + 1 byte size field = 1201 bytes
+    # Aligned to max alignment (4): 1204 bytes
+    assert constraint.size == 1204
+    assert constraint.alignment == 4
+
+
+def test_soa_size_field_uint16() -> None:
+    """Test that VarSoa with 256 <= max_size <= 65535 uses UInt16 for size field."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // X coordinate
+        #1 x: Float32;
+        // Y coordinate
+        #2 y: Float32;
+        // Z coordinate
+        #3 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_resolved = point3f_schema.get_resolved()
+
+    # VarSoa<Point3f, 1000>: should use UInt16 size field (2 bytes)
+    var_soa_1000 = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.VAR_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(point3f_resolved),
+            "max_size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(1000)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, var_soa_1000)
+    assert constraint is not None
+    # 3 fields * 1000 elements * 4 bytes = 12000 bytes
+    # + 2 byte UInt16 size field = 12002 bytes
+    # Aligned to max alignment (4): 12004 bytes
+    assert constraint.size == 12004
+    assert constraint.alignment == 4
+
+
+def test_soa_size_field_uint32() -> None:
+    """Test that VarSoa with 65536 <= max_size <= 4294967295 uses UInt32 for size field."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // X coordinate
+        #1 x: Float32;
+        // Y coordinate
+        #2 y: Float32;
+        // Z coordinate
+        #3 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_resolved = point3f_schema.get_resolved()
+
+    # VarSoa<Point3f, 100000>: should use UInt32 size field (4 bytes)
+    var_soa_100000 = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.VAR_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(point3f_resolved),
+            "max_size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(100000)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, var_soa_100000)
+    assert constraint is not None
+    # 3 fields * 100000 elements * 4 bytes = 1200000 bytes
+    # Aligned to 4 for UInt32 size field: 1200000 bytes (already aligned)
+    # + 4 byte size field = 1200004 bytes
+    # Aligned to max alignment (4): 1200004 bytes (already aligned)
+    assert constraint.size == 1200004
+    assert constraint.alignment == 4
+
+
+def test_soa_field_alignment() -> None:
+    """Test that SoA properly aligns fields with different alignment requirements."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // MixedAlignment - fields intentionally out of alignment order
+    schema MixedAlignment
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // 2-byte field first
+        #1 small: UInt16;
+        // 8-byte field second
+        #2 large: Int64;
+        // 1-byte field third
+        #3 tiny: UInt8;
+        // 4-byte field fourth
+        #4 medium: Int32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "mixed"), importer=fs_importer)
+    mixed_schema = module.inner_scope.lookup("MixedAlignment")
+    assert isinstance(mixed_schema, schema.Schema)
+    mixed_resolved = mixed_schema.get_resolved()
+
+    # FixedSoa<MixedAlignment, 7> - using odd size to force padding
+    # Fields sorted by alignment (descending): large (8), medium (4), small (2), tiny (1)
+    # large: 7 * 8 = 56 bytes (starts at 0)
+    # medium: 7 * 4 = 28 bytes (starts at 56, already 4-byte aligned)
+    # small: 7 * 2 = 14 bytes (starts at 84, already 2-byte aligned)
+    # tiny: 7 * 1 = 7 bytes (starts at 98, no alignment needed)
+    # Total: 105 bytes, aligned to max (8)
+    fixed_soa = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.FIXED_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(mixed_resolved),
+            "size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(7)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, fixed_soa)
+    assert constraint is not None
+    # Total: 105 bytes, aligned to max alignment (8): 112 bytes
+    assert constraint.size == 112
+    assert constraint.alignment == 8
+
+
+def test_soa_field_alignment_with_padding() -> None:
+    """Test SoA with fields that require inter-field padding due to misalignment."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // RequiresPadding
+    schema RequiresPadding
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // 1-byte field first
+        #1 byte_field: UInt8;
+        // 8-byte field second
+        #2 big_field: Int64;
+        // 2-byte field third
+        #3 word_field: UInt16;
+        // 4-byte field fourth
+        #4 dword_field: Int32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "padding"), importer=fs_importer)
+    requires_padding_schema = module.inner_scope.lookup("RequiresPadding")
+    assert isinstance(requires_padding_schema, schema.Schema)
+    requires_padding_resolved = requires_padding_schema.get_resolved()
+
+    # VarSoa<RequiresPadding, 65537> - Forcing padding before size field
+    # Fields sorted by alignment (descending): big_field (8), dword_field (4), word_field (2), byte_field (1)
+    # big_field: 65537 * 8 = 524296 bytes (starts at 0)
+    # dword_field: 65537 * 4 = 262148 bytes (starts at 524296, already 4-byte aligned)
+    # word_field: 65537 * 2 = 131074 bytes (starts at 786444, already 2-byte aligned)
+    # byte_field: 65537 * 1 = 65537 bytes (starts at 917518, no alignment needed)
+    # Total SoA data: 983055 bytes
+    # Align to 4 for UInt32 size field: 983056 bytes (needs 1 byte padding)
+    # + 4 byte UInt32 size field = 983060 bytes
+    fixed_soa = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.VAR_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(requires_padding_resolved),
+            "max_size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(65537)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, fixed_soa)
+    assert constraint is not None
+    # Total: 983060 bytes, aligned to max alignment (8): 983064 bytes
+    assert constraint.size == 983064
+    assert constraint.alignment == 8
+
+
+def test_empty_soa() -> None:
+    """Test that SoA with size 0 has minimal constraint."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // X coordinate
+        #1 x: Float32;
+        // Y coordinate
+        #2 y: Float32;
+        // Z coordinate
+        #3 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_resolved = point3f_schema.get_resolved()
+
+    # FixedSoa<Point3f, 0>
+    fixed_soa_empty = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.FIXED_SOA,
+        arguments={
+            "type": schema.InstantiatedSchema.from_typespec(point3f_resolved),
+            "size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(0)),
+        },
+    )
+    constraint = tachyon_reg.constraint_for_type(module.context, fixed_soa_empty)
+    assert constraint is not None
+    assert constraint.size == 0
+    assert constraint.alignment == 1

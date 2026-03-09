@@ -4,8 +4,8 @@
 #include "clockwork/cog/cog_conditions.hh"
 
 #include "clockwork/cog/input_condition.hh"
-#include "clockwork/common/process_description.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -105,7 +105,7 @@ auto CogConditions<Policies...>::make_conditions() const -> ConditionsTuple
 
 template <typename... Policies>
 void CogConditions<Policies...>::commit(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::BufferIterator last_consumed)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SlotRef last_consumed)
 {
   auto update = [&endpoint_id, &last_consumed]<typename Policy>(std::unique_ptr<InputCondition<Policy>>& condition)
   {
@@ -176,6 +176,13 @@ auto CogConditions<Policies...>::get_max_new_msgs(const ConditionsTuple& conditi
 
     return *max_new_msgs;
   }
+}
+
+template <typename... Policies>
+template <size_t index>
+void CogConditions<Policies...>::set_unit_test_condition(pinion::SubscriberHandle handle)
+{
+  std::get<index>(conditions_) = std::make_unique<InputCondition<PolicyType<index>>>(handle);
 }
 
 } // namespace clockwork

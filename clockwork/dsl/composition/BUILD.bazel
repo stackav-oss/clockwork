@@ -24,11 +24,13 @@ py_library(
     name = "channel_spy_config",
     srcs = ["channel_spy_config.py"],
     data = [
+        "//clockwork/common:constants.clk",
         "//clockwork/common:process_description.clk",
         "//clockwork/tools/channel_spy:channel_spy_config.clk",
     ],
     deps = [
         ":channel_spy_config_proto",
+        ":constants",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
@@ -40,6 +42,11 @@ py_library(
     name = "channel_spy_config_proto",
     srcs = ["channel_spy_config_proto.py"],
     deps = ["//clockwork/serialization/py:protocol"],
+)
+
+py_library(
+    name = "constants",
+    srcs = ["constants.py"],
 )
 
 py_library(
@@ -104,6 +111,9 @@ py_library(
         ":publisher_config",
         ":publisher_config_proto",
         ":system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/serialization:tachyon_reg",
         "//clockwork/serialization/metadata:tachyon",
         "//clockwork/serialization/metadata:tachyon_model_py_library",
     ],
@@ -116,8 +126,11 @@ py_library(
         ":metrics_channel_metadata_config",
         ":metrics_channel_metadata_config_proto",
         ":system",
+        "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
         "//clockwork/serialization/metadata:tachyon",
     ],
 )
@@ -134,6 +147,22 @@ py_library(
 )
 
 py_library(
+    name = "gen_signal_metadata_configs",
+    srcs = ["gen_signal_metadata_configs.py"],
+    deps = [
+        ":signal_metadata_config",
+        ":signal_metadata_config_proto",
+        ":system",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:report_group",
+        "//clockwork/dsl/ir:signal",
+        "//clockwork/dsl/ir:signal_registry",
+        "//clockwork/dsl/ir:uuid_reg",
+    ],
+)
+
+py_library(
     name = "genpd",
     srcs = ["genpd.py"],
     deps = [
@@ -146,6 +175,7 @@ py_library(
         "//clockwork/dsl/ir:diagnostics",
         "//clockwork/dsl/ir:extern_type",
         "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:representation",
         "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
@@ -170,6 +200,7 @@ py_library(
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:pubsub",
         "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:udp",
@@ -193,6 +224,7 @@ py_library(
     name = "logger_config",
     srcs = ["logger_config.py"],
     data = [
+        "//clockwork/common:constants.clk",
         "//clockwork/logging:channel_policy.clk",
         "//clockwork/logging:channel_type.clk",
         "//clockwork/logging:log_uuid_tag.clk",
@@ -201,12 +233,16 @@ py_library(
         "//clockwork/logging:schema_encoding.clk",
     ],
     deps = [
+        ":constants",
         ":logger_config_proto",
+        "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:policy",
         "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -220,11 +256,13 @@ py_library(
     name = "metrics_channel_metadata_config",
     srcs = ["metrics_channel_metadata_config.py"],
     data = [
+        "//clockwork/common:constants.clk",
         "//clockwork/common:process_description.clk",
         "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config.clk",
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":constants",
         ":metrics_channel_metadata_config_proto",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
@@ -308,8 +346,12 @@ py_library(
 py_library(
     name = "publisher_config",
     srcs = ["publisher_config.py"],
-    data = ["//clockwork/logging:channel_publisher_config.clk"],
+    data = [
+        "//clockwork/common:constants.clk",
+        "//clockwork/logging:channel_publisher_config.clk",
+    ],
     deps = [
+        ":constants",
         ":publisher_config_proto",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
@@ -325,6 +367,50 @@ py_library(
 )
 
 py_library(
+    name = "signal_metadata_config",
+    srcs = ["signal_metadata_config.py"],
+    data = [
+        "//clockwork/common:constants.clk",
+        "//clockwork/common:process_description.clk",
+        "//clockwork/common:signal_metadata_config.clk",
+        "//clockwork/logging:channel_policy.clk",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":constants",
+        ":signal_metadata_config_proto",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/serialization/py:tachyon_dyn",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "signal_metadata_config_proto",
+    srcs = ["signal_metadata_config_proto.py"],
+    visibility = ["//visibility:public"],
+    deps = ["//clockwork/serialization/py:protocol"],
+)
+
+py_library(
+    name = "snapshot_config",
+    srcs = ["snapshot_config.py"],
+    data = ["@clockwork//std:snapshot.clk"],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer_registry",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:policy",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
     name = "str_manip",
     srcs = ["str_manip.py"],
     visibility = ["//visibility:public"],
@@ -337,6 +423,7 @@ py_library(
         ":graphir",
         ":logger_config",
         ":logger_config_proto",
+        ":snapshot_config",
         ":str_manip",
         "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:audio",
@@ -350,9 +437,12 @@ py_library(
         "//clockwork/dsl/ir:policy",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:report_group",
+        "//clockwork/dsl/ir:representation",
         "//clockwork/dsl/ir:schema_reg",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:udp",
+        "//clockwork/dsl/ir:units",
         "//clockwork/dsl/ir:uuid_reg",
     ],
 )
@@ -362,16 +452,19 @@ py_library(
     srcs = ["systemgen.py"],
     deps = [
         ":bridgegen",
+        ":diagnostics_config",
         ":gen_channel_allocation_report",
         ":gen_channel_spy_configs",
         ":gen_diagnostics_configs",
         ":gen_logger_configs",
         ":gen_metrics_channel_metadata_configs",
         ":gen_multi_subscriber_configs",
+        ":gen_signal_metadata_configs",
         ":genpd",
         ":launchgen",
         ":logger_config",
         ":pdf",
+        ":signal_metadata_config",
         ":system",
         "//clockwork/dsl/bazel:simple_launch_targets",
         "//clockwork/dsl/bazel:targets",

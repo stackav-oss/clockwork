@@ -4,6 +4,7 @@
 """Tests for topology library."""
 
 # pyright: reportPrivateUsage=false
+import re
 from pathlib import Path
 
 import pytest
@@ -14,36 +15,39 @@ from clockwork.tools.topology import topology
 def fake_system() -> topology.System:
     cpu_a = "cpu_a"
     cpu_b = "cpu_b"
+    proc_a = "proc_a"
+    proc_b = "proc_b"
     cpus = [cpu_a, cpu_b]
     entities = [
         topology.Entity(
             name="source_socket",
             inputs=[],
             outputs=["source_chan"],
-            cpu=cpu_a,
+            process=proc_a,
         ),
         topology.Entity(
             name="source_cog",
             inputs=["source_chan"],
             outputs=["multi_node_chan"],
-            cpu=cpu_a,
+            process=proc_a,
         ),
         topology.Entity(
             name="sink_cog",
             inputs=["multi_node_chan"],
             outputs=["sink_chan"],
-            cpu=cpu_b,
+            process=proc_b,
         ),
         topology.Entity(
             name="sink_socket",
             inputs=["sink_chan"],
             outputs=[],
-            cpu=cpu_b,
+            process=proc_b,
         ),
     ]
     channels = [
         topology.Channel(
             name="source_chan",
+            size=10,
             publishers=[],
             subscribers=[],
             message_type="SourceMessage",
@@ -51,6 +55,7 @@ def fake_system() -> topology.System:
         ),
         topology.Channel(
             name="multi_node_chan",
+            size=10,
             publishers=[],
             subscribers=[],
             message_type="MultiNodeMessage",
@@ -58,15 +63,25 @@ def fake_system() -> topology.System:
         ),
         topology.Channel(
             name="sink_chan",
+            size=10,
             publishers=[],
             subscribers=[],
             message_type="SinkMessage",
             message_size=1,
         ),
     ]
+    processes = {
+        proc: topology.Process(
+            name=proc,
+            cpu=cpu,
+            entities=[entity.name for entity in entities if entity.process == proc],
+        )
+        for proc, cpu in zip([proc_a, proc_b], [cpu_a, cpu_b], strict=True)
+    }
     entity_dict = {entity.name: entity for entity in entities}
     cpu_dict = {
-        cpu: topology.Cpu(name=cpu, entities=[entity.name for entity in entities if entity.cpu == cpu]) for cpu in cpus
+        cpu: topology.Cpu(name=cpu, processes=[proc.name for proc in processes.values() if proc.cpu == cpu])
+        for cpu in cpus
     }
     for channel in channels:
         channel.publishers = sorted(entity.name for entity in entities if channel.name in entity.outputs)
@@ -77,6 +92,7 @@ def fake_system() -> topology.System:
         cpus=cpu_dict,
         entities=entity_dict,
         channels=channel_dict,
+        processes=processes,
     )
 
 
@@ -150,27 +166,57 @@ def test_mismatched_channel_name(fake_system: topology.System) -> None:
         topology.validate_system(fake_system)
 
 
-def test_invalid_cpus(fake_system: topology.System) -> None:
-    fake_system.entities["source_socket"].cpu = "unknown_cpu"
-    with pytest.raises(ValueError, match=r"Entity source_socket is assigned to an invalid cpu unknown_cpu"):
+def test_invalid_process_for_entity(fake_system: topology.System) -> None:
+    fake_system.entities["source_socket"].process = "unknown_process"
+    with pytest.raises(
+        ValueError,
+        match=re.escape(r"Entity source_socket is expected to be in process unknown_process, but found in ['proc_a']"),
+    ):
         topology.validate_system(fake_system)
 
 
-def test_cpu_missing_entity(fake_system: topology.System) -> None:
-    fake_system.cpus["cpu_a"].entities.remove("source_socket")
-    with pytest.raises(ValueError, match=r"CPU cpu_a does not contain entity source_socket."):
+def test_process_missing_entity(fake_system: topology.System) -> None:
+    fake_system.processes["proc_a"].entities.remove("source_socket")
+    with pytest.raises(
+        ValueError, match=re.escape(r"Entity source_socket is expected to be in process proc_a, but found in []")
+    ):
         topology.validate_system(fake_system)
 
 
-def test_multiple_cpus_contain_entity(fake_system: topology.System) -> None:
-    fake_system.cpus["cpu_b"].entities.append("source_socket")
-    with pytest.raises(ValueError, match=r"Entity source_socket found in multiple cpus."):
+def test_multiple_processes_containe_entity(fake_system: topology.System) -> None:
+    fake_system.processes["proc_b"].entities.append("source_socket")
+    with pytest.raises(
+        ValueError,
+        match=re.escape(r"Entity source_socket is expected to be in process proc_a, but found in ['proc_a', 'proc_b']"),
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_invalid_cpu_for_process(fake_system: topology.System) -> None:
+    fake_system.processes["proc_a"].cpu = "unknown_cpu"
+    with pytest.raises(
+        ValueError, match=re.escape(r"Process proc_a is expected to be in cpu unknown_cpu, but found in ['cpu_a']")
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_cpu_missing_process(fake_system: topology.System) -> None:
+    fake_system.cpus["cpu_a"].processes.remove("proc_a")
+    with pytest.raises(ValueError, match=re.escape(r"Process proc_a is expected to be in cpu cpu_a, but found in []")):
+        topology.validate_system(fake_system)
+
+
+def test_multiple_cpus_contain_process(fake_system: topology.System) -> None:
+    fake_system.cpus["cpu_b"].processes.append("proc_a")
+    with pytest.raises(
+        ValueError, match=re.escape(r"Process proc_a is expected to be in cpu cpu_a, but found in ['cpu_a', 'cpu_b']")
+    ):
         topology.validate_system(fake_system)
 
 
 def test_cpu_contains_phantom_entity(fake_system: topology.System) -> None:
-    fake_system.cpus["cpu_b"].entities.append("phantom_entity")
-    with pytest.raises(ValueError, match=r"CPU cpu_b expected additional entities that didn't exist: phantom_entity"):
+    fake_system.cpus["cpu_b"].processes.append("phantom_process")
+    with pytest.raises(ValueError, match=r"CPU cpu_b expected additional processes that didn't exist: phantom_process"):
         topology.validate_system(fake_system)
 
 

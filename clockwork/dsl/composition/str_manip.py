@@ -13,3 +13,9 @@ def snake_from_camel(camel_str: str) -> str:
     """Convert the camel case string to snake case."""
     with_semis = "".join(["_" + x.lower() if x.isupper() else x for x in camel_str])
     return with_semis.strip("_")
+
+
+def upper_snake_from_camel(camel_str: str) -> str:
+    """Convert the camel case string to upper snake case."""
+    with_semis = "".join(["_" + x if x.isupper() else x.upper() for x in camel_str])
+    return with_semis.strip("_")

@@ -18,11 +18,8 @@ index 0000000..718d1ce
 +++ MODULE.bazel
 @@ -0,0 +1 @@
 +module(name = "wise_enum")
-diff --git WORKSPACE WORKSPACE
-new file mode 100644
-index 0000000..e69de29
 diff --git wise_enum_detail.h wise_enum_detail.h
-index 1accbe7..b8bf1f2 100644
+index 1accbe7..2ad8766 100644
 --- wise_enum_detail.h
 +++ wise_enum_detail.h
 @@ -163,7 +163,9 @@ WISE_ENUM_CONSTEXPR_14 bool compare(U u1, U u2) {
@@ -32,7 +29,7 @@ index 1accbe7..b8bf1f2 100644
 -                   WISE_ENUM_IMPL_NARG(__VA_ARGS__), __VA_ARGS__)
 +                   WISE_ENUM_IMPL_NARG(__VA_ARGS__), __VA_ARGS__)              \
 +  /* Clang sometimes detects this function as unused when no fmtlib calls are present */ \
-+  [[maybe_unused]] friendly constexpr auto format_as(WISE_ENUM_IMPL_ONLY_OR_FIRST(name_storage) value) { return wise_enum::to_string(value); };
++  [[maybe_unused]] friendly constexpr auto format_as(WISE_ENUM_IMPL_ONLY_OR_FIRST(name_storage) value) -> decltype(wise_enum::to_string(value)) { return wise_enum::to_string(value); };
  
  #define WISE_ENUM_IMPL_2(type, name, storage, friendly, num_enums, ...)        \
    WISE_ENUM_IMPL_3(type, name, storage, friendly, num_enums,                   \
@@ -42,7 +39,7 @@ index 1accbe7..b8bf1f2 100644
    }                                                                            \
 -  }
 +  }                                                                            \
-+  [[maybe_unused]] constexpr auto format_as(name value) { return wise_enum::to_string(value); };
++  [[maybe_unused]] constexpr auto format_as(name value) -> decltype(wise_enum::to_string(value)) { return wise_enum::to_string(value); };
  
  #define WISE_ENUM_IMPL_ADAPT_2(name, num_enums, ...)                           \
    WISE_ENUM_IMPL_ADAPT_3(name, , num_enums,                                    \

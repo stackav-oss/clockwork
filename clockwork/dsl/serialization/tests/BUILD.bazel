@@ -30,7 +30,7 @@ cc_test(
         "//clockwork:repr_iface",
         "//clockwork/dsl/tests/support:tapmsg",
         "//clockwork/dsl/tests/support:taptag",
-        "//clockwork/dsl/tests/support:taptags",
+        "//clockwork/dsl/tests/support:taptags_clk_cc",
         "//jewels/container:compare",
         "//jewels/container/tap:optional",
         "//jewels/container/tap:var_array",
@@ -56,7 +56,7 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
@@ -112,6 +112,21 @@ py_test(
 )
 
 py_test(
+    name = "py_clk_tap_test",
+    srcs = [
+        "py_clk_tap_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/serialization/tests/resources:tapmsg_tachyon"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/tests/support:clk_tapmsg_clk_py",
+        "//clockwork/tests/support:py_test_utils",
+    ],
+)
+
+py_test(
     name = "py_tap_test",
     srcs = [
         "py_tap_test.py",
@@ -124,6 +139,41 @@ py_test(
         "//clockwork/dsl/tests/support:msg_with_au_py",
         "//clockwork/dsl/tests/support:pytapmsg",
         "//clockwork/tests/support:py_test_utils",
+    ],
+)
+
+py_test(
+    name = "soa_test",
+    srcs = [
+        "soa_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/serialization/tests/resources:expected_soa_outputs"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/serialization:soa",
+    ],
+)
+
+cc_test(
+    name = "soa_test_schema_test",
+    srcs = ["soa_test_schema_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/dsl/serialization/tests/support:soa_test_schema_clk_cc",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:soa",
+        "//jewels/container/tap:var_array",
+        "@boost//:iterator",
+        "@catch2//:catch2_main",
     ],
 )
 
@@ -180,6 +230,9 @@ py_test(
         "//clockwork/dsl/ir:clkenum",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/serialization:tachyon_reg",
         "@clockwork_pip//pytest",

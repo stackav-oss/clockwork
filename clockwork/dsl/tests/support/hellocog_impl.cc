@@ -13,4 +13,7 @@ void execute_cog(HelloCogDial& /*dial*/)
 void execute_cog(HelloCogWithMetricsDial& /*dial*/) {}
 void execute_cog(HelloInitDial& /*dial*/) {}
 void execute_cog(HelloInit2Dial& /*dial*/) {}
+void execute_cog(HelloCogMinMessagesDial& /*dial*/) {}
+void execute_cog(HelloCogMinNewMessagesDial& /*dial*/) {}
+
 } // namespace clockwork::testing::cogs

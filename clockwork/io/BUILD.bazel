@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "py_cc_binding")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,76 +10,32 @@ exports_files([
     "var_packet.clk",
 ])
 
-cc_library(
-    name = "network_var_packet",
-    srcs = [
-        "network_var_packet.cc",
-        "network_var_packet.inl",
-    ],
-    hdrs = ["network_var_packet.hh"],
-    data = [":network_var_packet_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "network_var_packet_clk",
     srcs = ["network_var_packet.clk"],
     outs = [
-        "network_var_packet.cc",
-        "network_var_packet.hh",
-        "network_var_packet.inl",
+        "network_var_packet_clk_cc.cc",
+        "network_var_packet_clk_cc.hh",
+        "network_var_packet_clk_cc.inl",
     ],
-)
-
-cc_library(
-    name = "var_packet",
-    srcs = [
-        "var_packet.cc",
-        "var_packet.inl",
-    ],
-    hdrs = ["var_packet.hh"],
-    data = [":var_packet_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 clk(
     name = "var_packet_clk",
     srcs = ["var_packet.clk"],
     outs = [
-        "var_packet.cc",
-        "var_packet.hh",
-        "var_packet.inl",
+        "var_packet_clk_cc.cc",
+        "var_packet_clk_cc.hh",
+        "var_packet_clk_cc.inl",
         "var_packet_clk_nb.cc",
         "var_packet_clk_nb.hh",
         "var_packet_clk_nb.inl",
     ],
-)
-
-py_cc_binding(
-    name = "var_packet_clk_nb",
-    srcs = [
-        "var_packet_clk_nb.cc",
-        "var_packet_clk_nb.hh",
-        "var_packet_clk_nb.inl",
+    generate = [
+        "cpp",
+        "nanobind",
     ],
-    data = [":var_packet_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    deps = [
-        ":var_packet",
-        "//jewels/nanobind:nb_byte_array",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
+    minimize_builtin_deps = True,
 )

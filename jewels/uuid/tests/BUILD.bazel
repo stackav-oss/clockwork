@@ -22,11 +22,14 @@ cc_test(
     name = "uuid_test",
     srcs = ["uuid_test.cc"],
     deps = [
+        "//jewels/container:compare",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
         "//jewels/uuid",
+        "//jewels/uuid:uuid_hasher",
         "@catch2//:catch2_main",
         "@fmt",
         "@gsl//:util",
+        "@xxhash",
     ],
 )

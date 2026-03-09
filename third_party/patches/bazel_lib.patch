@@ -1,0 +1,31 @@
+diff --git lib/private/diff_test_tmpl.sh lib/private/diff_test_tmpl.sh
+index d72f044..a66e64b 100644
+--- lib/private/diff_test_tmpl.sh
++++ lib/private/diff_test_tmpl.sh
+@@ -72,11 +72,11 @@ if [[ ! "$DF1" ]] && [[ "$DF2" ]]; then
+   exit 1
+ fi
+ if [[ "$DF1" ]] || [[ "$DF2" ]]; then
+-  if ! diff {diff_args} -r "$RF1" "$RF2"; then
++  if ! diff {diff_args} -r "$RF2" "$RF1"; then
+     fail "directories \"{file1}\" and \"{file2}\" differ. {fail_msg}"
+   fi
+ else
+-  if ! diff {diff_args} "$RF1" "$RF2"; then
++  if ! diff {diff_args} "$RF2" "$RF1"; then
+     fail "files \"{file1}\" and \"{file2}\" differ. {fail_msg}"
+   fi
+ fi
+diff --git lib/private/write_source_file.bzl lib/private/write_source_file.bzl
+index 438a06c..68eceed 100644
+--- lib/private/write_source_file.bzl
++++ lib/private/write_source_file.bzl
+@@ -24,7 +24,7 @@ def write_source_file(
+         diff_test = True,
+         diff_test_failure_message = "{{DEFAULT_MESSAGE}}",
+         file_missing_failure_message = "{{DEFAULT_MESSAGE}}",
+-        diff_args = [],
++        diff_args = ["--unified"],
+         check_that_out_file_exists = True,
+         verbosity = "full",
+         **kwargs):

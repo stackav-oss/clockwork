@@ -1,0 +1,344 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::common)]
+use clockwork::common::constants;
+use clockwork::common::process_description;
+
+
+// The type of logging requested (event vs telemetry)
+enum LogType
+{
+    uuid: acca0266-322b-484b-80a8-d79f55feaf48;
+    values
+    {
+        // Don't log
+        #0 none default;
+
+        // Log during events only
+        #1 event;
+
+        // Log in telemetry log (all the time) and also in events
+        #2 telemetry;
+    }
+}
+
+// Aggregation types for signals
+// Matches the AggregationType enum in signal.py
+enum AggregationType
+{
+  uuid: 8b1548ad-26f3-4ab8-8d4b-9987deb17832;
+
+  values
+  {
+    // No aggregation - raw value
+    #0 Value default;
+
+    // Minimum value
+    #1 Min;
+
+    // Maximum value
+    #2 Max;
+
+    // Sum of values
+    #3 Sum;
+
+    // Count of values
+    #4 Count;
+
+    // Mean (average) of values
+    #5 Mean;
+
+    // Final (last) value
+    #6 FinalValue;
+
+    // First value
+    #7 FirstValue;
+  }
+}
+
+// Report group type (batched vs aggregated)
+enum ReportGroupType
+{
+  uuid: e5e1c8e5-b642-4a84-8e2b-a6e66290ee8f;
+
+  values
+  {
+    // Batched - signals collected in arrays
+    #0 Batched default;
+
+    // Aggregated - signals post-processed with aggregation functions
+    #1 Aggregated;
+  }
+}
+
+
+
+// Signal definition with pre-aggregation configuration
+schema SignalMetadata
+{
+  uuid: 1c39188e-db5a-429f-8fdf-0718e05d202b;
+
+  parameters
+  {
+    // Maximum signal name size
+    #0 max_signal_name_size = 300;
+
+    // Maximum aggregation definition string size
+    #1 max_aggregation_definition_size = 80;
+
+    // Maximum number of pre-aggregation types
+    #2 max_pre_aggregation_types = 10;
+  }
+
+  fields
+  {
+    // Signal name (e.g., "OtherSignal", "BarSignal")
+    #3 name: VarString<max_signal_name_size>;
+
+    // Pre-aggregation type for the signal
+    #4 pre_aggregation_type: VarArray<AggregationType, max_pre_aggregation_types>;
+
+    // DSL string that defined the aggregation (e.g., "[min, max]" or "value")
+    #5 pre_aggregation_definition: VarString<max_aggregation_definition_size>;
+
+    // Indexes into SignalMetadataConfig.signal_instance_names
+    // Lists all instances of this signal
+    #6 signal_instance_indexes: VarArray<UInt32, 50>;
+  }
+}
+
+instantiate SignalMetadata<>;
+
+// Signal entry within a report group
+schema ReportGroupSignalMetadata
+{
+  uuid: 08b5bc24-8bec-49f4-a8d2-7f3a0526e95a;
+
+  parameters
+  {
+    // Maximum alias size
+    #0 max_alias_size = 100;
+
+    // Maximum post-aggregation types
+    #1 max_post_aggregation_types = 10;
+  }
+
+  fields
+  {
+    // Index into the Signals array
+    #2 signal_index: UInt32;
+
+    // Post-aggregation types applied to this signal
+    // Empty for batched report groups
+    #3 post_aggregation_types: VarArray<AggregationType, max_post_aggregation_types>;
+
+    // Optional alias for the signal (used when multiple instances exist)
+    #4 alias: Optional<VarString<max_alias_size>>;
+  }
+}
+
+instantiate ReportGroupSignalMetadata<>;
+
+// Report group configuration
+schema ReportGroupMetadata
+{
+  uuid: 9ffc333d-15f8-4f25-9705-12cbaca642a0;
+
+  parameters
+  {
+    // Maximum report group name size
+    #0 max_report_group_name_size = 300;
+
+    // Maximum number of signals in a report group
+    #1 max_num_signals = 50;
+  }
+
+  fields
+  {
+    // Report group name (e.g., "foosignals")
+    #2 name: VarString<max_report_group_name_size>;
+
+    // Log type (Event or Telemetry)
+    #3 log_type: LogType;
+
+    // Report group type (Batched or Aggregated)
+    #4 report_group_type: ReportGroupType;
+
+    // Aggregation size (number of executions to aggregate)
+    #5 aggregation_size: UInt32;
+
+    // Minimum duration between reports
+    #6 min_duration: Duration;
+
+    // Maximum duration between reports
+    #7 max_duration: Duration;
+
+    // Signals in this report group
+    #8 signals: VarArray<ReportGroupSignalMetadata<>, max_num_signals>;
+  }
+}
+
+instantiate ReportGroupMetadata<>;
+
+// Cog class with all its report groups
+schema CogReportGroupsMetadata
+{
+  uuid: 0c667a81-fce2-4c1f-b9f6-eb0ee6351e9a;
+
+  parameters
+  {
+    // Maximum number of report groups per cog
+    #0 max_num_report_groups = 10;
+  }
+
+  fields
+  {
+    // Cog class ID (from process_description.clk)
+    #1 cog_class_id: Uuid<process_description::CogClassId>;
+
+    // Report groups defined for this cog class
+    #2 report_groups: VarArray<ReportGroupMetadata<>, max_num_report_groups>;
+  }
+}
+
+instantiate CogReportGroupsMetadata<>;
+
+// Signal instance mapping (signal to specific instance)
+schema SignalInstanceMetadata
+{
+  uuid: 625daa6c-c009-40a6-ba71-98fb57eaa5dd;
+
+  fields
+  {
+    // Index into the Signals array
+    #1 signal_index: UInt32;
+
+    // Index into SignalMetadataConfig.signal_instance_names
+    #2 signal_instance_index: UInt32;
+  }
+}
+
+// Report group instance with channel and signal instance mappings
+schema ReportGroupInstanceMetadata
+{
+  uuid: 1672e2a9-e308-405c-88b0-c27db546c9b3;
+
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
+
+    // Maximum number of signal instances per report group
+    #1 max_num_signal_instances = 50;
+  }
+
+  fields
+  {
+    // Index into CogReportGroups.report_groups for this cog class
+    #2 report_group_index: UInt32;
+
+    // Channel name where this report group is published
+    #3 channel_name: VarString<max_channel_name_size>;
+
+    // Signal instance mappings for this report group instance
+    #4 signal_instances: VarArray<SignalInstanceMetadata, max_num_signal_instances>;
+  }
+}
+
+instantiate ReportGroupInstanceMetadata<>;
+
+// Cog instance with report group instances
+schema CogInstanceMetadata
+{
+  uuid: cb182cba-07d6-4f2e-a248-66465c3b3279;
+
+  parameters
+  {
+    // Maximum number of report group instances per cog instance
+    #0 max_num_report_group_instances = 10;
+  }
+
+  fields
+  {
+    // Cog class ID (from process_description.clk)
+    #1 cog_class_id: Uuid<process_description::CogClassId>;
+
+    // Cog instance ID (from process_description.clk)
+    #2 cog_instance_id: Uuid<process_description::CogInstanceId>;
+
+    // Report group instances for this cog instance
+    #3 report_group_instances: VarArray<ReportGroupInstanceMetadata<>, max_num_report_group_instances>;
+  }
+}
+
+instantiate CogInstanceMetadata<>;
+
+// Channel mapping for report groups
+schema ReportGroupChannelMetadata
+{
+  uuid: 3e4fec6b-0a53-4f62-9db2-4eb7e2503b2c;
+
+  parameters
+  {
+    // Maximum channel name size
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
+  }
+
+  fields
+  {
+    // Channel name
+    #1 channel_name: VarString<max_channel_name_size>;
+
+    // Cog class ID that publishes to this channel
+    #2 cog_class_id: Uuid<process_description::CogClassId>;
+
+    // Cog instance ID that publishes to this channel
+    #3 cog_instance_id: Uuid<process_description::CogInstanceId>;
+
+    // Index into CogReportGroups.report_groups
+    #4 report_group_index: UInt32;
+  }
+}
+
+instantiate ReportGroupChannelMetadata<>;
+
+// Top-level signal metadata configuration
+schema SignalMetadataConfig
+{
+  uuid: d12d82d8-f44c-4485-84f9-e0fde0b97a53;
+
+  parameters
+  {
+    // Maximum number of signals
+    #0 max_num_signals = 2046;
+
+    // Maximum number of cog classes
+    #1 max_num_cogs = 2046;
+
+    // Maximum number of cog instances
+    #2 max_num_cog_instances = 2046;
+
+    // Maximum number of report group channels
+    #3 max_num_report_group_channels = 2046;
+  }
+
+  fields
+  {
+    // Array of all signal instance names in the system
+    // Signal instance indexes reference positions in this array
+    #4 signal_instance_names: VarArray<VarString<300>, 4096>;
+
+    // All signal definitions in the system
+    #5 signals: VarArray<SignalMetadata<>, max_num_signals>;
+
+    // Cog classes with their report groups
+    #6 cogs: VarArray<CogReportGroupsMetadata<>, max_num_cogs>;
+
+    // Cog instances with signal instance mappings
+    #7 cog_instances: VarArray<CogInstanceMetadata<>, max_num_cog_instances>;
+
+    // Report group channel mappings
+    #8 report_group_channels: VarArray<ReportGroupChannelMetadata<>, max_num_report_group_channels>;
+  }
+}
+
+instantiate SignalMetadataConfig<>;

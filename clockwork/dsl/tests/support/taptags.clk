@@ -1,12 +1,5 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::testing::separate_tags)]
+
 // Another tag.
 tag AnotherTag;
-
-cpp_target taptags
-{
-  options
-  {
-    namespace clockwork::testing::separate_tags;
-  }
-
-  tag AnotherTag;
-}

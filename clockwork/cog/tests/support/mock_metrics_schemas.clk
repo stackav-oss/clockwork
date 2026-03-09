@@ -2,6 +2,9 @@
 // with the TestCogPolicy from simple_cog_test.cc. The cog is assumed to be named TestCog.
 // The generation logic is based on clockwork/dsl/ir/cog.py.
 
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cog::metrics::test)]
+
 use clockwork::dsl::cog::common_cog_event_metrics::{CogEventMetrics, InputChannelEventMetrics};
 use clockwork::dsl::cog::common_cog_telemetry_metrics::{CogTelemetryMetrics, InputChannelTelemetryMetrics, MinMaxMean};
 
@@ -78,36 +81,4 @@ schema TestCogEventMetricsBatch
     // Batch of event metrics for TestCog
     #0 event_metrics: VarArray<TestCogEventMetrics, 10>;
   }
-}
-
-// Cpp target for test cog telemetry metrics
-cpp_target test_cog_telemetry_metrics_cpp
-{
-  options
-  {
-    namespace clockwork::cog::metrics::test;
-  }
-  schema TestCogTelemetryMetrics;
-
-  representation Tachyon<TestCogTelemetryMetrics>;
-
-  interface Tappy<TestCogTelemetryMetrics>;
-}
-
-// Cpp target for test cog event metrics
-cpp_target test_cog_event_metrics_cpp
-{
-  options
-  {
-    namespace clockwork::cog::metrics::test;
-  }
-  enum TestCogConditionsMask;
-  schema TestCogEventMetrics;
-  schema TestCogEventMetricsBatch;
-
-  representation Tachyon<TestCogEventMetrics>;
-  representation Tachyon<TestCogEventMetricsBatch>;
-
-  interface Tappy<TestCogEventMetrics>;
-  interface Tappy<TestCogEventMetricsBatch>;
 }

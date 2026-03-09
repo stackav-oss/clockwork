@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, node, parse, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.module_id import ModuleID
@@ -19,6 +19,13 @@ if TYPE_CHECKING:  # pragma: nocover
     from collections.abc import Collection, Sequence
 
 
+class WildcardValue(typesys.ObjectIdentityValue):
+    """Sentinel value representing a wildcard subscript."""
+
+
+WILDCARD: Final = WildcardValue(type_info=clkbuiltins.TYPE_TYPE)
+
+
 @dataclass
 class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
     """Base IR node class representing an expression."""
@@ -26,7 +33,7 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
     resolved_value: typesys.Value | None
 
     @classmethod
-    def from_cst(cls: type[Expr], cst_node: cst.Expr, module: node.Module) -> Expr:
+    def from_cst(cls: type[Expr], cst_node: cst.Expr, module: node.Module) -> Expr:  # noqa: PLR0911 This is a factory method.
         """Construct the appropriate Expr subclass from a CST Expr."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
@@ -92,6 +99,25 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
                     for arg in args
                 ],
             )
+        if subscript_cst := cst_node.maybe_subscript():
+            if subscript_cst.maybe_index():
+                index_expr = Expr.from_cst(subscript_cst.child_index(), module=module)
+            else:
+                index_expr = SimpleExpr(
+                    module=module,
+                    cst_node=cst_node,
+                    type_info=clkbuiltins.TYPE_TYPE,
+                    resolved_value=WILDCARD,
+                    value=WILDCARD,
+                )
+            return SubscriptExpr(
+                module=module,
+                cst_node=cst_node,
+                type_info=typesys.InferenceVar.make(cst_node=subscript_cst, context=module),
+                resolved_value=None,
+                operand=Expr.from_cst(subscript_cst.child_operand(), module=module),
+                index=index_expr,
+            )
         msg = f"Expression type {cst_node} not yet implemented."
         raise NotImplementedError(msg)
 
@@ -109,6 +135,8 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
             doc=None,
             unresolved_imports=[],
             context=module.context,
+            generates=None,
+            inner_attrs=None,
         )
         return cls.from_cst(cst_node=result.cst, module=inner_module)
 
@@ -385,6 +413,42 @@ class CallExpr(Expr):
         self.resolved_value = operand.evaluate_call(ir_node=self, module=self.module, args=args)
         typesys.unify(self.type_info, self.resolved_value.type_info)
         return self.resolved_value
+
+
+@dataclass
+class SubscriptExpr(Expr):
+    """IR node class holding a subscript expression (e.g., signal[instance] or signal[*])."""
+
+    operand: Expr
+    index: Expr  # Evaluates to WildcardValue for wildcard '*'
+
+    @override
+    def evaluate(self) -> typesys.Value:
+        """Evaluate the subscript expression.
+
+        Returns:
+            The result of applying subscript to the operand.
+
+        Raises:
+            ValueError: if there is any error in expression evaluation.
+        """
+        if self.resolved_value is not None:
+            return self.resolved_value
+
+        operand = self.operand.evaluate()
+        index_value = self.index.evaluate()
+
+        if isinstance(operand, typesys.SubscriptableEntity):
+            self.resolved_value = operand.evaluate_subscript(
+                index=index_value,
+                cst_node=self,
+                module=self.module,
+            )
+            typesys.unify(self.type_info, self.resolved_value.type_info)
+            return self.resolved_value
+
+        msg = self.operand.append_error_line(f"Type {type(operand).__name__} does not support subscript operations")
+        raise TypeError(msg)
 
 
 @dataclass

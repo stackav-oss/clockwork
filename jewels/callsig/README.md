@@ -17,7 +17,7 @@ The library also provides explicit output parameter types (`Out`, `OptionalOut`,
 #### Features
 
 - No implicit conversion to `bool` - explicit checking required (primarily via `ok()` or `fails()` free functions)
-- Marked `[[nodiscard]]` to prevent ignoring return values
+- Marked `[[nodiscard]]` to prevent ignoring return values (do not redundantly declare functions `[[nodiscard]]`)
 - Constexpr instances for easy return values
 - Zero-overhead implementation
 
@@ -62,6 +62,7 @@ It can optionally specify which enum values are considered successful, allowing 
 
 #### Features
 
+- Marked `[[nodiscard]]` to prevent ignoring return values (do not redundantly declare functions `[[nodiscard]]`)
 - Template parameter `T` must be an enum type
 - Optional template parameters `success_values...` define which enum values are considered successful
 - Implicit construction from enum values
@@ -296,6 +297,49 @@ if (fails(get_data(Out{result}, config))) {
   return failure;
 }
 // result now contains the data
+```
+
+### `InOut<T>`
+
+`InOut<T>` is for parameters that act as both inputs and outputs (think mutable state).
+As inputs, they are considered mandatory - they are always provided by the caller.
+As outputs, they are considered mandatory - the callee will always populate them with a sensible value (including the case where the outputs happen to be the same as the inputs, and the callee has not changed them).
+
+#### Features
+
+- Lightweight wrapper around a non-null reference
+- Zero runtime overhead
+- Explicit signaling of stateful intent
+
+#### Usage
+
+```cpp
+#include "jewels/callsig/outparam.hh"
+
+// Function definition
+jewels::BinaryOutcome get_data(jewels::InOut<Data> data_out, const Config& config)
+{
+  if (data_out->field1 > 42)
+  {
+    data_out->field2 = "high";
+  }
+  else
+  {
+    data_out->field2 = "low";
+  }
+
+  return jewels::success;
+}
+
+// Call site
+Data state;
+state.field1 = 20;
+if (fails(get_data(InOut{state}, config))) {
+  // In the case of failure, state may or may not have been mutated in place.
+  // The recommendation is to document in the the function API whether the state is changed on failure.
+  return failure;
+}
+// in the case of success, state has been mutated in-place
 ```
 
 ### `OptionalOut<T>`

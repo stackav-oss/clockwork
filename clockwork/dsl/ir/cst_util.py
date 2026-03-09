@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from fltk.fegen.pyrt.terminalsrc import Span, TerminalSource
 
 if TYPE_CHECKING:
-    from clockwork.dsl import cst
+    from clockwork.dsl import clockwork_cst as cst
     from clockwork.dsl.ir.module_id import ModuleID
 
 
@@ -80,7 +80,7 @@ def strip_numeric_separators(literal: str) -> str:
     return literal.replace("'", "")
 
 
-def decimal_from_cst(number: cst.Number, terminals: TerminalSource) -> Decimal:
+def decimal_from_cst(number: cst.Number | cst.NonnegativeInteger | cst.Integer, terminals: TerminalSource) -> Decimal:
     """Convert a CST Number to a Decimal.
 
     Args:

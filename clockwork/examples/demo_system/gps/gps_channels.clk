@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::examples::demo_system::gps::gps_message;
 
 // Raw GPS packet channel

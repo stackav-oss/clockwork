@@ -144,18 +144,28 @@ index 0000000..0fe36bc
 +bazel_dep(name = "rules_cc")
 +bazel_dep(name = "catch2", version = "3.3.0")
 diff --git include/tl/expected.hpp include/tl/expected.hpp
-index 06e6dc4..67dc9e7 100644
+index 59e59aa..7f0119c 100644
 --- include/tl/expected.hpp
 +++ include/tl/expected.hpp
-@@ -22,6 +22,7 @@
+@@ -36,7 +36,7 @@
+ #define TL_EXPECTED_MSVC2015_CONSTEXPR constexpr
+ #endif
  
- #include <exception>
- #include <functional>
-+#include <memory_resource>
- #include <type_traits>
- #include <utility>
+-#if (defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ <= 9 &&              \
++#if defined(FORCE_GCC) || (defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ <= 9 &&              \
+      !defined(__clang__))
+ #define TL_EXPECTED_GCC49
+ #endif
+@@ -67,7 +67,7 @@
+ #endif
+ #endif
  
-@@ -81,7 +82,7 @@
+-#if (defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ <= 9 &&              \
++#if defined(FORCE_GCC) || (defined(__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ <= 9 &&              \
+      !defined(__clang__))
+ // GCC < 5 doesn't support overloading on const&& for member functions
+ 
+@@ -87,7 +87,7 @@
  #elif (defined(__GNUC__) && __GNUC__ < 8 && !defined(__clang__))
  #ifndef TL_GCC_LESS_8_TRIVIALLY_COPY_CONSTRUCTIBLE_MUTEX
  #define TL_GCC_LESS_8_TRIVIALLY_COPY_CONSTRUCTIBLE_MUTEX
@@ -164,7 +174,7 @@ index 06e6dc4..67dc9e7 100644
  namespace detail {
  template <class T>
  struct is_trivially_copy_constructible
-@@ -91,7 +92,7 @@ template <class T, class A>
+@@ -97,7 +97,7 @@ template <class T, class A>
  struct is_trivially_copy_constructible<std::vector<T, A>> : std::false_type {};
  #endif
  } // namespace detail
@@ -173,7 +183,7 @@ index 06e6dc4..67dc9e7 100644
  #endif
  
  #define TL_EXPECTED_IS_TRIVIALLY_COPY_CONSTRUCTIBLE(T)                         \
-@@ -138,8 +139,8 @@ struct is_trivially_copy_constructible<std::vector<T, A>> : std::false_type {};
+@@ -138,8 +138,8 @@ struct is_trivially_copy_constructible<std::vector<T, A>> : std::false_type {};
  #define TL_EXPECTED_NODISCARD
  #endif
  
@@ -184,7 +194,7 @@ index 06e6dc4..67dc9e7 100644
  
  #ifndef TL_MONOSTATE_INPLACE_MUTEX
  #define TL_MONOSTATE_INPLACE_MUTEX
-@@ -487,7 +488,7 @@ struct expected_storage_base {
+@@ -479,7 +479,7 @@ struct expected_storage_base {
                                             Args &&...args)
        : m_unexpect(il, std::forward<Args>(args)...), m_has_val(false) {}
  
@@ -193,7 +203,7 @@ index 06e6dc4..67dc9e7 100644
      if (m_has_val) {
        m_val.~T();
      } else {
-@@ -583,7 +584,7 @@ template <class T, class E> struct expected_storage_base<T, E, true, false> {
+@@ -575,7 +575,7 @@ template <class T, class E> struct expected_storage_base<T, E, true, false> {
    expected_storage_base(expected_storage_base &&) = default;
    expected_storage_base &operator=(const expected_storage_base &) = default;
    expected_storage_base &operator=(expected_storage_base &&) = default;
@@ -202,7 +212,7 @@ index 06e6dc4..67dc9e7 100644
      if (!m_has_val) {
        m_unexpect.~unexpected<E>();
      }
-@@ -632,7 +633,7 @@ template <class T, class E> struct expected_storage_base<T, E, false, true> {
+@@ -624,7 +624,7 @@ template <class T, class E> struct expected_storage_base<T, E, false, true> {
    expected_storage_base(expected_storage_base &&) = default;
    expected_storage_base &operator=(const expected_storage_base &) = default;
    expected_storage_base &operator=(expected_storage_base &&) = default;
@@ -211,7 +221,7 @@ index 06e6dc4..67dc9e7 100644
      if (m_has_val) {
        m_val.~T();
      }
-@@ -710,7 +711,7 @@ template <class E> struct expected_storage_base<void, E, false, false> {
+@@ -702,7 +702,7 @@ template <class E> struct expected_storage_base<void, E, false, false> {
    expected_storage_base(expected_storage_base &&) = default;
    expected_storage_base &operator=(const expected_storage_base &) = default;
    expected_storage_base &operator=(expected_storage_base &&) = default;
@@ -220,7 +230,7 @@ index 06e6dc4..67dc9e7 100644
      if (!m_has_val) {
        m_unexpect.~unexpected<E>();
      }
-@@ -1282,7 +1283,7 @@ private:
+@@ -1274,7 +1274,7 @@ private:
  /// has been destroyed. The initialization state of the contained object is
  /// tracked by the expected object.
  template <class T, class E>
@@ -229,7 +239,7 @@ index 06e6dc4..67dc9e7 100644
                   private detail::expected_move_assign_base<T, E>,
                   private detail::expected_delete_ctor_base<T, E>,
                   private detail::expected_delete_assign_base<T, E>,
-@@ -2478,6 +2479,6 @@ void swap(expected<T, E> &lhs,
+@@ -2470,6 +2470,6 @@ void swap(expected<T, E> &lhs,
            expected<T, E> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
    lhs.swap(rhs);
  }

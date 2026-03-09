@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
@@ -17,6 +17,7 @@
 #include "clockwork/logging/offboard/index_chunk_writer.hh"
 #include "clockwork/logging/offboard/metadata_chunk_writer.hh"
 #include "clockwork/logging/offboard/metrics_chunk_writer.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/writer_config.hh"
@@ -46,6 +47,8 @@ namespace clockwork_logging::offboard
 WISE_ENUM_CLASS((OverwriteMode, uint8_t), overwrite, dont_overwrite)
 
 /// Offboard log writer
+/// @tparam S3UtilsType S3 utility helper class type
+template <typename S3UtilsType = S3Utils>
 class Writer
 {
 public:
@@ -54,6 +57,10 @@ public:
 
   /// Maximum log file size
   static constexpr auto max_file_size = 50U * jewels::math::constants::bytes_per_gib<size_t>;
+
+  /// Header for the log metadata text protobuf file
+  static constexpr auto log_metadata_proto_header =
+    "# proto-file: clockwork/logging/offboard/v1/log_metadata.proto\n# proto-message: LogMetadata\n";
 
   /// Constructor
   /// @param[in] memory_resource Memory resource
@@ -166,12 +173,12 @@ private:
     /// Open the log file
     /// @param[in] chunk_writer_factory Chunk writer factory
     /// @return LogError on failure
-    [[nodiscard]] LogExpected<void> open(ChunkReaderWriterFactory& chunk_writer_factory);
+    [[nodiscard]] LogExpected<void> open(ChunkReaderWriterFactory<S3UtilsType>& chunk_writer_factory);
 
     /// Split the log file
     /// @param[in] chunk_writer_factory Chunk writer factory
     /// @return LogError on failure
-    [[nodiscard]] LogExpected<void> split_log_file(ChunkReaderWriterFactory& chunk_writer_factory);
+    [[nodiscard]] LogExpected<void> split_log_file(ChunkReaderWriterFactory<S3UtilsType>& chunk_writer_factory);
 
     /// Get the current log file size in bytes
     /// @return File size or LogError on failure
@@ -251,7 +258,7 @@ private:
   jewels::memory::NonNullSharedPtr<AsyncWorkQueue> async_work_queue_ptr_;
 
   /// Chunk writer factory
-  ChunkReaderWriterFactory chunk_writer_factory_;
+  ChunkReaderWriterFactory<S3UtilsType> chunk_writer_factory_;
 
   /// Log file URI prefix
   std::pmr::string file_uri_prefix_;

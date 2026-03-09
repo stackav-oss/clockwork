@@ -15,9 +15,7 @@ from clockwork.logging.readers.nb_types import (
     LogTimestamp,
     TopicMetadata,
 )
-
-# gazelle:ignore clockwork.logging.tests.support.py_test_message
-from clockwork.logging.tests.support import py_test_message
+from clockwork.logging.tests.support import test_message_clk_py
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 
 
@@ -32,13 +30,13 @@ class TestLogReaderClass:
         test_writer = LogWriter()
         test_writer.open(log_path, "")
         for channel_name in self.channel_names:
-            test_writer.create_tachyon_channel(channel_name, py_test_message.TestMessage)
+            test_writer.create_tachyon_channel(channel_name, test_message_clk_py.TestMessage)
         message_time = self.start_time.nanoseconds
         published_messages: list[str] = []
         for sequence_number in range(100):
             for channel_number in range(len(self.channel_names)):
                 message_string = f"{self.channel_names[channel_number]} {sequence_number}"
-                test_msg = py_test_message.TestMessage(message_string=message_string)
+                test_msg = test_message_clk_py.TestMessage(message_string=message_string)
                 test_writer.write_tachyon(
                     self.channel_names[channel_number],
                     sequence_number,
@@ -62,8 +60,8 @@ class TestLogReaderClass:
             expected_metadata = set(self.channel_names)
             assert {t.name for t in metadata} == expected_metadata
 
-            message_type_metadata = py_test_message.TestMessage.get_tachyon_metadata()
-            message_type_name = py_test_message.TestMessage.get_tachyon_metadata_name()
+            message_type_metadata = test_message_clk_py.TestMessage.get_tachyon_metadata()
+            message_type_name = test_message_clk_py.TestMessage.get_tachyon_metadata_name()
             schema_definition = tachyon_meta.to_protobuf(message_type_metadata).SerializeToString()
 
             for channel_name in self.channel_names:
@@ -101,7 +99,7 @@ class TestLogReaderClass:
                     self.message_interval.nanoseconds * len(logged_messages)
                 )
                 assert len(msg.header) == 0
-                deserialized_msg = py_test_message.TestMessage.deserialize_tachyon(memoryview(msg.data))
+                deserialized_msg = test_message_clk_py.TestMessage.deserialize_tachyon(memoryview(msg.data))
                 logged_messages.append(deserialized_msg.message_string)
 
             assert logged_messages == published_messages
@@ -127,7 +125,7 @@ class TestLogReaderClass:
                     self.message_interval.nanoseconds * len(logged_messages) * 3
                 )
                 assert len(msg.header) == 0
-                deserialized_msg = py_test_message.TestMessage.deserialize_tachyon(memoryview(msg.data))
+                deserialized_msg = test_message_clk_py.TestMessage.deserialize_tachyon(memoryview(msg.data))
                 logged_messages.append(deserialized_msg.message_string)
 
             assert len(logged_messages) == len(published_messages) / 3
@@ -152,7 +150,7 @@ class TestLogReaderClass:
             assert metrics.message_count == len(published_messages)
             assert (
                 metrics.byte_count
-                <= len(published_messages) * py_test_message.TestMessage.get_tachyon_constraint().size
+                <= len(published_messages) * test_message_clk_py.TestMessage.get_tachyon_constraint().size
             )
             assert len(metrics.topic_metrics) == len(self.channel_names)
             for i in range(len(self.channel_names)):

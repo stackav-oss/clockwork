@@ -52,7 +52,7 @@ TEST_CASE("execute", "[OnlineRunner]")
   auto runner = OnlineRunner(config);
 
   auto executed_msgs = boost::lockfree::queue<std::optional<TestMsg>>(0);
-  auto execute_cb = [&](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
+  auto execute_cb = [&executed_msgs](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
   { executed_msgs.push(msg); };
 
   auto msg0 = TestMsg{.value = 0};
@@ -146,7 +146,9 @@ TEST_CASE("ensure mutually exclusive execution shared queue", "[OnlineRunner]")
   std::mutex start_mutex;
   std::condition_variable start_cv;
 
-  auto execute_cb = [&](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
+  auto execute_cb =
+    [&start_mutex, &start_cv, &execution_start, &pause_mutex, &pause_cv, &pause_execution, &execution_end](
+      const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
   {
     {
       const std::unique_lock start_lock(start_mutex);
@@ -298,7 +300,9 @@ TEST_CASE("simulate shared state wake up", "[OnlineRunner]")
   std::mutex start_mutex;
   std::condition_variable start_cv;
 
-  auto execute_cb = [&](const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
+  auto execute_cb =
+    [&start_mutex, &start_cv, &execution_start, &pause_mutex, &pause_cv, &pause_execution, &execution_end](
+      const CogExecuteParams& /*params*/, const std::optional<TestMsg>& msg)
   {
     {
       const std::unique_lock start_lock(start_mutex);

@@ -3,7 +3,8 @@
 
 #pragma once
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -24,7 +25,7 @@ namespace clockwork::scaffolding
 ///
 [[nodiscard]] jewels::expected<std::pmr::vector<jewels::memory::NonNullSharedPtr<EPollable>>, jewels::MonoError>
 setup_io_connections(
-  std::span<const common::IoConnectionInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::IoConnectionInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   AbstractCasing& casing);
 

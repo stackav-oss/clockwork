@@ -27,21 +27,22 @@ from clockwork.dsl.composition.system import (
     make_system,
 )
 from clockwork.dsl.composition.systemgen import gen_system_from_logical_system
-from clockwork.dsl.ir import primitive, system_target
+from clockwork.dsl.ir import expr, primitive, system_target
 from clockwork.dsl.ir.box import (
     HOST_CPU_DOMAIN_POLICY,
     HOST_PROCESS_POLICY,
+    FirstMessageInstance,
     MemoryResourceInstance,
     ProcessInstance,
     SerializedDataFileInstance,
     StateInstance,
 )
 from clockwork.dsl.ir.clkenum import ResolvedEnum, ResolvedValueDef, ValueRef
-from clockwork.dsl.ir.cog import CogInstance, CogInstanceMember, InputDef, OutputDef
+from clockwork.dsl.ir.cog import CogInstance, CogInstanceMember, ConfigDef, InputDef, OutputDef, StateDef
 from clockwork.dsl.ir.compiler import compile_source_file, create_filesystem_importer
 from clockwork.dsl.ir.hardware import CpuDomain
 from clockwork.dsl.ir.policy import (
-    _POLICY_KEY,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    _POLICY_KEY,  # pyright: ignore[reportPrivateUsage] # Needed to reset policies
     POLICY_DATA_TYPE,
     PolicyClass,
     PolicyData,
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from uuid import UUID
 
+    from clockwork.dsl.compiler_context import CompilerContext
     from clockwork.dsl.ir.module_id import ModuleID
     from clockwork.dsl.ir.node import Importer
 
@@ -88,20 +90,32 @@ class GeneratedSystemFiles:
 class LogicalSystemInterface:
     """Public interface to Clockwork LogicalSystem data."""
 
-    def __init__(self, module_id: ModuleID, module_importer: Importer | None = None) -> None:
+    def __init__(
+        self,
+        module_id: ModuleID,
+        module_importer: Importer | None = None,
+        compatible_with: LogicalSystemInterface | None = None,
+    ) -> None:
         """Constructor for the interface to a LogicalSystem.
 
-        Parameters:
+        Args:
             module_id: Module containing a system target to interface with.
             module_importer: Optional importer instance to use when compiling Clockwork modules.
-                         Use the same importer if you are compiling and combining multiple logical system interfaces in the same process.
+                Use the same importer if you are compiling and combining multiple logical system interfaces in the same process.
+            compatible_with: An optional LogicalSystemInterface instance to import context from.
         """
         # Maybe turn down the logger because the clk compiler debug is too verbose
         previous_level = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel("DEBUG")
         debug_level = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel("INFO" if previous_level == debug_level else previous_level)
-        self._logical_system = self._logical_system_from_system_target_config(module_id, module_importer)
+        self.logical_system = self._logical_system_from_system_target_config(
+            module_id,
+            module_importer,
+            compatible_with.logical_system.module.context if compatible_with else None,
+        )
+        if compatible_with:
+            self.import_context_from(compatible_with)
         logging.getLogger().setLevel(previous_level)
 
     def import_context_from(self, other: LogicalSystemInterface) -> None:
@@ -112,7 +126,7 @@ class LogicalSystemInterface:
         of one logical system (loaded from one set of clk files) with another
         logical system (loaded from another set of clk files).
         """
-        self._logical_system.module.context.import_from(other._logical_system.module.context)
+        self.logical_system.module.context.import_from(other.logical_system.module.context)
 
     def write_execution_configs(self, root_dir: Path) -> GeneratedSystemFiles:
         """Generate execution config files for a LogicalSystem."""
@@ -124,7 +138,7 @@ class LogicalSystemInterface:
         generated_system_files, _output_targets_by_domain, _physical_system = gen_system_from_logical_system(
             include_dir=include_dir,
             root_dir=root_dir,
-            logical_system=self._logical_system,
+            logical_system=self.logical_system,
             write_files=write_files,
             write_json_files=write_json_files,
             system_fqn=system_fqn,
@@ -148,66 +162,80 @@ class LogicalSystemInterface:
     def get_channels(self) -> list[ChannelInterface]:
         """Get the channels in the system."""
         return [
-            ChannelInterface(self._logical_system, channel_name)
-            for channel_name in (self._logical_system.channels | self._logical_system.metrics_channels)
+            ChannelInterface(self.logical_system, channel_name)
+            for channel_name in (self.logical_system.channels | self.logical_system.metrics_channels)
         ]
 
     def get_channel(self, channel_name: str) -> ChannelInterface | None:
         """Get a channel from the system."""
-        channel = (self._logical_system.channels | self._logical_system.metrics_channels).get(channel_name)
+        channel = (self.logical_system.channels | self.logical_system.metrics_channels).get(channel_name)
         if not channel:
             return None
-        return ChannelInterface(self._logical_system, channel_name)
+        return ChannelInterface(self.logical_system, channel_name)
 
     def add_channel(self, channel: ChannelInterface, alternative_channel_name: str | None = None) -> ChannelInterface:
         """Add a channel to the system."""
         channel_name = channel.get_name()
-        output_channel = channel._channel.channel  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        output_channel = channel.channel.channel
         if alternative_channel_name:
             channel_name = alternative_channel_name
-            if channel_name in (self._logical_system.channels | self._logical_system.metrics_channels):
-                return ChannelInterface(self._logical_system, channel_name)
-            output_channel = _get_channel_with_alternate_name(channel._channel, alternative_channel_name)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        self._logical_system.ensure_channel(output_channel)
+            if channel_name in (self.logical_system.channels | self.logical_system.metrics_channels):
+                return ChannelInterface(self.logical_system, channel_name)
+            output_channel = _get_channel_with_alternate_name(channel.channel, alternative_channel_name)
+        self.logical_system.ensure_channel(output_channel)
         if channel.is_metrics_channel():
-            new_channel = self._logical_system.metrics_channels[channel_name]
+            new_channel = self.logical_system.metrics_channels[channel_name]
         else:
-            new_channel = self._logical_system.channels[channel_name]
+            new_channel = self.logical_system.channels[channel_name]
 
         new_channel.producers.clear()
         new_channel.observers.clear()
-        return ChannelInterface(self._logical_system, channel_name)
+        return ChannelInterface(self.logical_system, channel_name)
 
     def remove_channel(self, channel: ChannelInterface) -> None:
         """Remove a channel from the system."""
         channel.remove_self_from_system()
 
+    def get_observers(self) -> list[EndpointInterface]:
+        """Get the observers in the system."""
+        return [
+            EndpointInterface(self.logical_system, uuid, endpoint)
+            for uuid, endpoint in self.logical_system.observer_endpoints.items()
+        ]
+
+    def get_producers(self) -> list[EndpointInterface]:
+        """Get the producers in the system."""
+        return [
+            EndpointInterface(self.logical_system, uuid, endpoint)
+            for uuid, endpoint in self.logical_system.producer_endpoints.items()
+        ]
+
     def get_io_connections(self) -> list[IoConnectionInterface]:
         """Get the io connections in the system."""
         io_connections = []
-        io_connections.extend(
-            IoConnectionInterface(self._logical_system, uuid) for uuid in self._logical_system.udp_sockets
-        )
-        io_connections.extend(
-            IoConnectionInterface(self._logical_system, uuid) for uuid in self._logical_system.audio_sources
-        )
+        io_connections.extend(IoConnectionInterface(self, uuid) for uuid in self.logical_system.udp_sockets)
+        io_connections.extend(IoConnectionInterface(self, uuid) for uuid in self.logical_system.audio_sources)
         return io_connections
 
     def get_cogs(self) -> list[CogInterface]:
         """Get the cogs in the system."""
-        return [CogInterface(self._logical_system, cog_uuid) for cog_uuid in self._logical_system.cogs]
+        return [CogInterface(self, cog_uuid) for cog_uuid in self.logical_system.cogs]
 
     def add_cog(self, cog: CogInterface) -> CogInterface:
         """Add a cog to the system. Return the new cog."""
-        return cog._add_self_to_new_system(self._logical_system)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        return cog.add_self_to_new_system(self)
 
     def remove_cog(self, cog: CogInterface) -> None:
         """Remove a cog from the system."""
         cog.remove_self_from_system()
 
+    def add_data_source(self, data_source: DataSourceInterface) -> DataSourceInterface:
+        """Add a data source to the system. Return the new data source."""
+        return data_source.add_self_to_new_system(self.logical_system)
+
     def clear_policies(self) -> None:
         """Remove all policies from the system."""
-        self._logical_system.module.context[_POLICY_KEY].registry.clear()
+        self.logical_system.module.context[_POLICY_KEY].registry.clear()
 
     def clear_udp_sockets(self) -> None:
         """Clear all UDP sockets and their endpoints from the system."""
@@ -218,17 +246,17 @@ class LogicalSystemInterface:
             for observer in channel.get_observers():
                 if observer.is_udp_socket():
                     observer.delete()
-        self._logical_system.udp_sockets.clear()
+        self.logical_system.udp_sockets.clear()
 
     def get_processes(self) -> list[ProcessInterface]:
         """Get all processes in the system."""
-        return [ProcessInterface(self._logical_system, process_uuid) for process_uuid in self._logical_system.processes]
+        return [ProcessInterface(self, process_uuid) for process_uuid in self.logical_system.processes]
 
     def add_process(self, process: ProcessInterface, cpu_domain: CpuDomainInterface) -> ProcessInterface:
         """Add a process to the system."""
-        process_uuid = self._logical_system.add_process(process._process)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        self._logical_system.process_to_domain = {process_uuid: cpu_domain._cpu_domain_uuid}  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        return ProcessInterface(self._logical_system, process_uuid)
+        process_uuid = self.logical_system.add_process(process.process)
+        self.logical_system.process_to_domain = {process_uuid: cpu_domain.cpu_domain_uuid}
+        return ProcessInterface(self, process_uuid)
 
     def remove_process(self, process: ProcessInterface) -> None:
         """Remove a process from the system."""
@@ -236,30 +264,30 @@ class LogicalSystemInterface:
 
     def assign_all_entities_to_process(self, process: ProcessInterface) -> None:
         """Assign all entities to the same process."""
-        for entity_uuid in self._logical_system.entity_to_process:
-            self._logical_system.entity_to_process[entity_uuid] = process._process_uuid  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        for entity_uuid in self.logical_system.entity_to_process:
+            self.logical_system.entity_to_process[entity_uuid] = process.process_uuid
 
     def assign_endpoint_process(self, endpoint: EndpointInterface, process: ProcessInterface) -> None:
         """Assign an endpoint to a process."""
-        endpoint._endpoint.process = process._process_uuid  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        endpoint.endpoint.process = process.process_uuid
 
     def get_cpu_domains(self) -> list[CpuDomainInterface]:
         """Get all CPU domains in the system."""
         return [
-            CpuDomainInterface(self, self._logical_system, cpu_domain_uuid)
-            for cpu_domain_uuid in self._logical_system.cpu_domains
+            CpuDomainInterface(self, self.logical_system, cpu_domain_uuid)
+            for cpu_domain_uuid in self.logical_system.cpu_domains
         ]
 
     def get_cpu_domain_for_entity(self, entity_uuid: UUID) -> CpuDomainInterface:
         """Get the cpu domain where an entity resides."""
-        process_uuid = self._logical_system.entity_to_process[entity_uuid]
-        cpu_domain_uuid = self._logical_system.process_to_domain[process_uuid]
-        return CpuDomainInterface(self, self._logical_system, cpu_domain_uuid)
+        process_uuid = self.logical_system.entity_to_process[entity_uuid]
+        cpu_domain_uuid = self.logical_system.process_to_domain[process_uuid]
+        return CpuDomainInterface(self, self.logical_system, cpu_domain_uuid)
 
     def add_cpu_domain(self, cpu_domain: CpuDomainInterface) -> CpuDomainInterface:
         """Add a CPU Domain to the system."""
-        new_domain_uuid = self._logical_system.add_cpu_domain(cpu_domain._cpu_domain)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        return CpuDomainInterface(self, self._logical_system, new_domain_uuid)
+        new_domain_uuid = self.logical_system.add_cpu_domain(cpu_domain.cpu_domain)
+        return CpuDomainInterface(self, self.logical_system, new_domain_uuid)
 
     def remove_cpu_domain(self, cpu_domain: CpuDomainInterface) -> None:
         """Remove a CPU domain from the system."""
@@ -267,16 +295,16 @@ class LogicalSystemInterface:
 
     def bind_cpu_domain_policy_to_process(self, cpu_domain: CpuDomainInterface, process: ProcessInterface) -> None:
         """Bind a CPU domain to a process."""
-        cpu_domain_policy = cpu_domain._get_policy()  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        cpu_domain_policy = cpu_domain.get_policy()
         if isinstance(cpu_domain_policy.source, PolicyInstance):
             error_str = "CPU Domain policy source is of incorrect type for binding a new policy."
             raise TypeError(error_str)
-        internal_process = process._process  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        current_policy = lookup_policy(self._logical_system.module, HOST_CPU_DOMAIN_POLICY, internal_process)
+        internal_process = process.process
+        current_policy = lookup_policy(self.logical_system.module, HOST_CPU_DOMAIN_POLICY, internal_process)
         if current_policy and current_policy.data == cpu_domain_policy.data:
             return
         bind_policy_data(
-            self._logical_system.module,
+            self.logical_system.module,
             UnboundPolicyData(
                 policy_class=HOST_CPU_DOMAIN_POLICY,
                 data=cpu_domain_policy.data,
@@ -293,10 +321,31 @@ class LogicalSystemInterface:
         alternative_input_channel_name: str | None = None,
     ) -> None:
         """Add a log producer to read onto a channel."""
+        for producer in channel.get_producers():
+            if producer.is_log_producer():
+                _logger.debug(
+                    "Channel %s already has a log producer, skipping addition of another log producer.",
+                    channel.get_name(),
+                )
+                return
         channel.add_log_producer(
             alternative_output_channel_name=alternative_output_channel_name,
             alternative_input_channel_name=alternative_input_channel_name,
         )
+
+    def get_data_sources(self) -> list[DataSourceInterface]:
+        """Get all data sources in the system."""
+        return [
+            DataSourceInterface(self.logical_system, data_source)
+            for data_source in self.logical_system.data_sources.values()
+        ]
+
+    def get_state_instances(self) -> list[ConnectableInterface]:
+        """Get all state instances in the system."""
+        return [
+            ConnectableInterface(self.logical_system, uuid, self.logical_system.states)
+            for uuid in self.logical_system.states
+        ]
 
     def _get_policy_field_value(self, policy: PolicyClass, field_name: str) -> ResolvedValueDef:
         """Helper to get a field value from a policy class."""
@@ -315,7 +364,7 @@ class LogicalSystemInterface:
 
     def add_telemetry_log_observers(self, channels: list[ChannelInterface]) -> None:
         """Set a channel to be written to the telemetry log."""
-        channel_logging_policy_class = logger_config.get_channel_logging_policy()
+        channel_logging_policy_class = logger_config.get_channel_logging_policy(self.logical_system.module.context)
         telemetry_value = self._get_policy_field_value(channel_logging_policy_class, "telemetry")
         if telemetry_value.source is None:
             error_str = "Can't find telemetry value source value in order to assign to a logging policy."
@@ -326,57 +375,77 @@ class LogicalSystemInterface:
             raise RuntimeError(error_str)
 
         for channel in channels:
-            if isinstance(channel._channel, MetricsChannel):  # pyright: ignore[reportPrivateUsage]  TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+            if isinstance(channel.channel, MetricsChannel):
                 continue
             type_infos = list(channel_logging_policy_class.target_bound)
             if (
-                isinstance(channel._channel.channel.ir_node.type_info, TypeVal)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
-                and channel._channel.channel.ir_node.type_info not in type_infos  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+                isinstance(channel.channel.channel.ir_node.type_info, TypeVal)
+                and channel.channel.channel.ir_node.type_info not in type_infos
             ):
-                type_infos.append(channel._channel.channel.ir_node.type_info)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+                type_infos.append(channel.channel.channel.ir_node.type_info)
             channel_logging_policy_class.target_bound = list(type_infos)
             schema_args = [("log_type", ValueRef.make(telemetry_value.source))]
             if channel.is_persistent():
                 _logger.debug("Marking channel %s as persistent", channel.get_name())
                 schema_args.append(("channel_type", ValueRef.make(persistent_value.source)))
             bind_policy_data(
-                self._logical_system.module,
+                self.logical_system.module,
                 UnboundPolicyData(
                     policy_class=channel_logging_policy_class,
                     data=SchemaInstance.from_args(
                         schema_ir=channel_logging_policy_class.schema,
                         args=schema_args,
                         error_report_node=None,
-                        error_report_module=self._logical_system.module,
+                        error_report_module=self.logical_system.module,
                     ),
                     source=None,
                     type_info=POLICY_DATA_TYPE,
                 ),
-                channel._channel.channel.ir_node,  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+                channel.channel.channel.ir_node,
             )
 
     def is_endpoint_connected_to_cog(self, endpoint: EndpointInterface, cog: CogInterface) -> bool:
         """Determine whether an endpoint is connected to a cog."""
         return (
-            isinstance(endpoint._endpoint.entity, CogInstanceMember)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
-            and endpoint._endpoint.entity.cog_instance is cog._cog  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # noqa: SLF001
+            isinstance(endpoint.endpoint.entity, CogInstanceMember) and endpoint.endpoint.entity.cog_instance is cog.cog
         )
 
     def connect_channel_observer(self, channel: ChannelInterface, observer: EndpointInterface) -> None:
         """Connect a channel to a channel observer."""
-        self._logical_system.connect_channel_observer(channel._channel.channel, observer._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        self.logical_system.connect_channel_observer(channel.channel.channel, observer.endpoint.entity)
 
     def connect_channel_producer(self, channel: ChannelInterface, producer: EndpointInterface) -> None:
         """Connect a channel to a channel producer."""
         if channel.is_metrics_channel():
-            self._logical_system.connect_metrics_channel_producer(
-                channel._channel.channel, producer._endpoint.entity)  # pyright: ignore[reportArgumentType, reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+            assert isinstance(channel.channel, MetricsChannel)
+            self.logical_system.connect_metrics_channel_producer(channel.channel.channel, producer.endpoint.entity)
         else:
-            self._logical_system.connect_channel_producer(channel._channel.channel, producer._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+            self.logical_system.connect_channel_producer(channel.channel.channel, producer.endpoint.entity)
 
-    def _get_cpu_domain_policy(self, cpu_domain: CpuDomainInterface) -> PolicyData:
+    def connect_state(self, state: ConnectableInterface, cog_endpoint: EndpointInterface) -> None:
+        """Connect a state to a cog endpoint.
+
+        Disconnects any existing state connection to the endpoint before making the new connection.
+        """
+        if not isinstance(state.connectable.entity, StateInstance):
+            error_str = f"Can only connect StateInstance connectables to state, not {type(state.connectable.entity)}."
+            raise TypeError(error_str)
+        if not isinstance(cog_endpoint.endpoint.entity.member, StateDef):
+            error_str = (
+                f"Can only connect cog StateDef endpoints to state, not {type(cog_endpoint.endpoint.entity.member)}."
+            )
+            raise TypeError(error_str)
+
+        # Disconnect any existing state from this endpoint first
+        cog_endpoint_member = cog_endpoint.endpoint.entity
+        self.logical_system.disconnect_state(cog_endpoint_member)
+
+        # Now connect the new state
+        self.logical_system.connect_state(state.connectable.entity, cog_endpoint_member)
+
+    def get_cpu_domain_policy(self, cpu_domain: CpuDomainInterface) -> PolicyData:
         """Get the CPU domain policy data associated with this CPU domain."""
-        for policy in lookup_all_policies(self._logical_system.module, HOST_CPU_DOMAIN_POLICY):
+        for policy in lookup_all_policies(self.logical_system.module, HOST_CPU_DOMAIN_POLICY):
             if (
                 policy.data.data.get("cpu_domain")
                 and isinstance(policy.data.data["cpu_domain"], CpuDomain)
@@ -387,7 +456,10 @@ class LogicalSystemInterface:
         raise RuntimeError(error_str)
 
     def _logical_system_from_system_target_config(
-        self, module_id: ModuleID, module_importer: Importer | None = None
+        self,
+        module_id: ModuleID,
+        module_importer: Importer | None = None,
+        compiler_context: CompilerContext | None = None,
     ) -> LogicalSystem:
         """Generate a LogicalSystem representing the system target defined in the given clockwork config file."""
         if module_importer is None:
@@ -407,7 +479,10 @@ class LogicalSystemInterface:
                     raise RuntimeError(error_str)
                 system_target_ir = obj.get_resolved()
                 logical_system = make_system(
-                    [system_target_ir.box_instance], system_target_ir.module, system_target_ir.require_logging_policies
+                    [system_target_ir.box_instance],
+                    system_target_ir.module,
+                    system_target_ir.require_logging_policies,
+                    compiler_context,
                 )
         if logical_system is None:
             error_str = f"Clockwork configuration '{module_id.get_base_path()}' did not specify any system targets."
@@ -420,58 +495,58 @@ class EndpointInterface:
 
     def __init__(self, logical_system: LogicalSystem, uuid: UUID, endpoint: Endpoint[Any, Any]) -> None:
         """Constructor."""
-        self._logical_system: LogicalSystem = logical_system
-        self._uuid: UUID = uuid
-        self._endpoint: Endpoint[Any, Any] = endpoint
+        self.logical_system: LogicalSystem = logical_system
+        self.uuid: UUID = uuid
+        self.endpoint: Endpoint[Any, Any] = endpoint
 
     def is_udp_socket(self) -> bool:
         """Determine whether this endpoint is a udp socket."""
-        return isinstance(self._endpoint.entity, UdpSocketEndpointInstance)
+        return isinstance(self.endpoint.entity, UdpSocketEndpointInstance)
 
     def is_log_producer(self) -> bool:
         """Determine whether this endpoint is a log producer."""
-        return isinstance(self._endpoint.entity, LogProducer)
+        return isinstance(self.endpoint.entity, LogProducer)
 
     def get_log_producer_source_name(self) -> str:
         """Get the source name of a log producer."""
         if not self.is_log_producer():
             error_str = "Trying to get source name of a non-log producer endpoint."
             raise TypeError(error_str)
-        return str(self._endpoint.entity.source_name)
+        return str(self.endpoint.entity.source_name)
 
     def get_connected_channel(self) -> ChannelInterface | None:
         """Get the channel connected to this endpoint, if any."""
-        if isinstance(self._endpoint.connected_to, Channel):
-            return ChannelInterface(self._logical_system, self._endpoint.connected_to.channel.channel_name)
+        if isinstance(self.endpoint.connected_to, Channel):
+            return ChannelInterface(self.logical_system, self.endpoint.connected_to.channel.channel_name)
         return None
 
     def update_observed_channel(self, old_channel: ChannelInterface, new_channel: ChannelInterface) -> None:
         """Update an endpoint connection to a different channel."""
-        if not isinstance(self._endpoint.connected_to, Channel):
+        if not isinstance(self.endpoint.connected_to, Channel):
             error_str = "Trying to update connected channel for a non-channel endpoint"
             raise TypeError(error_str)
-        old_channel._channel.observers.pop(self._uuid)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        self._endpoint.connected_to = None
-        self._logical_system.connect_channel_observer(new_channel._channel.channel, self._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        old_channel.channel.observers.pop(self.uuid)
+        self.endpoint.connected_to = None
+        self.logical_system.connect_channel_observer(new_channel.channel.channel, self.endpoint.entity)
 
     def update_produced_channel(self, old_channel: ChannelInterface, new_channel: ChannelInterface) -> None:
         """Update an endpoint connection to a different channel."""
-        old_channel._channel.producers.pop(self._uuid)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-        self._endpoint.connected_to = None
-        self._logical_system.connect_channel_producer(new_channel._channel.channel, self._endpoint.entity)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        old_channel.channel.producers.pop(self.uuid)
+        self.endpoint.connected_to = None
+        self.logical_system.connect_channel_producer(new_channel.channel.channel, self.endpoint.entity)
 
     def delete(self) -> None:
         """Remove this endpoint from the system."""
-        if isinstance(self._endpoint.entity, CogInstanceMember):
+        if isinstance(self.endpoint.entity, CogInstanceMember):
             error_str = "Cog member endpoints cannot be deleted from the system. Consider deleting the cog instead."
             raise TypeError(error_str)
-        if isinstance(self._endpoint.entity, UdpSocketEndpointInstance):
-            _remove_entity(self._logical_system, self._uuid)
-            _remove_endpoint(self._logical_system, self._uuid)
-        elif isinstance(self._endpoint.entity, LogProducer):
-            _remove_entity(self._logical_system, self._uuid)
-            _remove_endpoint(self._logical_system, self._uuid)
-            self._logical_system.log_producers.pop(self._uuid)
+        if isinstance(self.endpoint.entity, UdpSocketEndpointInstance):
+            _remove_entity(self.logical_system, self.uuid)
+            _remove_endpoint(self.logical_system, self.uuid)
+        elif isinstance(self.endpoint.entity, LogProducer):
+            _remove_entity(self.logical_system, self.uuid)
+            _remove_endpoint(self.logical_system, self.uuid)
+            self.logical_system.log_producers.pop(self.uuid)
         else:
             error_str = "Unhandled endpoint type while trying to delete an endpoint."
             raise TypeError(error_str)
@@ -493,64 +568,68 @@ class ChannelInterface:
     def __init__(self, logical_system: LogicalSystem, channel_name: str) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
-        self._channel_name: str = channel_name
-        self._channel: Channel | MetricsChannel = (
+        self.channel_name: str = channel_name
+        self.channel: Channel | MetricsChannel = (
             self._logical_system.channels | self._logical_system.metrics_channels
-        )[self._channel_name]
+        )[self.channel_name]
         self._logging_policy: ChannelLoggingPolicy | None = self._lookup_logging_policy()
 
     def is_metrics_channel(self) -> bool:
         """Check if the channel is a metrics channel."""
-        return isinstance(self._channel, MetricsChannel)
+        return isinstance(self.channel, MetricsChannel)
+
+    def is_published_once(self) -> bool:
+        """Check if the channel is published once."""
+        return isinstance(self.channel, Channel) and self.channel.channel.is_published_once
 
     def is_multi_producer(self) -> bool:
         """Check if the channel is a multi producer."""
-        return self._channel.is_multi_producer()
+        return self.channel.is_multi_producer()
 
     def get_producers(self) -> list[EndpointInterface]:
         """Get the inputs into the channel."""
         return [
-            EndpointInterface(self._logical_system, uuid, endpoint)
-            for uuid, endpoint in self._channel.producers.items()
+            EndpointInterface(self._logical_system, uuid, endpoint) for uuid, endpoint in self.channel.producers.items()
         ]
 
     def get_observers(self) -> list[EndpointInterface]:
         """Get the outputs out of the channel."""
         return [
-            EndpointInterface(self._logical_system, uuid, endpoint)
-            for uuid, endpoint in self._channel.observers.items()
+            EndpointInterface(self._logical_system, uuid, endpoint) for uuid, endpoint in self.channel.observers.items()
         ]
 
     def get_name(self) -> str:
         """Get the channel name."""
-        return self._channel_name
+        return self.channel_name
 
     def has_log_writer_policy(self) -> bool:
         """Determine whether a channel is configured to be written to an output log."""
-        if isinstance(self._channel, MetricsChannel):
+        if isinstance(self.channel, MetricsChannel):
             return True
-        channel_logging_policy_class = logger_config.get_channel_logging_policy()
+        channel_logging_policy_class = logger_config.get_channel_logging_policy(self._logical_system.module.context)
         return (
-            lookup_policy(self._logical_system.module, channel_logging_policy_class, self._channel.channel.ir_node)
+            lookup_policy(self._logical_system.module, channel_logging_policy_class, self.channel.channel.ir_node)
             is not None
         )
 
     def get_optimal_queue_size(self) -> int:
         """Get the smallest queue size for the channel that still meets the requirements for all observers."""
+        if self.is_published_once():
+            return 1
         optimal_queue_size = 1
         for endpoint in self.get_observers():
-            if isinstance(endpoint._endpoint.entity, CogInstanceMember):  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
-                view_max_messages = endpoint._endpoint.entity.member.view_params.max_msgs + 1  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+            if isinstance(endpoint.endpoint.entity, CogInstanceMember):
+                view_max_messages = endpoint.endpoint.entity.member.view_params.max_msgs + 1
                 if isinstance(view_max_messages, int):
                     optimal_queue_size = max(optimal_queue_size, view_max_messages)
         return optimal_queue_size
 
     def _lookup_logging_policy(self) -> ChannelLoggingPolicy | None:
         """Lookup the channel log writer policy, or None if one is not set."""
-        if isinstance(self._channel, MetricsChannel):
-            return ChannelLoggingPolicy(log_type=self._channel.channel.log_type.name, channel_type="regular")
-        channel_logging_policy_class = logger_config.get_channel_logging_policy()
-        policy = lookup_policy(self._logical_system.module, channel_logging_policy_class, self._channel.channel.ir_node)
+        if isinstance(self.channel, MetricsChannel):
+            return ChannelLoggingPolicy(log_type=self.channel.channel.log_type.name, channel_type="regular")
+        channel_logging_policy_class = logger_config.get_channel_logging_policy(self._logical_system.module.context)
+        policy = lookup_policy(self._logical_system.module, channel_logging_policy_class, self.channel.channel.ir_node)
         if policy is None:
             return None
 
@@ -575,14 +654,15 @@ class ChannelInterface:
         """Get whether the logging policy is persistent."""
         if self._logging_policy is None:
             return False
-        return self._logging_policy.channel_type == logger_config.ChannelType.persistent.name  # pyright: ignore[reportAttributeAccessIssue] Dynamic Type
+        entities = logger_config.get_entities(self._logical_system.module.context)
+        return self._logging_policy.channel_type == entities.channel_type.persistent.name  # pyright: ignore[reportAttributeAccessIssue] This is a dynamic enum
 
     def remove_self_from_system(self) -> None:
         """Remove this channel from its system."""
         if self.is_metrics_channel():
-            removed_channel = self._logical_system.metrics_channels.pop(self._channel_name)
+            removed_channel = self._logical_system.metrics_channels.pop(self.channel_name)
         else:
-            removed_channel = self._logical_system.channels.pop(self._channel_name)
+            removed_channel = self._logical_system.channels.pop(self.channel_name)
         for endpoint_dict in _get_endpoint_dicts(self._logical_system):
             for endpoint_uuid in list(endpoint_dict.keys()):
                 endpoint = endpoint_dict[endpoint_uuid]
@@ -596,7 +676,7 @@ class ChannelInterface:
         self, alternative_output_channel_name: str | None = None, alternative_input_channel_name: str | None = None
     ) -> None:
         """Add a log producer to the system that produces this channel."""
-        if isinstance(self._channel, MetricsChannel):
+        if isinstance(self.channel, MetricsChannel):
             error_str = (
                 "Trying to add a log producer for a metrics channel. Metrics channels are not supported for log "
                 "producers."
@@ -605,9 +685,9 @@ class ChannelInterface:
         channel_name = self.get_name()
         # cant read schema from the log if it doesn't have a uuid
         if (
-            not self._channel.channel.ir_node.message_repr
-            or not self._channel.channel.ir_node.message_repr
-            or not self._channel.channel.ir_node.message_repr.schema_ir.schema.uuid
+            not self.channel.channel.ir_node.message_repr
+            or not self.channel.channel.ir_node.message_repr
+            or not self.channel.channel.ir_node.message_repr.schema_ir.schema.uuid
         ):
             error_str = (
                 f"Trying to add a log producer for channel {channel_name}, but don't have a UUID for the "
@@ -615,17 +695,17 @@ class ChannelInterface:
             )
             raise RuntimeError(error_str)
         output_channel_name = channel_name
-        output_channel = self._channel.channel
+        output_channel = self.channel.channel
         if alternative_output_channel_name:
             if alternative_output_channel_name in self._logical_system.channels:
                 output_channel = self._logical_system.channels[alternative_output_channel_name].channel
             else:
                 output_channel_name = alternative_output_channel_name
-                output_channel = _get_channel_with_alternate_name(self._channel, alternative_output_channel_name)
+                output_channel = _get_channel_with_alternate_name(self.channel, alternative_output_channel_name)
                 # A Graphir Channel was the argument in so that type should be the output of _get_channel_with_alternate_name
                 assert isinstance(output_channel, GraphirChannel)
             self._logical_system.ensure_channel(output_channel)
-        input_channel_name = alternative_input_channel_name if alternative_input_channel_name else channel_name
+        input_channel_name = alternative_input_channel_name or channel_name
         log_producer = LogProducer(
             name=f"logreader-({input_channel_name})-to-({output_channel_name})",
             scope=self._logical_system.module.inner_scope,
@@ -640,19 +720,19 @@ class ChannelInterface:
 
     def get_message_repr_name(self) -> str:
         """Get the name of the message representation."""
-        return self._channel.channel.message_repr.schema_ir.schema.fqn
+        return self.channel.channel.message_repr.schema_ir.schema.fqn
 
     def get_message_size_bytes(self) -> int:
         """Get the size of messages on this channel."""
-        return self._channel.channel.message_size
+        return self.channel.channel.message_size
 
     def get_queue_size(self) -> int:
         """Get the message queue size for the channel."""
-        return self._channel.channel.num_slots
+        return self.channel.channel.num_slots
 
     def set_queue_size(self, queue_size: int) -> None:
         """Set the message queue size for the channel."""
-        self._channel.channel = replace(self._channel.channel, num_slots=queue_size)  # pyright: ignore[reportAttributeAccessIssue] # False positive, pyright doesn't understand replace() is a dataclass method
+        self.channel.channel = replace(self.channel.channel, num_slots=queue_size)  # pyright: ignore[reportAttributeAccessIssue] # False positive, pyright doesn't understand replace() is a dataclass method
 
 
 class ConnectableInterface:
@@ -664,34 +744,45 @@ class ConnectableInterface:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._connectable_uuid: UUID = connectable_uuid
-        self._connectable_dict: dict[UUID, Any] = connectable_dict
-        self._connectable: Connectable[Any, CogInstanceMember[Any]] = self._connectable_dict[self._connectable_uuid]
+        self.connectable: Connectable[Any, CogInstanceMember[Any]] = connectable_dict[self._connectable_uuid]
 
     def get_name(self) -> str:
         """Get the name of the connectable."""
-        if not hasattr(self._connectable.entity, "fqn") or not isinstance(self._connectable.entity.fqn, str):
+        if not hasattr(self.connectable.entity, "fqn") or not isinstance(self.connectable.entity.fqn, str):
             error_str = "Could not get a name for a connectable"
             raise RuntimeError(error_str)
-        return self._connectable.entity.fqn
+        return self.connectable.entity.fqn
 
     def get_endpoints(self) -> list[EndpointInterface]:
         """Get the endpoints on a connectable."""
         return [
             EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
-            for endpoint_uuid, endpoint in self._connectable.endpoints.items()
+            for endpoint_uuid, endpoint in self.connectable.endpoints.items()
         ]
 
-    def _add_self_to_new_system(self, new_logical_system: LogicalSystem, process_policy_data: PolicyData) -> None:
+    def add_self_to_new_system(self, new_logical_system: LogicalSystem, process_policy_data: PolicyData) -> None:
         """Add this connectable to a new system (and make the appropriate connections)."""
         self._try_set_connectable_process_in_new_system(new_logical_system, process_policy_data)
         self._try_add_connectable_entity_to_new_system(new_logical_system)
         self._make_connections_to_cogs(new_logical_system)
 
+    def set_init_data_source(self, init_data_source: DataSourceInterface) -> None:
+        """Set the initial data source for the connectable.
+
+        Note: only StateInstance connectables can have initial data sources.
+        """
+        if not isinstance(self.connectable.entity, StateInstance):
+            error_str = (
+                f"Can only set initial data source for StateInstance connectables, not {type(self.connectable.entity)}."
+            )
+            raise TypeError(error_str)
+        self._logical_system.init_data_sources[self._connectable_uuid] = init_data_source.uuid
+
     def _try_set_connectable_process_in_new_system(
         self, new_logical_system: LogicalSystem, process_policy_data: PolicyData
     ) -> None:
         """Set the process for the connectable, if needed."""
-        if lookup_policy(new_logical_system.module, HOST_PROCESS_POLICY, self._connectable.entity) is None:
+        if lookup_policy(new_logical_system.module, HOST_PROCESS_POLICY, self.connectable.entity) is None:
             if isinstance(process_policy_data.source, PolicyInstance):
                 error_str = "Policy data source is of incorrect type for binding a new policy."
                 raise RuntimeError(error_str)
@@ -703,51 +794,62 @@ class ConnectableInterface:
                     source=process_policy_data.source,
                     type_info=POLICY_DATA_TYPE,
                 ),
-                self._connectable.entity,
+                self.connectable.entity,
             )
 
     def _try_add_connectable_entity_to_new_system(self, new_logical_system: LogicalSystem) -> None:
         """Add this connectables entity to the new system, if needed."""
-        if isinstance(self._connectable.entity, SerializedDataFileInstance):
+        if isinstance(self.connectable.entity, SerializedDataFileInstance):
             with contextlib.suppress(KeyError):
-                new_logical_system.add_config(self._connectable.entity)
-        elif isinstance(self._connectable.entity, StateInstance):
+                new_logical_system.add_config(self.connectable.entity)
+        elif isinstance(self.connectable.entity, StateInstance):
             with contextlib.suppress(KeyError):
-                new_logical_system.add_state(self._connectable.entity)
-        elif isinstance(self._connectable.entity, MemoryResourceInstance):
+                new_logical_system.add_state(self.connectable.entity)
+        elif isinstance(self.connectable.entity, MemoryResourceInstance):
             with contextlib.suppress(KeyError):
-                new_logical_system.add_memory_resource(self._connectable.entity)
+                new_logical_system.add_memory_resource(self.connectable.entity)
 
     def _make_connections_to_cogs(self, new_logical_system: LogicalSystem) -> None:
         """Make connections to cogs in the new system."""
-        for endpoint in self._connectable.endpoints.values():
+        for endpoint in self.connectable.endpoints.values():
             for cog in new_logical_system.cogs.values():
                 if endpoint.entity.cog_instance is cog:
-                    if isinstance(self._connectable.entity, SerializedDataFileInstance):
-                        new_logical_system.connect_config(self._connectable.entity, endpoint.entity)
-                    elif isinstance(self._connectable.entity, StateInstance):
-                        new_logical_system.connect_state(self._connectable.entity, endpoint.entity)
-                    elif isinstance(self._connectable.entity, MemoryResourceInstance):
-                        new_logical_system.connect_memory_resource(self._connectable.entity, endpoint.entity)
+                    if isinstance(self.connectable.entity, FirstMessageInstance | SerializedDataFileInstance):
+                        new_logical_system.connect_config(self.connectable.entity, endpoint.entity)
+                    elif isinstance(self.connectable.entity, StateInstance):
+                        new_logical_system.connect_state(self.connectable.entity, endpoint.entity)
+                    elif isinstance(self.connectable.entity, MemoryResourceInstance):
+                        new_logical_system.connect_memory_resource(self.connectable.entity, endpoint.entity)
                     else:
-                        error_str = f"Unhandled connectable type {type(self._connectable.entity)}"
+                        error_str = f"Unhandled connectable type {type(self.connectable.entity)}"
                         raise TypeError(error_str)
 
 
 class ProcessInterface:
     """Public interface to clockwork logical system process."""
 
-    def __init__(self, logical_system: LogicalSystem, process_uuid: UUID) -> None:
+    def __init__(self, logical_system_interface: LogicalSystemInterface, process_uuid: UUID) -> None:
         """Constructor."""
-        self._logical_system: LogicalSystem = logical_system
-        self._process_uuid: UUID = process_uuid
-        self._process: ProcessInstance = self._logical_system.processes[self._process_uuid]
+        self.logical_system_interface: LogicalSystemInterface = logical_system_interface
+        self.logical_system: LogicalSystem = logical_system_interface.logical_system
+        self.process_uuid: UUID = process_uuid
+        self.process: ProcessInstance = self.logical_system.processes[self.process_uuid]
 
     def remove_self_from_system(self) -> None:
         """Remove the process from the system. Entities and endpoints may be left with dangling references."""
-        _remove_entity(self._logical_system, self._process_uuid)
-        self._logical_system.processes.pop(self._process_uuid)
-        self._logical_system.process_to_domain.pop(self._process_uuid)
+        _remove_entity(self.logical_system, self.process_uuid)
+        self.logical_system.processes.pop(self.process_uuid)
+        self.logical_system.process_to_domain.pop(self.process_uuid)
+
+    def get_name(self) -> str:
+        """Get the fqn of the process."""
+        return self.process.fqn
+
+    def get_cpu_domain(self) -> CpuDomainInterface:
+        """Get the cpu domain for the process."""
+        return CpuDomainInterface(
+            self.logical_system_interface, self.logical_system, self.logical_system.process_to_domain[self.process_uuid]
+        )
 
 
 class CpuDomainInterface:
@@ -760,37 +862,42 @@ class CpuDomainInterface:
         cpu_domain_uuid: UUID,
     ) -> None:
         """Constructor."""
-        self._logical_system_interface: LogicalSystemInterface = logical_system_interface
-        self._logical_system: LogicalSystem = logical_system
-        self._cpu_domain_uuid: UUID = cpu_domain_uuid
-        self._cpu_domain: CpuDomain = self._logical_system.cpu_domains[self._cpu_domain_uuid]
+        self.logical_system_interface: LogicalSystemInterface = logical_system_interface
+        self.logical_system: LogicalSystem = logical_system
+        self.cpu_domain_uuid: UUID = cpu_domain_uuid
+        self.cpu_domain: CpuDomain = self.logical_system.cpu_domains[self.cpu_domain_uuid]
 
     def remove_self_from_system(self) -> None:
         """Remove the process from the system. Processes may be left with dangling references."""
-        _remove_entity(self._logical_system, self._cpu_domain_uuid)
-        self._logical_system.cpu_domains.pop(self._cpu_domain_uuid)
+        _remove_entity(self.logical_system, self.cpu_domain_uuid)
+        self.logical_system.cpu_domains.pop(self.cpu_domain_uuid)
 
     def get_name(self) -> str:
         """Get the name of the CPU Domain."""
-        return self._cpu_domain.name
+        return self.cpu_domain.name
 
-    def _get_policy(self) -> PolicyData:
+    def get_policy(self) -> PolicyData:
         """Get the CPU Domain policy."""
-        return self._logical_system_interface._get_cpu_domain_policy(self)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+        return self.logical_system_interface.get_cpu_domain_policy(self)
 
 
 @final
 class IoConnectionInterface:
     """Public interface to a clockwork IoConnection."""
 
-    def __init__(self, logical_system: LogicalSystem, uuid: UUID) -> None:
+    def __init__(self, logical_system_interface: LogicalSystemInterface, uuid: UUID) -> None:
         """Initialize the class."""
-        self._logical_system = logical_system
+        self._logical_system_interface = logical_system_interface
+        self._logical_system = logical_system_interface.logical_system
         self._uuid = uuid
 
     def get_uuid(self) -> UUID:
         """Get UUID for the io connection instance."""
         return self._uuid
+
+    def get_process(self) -> ProcessInterface:
+        """Get the process where this connection runs."""
+        return ProcessInterface(self._logical_system_interface, self._logical_system.entity_to_process[self._uuid])
 
     def get_name(self) -> str:
         """Get name for the io connection instance."""
@@ -845,32 +952,37 @@ class IoConnectionInterface:
 class CogInterface:
     """Public interface to clockwork logical system cog."""
 
-    def __init__(self, logical_system: LogicalSystem, cog_uuid: UUID) -> None:
+    def __init__(self, logical_system_interface: LogicalSystemInterface, cog_uuid: UUID) -> None:
         """Constructor."""
-        self._logical_system: LogicalSystem = logical_system
-        self._cog_uuid: UUID = cog_uuid
-        self._cog: CogInstance = self._logical_system.cogs[self._cog_uuid]
+        self.logical_system_interface: LogicalSystemInterface = logical_system_interface
+        self.logical_system: LogicalSystem = logical_system_interface.logical_system
+        self.cog_uuid: UUID = cog_uuid
+        self.cog: CogInstance = self.logical_system.cogs[self.cog_uuid]
 
     def get_name(self) -> str:
         """Get the cog name."""
-        return self._cog.fqn
+        return self.cog.fqn
 
     def get_uuid(self) -> UUID:
         """Get the cog UUID."""
-        return self._cog_uuid
+        return self.cog_uuid
+
+    def get_process(self) -> ProcessInterface:
+        """Get the process where this connection runs."""
+        return ProcessInterface(self.logical_system_interface, self.logical_system.entity_to_process[self.cog_uuid])
 
     def is_init(self) -> bool:
         """Whether or not this is an init cog."""
-        return self._cog.cog_class.is_init()
+        return self.cog.cog_class.is_init()
 
     def get_output_channel_names(self) -> list[str]:
         """Names of any output channels."""
         channel_names = []
-        for entity in self._cog.members:
+        for entity in self.cog.members:
             if not isinstance(entity.member, OutputDef):
                 continue
-            endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
-            endpoint = self._logical_system.producer_endpoints[endpoint_uuid]
+            endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+            endpoint = self.logical_system.producer_endpoints[endpoint_uuid]
             if not isinstance(endpoint.connected_to, Channel):
                 continue
             channel_names.append(endpoint.connected_to.channel.channel_name)
@@ -878,23 +990,23 @@ class CogInterface:
 
     def get_endpoint_by_output_name(self, name: str) -> EndpointInterface | None:
         """Get an endpoint by its name in the cog outputs."""
-        for entity in self._cog.members:
+        for entity in self.cog.members:
             if not isinstance(entity.member, OutputDef):
                 continue
             if entity.name == name:
-                endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
-                endpoint = self._logical_system.producer_endpoints[endpoint_uuid]
-                return EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
+                endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+                endpoint = self.logical_system.producer_endpoints[endpoint_uuid]
+                return EndpointInterface(self.logical_system, endpoint_uuid, endpoint)
         return None
 
     def get_input_channel_names(self) -> list[str]:
         """Names of any input channels."""
         channel_names = []
-        for entity in self._cog.members:
+        for entity in self.cog.members:
             if not isinstance(entity.member, InputDef):
                 continue
-            endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
-            endpoint = self._logical_system.observer_endpoints[endpoint_uuid]
+            endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+            endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
             if not isinstance(endpoint.connected_to, Channel):
                 continue
             channel_names.append(endpoint.connected_to.channel.channel_name)
@@ -902,30 +1014,62 @@ class CogInterface:
 
     def get_endpoint_by_input_name(self, name: str) -> EndpointInterface | None:
         """Get an endpoint by its name in the cog inputs."""
-        for entity in self._cog.members:
+        for entity in self.cog.members:
             if not isinstance(entity.member, InputDef):
                 continue
             if entity.name == name:
-                endpoint_uuid = lookup_uuid(self._logical_system.module.context, entity)
-                endpoint = self._logical_system.observer_endpoints[endpoint_uuid]
-                return EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
+                endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+                endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
+                return EndpointInterface(self.logical_system, endpoint_uuid, endpoint)
         return None
+
+    def get_config_endpoint_by_name(self, endpoint_name: str) -> EndpointInterface | None:
+        """Get a config endpoint by its name in the cog configs."""
+        for entity in self.cog.members:
+            if not isinstance(entity.member, ConfigDef):
+                continue
+            if entity.name == endpoint_name:
+                endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+                endpoint = self.logical_system.config_endpoints[endpoint_uuid]
+                return EndpointInterface(self.logical_system, endpoint_uuid, endpoint)
+        return None
+
+    def connect_config_by_name(self, endpoint_name: str, data_source: DataSourceInterface) -> None:
+        """Connect a config endpoint by its name in the cog configs.
+
+        Disconnects any existing config connection to the endpoint before making the new connection.
+        """
+        endpoint = self.get_config_endpoint_by_name(endpoint_name)
+        if endpoint is None:
+            error_str = f"Could not find config endpoint named {endpoint_name} in cog {self.get_name()}"
+            raise RuntimeError(error_str)
+        assert isinstance(endpoint.endpoint.entity, CogInstanceMember)
+        assert isinstance(
+            endpoint.endpoint.entity.member,
+            ConfigDef,
+        )
+
+        # Disconnect any existing config from this endpoint first
+        self.logical_system.disconnect_config(endpoint.endpoint.entity)
+
+        # Now connect the new config
+        self.logical_system.connect_config(config=data_source.data_source, endpoint=endpoint.endpoint.entity)
 
     def get_connectables(self) -> list[ConnectableInterface]:
         """Get the connectables that feed into this cog."""
         return [
-            *self._get_connectables(self._logical_system.configs),
-            *self._get_connectables(self._logical_system.states),
-            *self._get_connectables(self._logical_system.mem_resources),
+            *self._get_connectables(self.logical_system.configs),
+            *self._get_connectables(self.logical_system.states),
+            *self._get_connectables(self.logical_system.mem_resources),
         ]
 
     def remove_self_from_system(self) -> None:
         """Remove this cog from its system."""
-        self._logical_system.all_entities.pop(self._cog_uuid)
-        self._logical_system.entity_to_process.pop(self._cog_uuid)
-        removed_cog = self._logical_system.cogs.pop(self._cog_uuid)
+        self.logical_system.all_entities.pop(self.cog_uuid)
+        self.logical_system.entity_to_process.pop(self.cog_uuid)
+        removed_cog = self.logical_system.cogs.pop(self.cog_uuid)
 
-        for endpoint_dict in _get_endpoint_dicts(self._logical_system):
+        for endpoint_dict in _get_endpoint_dicts(self.logical_system):
             for endpoint_uuid in list(endpoint_dict.keys()):
                 endpoint = endpoint_dict.get(endpoint_uuid)
                 if (
@@ -933,12 +1077,12 @@ class CogInterface:
                     and isinstance(endpoint.entity, CogInstanceMember)
                     and endpoint.entity in removed_cog.members
                 ):
-                    _remove_endpoint(self._logical_system, endpoint_uuid)
+                    _remove_endpoint(self.logical_system, endpoint_uuid)
 
         connectable_infos: list[tuple[dict[UUID, Connectable[Any, Any]], Callable[[LogicalSystem, UUID], None]]] = [
-            (self._logical_system.configs, _remove_config),
-            (self._logical_system.states, _remove_state),
-            (self._logical_system.mem_resources, _remove_mem_resource),
+            (self.logical_system.configs, _remove_config),
+            (self.logical_system.states, _remove_state),
+            (self.logical_system.mem_resources, _remove_mem_resource),
         ]
         for connectable_info in connectable_infos:
             connectable_dict = connectable_info[0]
@@ -952,9 +1096,9 @@ class CogInterface:
                         and isinstance(endpoint.entity, CogInstanceMember)
                         and endpoint.entity.cog_instance is removed_cog
                     ):
-                        _remove_endpoint(self._logical_system, endpoint_uuid)
+                        _remove_endpoint(self.logical_system, endpoint_uuid)
                         if not len(connectable.endpoints):
-                            removal_fn(self._logical_system, connectable_uuid)
+                            removal_fn(self.logical_system, connectable_uuid)
 
     def _get_connectables(
         self, connectable_dict: dict[UUID, Connectable[Any, CogInstanceMember[Any]]]
@@ -964,7 +1108,7 @@ class CogInterface:
         for connectable_uuid, connectable in connectable_dict.items():
             connectable_feeds_cog = False
             for endpoint in connectable.endpoints.values():
-                if isinstance(endpoint.entity, CogInstanceMember) and endpoint.entity.cog_instance is self._cog:  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+                if endpoint.entity.cog_instance is self.cog:
                     connectable_feeds_cog = True
                     break
             if connectable_feeds_cog:
@@ -973,39 +1117,41 @@ class CogInterface:
                     for (
                         mem_connectable_uuid,
                         mem_resource_connectable,
-                    ) in self._logical_system.mem_resources.items():
+                    ) in self.logical_system.mem_resources.items():
                         if mem_resource_connectable.entity is connectable.entity.memory_resource:
                             connectable_interfaces.append(
                                 ConnectableInterface(
-                                    self._logical_system, mem_connectable_uuid, self._logical_system.mem_resources
+                                    self.logical_system, mem_connectable_uuid, self.logical_system.mem_resources
                                 )
                             )
                 connectable_interfaces.append(
-                    ConnectableInterface(self._logical_system, connectable_uuid, connectable_dict)
+                    ConnectableInterface(self.logical_system, connectable_uuid, connectable_dict)
                 )
         return connectable_interfaces
 
-    def _add_self_to_new_system(self, new_logical_system: LogicalSystem) -> CogInterface:
+    def add_self_to_new_system(self, new_logical_system_interface: LogicalSystemInterface) -> CogInterface:
         """Add this cog to a different logical system from the original one."""
-        process_policy_data = lookup_policy(self._logical_system.module, HOST_PROCESS_POLICY, self._cog)
+        process_policy_data = lookup_policy(self.logical_system.module, HOST_PROCESS_POLICY, self.cog)
         if process_policy_data is None or isinstance(process_policy_data.source, PolicyInstance):
             error_str = "While adding cog to a new system, couldn't find associated process policy in old system."
             raise RuntimeError(error_str)
         bind_policy_data(
-            new_logical_system.module,
+            new_logical_system_interface.logical_system.module,
             UnboundPolicyData(
                 policy_class=HOST_PROCESS_POLICY,
                 data=process_policy_data.data,
                 source=process_policy_data.source,
                 type_info=POLICY_DATA_TYPE,
             ),
-            self._cog,
+            self.cog,
         )
-        new_cog_uuid = new_logical_system.add_cog(self._cog)
+        new_cog_uuid = new_logical_system_interface.logical_system.add_cog(self.cog)
         for old_system_connectable in self.get_connectables():
-            old_system_connectable._add_self_to_new_system(new_logical_system, process_policy_data)  # pyright: ignore[reportPrivateUsage] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip # noqa: SLF001
+            old_system_connectable.add_self_to_new_system(
+                new_logical_system_interface.logical_system, process_policy_data
+            )
 
-        return CogInterface(new_logical_system, new_cog_uuid)
+        return CogInterface(new_logical_system_interface, new_cog_uuid)
 
 
 def _remove_entity(logical_system: LogicalSystem, entity_uuid: UUID) -> None:
@@ -1017,7 +1163,7 @@ def _remove_entity(logical_system: LogicalSystem, entity_uuid: UUID) -> None:
 def _remove_endpoint(logical_system: LogicalSystem, endpoint_to_remove_uuid: UUID) -> None:
     """Remove an endpoint from a LogicalSystem."""
     _remove_entity(logical_system, endpoint_to_remove_uuid)
-    for endpoint_dict in _get_endpoint_dicts(logical_system):
+    for endpoint_dict in [logical_system.snapshot_metadata, *_get_endpoint_dicts(logical_system)]:
         endpoint_dict.pop(endpoint_to_remove_uuid, None)
 
     for channel in (logical_system.channels | logical_system.metrics_channels).values():
@@ -1036,6 +1182,79 @@ def _remove_endpoint(logical_system: LogicalSystem, endpoint_to_remove_uuid: UUI
             connectable = connectable_dict[connectable_uuid]
             if connectable.endpoints.pop(endpoint_to_remove_uuid, None) and not len(connectable.endpoints):
                 removal_fn(logical_system, connectable_uuid)
+
+
+class DataSourceInterface:
+    """Public interface to clockwork logical system data source."""
+
+    def __init__(
+        self, logical_system: LogicalSystem, data_source: FirstMessageInstance | SerializedDataFileInstance
+    ) -> None:
+        """Constructor."""
+        self.logical_system: LogicalSystem = logical_system
+        self.data_source = data_source
+
+    @property
+    def uuid(self) -> UUID:
+        """Get the UUID of the data source."""
+        return lookup_uuid(self.logical_system.module.context, self.data_source)
+
+    @property
+    def fqn(self) -> str:
+        """Get the fully qualified name of the data source."""
+        return self.data_source.fqn
+
+    def set_fallback(self, fallback: DataSourceInterface) -> None:
+        """Set a fallback data source for this data source."""
+        self.logical_system.set_data_source_fallback(self.data_source, fallback.data_source)
+
+    def is_message(self) -> bool:
+        """Check if the data source is a message."""
+        return isinstance(self.data_source, FirstMessageInstance)
+
+    def is_file(self) -> bool:
+        """Check if the data source is a file."""
+        return isinstance(self.data_source, SerializedDataFileInstance)
+
+    def get_name(self) -> str:
+        """Get the name of the data source."""
+        if isinstance(self.data_source, SerializedDataFileInstance):
+            return str(self.data_source.file_path)
+        if self.is_message():
+            assert not isinstance(self.data_source.channel.channel_name, expr.Expr)
+            return str(self.data_source.channel.channel_name.value)
+        error_str = "Unhandled data source type while trying to get name."
+        raise TypeError(error_str)
+
+    def add_self_to_new_system(self, new_logical_system: LogicalSystem) -> DataSourceInterface:
+        """Add this data source to a different logical system from the original one."""
+        try:
+            uuid = lookup_uuid(new_logical_system.module.context, self.data_source)
+            if uuid in new_logical_system.data_sources:
+                # data source already available in new system
+                return DataSourceInterface(new_logical_system, new_logical_system.data_sources[uuid])
+        except RuntimeError:
+            pass
+        process_policy_data = lookup_policy(self.logical_system.module, HOST_PROCESS_POLICY, self.data_source)
+        if process_policy_data is None or isinstance(process_policy_data.source, PolicyInstance):
+            error_str = (
+                "While adding data source to a new system, couldn't find associated process policy in old system."
+            )
+            raise RuntimeError(error_str)
+        bind_policy_data(
+            new_logical_system.module,
+            UnboundPolicyData(
+                policy_class=HOST_PROCESS_POLICY,
+                data=process_policy_data.data,
+                source=process_policy_data.source,
+                type_info=POLICY_DATA_TYPE,
+            ),
+            self.data_source,
+        )
+        new_data_source_uuid = new_logical_system.add_or_lookup_data_source(self.data_source)
+        new_data_source = new_logical_system.data_sources[new_data_source_uuid]
+
+        return DataSourceInterface(new_logical_system, new_data_source)
 
 
 def _remove_config(logical_system: LogicalSystem, config_uuid: UUID) -> None:
@@ -1082,10 +1301,13 @@ def _get_channel_with_alternate_name(
         channel.channel.message_repr,
         channel.channel.message_size,
         channel.channel.num_slots,
+        channel.channel.is_published_once,
         channel.channel.is_multi_publisher,
         channel.channel.is_diagnostics,
         channel.channel.is_bridge_status,
+        channel.channel.is_c2c_bridge_status,
         channel.channel.enforce_backwards_compatibility,
+        channel.channel.is_bulk_data,
         updated_ir_node,
     )
 

@@ -1,7 +1,6 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/pinion/aligned_pointer.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
 #include "clockwork/pinion/error.hh"
@@ -39,6 +38,7 @@ TEST_CASE("Check constants")
     constexpr BufferLayout layout{
       .num_slots = 2UL,
       .message_size = 8UL,
+      .is_published_once = false,
     };
     REQUIRE(slot_stride(layout) == 2U);
     REQUIRE(buffer_size(layout) == sizeof(support::BufferStorage<layout>) - support::storage_trail_padding<layout>);
@@ -50,6 +50,7 @@ TEST_CASE("Check constants")
     constexpr BufferLayout layout{
       .num_slots = 2UL,
       .message_size = 1234UL,
+      .is_published_once = false,
     };
     REQUIRE(slot_stride(layout) == 21U);
     REQUIRE(buffer_size(layout) == sizeof(support::BufferStorage<layout>) - support::storage_trail_padding<layout>);
@@ -63,6 +64,7 @@ TEST_CASE("Buffer")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = 1234UL,
+    .is_published_once = false,
   };
 
   SECTION("to_position")
@@ -92,23 +94,31 @@ TEST_CASE("Buffer")
   auto buffer = *maybe_buffer;
   REQUIRE(std::ranges::equal(buffer.bytes(), storage_span));
   REQUIRE(static_cast<const void*>(buffer.get().get()) == static_cast<const void*>(&buffer_storage));
+  REQUIRE_FALSE(buffer.is_published_once());
+  REQUIRE(buffer.get_publish_count() == 0U);
 
   SECTION("Access / updates")
   {
     REQUIRE(buffer.head() == BufferIndex{0UL});
     REQUIRE(buffer.tail() == BufferIndex{0UL});
     REQUIRE(buffer.increment_head(BufferIndex{0UL}, 1UL) == BufferIndex{1UL});
+    REQUIRE(buffer.get_publish_count() == 1U);
     REQUIRE(buffer.increment_tail(BufferIndex{0UL}, 1UL) == BufferIndex{1UL});
     REQUIRE(buffer.increment_head(BufferIndex{0UL}, 1UL) == jewels::unexpected{BufferIndex{1UL}});
+    REQUIRE(buffer.get_publish_count() == 1U);
     REQUIRE(buffer.increment_head(BufferIndex{0UL}, 1UL) == jewels::unexpected{BufferIndex{1UL}});
+    REQUIRE(buffer.get_publish_count() == 1U);
     REQUIRE(buffer.increment_tail(BufferIndex{2UL}, 1UL) == jewels::unexpected{BufferIndex{1UL}});
+    REQUIRE(buffer.get_publish_count() == 1U);
     REQUIRE(buffer.increment_tail(BufferIndex{2UL}, 1UL) == jewels::unexpected{BufferIndex{1UL}});
+    REQUIRE(buffer.get_publish_count() == 1U);
     REQUIRE(buffer.head() == BufferIndex{1UL});
     REQUIRE(buffer.tail() == BufferIndex{1UL});
     buffer_storage.control_block.head = BufferIndex{1UL};
     buffer_storage.control_block.tail = BufferIndex{3UL};
     REQUIRE(buffer.head() == BufferIndex{1UL});
     REQUIRE(buffer.tail() == BufferIndex{3UL});
+    REQUIRE(buffer.get_publish_count() == 1U);
 
     constexpr auto max_index{std::numeric_limits<BufferIndex>::max()};
     buffer_storage.control_block.head = max_index;
@@ -213,6 +223,45 @@ TEST_CASE("Buffer")
     REQUIRE(buffer.increment_tail(BufferIndex{0UL}, 2UL) == BufferIndex{2UL});
     REQUIRE(std::ranges::empty(buffer));
   }
+}
+
+TEST_CASE("Published once buffers return error if published twice")
+{
+  constexpr BufferLayout layout{
+    .num_slots = 10UL,
+    .message_size = 1234UL,
+    .is_published_once = true,
+  };
+
+  support::BufferStorage<layout> buffer_storage{};
+  const auto storage_span = as_writable_bytes(jewels::as_single_item_span(buffer_storage))
+                              .first(sizeof(buffer_storage) - support::storage_trail_padding<layout>);
+  auto maybe_buffer = Buffer::try_make(storage_span, layout);
+  REQUIRE(maybe_buffer);
+
+  auto buffer = *maybe_buffer;
+  REQUIRE(std::ranges::equal(buffer.bytes(), storage_span));
+  REQUIRE(static_cast<const void*>(buffer.get().get()) == static_cast<const void*>(&buffer_storage));
+  REQUIRE(buffer.is_published_once());
+
+  // Publish protocol is to increment tail by the number of slots you need to reserve (which might be 0 if no slots are
+  // in use).  The slots are written then head is increment to 'publish' those slots.
+  REQUIRE(buffer.head() == BufferIndex{0UL});
+  REQUIRE(buffer.tail() == BufferIndex{0UL});
+  // Buffer is empty so all slots are reserved and there's no need to increment tail
+  REQUIRE(buffer.get_publish_count() == 0U);
+  REQUIRE(buffer.increment_head(BufferIndex{0UL}, 2UL) == jewels::unexpected(BufferIndex{0UL}));
+  REQUIRE(buffer.increment_head(BufferIndex{0UL}, 1UL) == BufferIndex{1UL});
+  REQUIRE(buffer.get_publish_count() == 1U);
+  REQUIRE(buffer.head() == BufferIndex{1UL});
+  REQUIRE(buffer.tail() == BufferIndex{0UL});
+  // Second publish could increment tail to reserve the first slot or increment head to publish the second slot.  Either
+  // should fail for a single publish buffer
+  REQUIRE(buffer.increment_tail(BufferIndex{0UL}, 1UL) == jewels::unexpected(BufferIndex{0UL}));
+  REQUIRE(buffer.increment_head(BufferIndex{1UL}, 1UL) == jewels::unexpected(BufferIndex{1LL}));
+  REQUIRE(buffer.get_publish_count() == 1U);
+  REQUIRE(buffer.head() == BufferIndex{1UL});
+  REQUIRE(buffer.tail() == BufferIndex{0UL});
 }
 
 } // namespace clockwork::pinion

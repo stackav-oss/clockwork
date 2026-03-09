@@ -3,7 +3,8 @@
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/cog.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
@@ -37,7 +38,7 @@ TEST_CASE("setup_cogs")
 
   const std::shared_ptr<AbstractCogQueue> queue;
 
-  std::vector<common::CogInstanceDescriptionTap> configs;
+  std::vector<Tappy<common::CogInstanceDescription<>>> configs;
   configs.emplace_back();
   configs.back().set_cog_instance_id(jewels::Uuid<common::CogInstanceId>::random_uuid());
   configs.back().get_underlying_instance_path_name().set_truncate("cog1");

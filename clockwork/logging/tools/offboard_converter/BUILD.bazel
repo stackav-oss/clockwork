@@ -21,6 +21,7 @@ cc_library(
         "//clockwork/logging/readers:types",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
         "@fmt",
     ],
 )

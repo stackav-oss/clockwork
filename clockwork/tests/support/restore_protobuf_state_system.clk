@@ -1,0 +1,86 @@
+use clockwork::tests::support::exec_time::{ExecState};
+use clockwork::tests::support::snapshot_test_messages::{SnapshotTestConfig};
+use clockwork::tests::support::restore_test_cog::{RestoreTestCog};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogReaderPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
+
+// This just exists to get a publisher config generated
+channel DummyChannel
+{
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 3;
+}
+
+policy LogReaderPolicy for DummyChannel
+{
+}
+
+// Channel for state snapshots (output)
+channel StateSnapshotChannel
+{
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 10;
+}
+
+// Channel for config snapshots (output)
+channel ConfigSnapshotChannel
+{
+  message_type: Tachyon<SnapshotTestConfig>;
+  max_num_messages: 10;
+}
+
+// We listen to state snapshots
+policy ChannelLoggingPolicy for StateSnapshotChannel
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+// We listen to config snapshots
+policy ChannelLoggingPolicy for ConfigSnapshotChannel
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+// Box for Protobuf file-based state restoration
+box RestoreProtobufStateBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+  new state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+  new config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/snapshot_test_config.textproto");
+
+  new saved_state: SerializedDataFile(representation=Protobuf<ExecState>, path="clockwork/tests/resources/restore_test_state.textproto");
+
+  new cog: RestoreTestCog;
+
+  connect state to cog.state;
+  connect config to cog.config;
+  connect saved_state to state;
+  connect cog.pub_state to StateSnapshotChannel;
+  connect cog.pub_config to ConfigSnapshotChannel;
+  connect DummyChannel to cog.dummy;
+}
+
+cpp_executable restore_protobuf_state_exe
+{
+  casing
+  {
+    box RestoreProtobufStateBox;
+  }
+}
+
+cpu_domain RestoreProtobufStateCpu;
+
+box RestoreProtobufStateSystem
+{
+  new box: RestoreProtobufStateBox;
+  new proc: Process(executable=restore_protobuf_state_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=RestoreProtobufStateCpu) to proc;
+}
+
+system_target restore_protobuf_state_system
+{
+  box: RestoreProtobufStateSystem;
+}

@@ -20,9 +20,9 @@ cc_test(
     name = "approx_aligner_test",
     srcs = ["approx_aligner_test.cc"],
     deps = [
-        "//clockwork/dial:alignment_type",
+        "//clockwork/dial:alignment_type_clk_cc",
         "//clockwork/dial:approx_aligner",
-        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:msg_input",
         "//clockwork/dial/tests/support:approx_aligner_fixture",
         "//jewels/memory:memory_resource",
@@ -39,6 +39,16 @@ cc_test(
         "//clockwork/dial:msg_input",
         "//jewels/container:circular_buffer",
         "@boost//:iterator",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "signal_aggregator_test",
+    srcs = ["signal_aggregator_test.cc"],
+    deps = [
+        "//clockwork/dial:signal_aggregator",
+        "//jewels/time:sync_time",
         "@catch2//:catch2_main",
     ],
 )

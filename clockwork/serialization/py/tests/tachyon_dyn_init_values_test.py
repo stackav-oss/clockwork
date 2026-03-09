@@ -101,7 +101,7 @@ def test_schema_with_init_values(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_text(source_content, ModuleID(CLK_REPO, "init_values_test"), importer=fs_importer)
 
     # Get the dataclass
-    with_init_values_class, schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithInitValues")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    with_init_values_class, _schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithInitValues")
 
     # Create a new instance with defaults
     instance = with_init_values_class()
@@ -155,8 +155,8 @@ def test_enum_default_values(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_text(source_content, ModuleID(CLK_REPO, "enum_test"), importer=fs_importer)
 
     # Get the enum and schema dataclasses
-    test_enum_class, enum_ir = tachyon_dyn.get_enum(module.context, module, "TestEnum")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    with_enum_field_class, schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithEnumField")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    test_enum_class, _enum_ir = tachyon_dyn.get_enum(module.context, module, "TestEnum")
+    with_enum_field_class, _schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithEnumField")
 
     # Create instance with defaults
     instance = with_enum_field_class()
@@ -211,8 +211,8 @@ def test_nested_schema_defaults(fs_importer: FilesystemImporter) -> None:
     )
 
     # Get the dataclasses
-    inner_class, inner_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "Inner")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    outer_class, outer_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "Outer")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    inner_class, _inner_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "Inner")
+    outer_class, _outer_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "Outer")
 
     # Create a nested instance with defaults
     instance = outer_class()
@@ -257,7 +257,7 @@ def test_container_with_defaults(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_text(source_content, ModuleID(CLK_REPO, "containers_test"), importer=fs_importer)
 
     # Get the dataclass
-    with_containers_class, schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithContainers")  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    with_containers_class, _schema_ir = tachyon_dyn.get_schema_dataclass(module.context, module, "WithContainers")
 
     # Create instance with defaults
     instance = with_containers_class()
@@ -320,7 +320,7 @@ def test_conversion_errors(fs_importer: FilesystemImporter) -> None:
 def test_complex_schema_with_all_types(fs_importer: FilesystemImporter) -> None:
     """Test a complex schema with all types of fields and default values."""
     source_content = """
-        use jewels::units::clk::au::MetersF;
+        use jewels::units::clk::au::{MetersF};
 
     // Status enum definition
     enum Status {

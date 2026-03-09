@@ -3,7 +3,7 @@
 
 #include "clockwork/repr_iface.hh"
 #include "clockwork/tools/channel_spy/channel_spy.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_helper.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_message.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_publisher.hh"
@@ -11,6 +11,7 @@
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -21,9 +22,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <memory>
+#include <memory_resource>
 #include <span>
 #include <string>
 #include <string_view>
@@ -46,9 +47,9 @@ constexpr std::array schema_definition2 = {std::byte{2}, std::byte{3}, std::byte
 
 /// Generate fake test channel spy configuration for testing list channels
 /// @return Generated configuration
-[[nodiscard]] std::unique_ptr<ChannelSpyConfigTap> gen_fake_channel_spy_config()
+[[nodiscard]] std::unique_ptr<Tappy<ChannelSpyConfig<>>> gen_fake_channel_spy_config()
 {
-  auto config = std::make_unique<ChannelSpyConfigTap>();
+  auto config = std::make_unique<Tappy<ChannelSpyConfig<>>>();
   auto& channel1 = config->get_underlying_channels().emplace_back();
   channel1.get_underlying_channel_name().set_truncate(channel_name1);
   channel1.get_underlying_schema_name().set_truncate(schema_name1);
@@ -72,7 +73,7 @@ TEST_CASE("channels and spy_config")
   const auto config = gen_fake_channel_spy_config();
   support::write_channel_spy_config_file(test_dir_path, socket_ns, *config);
 
-  ChannelSpy spy{test_dir_path, socket_ns};
+  ChannelSpy spy{test_dir_path, test_dir_path, socket_ns};
   const auto channels = spy.channels();
   REQUIRE(channels.size() == 2U);
   REQUIRE(channels[0U].channel_name == channel_name1);
@@ -82,7 +83,7 @@ TEST_CASE("channels and spy_config")
   REQUIRE(channels[1U].schema_name == schema_name2);
   REQUIRE(std::ranges::equal(channels[1U].schema_definition, schema_definition2));
 
-  REQUIRE(spy.spy_config() == *config);
+  REQUIRE(*spy.read_channel_spy_config() == *config);
 }
 
 TEST_CASE("raw message subscription")
@@ -90,7 +91,8 @@ TEST_CASE("raw message subscription")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_dir_path = test_dir.get_path().string();
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto test_helper = support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, socket_ns);
+  const auto test_helper =
+    support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, test_dir_path, socket_ns);
 
   auto publisher = test_helper->open_publisher(0U);
 
@@ -98,7 +100,7 @@ TEST_CASE("raw message subscription")
   uint64_t actual_sequence_number{99999U};
   int64_t actual_message_time{99999};
 
-  ChannelSpy spy{test_dir_path, socket_ns};
+  ChannelSpy spy{test_dir_path, test_dir_path, socket_ns};
   spy.subscribe(
     support::test_channel_name1,
     [&actual_message, &actual_sequence_number, &actual_message_time](
@@ -140,7 +142,8 @@ TEST_CASE("raw message subscription overruns")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_dir_path = test_dir.get_path().string();
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto test_helper = support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, socket_ns);
+  const auto test_helper =
+    support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, test_dir_path, socket_ns);
 
   auto publisher = test_helper->open_publisher(0U);
 
@@ -150,7 +153,7 @@ TEST_CASE("raw message subscription overruns")
 
   bool received_callback{false};
 
-  ChannelSpy spy{test_dir_path, socket_ns};
+  ChannelSpy spy{test_dir_path, test_dir_path, socket_ns};
   spy.subscribe(
     support::test_channel_name1,
     [&received_callback, &publisher, &message0](
@@ -174,7 +177,8 @@ TEST_CASE("deserialized message subscription")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_dir_path = test_dir.get_path().string();
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto test_helper = support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, socket_ns);
+  const auto test_helper =
+    support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, test_dir_path, socket_ns);
 
   auto publisher = test_helper->open_publisher(0U);
 
@@ -182,7 +186,7 @@ TEST_CASE("deserialized message subscription")
   uint64_t actual_sequence_number{99999U};
   int64_t actual_message_time{99999};
 
-  ChannelSpy spy{test_dir_path, socket_ns};
+  ChannelSpy spy{test_dir_path, test_dir_path, socket_ns};
   spy.subscribe<Tappy<support::TestMessage>>(
     support::test_channel_name1,
     [&actual_message, &actual_sequence_number, &actual_message_time](
@@ -219,7 +223,8 @@ TEST_CASE("multi-publisher subscriber")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_dir_path = test_dir.get_path().string();
   const auto socket_ns = jewels::Uuid<void>::random_uuid().to_string();
-  const auto test_helper = support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, socket_ns);
+  const auto test_helper =
+    support::TestHelper<Tappy<support::TestMessage>>::make_test_helper(test_dir_path, test_dir_path, socket_ns);
 
   REQUIRE(test_helper->channel_name(1U) == test_helper->channel_name(2U));
   auto publisher2a = test_helper->open_publisher(1U);
@@ -229,7 +234,7 @@ TEST_CASE("multi-publisher subscriber")
   uint64_t actual_sequence_number{99999U};
   int64_t actual_message_time{99999};
 
-  ChannelSpy spy{test_dir_path, socket_ns};
+  ChannelSpy spy{test_dir_path, test_dir_path, socket_ns};
   spy.subscribe<Tappy<support::TestMessage>>(
     support::test_channel_name2,
     [&actual_message, &actual_sequence_number, &actual_message_time](

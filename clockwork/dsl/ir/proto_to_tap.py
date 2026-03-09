@@ -132,6 +132,14 @@ class ProtoToTapConverterRegistryKey(ContextKey[ProtoToTapConverterRegistry]):
                 Header(JEWELS_REPO, "jewels/container/tap/protobuf_to_tap.hh"),
             ],
         )
+        registry.type_conversion_map[clkbuiltins.VAR_SOA.value_key()] = ConversionInfo(
+            _generate_var_soa_conversion,
+            [Header(JEWELS_REPO, "jewels/container/tap/protobuf_to_tap.hh")],
+        )
+        registry.type_conversion_map[clkbuiltins.FIXED_SOA.value_key()] = ConversionInfo(
+            _generate_fixed_soa_conversion,
+            [Header(JEWELS_REPO, "jewels/container/tap/protobuf_to_tap.hh")],
+        )
         registry.type_conversion_map[clkbuiltins.OPTIONAL.value_key()] = ConversionInfo(
             _generate_optional_conversion, []
         )
@@ -174,6 +182,8 @@ def _generate_validation_statement(
     if isinstance(field_type, typesys.Instantiation) and (
         (field_type.instantiates.value_key() == clkbuiltins.VAR_ARRAY.value_key())
         or (field_type.instantiates.value_key() == clkbuiltins.FIXED_ARRAY.value_key())
+        or (field_type.instantiates.value_key() == clkbuiltins.VAR_SOA.value_key())
+        or (field_type.instantiates.value_key() == clkbuiltins.FIXED_SOA.value_key())
     ):
         value_type = field_type.arguments["type"]
         if in_converter_registry(value_type, compiler_context):
@@ -209,7 +219,7 @@ def _generate_standard_validator(validation_params: ValidationParams) -> list[st
 
 def _generate_error_printing(proto_field_name: str, source_name: str) -> list[str]:
     return [
-        f'{context.INDENT}jewels::log_cerr_error("{proto_field_name} not set in: {{}}", {source_name}.GetTypeName());'
+        f'{context.INDENT}::jewels::log_cerr_error("{proto_field_name} not set in: {{}}", {source_name}.GetTypeName());'
     ]
 
 
@@ -258,8 +268,11 @@ def _generate_conversion_statement(field_type: typesys.Value, compiler_context: 
 def _generate_strong_type_conversion(conversion_params: ConversionParams) -> list[str]:
     factory = literal.get_factory_fn(conversion_params.field_type)
     if not factory:
-        msg = f"No factory registered for strong type {conversion_params.field_type}"
-        raise ValueError(msg)
+        value = CppValue(None, f"{conversion_params.proto_getter}")
+        return [
+            f"{conversion_params.destination_name}."  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            f"set_{conversion_params.field_name}({value.render(conversion_params.enclosing_namespace)});"
+        ]
     args = [CppValue(None, f"{conversion_params.proto_getter}")]
     return [
         f"{conversion_params.destination_name}."  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
@@ -282,7 +295,7 @@ def _generate_int_converter(conversion_params: ConversionParams) -> list[str]:
     return [
         # if this is an optional we need to call set first to enable the field. If it isn't the result gets overridden anyway.
         f"{conversion_params.destination_name}.set_{conversion_params.field_name}(0);",
-        f"auto {conversion_params.field_name}_status = jewels::protobuf_to_tap({conversion_params.destination_name}",
+        f"auto {conversion_params.field_name}_status = ::jewels::protobuf_to_tap({conversion_params.destination_name}",
         f".{get_function}_{conversion_params.field_name}(), {conversion_params.source_name}.{conversion_params.proto_field_name}());",
         *_generate_expected_check(f"{conversion_params.field_name}_status"),
     ]
@@ -304,7 +317,7 @@ def _generate_enum_conversion(conversion_params: ConversionParams) -> list[str]:
 def _generate_schema_converter(conversion_params: ConversionParams, namespace: str) -> list[str]:
     """Generates a converter for a schema type. This will be calling another generated protobuf_to_tap function."""
     return [
-        f"auto {conversion_params.field_name}_status = {namespace}::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        f"auto {conversion_params.field_name}_status = ::{namespace}::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         f".get_mutable_{conversion_params.field_name}(), {conversion_params.source_name}.{conversion_params.proto_field_name}());",
         *_generate_expected_check(f"{conversion_params.field_name}_status"),
     ]
@@ -314,7 +327,7 @@ def _generate_schema_validator(validation_params: ValidationParams, namespace: s
     return [
         f"if ({validation_params.source_name}.has_{validation_params.proto_field_name}())",
         "{",
-        f"{context.INDENT}protobuf_valid = protobuf_valid && {namespace}::validate_protobuf({validation_params.source_name}.{validation_params.proto_field_name}());",
+        f"{context.INDENT}protobuf_valid = protobuf_valid && ::{namespace}::validate_protobuf({validation_params.source_name}.{validation_params.proto_field_name}());",
         "}",
         "else",
         "{",
@@ -328,14 +341,14 @@ def _generate_array_validator(validation_params: ValidationParams, namespace: st
     return [
         f"for (const auto& {validation_params.field_name}_value: {validation_params.source_name}.{validation_params.proto_field_name}())",
         "{",
-        f"{context.INDENT}protobuf_valid = protobuf_valid && {namespace}::validate_protobuf({validation_params.field_name}_value);",
+        f"{context.INDENT}protobuf_valid = protobuf_valid && ::{namespace}::validate_protobuf({validation_params.field_name}_value);",
         "}",
     ]
 
 
 def _generate_validation_check(source_name: str, namespace: str) -> list[str]:
     return [
-        f"if (!{namespace}::validate_protobuf({source_name}))",
+        f"if (!::{namespace}::validate_protobuf({source_name}))",
         "{",
         f"{context.INDENT}return ::jewels::unexpected(::jewels::MonoError());",
         "}",
@@ -346,7 +359,7 @@ def _generate_optional_schema_converter(conversion_params: ConversionParams, nam
     """Same as above but for when the schema is contained in a optional."""
     return [
         f"{conversion_params.destination_name}.set_{conversion_params.field_name}(std::remove_reference_t<decltype({conversion_params.destination_name}.value_mutable_{conversion_params.field_name}())>());",
-        f"auto {conversion_params.field_name}_status = {namespace}::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        f"auto {conversion_params.field_name}_status = ::{namespace}::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
         f".value_mutable_{conversion_params.field_name}(), {conversion_params.source_name}.{conversion_params.proto_field_name}());",
         *_generate_expected_check(f"{conversion_params.field_name}_status"),
     ]
@@ -426,8 +439,8 @@ def _generate_var_array_conversion(conversion_params: ConversionParams) -> list[
     value_type = conversion_params.field_type.arguments["type"]
     if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status ="  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-            f"{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::protobuf_to_tap({output}.emplace_back(),"
+            f"{context.INDENT}auto conversion_status = "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            f"::{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::protobuf_to_tap({output}.emplace_back(),"
             f" {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
@@ -458,14 +471,14 @@ def _generate_var_array_conversion(conversion_params: ConversionParams) -> list[
     ):
         # We need the conversion to be done using the jewels::protobuf_to_tap function
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status = jewels::protobuf_to_tap({output}.emplace_back(), {conversion_params.field_name}_value);",
+            f"{context.INDENT}auto conversion_status = ::jewels::protobuf_to_tap({output}.emplace_back(), {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
     elif isinstance(value_type, clkbuiltins.PrimitiveType):
         conversion_lines = [f"{context.INDENT}{output}.emplace_back({conversion_params.field_name}_value);"]
     else:
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status = jewels::protobuf_to_tap({output}.emplace_back(), {conversion_params.field_name}_value);",
+            f"{context.INDENT}auto conversion_status = ::jewels::protobuf_to_tap({output}.emplace_back(), {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
     return [
@@ -489,20 +502,20 @@ def _generate_fixed_array_conversion(conversion_params: ConversionParams) -> lis
     value_type = conversion_params.field_type.arguments["type"]
     if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status ="  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-            f"{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::protobuf_to_tap(jewels::at({output}, i),"
+            f"{context.INDENT}auto conversion_status = "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            f"::{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::protobuf_to_tap(::jewels::at({output}, i),"
             f" {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
     elif value_type is clkbuiltins.BYTE:
         return [
-            f"auto {conversion_params.field_name}_status = jewels::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            f"auto {conversion_params.field_name}_status = ::jewels::protobuf_to_tap({conversion_params.destination_name}"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             f".get_mutable_{conversion_params.field_name}(), {conversion_params.source_name}.{conversion_params.proto_field_name}());",
             *_generate_expected_check(f"{conversion_params.field_name}_status"),
         ]
     elif isinstance(value_type, clkenum.ResolvedEnum):
         conversion_lines = [
-            f"{context.INDENT}jewels::at({output}, static_cast<int64_t>(i)) = "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            f"{context.INDENT}::jewels::at({output}, static_cast<int64_t>(i)) = "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
             f"(static_cast<{typereg.get_cpp_type(value_type.module.context, value_type).render(conversion_params.enclosing_namespace)}>({conversion_params.field_name}_value));"
         ]
     elif isinstance(value_type, strongtypes.StrongType):
@@ -512,7 +525,7 @@ def _generate_fixed_array_conversion(conversion_params: ConversionParams) -> lis
             raise ValueError(msg)
         args = [CppValue(None, f"{conversion_params.field_name}_value")]
         conversion_lines = [
-            f"{context.INDENT}jewels::at({output}, static_cast<int64_t>(i)) = {factory.fn.invoke(args).render(conversion_params.enclosing_namespace)};"
+            f"{context.INDENT}::jewels::at({output}, static_cast<int64_t>(i)) = {factory.fn.invoke(args).render(conversion_params.enclosing_namespace)};"
         ]
         # If the value type is smaller than 32 bits, we need to use jewels::protobuf_to_tap to convert it.
     elif (
@@ -520,16 +533,16 @@ def _generate_fixed_array_conversion(conversion_params: ConversionParams) -> lis
         and value_type.bit_width < _SMALL_INT_SIZE
     ):
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status = jewels::protobuf_to_tap(jewels::at({output}, static_cast<int64_t>(i)), {conversion_params.field_name}_value);",
+            f"{context.INDENT}auto conversion_status = ::jewels::protobuf_to_tap(::jewels::at({output}, static_cast<int64_t>(i)), {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
     elif isinstance(value_type, clkbuiltins.PrimitiveType):
         conversion_lines = [
-            f"{context.INDENT}jewels::at({output}, static_cast<int64_t>(i)) = {conversion_params.field_name}_value;"
+            f"{context.INDENT}::jewels::at({output}, static_cast<int64_t>(i)) = {conversion_params.field_name}_value;"
         ]
     else:
         conversion_lines = [
-            f"{context.INDENT}auto conversion_status = jewels::protobuf_to_tap(jewels::at({output}, static_cast<int64_t>(i)), {conversion_params.field_name}_value);",
+            f"{context.INDENT}auto conversion_status = ::jewels::protobuf_to_tap(::jewels::at({output}, static_cast<int64_t>(i)), {conversion_params.field_name}_value);",
             *_generate_expected_check("conversion_status", indent=1),
         ]
     return [
@@ -538,6 +551,85 @@ def _generate_fixed_array_conversion(conversion_params: ConversionParams) -> lis
         "{",
         f"const auto &{conversion_params.field_name}_value = {conversion_params.source_name}.{conversion_params.proto_field_name}(i);",
         *conversion_lines,
+        "}",
+    ]
+
+
+def _generate_var_soa_conversion(conversion_params: ConversionParams) -> list[str]:
+    """Generate a converter for VarSoa (variable-size Struct-of-Arrays) container types.
+
+    SoA containers are deserialized from protobuf the same way as arrays: from repeated messages.
+    Each protobuf element is converted via the element schema's protobuf_to_tap converter,
+    producing a Tap<Tachyon<T>> which is then assigned to the SoA element proxy.
+    """
+    if not isinstance(conversion_params.field_type, typesys.Instantiation):
+        msg = f"expected an instantiation type for the VarSoa conversion, got {conversion_params.field_type}"
+        raise TypeError(msg)
+
+    output = conversion_params.field_name
+    value_type = conversion_params.field_type.arguments["type"]
+
+    if not in_converter_registry(value_type, conversion_params.compiler_context):
+        msg = f"SoA element type {value_type} must have a registered converter"
+        raise TypeError(msg)
+
+    conversion_registration = get_conversion_registration(value_type, conversion_params.compiler_context)
+    tap_cpp_type = typereg.get_cpp_type(conversion_params.compiler_context, value_type)
+    tap_tachyon_type = (
+        f"::clockwork::Tap<::clockwork::Tachyon<{tap_cpp_type.render(conversion_params.enclosing_namespace)}>>"
+    )
+
+    return [
+        f"auto& {output} = {conversion_params.destination_name}.get_mutable_{conversion_params.field_name}();",
+        f"{output}.clear();",
+        f"{output}.resize(static_cast<size_t>({conversion_params.source_name}.{conversion_params.proto_field_name}_size()));",
+        f"for (int i = 0; i < {conversion_params.source_name}.{conversion_params.proto_field_name}_size(); ++i)",
+        "{",
+        f"{context.INDENT}{tap_tachyon_type} tap_element;",
+        (
+            f"{context.INDENT}auto conversion_status = ::{conversion_registration.namespace}::protobuf_to_tap(tap_element,"
+            f" {conversion_params.source_name}.{conversion_params.proto_field_name}(i));"
+        ),
+        *_generate_expected_check("conversion_status", indent=1),
+        f"{context.INDENT}{output}[static_cast<size_t>(i)] = tap_element;",
+        "}",
+    ]
+
+
+def _generate_fixed_soa_conversion(conversion_params: ConversionParams) -> list[str]:
+    """Generate a converter for FixedSoa (fixed-size Struct-of-Arrays) container types.
+
+    Each protobuf element is converted via the element schema's protobuf_to_tap converter,
+    producing a Tap<Tachyon<T>> which is then assigned to the SoA element proxy.
+    """
+    if not isinstance(conversion_params.field_type, typesys.Instantiation):
+        msg = f"expected an instantiation type for the FixedSoa conversion, got {conversion_params.field_type}"
+        raise TypeError(msg)
+
+    output = conversion_params.field_name
+    value_type = conversion_params.field_type.arguments["type"]
+
+    if not in_converter_registry(value_type, conversion_params.compiler_context):
+        msg = f"SoA element type {value_type} must have a registered converter"
+        raise TypeError(msg)
+
+    conversion_registration = get_conversion_registration(value_type, conversion_params.compiler_context)
+    tap_cpp_type = typereg.get_cpp_type(conversion_params.compiler_context, value_type)
+    tap_tachyon_type = (
+        f"::clockwork::Tap<::clockwork::Tachyon<{tap_cpp_type.render(conversion_params.enclosing_namespace)}>>"
+    )
+
+    return [
+        f"auto& {output} = {conversion_params.destination_name}.get_mutable_{conversion_params.field_name}();",
+        f"for (int i = 0; i < {conversion_params.source_name}.{conversion_params.proto_field_name}_size(); ++i)",
+        "{",
+        f"{context.INDENT}{tap_tachyon_type} tap_element;",
+        (
+            f"{context.INDENT}auto conversion_status = ::{conversion_registration.namespace}::protobuf_to_tap(tap_element,"
+            f" {conversion_params.source_name}.{conversion_params.proto_field_name}(i));"
+        ),
+        *_generate_expected_check("conversion_status", indent=1),
+        f"{context.INDENT}{output}[static_cast<size_t>(i)] = tap_element;",
         "}",
     ]
 
@@ -631,7 +723,7 @@ def render_protobuf_to_tachyon_converter(
         conversion_method.body.append(conversion_info.conversion_generator(conversion_params))
         needed_includes.update(conversion_info.required_includes)
 
-    conversion_method.body.append("return jewels::ConversionStatusExpected();")
+    conversion_method.body.append("return ::jewels::ConversionStatusExpected();")
     module_chunks = conversion_method.render(None, namespace)
     module_chunks.append(validation_method.render(None, namespace))
     module_chunks.header_chunk.context.add_includes(needed_includes)

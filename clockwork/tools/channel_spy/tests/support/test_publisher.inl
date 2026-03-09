@@ -9,14 +9,13 @@
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_publisher.hh"
-#include "clockwork/pinion/slot.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <chrono>
 #include <cstddef>
@@ -63,6 +62,7 @@ template <typename MessageType>
     clockwork::pinion::BufferLayout{
       .num_slots = num_slots,
       .message_size = sizeof(MessageType),
+      .is_published_once = false,
     },
     1U);
   if (!publisher_result)

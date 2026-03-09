@@ -55,6 +55,16 @@ TEST_CASE("enum_flags test | basic")
     value_v -= Enum8::a;
     CHECK(value_v == Enum8::b);
   }
+  SECTION("test ops")
+  {
+    CHECK(Enum8::b);
+    CHECK_FALSE(Enum8::zero);
+    CHECK(static_cast<bool>(Enum8::b));
+    CHECK_FALSE(static_cast<bool>(Enum8::zero));
+    CHECK(!Enum8::zero);
+    CHECK(!!Enum8::b);
+    CHECK_FALSE(!Enum8::b);
+  }
 }
 
 namespace ns1

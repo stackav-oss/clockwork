@@ -3,6 +3,7 @@
 
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -12,7 +13,6 @@
 #include <algorithm>
 #include <cerrno>
 #include <fcntl.h>
-#include <filesystem>
 #include <memory_resource>
 #include <string>
 #include <utility>

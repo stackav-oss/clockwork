@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkenum,
     expr,
@@ -25,6 +25,10 @@ class ResolvedNanobindBinding(node.CstNode[cst.NanobindBinding]):
 
     original_type: typesys.Instantiation | clkenum.ResolvedEnum
     alias_name: str | None
+
+    def get_resolved(self) -> ResolvedNanobindBinding:
+        """Convenience function so code can work with either resolved or unresolved bindings."""
+        return self
 
 
 @dataclass

@@ -5,7 +5,7 @@
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/tests/support/stress_cog_dial.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 #include <array>
 #include <chrono>

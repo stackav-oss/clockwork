@@ -19,6 +19,7 @@ message TypeDesc {
     ClkEnumType clk_enum = 3;
     TagType tag = 4;
     StrongType strong_type = 5;
+    SoaType soa_type = 6;
   }
 }
 
@@ -47,6 +48,7 @@ message SchemaType {
   repeated SchemaField fields = 6;
   bytes hash = 7;
   History history = 8;
+  repeated Argument arguments = 9;
 }
 
 message SchemaField {
@@ -88,7 +90,7 @@ message StrongType {
 message History {
   repeated int32 removed = 1;
   map<int32, int32> became = 2;
-  repeated int32 versions = 3;
+  reserved 3;
 }
 
 message InitialValue {
@@ -98,6 +100,21 @@ message InitialValue {
     string float_value = 3;
     bool bool_value = 4;
   }
+}
+
+message SoaType {
+  string fqn = 1;
+  bytes uuid = 2;
+  int32 size = 3;
+  int32 alignment = 4;
+  // Soa types can only hold schemas, not other types.
+  int32 schema_type_id = 5;
+  int32 container_size = 6;
+  repeated SchemaField field_layouts = 7;
+  // For VarSoa only - offset and type_id of the size field
+  optional int32 size_field_offset = 8;
+  optional int32 size_field_type_id = 9;
+  bytes hash = 10;
 }
 
 message LoggedChannelMetadata {

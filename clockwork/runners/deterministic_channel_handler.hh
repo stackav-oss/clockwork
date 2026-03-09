@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/pinion/channel_observer.hh"
 #include "clockwork/pinion/channel_observer_client.hh"
 #include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -70,7 +71,7 @@ public:
   DeterministicChannelHandler(
     jewels::memory::MemoryResource memory_resource,
     jewels::memory::NonNullSharedPtr<AbstractMessageWriter> message_writer,
-    jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_writer_config,
+    jewels::memory::ObjectPtr<const Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config,
     ChannelMap channels);
 
   DeterministicChannelHandler(const DeterministicChannelHandler&) = delete;
@@ -94,8 +95,7 @@ public:
   void message_callback(
     jewels::time::SyncTime current_time,
     std::string_view channel_name,
-    jewels::memory::ObjectPtr<const clockwork::pinion::Buffer> buffer_ptr,
-    const clockwork::pinion::BufferIterator& buffer_iterator) override;
+    const ::clockwork::pinion::SlotRef& message_ref) override;
 
   ///
   /// Called by the channel observer when it has been detected that the buffer has dropped messages.
@@ -113,7 +113,7 @@ private:
   jewels::memory::NonNullSharedPtr<AbstractMessageWriter> message_writer_;
 
   /// Log writer config.
-  jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_writer_config_;
+  jewels::memory::ObjectPtr<const Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config_;
 
   /// Observers that call our message callback
   std::pmr::vector<clockwork::pinion::ChannelObserver> observers_;

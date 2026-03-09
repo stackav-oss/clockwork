@@ -37,7 +37,7 @@ public:
     (Error, uint8_t),
     fatal,  // Assorted failures with no clear resolution
     dirty,  // Shm file exists but can't be resumed
-    missing // Shm file doesn't exist and creating is wasn't attempted
+    missing // Shm file doesn't exist and creating it wasn't attempted
   )
   enum class Role : uint8_t
   {

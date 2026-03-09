@@ -152,7 +152,7 @@ def protobuf_repr_to_cpp_type(proto_rep: schema_reg.RepresentationInfo, compiler
     if isinstance(proto_ir.typespec, expr.Expr):
         msg = "Attempted to render an unresolved converter"
         raise TypeError(msg)
-    proto_name = proto_ir.name if proto_ir.name else proto_ir.schema_ir.schema_name
+    proto_name = proto_ir.name or proto_ir.schema_ir.schema_name
     proto_type = proto_typereg.get_protobuf_type(proto_ir.schema_ir, compiler_context)
     schema_ir = to_schema_instantiation(proto_ir.typespec)
     if not isinstance(proto_type, proto_typereg.DefinedProtobufType):

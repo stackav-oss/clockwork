@@ -4,10 +4,9 @@
 #pragma once
 
 #include "clockwork/repr_iface.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/channel_spy_subscriber.hh"
 #include "clockwork/tools/channel_spy/types.hh"
-#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 
 #include <chrono>
@@ -37,20 +36,21 @@ struct SpyChannelMetadata
 class ChannelSpy
 {
 public:
-  /// Default format string for the channel spy configuration file path
-  static constexpr auto default_channel_spy_config_path_format = "{}/clockwork/pinion/pub/channel_spy_config.tachyon";
+  /// Default channel spy configuration file path
+  static constexpr auto default_channel_spy_config_path_format = "{}/clockwork/channel_spy_config.tachyon";
 
   /// Format string for the channel spy configuration file path when the socket namespace is specified
-  static constexpr auto namespace_channel_spy_config_path_format =
-    "{}/clockwork/{}/pinion/pub/channel_spy_config.tachyon";
+  static constexpr auto namespace_channel_spy_config_path_format = "{}/clockwork/{}/channel_spy_config.tachyon";
 
   /// Default subscriber polling interval
   static constexpr auto default_polling_interval = std::chrono::milliseconds(1);
 
   /// Constructor
   /// @param[in] shm_root_dir Pinion shared memory root directory
+  /// @param[in] tmp_dir Temporary file directory
   /// @param[in] socket_ns Pinion socket namespace
-  explicit ChannelSpy(std::string_view shm_root_dir = "/dev/shm", std::string_view socket_ns = "");
+  explicit ChannelSpy(
+    std::string_view shm_root_dir = "/dev/shm", std::string_view tmp_dir = "/tmp", std::string_view socket_ns = "");
 
   ~ChannelSpy() noexcept = default;
   ChannelSpy(const ChannelSpy&) = delete;
@@ -60,11 +60,12 @@ public:
 
   /// @return The channels available for reading
   /// @throws runtime_error on failure
-  [[nodiscard]] std::vector<SpyChannelMetadata> channels();
+  [[nodiscard]] std::vector<SpyChannelMetadata> channels() const;
 
+  /// Read the channel spy configuration file, maybe_config_ will have a value on success
   /// @return The channel spy configuration for the local machine
   /// @throws runtime_error on failure
-  [[nodiscard]] const ChannelSpyConfigTap& spy_config();
+  [[nodiscard]] std::unique_ptr<Tappy<ChannelSpyConfig<>>> read_channel_spy_config() const;
 
   /// Add channel spy subscriber to receive raw message data
   /// @param[in] channel_name Channel name
@@ -95,20 +96,17 @@ public:
   void run_once();
 
 private:
-  /// Read the channel spy configuration file, maybe_config_ will have a value on success
-  void read_channel_spy_config();
-
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
 
   /// Pinion shared memory root directory
   std::string shm_root_dir_;
 
+  /// Temporary file directory
+  std::string tmp_dir_;
+
   /// Pinion socket namespace
   std::string socket_ns_;
-
-  /// Cached configuration file
-  std::unique_ptr<ChannelSpyConfigTap> config_ptr_;
 
   /// Channel subscribers
   std::vector<std::unique_ptr<ChannelSpySubscriber>> subscribers_;

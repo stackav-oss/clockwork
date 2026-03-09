@@ -11,7 +11,7 @@ from clockwork.dsl.composition.metrics_channel_metadata_config import (
     MetricsChannelMetadata,
     MetricsChannelMetadataConfig,
 )
-from clockwork.dsl.ir import node, representation
+from clockwork.dsl.ir import clkbuiltins, node, representation, schema, typesys
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
 
 
@@ -34,11 +34,24 @@ def _generate_metrics_metadata_config_domain(
             )
         )
 
-    rep = CSC_MODULE.inner_scope.lookup("MetricsChannelMetadataReportTach")
-    # Only way this can fail is if a change to metrics_channel_metadata_config.clk removes/modifies MetricsChannelMetadataReportTach.
-    assert isinstance(rep, representation.ReprInstantiation), node.enrich_error_if_possible(
-        rep, "Expected MetricsChannelMetadataReportTach to refer to a ReprInstantiation"
+    rep_schema = CSC_MODULE.inner_scope.lookup("MetricsChannelMetadataReport")
+    # Only way these asserts can fail is if a change to metrics_channel_metadata_config.clk removes/modifies
+    # MetricsChannelMetadataReport.
+    assert isinstance(rep_schema, schema.Schema), node.enrich_error_if_possible(
+        rep_schema, "Expected MetricsChannelMetadataReport to refer to a Schema"
     )
+    rep_params = rep_schema.generic_parameters()
+    assert rep_params, node.enrich_error_if_possible(
+        rep_schema, "Expected MetricsChannelMetadataReport to refer to a parameterized Schema"
+    )
+    rep_args: dict[str, typesys.Value] = {}
+    for param in rep_params:
+        assert param.default, node.enrich_error_if_possible(
+            rep_schema, "Expected MetricsChannelMetadataReport parameters to have default values"
+        )
+        rep_args[param.name] = param.default
+    rep_inst = typesys.Instantiation(type_info=clkbuiltins.TYPE_TYPE, instantiates=rep_schema, arguments=rep_args)
+    rep = representation.ResolvedReprInstantiation.from_schema(schema_ir=rep_inst, module=CSC_MODULE)
     message_schema = rep.get_resolved().get_schema()
     schema_definition = tachyon_metadata.get_serialized_metadata(CSC_MODULE.context, message_schema)
     return MetricsChannelMetadataConfig(

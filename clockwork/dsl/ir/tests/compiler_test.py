@@ -52,7 +52,9 @@ cog TestCog
 """
     mock_importer = MockImporter()
     mock_importer.import_specs = {
-        node.Module.UseResult(repo=None, path=("a", "b", "c"), alias=None): node.ImportSpec(
+        node.Module.UseResult(
+            repo=None, path=("a", "b", "c"), alias=None, use_targets=None, use_type=node.UseResultType.module
+        ): node.ImportSpec(
             ModuleID.from_path("", Path("a/b/c.clk")),
             entity_name=None,
             import_name="c",
@@ -141,7 +143,8 @@ def test_clk_target(mock_path_to_clk: MagicMock, tmp_path: Path) -> None:
 
     source_text = """
 use a::b::c;
-use d::{e, f};
+use d::e;
+use d::f;
 
     // Valid syntax requires some element beyond just `use`.
     schema Test

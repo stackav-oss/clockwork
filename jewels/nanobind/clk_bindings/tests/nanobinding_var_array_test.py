@@ -281,18 +281,18 @@ def test_extend() -> None:
     arr.extend([1, 2, 3, 4])
     assert arr == [20, 1, 2, 3, 4]
 
-    with pytest.raises(ValueError, match="VarArray: extend: Insufficient capacity."):
+    with pytest.raises(ValueError, match=r"VarArray: extend: Insufficient capacity\."):
         arr.extend([1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     # didn't change contents
     assert arr == [20, 1, 2, 3, 4]
 
     # Extend too far (iterator version)
-    with pytest.raises(ValueError, match="VarArray: extend: Insufficient capacity."):
+    with pytest.raises(ValueError, match=r"VarArray: extend: Insufficient capacity\."):
         arr.extend(range(50))
 
     # Extend too far (list verision)
-    with pytest.raises(ValueError, match="VarArray: extend: Insufficient capacity."):
+    with pytest.raises(ValueError, match=r"VarArray: extend: Insufficient capacity\."):
         arr.extend(list(range(50)))
 
 

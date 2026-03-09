@@ -1,17 +1,17 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/bidirectional_udp.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/sockets.hh"
@@ -82,7 +82,7 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   REQUIRE(local_addr);
   auto local_port = ::ntohs(local_addr->sin_port);
 
-  InMemoryChannel<Msg, num_slots> incoming_channel{memres};
+  InMemoryChannel<Msg, num_slots, false> incoming_channel{memres};
   SECTION("Invalid publisher endpoint id")
   {
     auto incoming_publisher = incoming_channel.make_publisher(1UL);
@@ -95,7 +95,7 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   auto incoming_subscriber = incoming_channel.make_subscriber();
 
   REQUIRE(bd_socket->connect_publisher(*publisher_endpoint_class_id, std::move(incoming_publisher)));
-  InMemoryChannel<Msg, num_slots> outgoing_channel{memres};
+  InMemoryChannel<Msg, num_slots, false> outgoing_channel{memres};
 
   SECTION("Invalid subsciber endpoint id")
   {
@@ -128,7 +128,7 @@ TEST_CASE("BidirectionalUdp", "Both directions")
       *(reinterpret_cast<const sockaddr_in*>(client_addr->ptr()))) == sizeof(ref_test_value));
   REQUIRE(support::wait_for_readable(bd_socket->fd()));
   bd_socket->read();
-  const pinion::BufferIterator next_to_consume{};
+  const pinion::SlotRef next_to_consume{};
   auto available = pinion::available_starting_from(incoming_subscriber.available(), next_to_consume);
   REQUIRE(available);
   REQUIRE(available->size() == 1UL);

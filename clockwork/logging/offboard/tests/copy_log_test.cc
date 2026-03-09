@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/copy_log.hh"
 #include "clockwork/logging/offboard/reader.hh"
@@ -16,7 +16,8 @@
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -28,7 +29,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory_resource>
@@ -271,6 +271,7 @@ TEST_CASE("copy_log_union")
   constexpr auto source_log_union = "source_log_union";
   constexpr auto source_log_name1 = "source_log1";
   constexpr auto source_log_name2 = "source_log2";
+  constexpr auto source_log_name3 = "source_log3";
   constexpr auto dest_log_name = "dest_log";
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
@@ -279,9 +280,11 @@ TEST_CASE("copy_log_union")
   const auto source_log_union_path = test_dir.get_path() / source_log_union;
   const auto source_log_path1 = test_dir.get_path() / source_log_name1;
   const auto source_log_path2 = test_dir.get_path() / source_log_name2;
+  const auto source_log_path3 = test_dir.get_path() / source_log_name3;
   const auto dest_log_path = test_dir.get_path() / dest_log_name;
   Writer writer1{memory_resource};
   Writer writer2{memory_resource};
+  Writer writer3{memory_resource};
 
   constexpr LogTimestamp time1{std::chrono::seconds(1)};
   constexpr LogTimestamp time2{std::chrono::seconds(2)};
@@ -323,6 +326,7 @@ TEST_CASE("copy_log_union")
   REQUIRE(writer1.create_channel(metadata1));
   REQUIRE(writer2.open(source_log_path2.string()));
   REQUIRE(writer2.create_channel(metadata2));
+  REQUIRE(writer3.open(source_log_path3.string()));
 
   REQUIRE(writer1.write(
     LoggedMessage{
@@ -350,10 +354,12 @@ TEST_CASE("copy_log_union")
 
   REQUIRE(writer1.close());
   REQUIRE(writer2.close());
+  REQUIRE(writer3.close());
 
   ::clockwork::logging::offboard::v1::LogUnion source_log_union_protobuf;
   source_log_union_protobuf.mutable_log_union_entry()->Add()->set_absolute_path(source_log_path1.string());
   source_log_union_protobuf.mutable_log_union_entry()->Add()->set_absolute_path(source_log_path2.string());
+  source_log_union_protobuf.mutable_log_union_entry()->Add()->set_absolute_path(source_log_path3.string());
 
   const auto source_log_union_file_uri = source_log_union_path / "stack_log_union.pbtxt";
 
@@ -525,8 +531,8 @@ TEST_CASE("copy_log_union")
     const auto read_result = chunk_reader_writer_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
       dest_log_union_file_uri.string());
     REQUIRE(read_result);
-    REQUIRE(read_result->log_union_entry(0).absolute_path() == source_log_path1.string());
-    REQUIRE(read_result->log_union_entry(1).absolute_path() == source_log_path2.string());
+    REQUIRE(read_result->log_union_entry(0).absolute_path() == source_log_path1.string_view());
+    REQUIRE(read_result->log_union_entry(1).absolute_path() == source_log_path2.string_view());
   }
 }
 

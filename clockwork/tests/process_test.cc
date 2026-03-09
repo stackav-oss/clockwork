@@ -1,14 +1,14 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
 #include "clockwork/repr_iface.hh"
@@ -16,10 +16,11 @@
 #include "clockwork/scaffolding/main_impl.hh"
 #include "clockwork/scaffolding/tests/support/runtime_tools.hh"
 #include "clockwork/scaffolding/tests/support/test_cogs_dial.hh"
-#include "clockwork/scaffolding/tests/support/test_msgs.hh"
+#include "clockwork/scaffolding/tests/support/test_msgs_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -35,7 +36,6 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -115,7 +115,7 @@ TEST_CASE("clockwork_integration")
   const jewels::testing::TmpDirectoryGuard tmpdir;
   const std::string arg_pd_file_name = jewels::fix_clockwork_path(
     "clockwork/tests/support/clockwork.clockwork.tests.support.test_system.test_system.proc.tachyon");
-  const std::string arg_pinion_dir = tmpdir.get_path().native();
+  const std::string arg_pinion_dir{tmpdir.get_path().c_str()};
   const std::string arg_pinion_ns = jewels::Uuid<int>::random_uuid().to_string();
   std::vector<const char*> args = {
     {"integration_test_bin",
@@ -131,7 +131,7 @@ TEST_CASE("clockwork_integration")
       .value();
 
   // The process description file is too big to fit on the stack.
-  auto pd_ptr = std::make_unique<common::ProcessDescriptionTap>();
+  auto pd_ptr = std::make_unique<Tappy<common::ProcessDescription<>>>();
   auto& desc = *pd_ptr;
 
   // Load the pd file to lookup UUIDs
@@ -141,8 +141,8 @@ TEST_CASE("clockwork_integration")
   REQUIRE(pd_file_read);
   REQUIRE(pd_file_read.value() == sizeof(desc));
 
-  const common::PublishEndpointTap* chan2_desc = nullptr;
-  const common::StateInstanceDescriptionTap* state_desc = nullptr;
+  const Tappy<common::PublishEndpoint<>>* chan2_desc = nullptr;
+  const Tappy<common::StateInstanceDescription<>>* state_desc = nullptr;
   for (const auto& pub_desc : desc.get_pubsub_graph().get_publish_endpoints())
   {
     if (pub_desc.get_buffer_layout().get_message_size() == sizeof(Tappy<testing::Message2>))
@@ -165,7 +165,7 @@ TEST_CASE("clockwork_integration")
   std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_chan2;
   std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_state1;
   testing::RunStopper exec(
-    [&]()
+    [&snoop_chan2, &snoop_state1, &channel_factory, &chan2_desc, &state_desc, &exec, &test_system_config_id]()
     {
       if (!snoop_chan2)
       {

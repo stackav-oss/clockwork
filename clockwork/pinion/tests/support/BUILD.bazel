@@ -11,6 +11,34 @@ package(
 )
 
 cc_library(
+    name = "bridge_test_support",
+    srcs = [
+        "bridge_test_support.cc",
+        "bridge_test_support.inl",
+    ],
+    hdrs = ["bridge_test_support.hh"],
+    deps = [
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard/tests/support:test_support",
+        "//clockwork/pinion:tcp_bridge_common",
+        "//clockwork/pinion:tcp_bridge_server",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/callsig:outparam",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/memory:memory_resource",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
     name = "epoll_snooper",
     srcs = ["epoll_snooper.cc"],
     hdrs = ["epoll_snooper.hh"],
@@ -28,17 +56,13 @@ cc_library(
         ":mock_slot",
         "//clockwork/pinion:buffer",
         "//jewels/std:span",
-        "@boost//:atomic",
     ],
 )
 
 cc_library(
     name = "mock_slot",
     hdrs = ["mock_slot.hh"],
-    deps = [
-        "//clockwork/pinion:slot",
-        "@boost//:atomic",
-    ],
+    deps = ["//clockwork/pinion:slot"],
 )
 
 clk(
@@ -50,8 +74,10 @@ clk(
         "optional_connected_test_system.optionally_connected_system.SimCpu_channel_spy_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_event_logger_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_metrics_channel_metadata_config.tachyon",
+        "optional_connected_test_system.optionally_connected_system.SimCpu_signal_metadata_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_simplelaunch_config.textproto",
         "optional_connected_test_system.optionally_connected_system.SimCpu_telemetry_logger_config.tachyon",
+        "optional_connected_test_system.optionally_connected_system.diagnostics_database_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.logged_channel_metadata.pbbin",
         "optionally_connected_cog.cc",
         "optionally_connected_cog.hh",
@@ -85,14 +111,14 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -115,7 +141,7 @@ cc_library(
     deps = [
         ":optionally_connected_cog_dial",
         "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "@catch2//:catch2_main",
     ],
 )
@@ -164,10 +190,10 @@ cc_library(
         ":tmp_shm_namespace",
         "//clockwork/common:abstract_cog",
         "//clockwork/common:forward",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/pinion:buffer",
         "//clockwork/pinion:observer",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "//clockwork/pinion:shm_channel",
         "//clockwork/pinion:shm_channel_factory",
         "//clockwork/pinion:shm_publisher",
@@ -197,7 +223,9 @@ merge_simplelaunch_config(
         "optional_connected_test_system.optionally_connected_system.SimCpu_channel_spy_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_event_logger_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_metrics_channel_metadata_config.tachyon",
+        "optional_connected_test_system.optionally_connected_system.SimCpu_signal_metadata_config.tachyon",
         "optional_connected_test_system.optionally_connected_system.SimCpu_telemetry_logger_config.tachyon",
+        "optional_connected_test_system.optionally_connected_system.diagnostics_database_config.tachyon",
         ":optionally_connected_system_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
@@ -212,8 +240,9 @@ cc_library(
     hdrs = ["sockets.hh"],
     deps = [
         ":udp_payloads",
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
+        "//clockwork/pinion:publishable",
         "//clockwork/pinion:publisher_handle",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
@@ -259,6 +288,7 @@ cc_library(
         "//clockwork/pinion:shm_channel",
         "//clockwork/pinion:shm_channel_factory",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",
         "//jewels/testing:tmp_directory_guard",
     ],
@@ -269,8 +299,8 @@ cc_library(
     srcs = ["udp_payloads.inl"],
     hdrs = ["udp_payloads.hh"],
     deps = [
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//jewels/std:span",
     ],
 )

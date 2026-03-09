@@ -3,9 +3,9 @@
 
 #include "clockwork/runners/deterministic_channel_handler.hh"
 
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -21,7 +21,7 @@ namespace clockwork
 DeterministicChannelHandler::DeterministicChannelHandler(
   jewels::memory::MemoryResource memory_resource,
   jewels::memory::NonNullSharedPtr<AbstractMessageWriter> message_writer,
-  jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_writer_config,
+  jewels::memory::ObjectPtr<const Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config,
   ChannelMap channels)
   : memory_resource_(std::move(memory_resource)),
     message_writer_(std::move(message_writer)),
@@ -76,12 +76,9 @@ jewels::expected<void, jewels::MonoError> DeterministicChannelHandler::initializ
 }
 
 void DeterministicChannelHandler::message_callback(
-  jewels::time::SyncTime current_time,
-  std::string_view channel_name,
-  jewels::memory::ObjectPtr<const clockwork::pinion::Buffer> /*buffer_ptr*/,
-  const clockwork::pinion::BufferIterator& buffer_iterator)
+  jewels::time::SyncTime current_time, std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_ref)
 {
-  auto slot = buffer_iterator.dereference();
+  auto slot = message_ref.slot();
   auto slot_header = slot.header();
   const auto& message_data = slot.message();
 

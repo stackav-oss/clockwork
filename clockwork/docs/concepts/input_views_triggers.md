@@ -45,6 +45,19 @@ As new messages are published beyond eight, old messages disappear from the chan
 > If you only ever publish one message to a channel, it'll just be there available until the system restarts.
 > At system start (or restart) all channels are empty.
 
+Some channels are only published once at initialization.
+The `published_once` channel option is used to declare that a channel is only published once.
+The `published_once` and `max_num_messages` options are mutually exclusive and the only supported value of the `published_once` option is `true`.
+Setting `published_once` declares a channel that can store at most one messages that can only be published by a cog with that runs at initialization.
+
+```clk
+channel OneTimeChannel
+{
+    message_type: Tachyon<SomeMsg>;
+    published_once: true;
+}
+```
+
 ## Input views
 
 An input view is a window onto the channel: a contiguous sub-sequence of the messages currently in the channel.
@@ -177,6 +190,45 @@ This is what you get by default in Clockwork, with the default view size of one.
 (Though see the discussion on `max` parameters to input conditions below, which can cause input views to explicitly not always have the latest message; this only happens if you ask for that behavior though, such as in the [every message use case](#every-message).)
 There is no reason to keep your own "most recent" copy.
 
+### New message pointer
+
+Clockwork tracks which messages in an input view are "new" versus "seen".
+A message is "new" if it has not been present in the input view on any previous execution of the Cog.
+Each message can be new on at most one execution; after that execution completes, the message becomes "seen".
+
+The new message pointer divides the input view into two regions:
+
+- **Seen messages**: Messages before the new message pointer were visible on a previous execution.
+- **New messages**: Messages from the new message pointer onward are being seen for the first time.
+
+You can access new messages via:
+
+- `get_new_msgs_view()` — returns a range (compatible with range iteration) of only new messages
+- `get_nonempty_new_msgs_view()` - As `get_new_msgs_view`, but the range is guaranteed to be non-empty.
+  (If the cog can run without new messages being present in the view, this method is not available, and you must call `get_new_msgs_view` and check whether it is empty before using it.)
+- `get_first_new()` — returns an iterator to the first new message (may be `end()` if there are no new messages)
+- `get_latest_new_msg()` - returns a reference to the most recent new message.
+  (If the cog can run without new messages being present in the view, this method is not available, and you must use one of the methods above and check to see whether a message exists.)
+
+The new message pointer advances automatically between Cog executions based solely on what was visible in the view.
+If a message was in the view during the last execution, it will be marked as "seen" on the next execution — **regardless of whether your Cog actually accessed or processed it**.
+You do not need to call `get_new_msgs_view()` or `get_first_new()` for the pointer to advance; visibility alone determines what is "new".
+
+> [!NOTE]
+> The new message pointer is distinct from the [cursor](#cursors).
+> Even if you use manual cursor control, the new message pointer still advances automatically.
+> "New" is always determined by whether the message was visible on a previous execution, not by the cursor position or whether you accessed the message.
+
+### Other message accessor functions
+
+You can call these other functions to access messages in the view:
+
+- `get_view()` - returns a range (compatible with range iteration) of all messages in the view
+- `get_nonempty_view()` - As `get_view`, but the range is guaranteed to be non-empty.
+  (If the cog can run without new messages being present in the view, this method is not available, and you must call `get_view` and check whether it is empty before using it.)
+- `get_latest_msg()` - returns a reference to the most recent message.
+  (If the cog can run without new messages being present in the view, this method is not available, and you must call `get_view` and check whether it is empty before using it.)
+
 ### Cursors
 
 Views also have a concept of a "cursor".
@@ -189,6 +241,19 @@ If you choose manual cursor control, then the cursor only advances when you adva
 Manual cursor control can optionally be used for Cogs which don't always process all of their inputs on every execution, and want to keep track of which one they last processed.
 This can be useful for message alignment or other purposes.
 In this case, opt in to manual cursor control, and manually advance the cursor as you process messages in the view.
+
+To enable manual cursor control, set `manual_cursor: true;` on the input in your `.clk` schema:
+
+```clk
+inputs
+{
+  some_input: Tappy<SomeMessage>
+  {
+    max_msgs: 10;
+    manual_cursor: true;
+  }
+}
+```
 
 ### Avoiding overruns
 
@@ -305,6 +370,7 @@ For purposes of a `new_message` condition, only new messages are relevant.
 
 This condition has two parameters: `min` and `max`.
 The default `min` parameter is 1, and the default `max` is "infinite" (or "none").
+Since specifying `min=1` is redundant, it is illegal - you will get an error message.
 The meaning of the `min` parameter is intuitive; there must be at least that number of new messages for the condition to be active.
 
 The `max` parameter is more subtle.
@@ -322,7 +388,7 @@ This is how the default behavior in Clockwork becomes "latest" rather than "ever
 > But any `max` that's less than or equal to input view `max_msgs` will cause Clockwork to make a best effort to deliver every message.
 
 Let's work through an example where the view size is three and there's a `new_message(max=2)` condition on the input.
-Remember that `min=1` is the default, so this is the same as `new_message(min=1, max=2)`.
+Remember that `min=1` is the default.
 
 #### Time t0
 
@@ -386,7 +452,7 @@ You're done.
 
 ### Every N messages
 
-Here you want `new_message(min=N,max=N)` to exactly divide the input frequency by N to determine your execution frequency.
+Here you want `new_message(min=N, max=N)` to exactly divide the input frequency by N to determine your execution frequency.
 If you want to see every message but only execute less frequently, then your view size should be N.
 If you actually want to skip N-1 messages each time, seeing only every Nth message, then the default view size of one will do it.
 

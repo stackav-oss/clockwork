@@ -1,11 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/clockwork_writer_policy.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
@@ -13,10 +14,12 @@
 #include "clockwork/logging/readers/log_reader_factory.hh"
 #include "clockwork/logging/readers/serialization.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/logging/tools/offboard_converter/convert_to_offboard.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -25,13 +28,12 @@
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -75,10 +77,12 @@ TEST_CASE("Convert to offboard log format")
       onboard::LoggedChannelMetadata{
         .channel_name = "/channel1",
         .compression_type = CompressionType::none,
-        .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(
+          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
         .channel_type = ChannelType::regular,
         .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name,
-        .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+        .schema_encoding =
+          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
         .schema_definition = schema_definition,
       },
       jewels::time::SteadyClock::now()));
@@ -86,10 +90,12 @@ TEST_CASE("Convert to offboard log format")
       onboard::LoggedChannelMetadata{
         .channel_name = "/channel2",
         .compression_type = CompressionType::none,
-        .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(
+          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
         .channel_type = ChannelType::regular,
         .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name,
-        .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+        .schema_encoding =
+          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
         .schema_definition = schema_definition,
       },
       jewels::time::SteadyClock::now()));
@@ -129,17 +135,21 @@ TEST_CASE("Convert to offboard log format")
     {{
        .name = "/channel1",
        .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
-       .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+       .message_encoding =
+         static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
        .channel_type = ChannelType::regular,
-       .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+       .schema_encoding =
+         static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
        .schema_definition = schema_definition,
      },
      {
        .name = "/channel2",
        .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
-       .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+       .message_encoding =
+         static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
        .channel_type = ChannelType::regular,
-       .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+       .schema_encoding =
+         static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
        .schema_definition = schema_definition,
      }});
 

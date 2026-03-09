@@ -89,8 +89,8 @@ template <typename Policy>
 }
 
 template <typename Policy>
-[[nodiscard]] size_t
-AsyncWriteRequest<Policy>::copy_data(jewels::time::SteadyTime timestamp, std::span<const std::byte> data)
+[[nodiscard]] size_t AsyncWriteRequest<Policy>::copy_data(
+  jewels::time::SteadyTime timestamp, std::span<const std::byte> data, DataType data_type)
 {
   if (!maybe_current_buffer_ || is_full())
   {
@@ -103,6 +103,10 @@ AsyncWriteRequest<Policy>::copy_data(jewels::time::SteadyTime timestamp, std::sp
     &jewels::at(*maybe_current_buffer_, static_cast<ssize_t>(current_buffer_offset_)), data.data(), bytes_to_copy);
   current_buffer_offset_ += bytes_to_copy;
   write_size_ += bytes_to_copy;
+  if (data_type == DataType::message)
+  {
+    message_data_size_ += bytes_to_copy;
+  }
   if (current_buffer_offset_ == maybe_current_buffer_->size())
   {
     add_current_buffer_to_io_vector();
@@ -112,7 +116,10 @@ AsyncWriteRequest<Policy>::copy_data(jewels::time::SteadyTime timestamp, std::sp
 
 template <typename Policy>
 [[nodiscard]] size_t AsyncWriteRequest<Policy>::zero_copy_data(
-  jewels::time::SteadyTime timestamp, std::span<const std::byte> data, MessageHandleType message_handle)
+  jewels::time::SteadyTime timestamp,
+  std::span<const std::byte> data,
+  DataType data_type,
+  MessageHandleType message_handle)
 {
   if (
     (maybe_current_buffer_ && !AlignerType::is_aligned(current_buffer_offset_)) ||
@@ -142,6 +149,10 @@ template <typename Policy>
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast) Required by C syscall interface
   io_vectors_.emplace_back(const_cast<std::byte*>(data.data()), bytes_to_zero_copy);
   write_size_ += bytes_to_zero_copy;
+  if (data_type == DataType::message)
+  {
+    message_data_size_ += bytes_to_zero_copy;
+  }
   maybe_current_buffer_ = maybe_partial_buffer;
   current_buffer_offset_ = 0U;
   return bytes_to_zero_copy;
@@ -159,6 +170,12 @@ template <typename Policy>
 [[nodiscard]] size_t AsyncWriteRequest<Policy>::get_write_size() const
 {
   return write_size_;
+}
+
+template <typename Policy>
+[[nodiscard]] size_t AsyncWriteRequest<Policy>::get_message_data_size() const
+{
+  return message_data_size_;
 }
 
 template <typename Policy>

@@ -26,33 +26,54 @@ cc_library(
 
 cc_library(
     name = "fix_catch2_cerr_nonthreadsafe_redirect",
+    srcs = ["fix_catch2_cerr_nonthreadsafe_redirect.cc"],
     hdrs = ["fix_catch2_cerr_nonthreadsafe_redirect.hh"],
     visibility = ["//visibility:public"],
 )
 
 py_cc_binding(
     name = "nb_tmp_directory_guard",
+    testonly = True,
     srcs = ["nb_tmp_directory_guard.cc"],
     use_type_stubs = False,
     visibility = ["//visibility:public"],
     deps = [
         ":tmp_directory_guard",
+        "//jewels/filesystem:path",
         "@nanobind",
     ],
 )
 
 cc_library(
     name = "tmp_directory_guard",
+    testonly = True,
     srcs = ["tmp_directory_guard.cc"],
     hdrs = ["tmp_directory_guard.hh"],
     visibility = ["//visibility:public"],
-    deps = ["@boost//:filesystem"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:path",
+        "//jewels/memory:default_memory_resource",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+    ],
 )
 
 cc_library(
     name = "wise_enum_proto_sync",
     testonly = True,
     hdrs = ["wise_enum_proto_sync.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@catch2//:catch2_main",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "wise_enum_sync",
+    testonly = True,
+    hdrs = ["wise_enum_sync.hh"],
     visibility = ["//visibility:public"],
     deps = [
         "@catch2//:catch2_main",

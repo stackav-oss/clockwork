@@ -1,0 +1,79 @@
+use clockwork::tests::support::exec_time::{ExecState};
+use clockwork::tests::support::snapshot_test_messages::{SnapshotTestConfig};
+use clockwork::tests::support::restore_test_cog::{RestoreTestCog};
+use clockwork::logging::channel_policy::{LogReaderPolicy};
+
+// Channel for the cog input
+channel InputChannel
+{
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 3;
+}
+
+// Log reader policy to provide a producer for InputChannel
+policy LogReaderPolicy for InputChannel
+{
+  source_name = 'input_channel';
+}
+
+// Channel for state snapshots
+channel StateChannel
+{
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 10;
+}
+
+// Channel for config snapshots
+channel ConfigChannel
+{
+  message_type: Tachyon<SnapshotTestConfig>;
+  max_num_messages: 1;
+}
+
+// Box for testing LogicalSystemInterface modification
+box LogicalSystemInterfaceTestBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+
+  // Create a state that is NOT initially connected to any cog
+  new unconnected_state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+
+  // Create a state that IS connected to a cog
+  new connected_state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+
+  // Create multiple data sources for testing fallbacks
+  new primary_config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/snapshot_test_config.textproto");
+  new fallback_config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/restore_test_config.textproto");
+  new unconnected_config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/snapshot_test_config.textproto");
+
+  // Create a cog with the connected state and primary config
+  new test_cog: RestoreTestCog;
+  connect connected_state to test_cog.state;
+  connect primary_config to test_cog.config;
+  connect test_cog.pub_state to StateChannel;
+  connect test_cog.pub_config to ConfigChannel;
+  connect InputChannel to test_cog.dummy;
+}
+
+cpp_executable logical_system_interface_test_exe
+{
+  casing
+  {
+    box LogicalSystemInterfaceTestBox;
+  }
+}
+
+cpu_domain LogicalSystemInterfaceTestCpu;
+
+box LogicalSystemInterfaceTestSystem
+{
+  new box: LogicalSystemInterfaceTestBox;
+  new proc: Process(executable=logical_system_interface_test_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=LogicalSystemInterfaceTestCpu) to proc;
+}
+
+system_target logical_system_interface_test_system
+{
+  box: LogicalSystemInterfaceTestSystem;
+}

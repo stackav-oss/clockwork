@@ -45,6 +45,8 @@ def test_process_description() -> None:
         log_cog=uuid4(),
         io_connections=[],
         not_connected_endpoints=[],
+        snapshot_configs=[],
+        data_sources=[],
     )
     buffer = bytearray(pdf.ProcessDescription.get_tachyon_constraint().size)
     pd1.serialize_tachyon(memoryview(buffer))

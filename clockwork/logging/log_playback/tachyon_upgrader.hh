@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/readers/types.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 #include "jewels/memory/memory_resource.hh"
 
@@ -41,7 +42,7 @@ public:
   /// @param[in metadata Incoming log metadata
   TachyonUpgrader(
     jewels::memory::MemoryResource memory_resource,
-    const ChannelPublisherConfigTap& publisher_config,
+    const clockwork::Tappy<ChannelPublisherConfig<>>& publisher_config,
     std::span<const TopicMetadata> metadata);
 
   ~TachyonUpgrader() = default;

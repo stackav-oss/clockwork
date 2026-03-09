@@ -45,13 +45,6 @@ index 0000000..fd4c632
 +
 +bazel_dep(name = "rules_cc")
 +bazel_dep(name = "platforms")
-diff --git WORKSPACE WORKSPACE
-new file mode 100644
-index 0000000..8b13789
---- /dev/null
-+++ WORKSPACE
-@@ -0,0 +1 @@
-+
 diff --git tests/sanity_test.c tests/sanity_test.c
 index 4c59bf3..b9023f4 100644
 --- tests/sanity_test.c

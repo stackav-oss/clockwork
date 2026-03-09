@@ -32,6 +32,9 @@ struct alignas(uuid_alignment) Uuid
   /// UUID size in bytes
   static constexpr size_t uuid_size_bytes = 16U;
 
+  /// Size of the time field in bytes
+  static constexpr size_t time_size_bytes = 6U;
+
   /// Construct a UUID from raw bytes
   /// @param[in] uuid_in Raw UUID bytes
   constexpr explicit Uuid(const std::array<uint8_t, uuid_size_bytes>& uuid_in) noexcept;

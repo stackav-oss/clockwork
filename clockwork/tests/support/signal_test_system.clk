@@ -1,0 +1,6 @@
+use clockwork::tests::support::signal_test_box;
+
+system_target signal_test_system
+{
+    box: signal_test_box::SignalTestSystem;
+}

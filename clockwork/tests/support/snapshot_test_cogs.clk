@@ -1,0 +1,44 @@
+use clockwork::tests::support::exec_time::{ExecState};
+use clockwork::tests::support::snapshot_test_messages::{StateUpdateMessage, SnapshotTestConfig};
+
+// Stateful cog that maintains a counter and responds to update messages
+cog StatefulCog
+{
+  configs
+  {
+    config: Tappy<SnapshotTestConfig>;
+  }
+
+  states
+  {
+    state: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    update_message: Tappy<StateUpdateMessage>
+    {
+      max_msgs: 5;
+    }
+  }
+
+  execution
+  {
+    condition new_update: new_message(update_message);
+    condition periodic: time_since_last_exec(50ms);
+    execute when: new_update or periodic;
+  }
+}
+
+cpp_target snapshot_test_cogs
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog StatefulCog;
+}

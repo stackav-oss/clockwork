@@ -1,5 +1,9 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
 // Message encoding
-enum MessageEncoding {
+enum MessageEncoding
+{
   options
   {
     underlying_type: UInt16;
@@ -32,13 +36,4 @@ enum MessageEncoding {
       underlying_value: 3;
     }
   }
-}
-
-cpp_target message_encoding
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  enum MessageEncoding;
 }

@@ -30,6 +30,9 @@ public:
   [[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode>
   add(int efd, uint32_t /*events*/, const std::shared_ptr<AbstractEPollCallback>& callback) override;
 
+  /// @see AbstractEPollMananger::modify
+  [[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode> modify(int /*efd*/, uint32_t /*events*/) override;
+
   /// @see AbstractEPollMananger::remove
   void remove(int efd) override;
 

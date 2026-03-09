@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "clockwork/logging/log_uuid_tag.hh"
+#include "clockwork/logging/log_uuid_tag_clk_cc.hh"
 #include "jewels/uuid/uuid.hh"
 #include "jewels/uuid/uuid_hasher.hh"
 namespace clockwork_logging

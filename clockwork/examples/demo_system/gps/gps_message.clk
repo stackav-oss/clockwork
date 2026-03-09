@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::demo_system::gps)]
+
 // Fake GPS message, real GPS messages have a lot more in them.
 schema GpsMessage
 {
@@ -16,16 +19,4 @@ schema GpsMessage
     // Elevation above mean sea level, in meters.
     #3 elevation_m: Float64;
   }
-}
-
-cpp_target gps_message
-{
-  options
-  {
-    namespace clockwork::demo_system::gps;
-  }
-  schema GpsMessage;
-
-  representation Tachyon<GpsMessage>;
-  interface Tappy<GpsMessage>;
 }

@@ -7,7 +7,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cerrno>
-#include <filesystem>
 #include <memory_resource>
 
 namespace jewels::filesystem::testing
@@ -16,7 +15,7 @@ namespace jewels::filesystem::testing
 TEST_CASE("FilesystemWrapper::inject_remove_error")
 {
   const ::jewels::testing::TmpDirectoryGuard temporary_directory;
-  const std::string placeholder_path = temporary_directory.get_path() / "placeholder";
+  const auto placeholder_path{temporary_directory.get_path() / "placeholder"};
 
   const memory::MemoryResource memory_resource(std::pmr::new_delete_resource());
   FilesystemWrapper filesystem_wrapper(memory_resource);

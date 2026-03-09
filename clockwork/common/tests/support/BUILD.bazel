@@ -9,12 +9,33 @@ package(
 )
 
 cc_library(
+    name = "dummy_cog_queue",
+    srcs = ["dummy_cog_queue.cc"],
+    hdrs = ["dummy_cog_queue.hh"],
+    deps = [
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:cog_envelope",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "dummy_timer",
+    srcs = ["dummy_timer.cc"],
+    hdrs = ["dummy_timer.hh"],
+    deps = [
+        "//clockwork/common:abstract_timer",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
     name = "fake_cog",
     hdrs = ["fake_cog.hh"],
     deps = [
         "//clockwork/common:abstract_cog",
         "//clockwork/common:forward",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
         "//jewels/filesystem:file",
@@ -48,7 +69,7 @@ cc_library(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:cog_envelope",
-        "//clockwork/common:cog_execution_error",
+        "//clockwork/common:cog_execution_error_clk_cc",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/time:sync_time",

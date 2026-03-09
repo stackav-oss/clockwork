@@ -8,358 +8,77 @@ This is named clkenum to avoid conflicts with Python's enum standard library mod
 
 from __future__ import annotations
 
+import itertools
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
 from typing_extensions import override
 
 if TYPE_CHECKING:
-    from collections.abc import Container, Iterable
-
-
-@dataclass
-class HistoricalValueDef(node.DocableEntity, node.CstNode[cst.EnumValueHistory]):
-    """Historical information about a value that no longer exists or has been replaced by another."""
-
-    enum: ClkEnum
-    field_num: int
-    name: str
-    is_default: bool
-    integer_value: int | expr.Expr | None
-    removed_in_version: int | None = None
-    became_field_num: int | None = None
-    resolved: ResolvedHistoricalValueDef | None = field(repr=False, default=None)
-
-    def name_resolution_fields(self) -> Container[str]:
-        """Override recursion for node.resolve_names.
-
-        Because we hold a recursive reference back to our parent, we need to
-        prevent node.resolve_names from recursing on this object.
-        """
-        return ["integer_value"]
-
-    @classmethod
-    def from_cst(
-        cls: type[HistoricalValueDef],
-        cst_node: cst.EnumValueHistory,
-        module: node.Module,
-        enum: ClkEnum,
-    ) -> HistoricalValueDef:
-        """Create an IR HistoricalValueDef from a CST node."""
-        if module.terminals is None:
-            msg = "Cannot construct IR nodes from CST without a TerminalSource"
-            raise ValueError(msg)
-
-        value_def = ValueDef.from_cst(
-            enum, cast("cst.EnumValue", cst_node.child_enum_history_value()), module, enum.inner_scope
-        )
-        value_change = cst_node.child_enum_value_change()
-
-        hist_value = cls(
-            module=module,
-            cst_node=cst_node,
-            doc=value_def.doc,
-            enum=enum,
-            field_num=value_def.field_num,
-            name=value_def.name,
-            is_default=value_def.is_default,
-            integer_value=value_def.integer_value if isinstance(value_def.integer_value, expr.Expr) else None,
-            removed_in_version=None,
-            became_field_num=None,
-            resolved=None,
-        )
-
-        changed_version = int_from_cst(value_change.child_changed_version(), module.terminals)
-        if value_change.maybe_removed():
-            hist_value.removed_in_version = changed_version
-        elif value_change.maybe_became():
-            hist_value.became_field_num = changed_version
-
-        return hist_value
-
-    def resolve(self) -> ResolvedHistoricalValueDef:
-        """Perform finalization of the field IR."""
-        if self.resolved:
-            return self.resolved
-
-        int_value = self.integer_value
-        if isinstance(int_value, expr.Expr):
-            value = int_value.evaluate()
-            if not isinstance(value, primitive.DecimalValue):
-                msg = int_value.append_error_line(f"Expected an integer value, but got {value}")
-                raise TypeError(msg)
-            int_value = int(value.value)
-
-        self.resolved = ResolvedHistoricalValueDef(
-            field_num=self.field_num,
-            name=self.name,
-            is_default=self.is_default,
-            integer_value=int_value,
-            removed_in_version=self.removed_in_version,
-            became_field_num=self.became_field_num,
-            source=self,
-        )
-        return self.resolved
-
-
-@dataclass
-class ResolvedHistoricalValueDef:
-    """Resolved version of historical value information."""
-
-    field_num: int
-    name: str
-    is_default: bool
-    integer_value: int | None
-    removed_in_version: int | None = None
-    became_field_num: int | None = None
-    source: HistoricalValueDef | None = field(repr=False, default=None)
-
-
-@dataclass
-class EnumHistoryOptions:
-    """Options that apply to a historical version of an enum."""
-
-    version: int
-    bit_flags: bool
-    underlying_type: expr.Expr | clkbuiltins.IntegerPrimitiveType | None
-
-
-@dataclass
-class ResolvedEnumHistoryOptions:
-    """Resolved options that apply to a historical version of an enum."""
-
-    version: int
-    bit_flags: bool
-    underlying_type: clkbuiltins.IntegerPrimitiveType | None
-    source: EnumHistoryOptions | None = field(repr=False, default=None)
-
-
-@dataclass
-class ResolvedEnumHistory:
-    """Resolved version of enum history tracking."""
-
-    versions: list[int]
-    pseudoversions: list[int]
-    values: dict[int, ResolvedHistoricalValueDef]
-    options: list[ResolvedEnumHistoryOptions] | None
-    source: EnumHistory | None = field(repr=False, default=None)
+    from collections.abc import Container
 
 
 @dataclass
 class EnumHistory:
     """Track historical information about an enum."""
 
-    versions: list[int]
-    pseudoversions: list[int]
-    values: dict[int, HistoricalValueDef]
-    options: list[EnumHistoryOptions] | None
-    resolved: ResolvedEnumHistory | None = field(repr=False, default=None)
+    version: int
+    legacy_became: dict[int, int]
+    removed: set[int]
 
     @classmethod
     def from_cst(
         cls: type[EnumHistory],
         cst_node: cst.EnumHistoryBlock,
         module: node.Module,
-        enum: ClkEnum,
     ) -> EnumHistory:
         """Create an IR EnumHistory from a CST node."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
 
-        versions = []
-        historical_values = {}
-        historical_options = None
+        # Parse version
+        version_cst = cst_node.child_version_spec()
+        version = int_from_cst(version_cst.child_version(), module.terminals)
 
-        version_spec = cst_node.child_version_spec()
-        versions = [int_from_cst(version_cst, module.terminals) for version_cst in version_spec.children_version()]
-        if len(versions) != len(set(versions)):
-            msg = node.append_error_line(version_spec, module, "Duplicate version numbers")
-            raise ValueError(msg)
-
-        if version_pseudofields_cst := version_spec.maybe_version_pseudofields():
-            pseudoversions = [
-                int_from_cst(version_cst, module.terminals)
-                for version_cst in version_pseudofields_cst.children_version()
-            ]
-            if len(pseudoversions) != len(set(pseudoversions)):
-                msg = node.append_error_line(version_pseudofields_cst, module, "Duplicate pseudofield version numbers")
-                raise ValueError(msg)
-        else:
-            pseudoversions = []
-
-        if values_history := cst_node.maybe_enum_values_history():
-            for value_history in values_history.children_enum_value_history():
-                hist_value = HistoricalValueDef.from_cst(value_history, module, enum)
-                if hist_value.field_num in historical_values:
+        # Parse legacy_became if present
+        legacy_became = {}
+        new_numbers = set()
+        if legacy_became_spec_cst := cst_node.maybe_legacy_became_spec():
+            for became_spec_cst in legacy_became_spec_cst.children_became_spec():
+                old_number_cst = became_spec_cst.child_old_number()
+                old_number = int_from_cst(old_number_cst, module.terminals)
+                if old_number in legacy_became:
                     msg = node.append_error_line(
-                        value_history, module, f"Duplicate field number {hist_value.field_num} in history block"
+                        old_number_cst, module, f"Duplicate old field number {old_number} in legacy became block"
                     )
                     raise ValueError(msg)
-                historical_values[hist_value.field_num] = hist_value
-
-        historical_options = cls._parse_enum_options_history(cst_node, module)
-
-        return cls(
-            versions=versions, pseudoversions=pseudoversions, values=historical_values, options=historical_options
-        )
-
-    @staticmethod
-    def _parse_enum_options_history(
-        cst_node: cst.EnumHistoryBlock,
-        module: node.Module,
-    ) -> list[EnumHistoryOptions] | None:
-        """Parse enum options history from the CST node.
-
-        Args:
-            cst_node: The CST node containing the history block
-            module: The current module
-            enum: The enum being parsed
-
-        Returns:
-            A list of EnumHistoryOptions if options history is present, None otherwise
-        """
-        if not (enum_history := cst_node.maybe_enum_history()):
-            return None
-
-        if not (options_block := enum_history.maybe_enum_history_options_block()):
-            return None
-
-        assert module.terminals is not None
-        historical_options = []
-
-        for history_options in options_block.children_enum_history_options():
-            version = int_from_cst(history_options.child_version(), module.terminals)
-            bit_flags = False
-            underlying_type = None
-
-            for option_cst in history_options.children_enum_option():
-                if option_cst.maybe_enum_option_flags():
-                    bit_flags = True
-                elif underlying_type_cst := option_cst.maybe_enum_option_underlying_type():
-                    underlying_type = _extract_underlying_type_cst(underlying_type_cst, module)
-
-            historical_options.append(
-                EnumHistoryOptions(
-                    version=version,
-                    bit_flags=bit_flags,
-                    underlying_type=underlying_type,
-                )
-            )
-
-        return historical_options if historical_options else None
-
-    def resolve(self) -> ResolvedEnumHistory:
-        """Perform finalization of the history IR."""
-        if self.resolved:
-            return self.resolved
-
-        resolved_values = {}
-        for num, value in self.values.items():
-            resolved_values[num] = value.resolve()
-
-        resolved_options = None
-        if self.options:
-            resolved_options = []
-            for option in self.options:
-                underlying_type = option.underlying_type
-                if isinstance(underlying_type, expr.Expr):
-                    evaluated_type = underlying_type.evaluate()
-                    if not isinstance(evaluated_type, clkbuiltins.IntegerPrimitiveType):
-                        msg = underlying_type.append_error_line(
-                            f"Expected an integer primitive type, but got {evaluated_type}"
-                        )
-                        raise TypeError(msg)
-                    underlying_type = evaluated_type
-
-                resolved_options.append(
-                    ResolvedEnumHistoryOptions(
-                        version=option.version,
-                        bit_flags=option.bit_flags,
-                        underlying_type=underlying_type,
-                        source=option,
-                    )
-                )
-
-        self.resolved = ResolvedEnumHistory(
-            versions=self.versions,
-            pseudoversions=self.pseudoversions,
-            values=resolved_values,
-            options=resolved_options,
-            source=self,
-        )
-        return self.resolved
-
-    def get_resolved(self) -> ResolvedEnumHistory:
-        """Get a resolved version of this object."""
-        if not self.resolved:
-            msg = "Attempt to access unresolved object"
-            raise RuntimeError(msg)
-        return self.resolved
-
-    def _validate_value_changes(
-        self,
-        historical_values: Iterable[HistoricalValueDef],
-        all_field_nums: set[int],
-    ) -> dict[int, int]:
-        """Validate changes to historical values.
-
-        Args:
-            historical_values: Iterator of historical value definitions
-            all_field_nums: Set of all field numbers (current and historical)
-
-        Returns:
-            Dict mapping target field numbers to source field numbers for 'became' transitions
-
-        Raises:
-            RuntimeError: If a value has no change version
-            ValueError: If change version is invalid
-        """
-        became_targets: dict[int, int] = {}
-
-        for hist_value in historical_values:
-            if hist_value.removed_in_version is None and hist_value.became_field_num is None:
-                msg = hist_value.append_error_line(f"Historical value {hist_value.field_num} has no change version")
-                raise RuntimeError(msg)
-
-            if hist_value.removed_in_version is not None:
-                if hist_value.removed_in_version <= hist_value.field_num:
-                    msg = hist_value.append_error_line(
-                        f"Historical value {hist_value.field_num} cannot be removed in version {hist_value.removed_in_version}"
+                new_number_cst = became_spec_cst.child_new_number()
+                new_number = int_from_cst(new_number_cst, module.terminals)
+                if new_number in new_numbers:
+                    msg = node.append_error_line(
+                        new_number_cst, module, f"Duplicate new field number {new_number} in legacy became block"
                     )
                     raise ValueError(msg)
+                legacy_became[old_number] = new_number
+                new_numbers.add(new_number)
 
-                if hist_value.removed_in_version not in all_field_nums:
-                    msg = hist_value.append_error_line(
-                        f"Historical value {hist_value.field_num} references non-existent version {hist_value.removed_in_version}"
+        # Parse removed if present
+        removed = set()
+        if removed_spec_cst := cst_node.maybe_removed_spec():
+            for value_num_cst in removed_spec_cst.children_num():
+                value_num = int_from_cst(value_num_cst, module.terminals)
+                if value_num in legacy_became:
+                    msg = node.append_error_line(
+                        value_num_cst, module, f"Value number {value_num} is in both legacy_became and removed"
                     )
                     raise ValueError(msg)
-
-            if hist_value.became_field_num is not None:
-                if hist_value.became_field_num not in all_field_nums:
-                    msg = hist_value.append_error_line(
-                        f"Historical value {hist_value.field_num} references non-existent version {hist_value.became_field_num}"
-                    )
-                    raise ValueError(msg)
-
-                became_targets[hist_value.became_field_num] = hist_value.field_num
-
-        return became_targets
-
-
-@dataclass
-class _HistoricalValueInfo:
-    """Temporary value information used during historical enum construction."""
-
-    doc: node.Doc
-    name: str
-    is_default: bool
-    integer_value: int | None
-    field_num: int
+                removed.add(value_num)
+        return cls(version=version, legacy_became=legacy_became, removed=removed)
 
 
 @dataclass
@@ -375,19 +94,15 @@ class ResolvedEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEnti
     has_explicit_underlying_type: bool  # True if underlying type was explicitly assigned
     has_explicit_values: bool  # True if enum values were explicitly assigned
     linter_overrides: set[str]
-    history: ResolvedEnumHistory = field(repr=False)
+    history: EnumHistory = field(repr=False)
+    attributes: node.ClkAttributes | None = field(repr=False)
     source: ClkEnum | None = field(repr=False)
-    _historical_versions: dict[int, ResolvedEnum] = field(
-        repr=False, default_factory=dict
-    )  # Cache for historical versions
 
     def cur_version(self) -> int:
         """Get the current version of the enum."""
-        max_value = max(self.values)
-        max_pseudoversion = max(self.history.pseudoversions) if self.history.pseudoversions else -1
-        return max(max_value, max_pseudoversion)
+        return self.history.version
 
-    def _validate_version(self, version: int) -> None:
+    def validate_version(self, version: int) -> None:
         """Validate that the requested version exists in history.
 
         Args:
@@ -396,294 +111,11 @@ class ResolvedEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEnti
         Raises:
             ValueError: If version is not in the enum history
         """
-        if version not in self.history.versions:
-            msg = f"Version {version} not found in enum history"
-            raise ValueError(msg)
-
-    def _collect_historical_values(self, version: int) -> tuple[dict[int, _HistoricalValueInfo], int | None, bool]:
-        """Collect values that existed at the given version.
-
-        Args:
-            version: The historical version to collect values for
-
-        Returns:
-            A tuple of (values_dict, default_field_num, has_explicit_values)
-            where values_dict maps field_num to _HistoricalValueInfo,
-            default_field_num is the field number of the default value (or None if not found),
-            and has_explicit_values indicates if any values have explicit integer assignments
-        """
-        current_values, current_default_field_num, has_explicit_current_values = (
-            self._collect_current_values_at_version(version)
-        )
-
-        historical_values, historical_default_field_num, has_explicit_historical_values = (
-            self._collect_historical_values_at_version(version)
-        )
-
-        merged_values = {**current_values, **historical_values}
-        default_field_num = (
-            current_default_field_num if current_default_field_num is not None else historical_default_field_num
-        )
-        has_explicit_values = has_explicit_current_values or has_explicit_historical_values
-
-        return merged_values, default_field_num, has_explicit_values
-
-    def _collect_current_values_at_version(
-        self, version: int
-    ) -> tuple[dict[int, _HistoricalValueInfo], int | None, bool]:
-        """Collect current values that existed at the given version.
-
-        Args:
-            version: The historical version to collect values for
-
-        Returns:
-            A tuple of (values_dict, default_field_num, has_explicit_values)
-        """
-        historical_values: dict[int, _HistoricalValueInfo] = {}
-        default_field_num: int | None = None
-        has_explicit_values = False
-
-        # Include current values with field_num <= version
-        for field_num, value in self.values.items():
-            if field_num > version:
-                continue
-            if value.is_default:
-                if default_field_num is not None:
-                    msg = value.append_error_line(
-                        f"Multiple values tagged as default {default_field_num} and {field_num}"
-                    )
-                    raise ValueError(msg)
-                default_field_num = field_num
-
-            historical_values[field_num] = _HistoricalValueInfo(
-                doc=value.doc,
-                name=value.name,
-                is_default=value.is_default,
-                integer_value=value.integer_value if value.value_is_explicit else None,
-                field_num=field_num,
+        if version > self.history.version:
+            msg = self.append_error_line(
+                f"Version {version} is greater than current enum version {self.history.version}"
             )
-            if value.value_is_explicit:
-                has_explicit_values = True
-
-        return historical_values, default_field_num, has_explicit_values
-
-    def _collect_historical_values_at_version(
-        self, version: int
-    ) -> tuple[dict[int, _HistoricalValueInfo], int | None, bool]:
-        """Collect historical values that existed at the given version.
-
-        Args:
-            version: The historical version to collect values for
-
-        Returns:
-            A tuple of (values_dict, default_field_num, has_explicit_values)
-        """
-        historical_values: dict[int, _HistoricalValueInfo] = {}
-        default_field_num: int | None = None
-        has_explicit_values = False
-
-        for field_num, hist_value in self.history.values.items():
-            if (
-                field_num <= version
-                and (hist_value.removed_in_version is None or hist_value.removed_in_version > version)
-                and (hist_value.became_field_num is None or hist_value.became_field_num > version)
-            ):
-                if hist_value.is_default:
-                    if default_field_num is not None:
-                        msg = self.append_error_line(
-                            f"Multiple values tagged as default {default_field_num} and {field_num}"
-                        )
-                        raise ValueError(msg)
-                    default_field_num = field_num
-
-                assert field_num not in historical_values
-                historical_values[field_num] = _HistoricalValueInfo(
-                    doc=node.Doc(
-                        module=self.module,
-                        cst_node=None,
-                        value=f"Historical value '{hist_value.name}' from version {field_num}",
-                    ),
-                    name=hist_value.name,
-                    is_default=hist_value.is_default,
-                    integer_value=hist_value.integer_value,
-                    field_num=field_num,
-                )
-
-                if hist_value.integer_value is not None:
-                    has_explicit_values = True
-
-        return historical_values, default_field_num, has_explicit_values
-
-    def _auto_assign_values(self, values: dict[int, _HistoricalValueInfo], has_explicit_values: bool) -> None:
-        """Auto-assign integer values to values that don't have them.
-
-        Args:
-            values: Dictionary mapping field numbers to value info objects
-            has_explicit_values: Whether any values have explicit integer assignments
-
-        Raises:
-            ValueError: If there's a mix of explicit and implicit integer values
-        """
-        need_auto_assign = False
-        for info in values.values():
-            if info.integer_value is None:
-                need_auto_assign = True
-                break
-
-        if need_auto_assign and has_explicit_values:
-            msg = f"Enum {self.name} has a mix of explicit and implicit integer values"
             raise ValueError(msg)
-
-        if need_auto_assign:
-            cur_value = 1  # Start auto-assignment at 1 because default is always 0
-            for _, info in sorted(values.items()):
-                if info.is_default:
-                    final_value = 0
-                else:
-                    # Other values get assigned sequentially
-                    final_value = cur_value
-                    cur_value += 1
-                info.integer_value = final_value
-
-    def _get_options_for_version(self, version: int) -> tuple[bool, clkbuiltins.IntegerPrimitiveType | None, bool]:
-        """Get the enum options (bit_flags, underlying_type) applicable for a given version.
-
-        This is subtle: We want the options that are specified for the lowest
-        version that's greater than or equal to the target version.  This is
-        because the options are specified in the file after the fact: when you
-        change the options, you record the options in effect in the version
-        prior to your change.
-
-        For example: If there are no historical options, then that means the
-        schema's current options apply to all historical versions (they've
-        never changed).
-
-        But if current version is 10 and there's a historical options spec at
-        version 5, that means that the options changed in version 6. Therefore
-        the current options apply to versions 6-10, and the historical options
-        apply to versions 5 and earlier.
-
-        Therefore, you take the lowest options version greater than or equal
-        to the target version.
-
-        Args:
-            version: The version to get options for
-
-        Returns:
-            A tuple of (bit_flags, underlying_type, has_explicit_underlying_type)
-        """
-        # Start with current version's options
-        bit_flags = self.bit_flags
-        underlying_type = self.underlying_type if self.has_explicit_underlying_type else None
-        has_explicit_underlying_type = self.has_explicit_underlying_type
-
-        # Replace those with the lowest historical options version >= target, if any
-        if self.history.options:
-            applicable_options = [opt for opt in self.history.options if opt.version >= version]
-            if applicable_options:
-                # Get the lowest version >= our target
-                closest_option = min(applicable_options, key=lambda opt: opt.version)
-                bit_flags = closest_option.bit_flags
-                underlying_type = closest_option.underlying_type
-                # If the historical option has an explicit underlying type, then we're explicit
-                has_explicit_underlying_type = underlying_type is not None
-
-        return bit_flags, underlying_type, has_explicit_underlying_type
-
-    def _create_historical_value_defs(
-        self, values: dict[int, _HistoricalValueInfo], need_auto_assign: bool
-    ) -> dict[int, ResolvedValueDef]:
-        """Create ResolvedValueDef instances for historical values.
-
-        Args:
-            values: Dictionary mapping field numbers to value info objects
-            need_auto_assign: Whether values were auto-assigned
-
-        Returns:
-            Dictionary mapping field numbers to resolved value definitions
-        """
-        final_values: dict[int, ResolvedValueDef] = {}
-        for field_num, info in values.items():
-            assert info.integer_value is not None
-            final_values[field_num] = ResolvedValueDef(
-                doc=info.doc,
-                module=self.module,
-                cst_node=None,
-                name=info.name,
-                scope=self.scope,
-                enum=self.source or cast("ClkEnum", self),
-                field_num=field_num,
-                is_default=info.is_default,
-                integer_value=info.integer_value,
-                value_is_explicit=(not need_auto_assign),
-                source=None,
-            )
-        return final_values
-
-    def get_enum_at_version(self, version: int) -> ResolvedEnum:
-        """Generate a ResolvedEnum instance representing this enum at a specific historical version.
-
-        Args:
-            version: The historical version to generate
-
-        Returns:
-            A new ResolvedEnum instance representing this enum at the specified version
-
-        Raises:
-            ValueError: If the requested version is not in the enum history versions list
-        """
-        self._validate_version(version)
-
-        if version == self.cur_version():
-            return self
-
-        if version in self._historical_versions:
-            return self._historical_versions[version]
-
-        historical_values, default_field_num, has_explicit_values = self._collect_historical_values(version)
-
-        if default_field_num is None:
-            msg = f"No default value found for enum {self.name} at version {version}"
-            raise ValueError(msg)
-
-        need_auto_assign = any(info.integer_value is None for info in historical_values.values())
-        self._auto_assign_values(historical_values, has_explicit_values)
-
-        final_historical_values = self._create_historical_value_defs(historical_values, need_auto_assign)
-
-        bit_flags, underlying_type, has_explicit_underlying_type = self._get_options_for_version(version)
-
-        int_values = [v.integer_value for v in final_historical_values.values()]
-        min_value = min(int_values)
-        max_value = max(int_values)
-
-        if underlying_type is None:
-            underlying_type = primitive.smallest_type_to_hold_range(min_value, max_value)
-            has_explicit_underlying_type = False
-
-        result = ResolvedEnum(
-            doc=self.doc,
-            name=self.name,
-            scope=self.scope,
-            module=self.module,
-            cst_node=self.cst_node,
-            type_info=self.type_info,
-            inner_scope=self.inner_scope,
-            uuid=self.uuid,
-            values=final_historical_values,
-            default_field_num=default_field_num,
-            bit_flags=bit_flags,
-            underlying_type=underlying_type,
-            has_explicit_underlying_type=has_explicit_underlying_type,
-            has_explicit_values=(not need_auto_assign),
-            linter_overrides=self.linter_overrides,
-            history=self.history,
-            source=self.source,
-        )
-        _validate_underlying_type(result, min_value, max_value)
-
-        self._historical_versions[version] = result
-        return result
 
 
 @dataclass
@@ -702,6 +134,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
     has_explicit_underlying_type: bool
     linter_overrides: set[str]
     history: EnumHistory | None = field(repr=False)
+    attributes: node.ClkAttributes | None = field(repr=False)
     resolved: ResolvedEnum | None = field(repr=False)
 
     @override
@@ -713,6 +146,9 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         """
         return self.inner_scope.lookup(name, recursive=False)
 
+    # We must disable C901 and PLR0912 here (function complexity, branches) because
+    # we inherently have many branches, one for each type of module-level entity.
+    # However, they're handled in a uniform way that isn't difficult to understand.
     @classmethod
     def from_cst(cls: type[ClkEnum], cst_node: cst.Enum, module: node.Module, scope: node.Scope) -> ClkEnum:  # noqa: C901, PLR0912
         """Construct an IR node from a CST node."""
@@ -721,6 +157,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
             raise ValueError(msg)
         doc = node.Doc.from_cst(cst_node.child_doc(), module)
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
         uuid_val = (
             uuid.UUID(hex=get_span(uuid_spec.child_uuid(), module.terminals))
             if (uuid_spec := cst_node.maybe_uuid_spec())
@@ -770,6 +207,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
             has_explicit_underlying_type=has_explicit_underlying_type,
             linter_overrides=linter_overrides,
             history=None,
+            attributes=attributes,
             resolved=None,
         )
 
@@ -792,7 +230,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         assert result.default_field_num >= 0
 
         if history_cst := cst_node.maybe_enum_history_block():
-            result.history = EnumHistory.from_cst(history_cst, module, result)
+            result.history = EnumHistory.from_cst(history_cst, module)
 
         scope.define(name, result, module.terminals)
         return result
@@ -812,7 +250,7 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         return override.value
 
     def _validate_history(self) -> None:
-        """Validate enum history.
+        """Validate schema history.
 
         Raises:
             ValueError: If any validation rule is violated
@@ -820,138 +258,28 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         if not self.history:
             return
 
-        current_field_nums = set(self.values.keys())
-        historical_nums = set(self.history.values.keys())
-        all_field_nums = current_field_nums.union(historical_nums)
+        current_value_nums = set(self.values.keys())
+        historical_nums = set(itertools.chain(self.history.legacy_became.keys(), self.history.removed))
+        self._validate_value_number_overlap(current_value_nums, historical_nums)
 
-        pseudo_set = set(self.history.pseudoversions)
-        overlap = pseudo_set.intersection(all_field_nums)
-        if overlap:
-            msg = self.append_error_line(
-                f"Pseudoversions {overlap} conflict with value numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-                "Please note: pseudofield numbers are reserved after creation and cannot be reused as value numbers.\n"
-                "If you're seeing this error after adding a value, renumber the value(s)\n"
-                "to not conflict with any already-reserved pseudofield numbers."
-            )
-            raise ValueError(msg)
-
-        # Include pseudoversions in field numbers set for validation
-        all_field_nums |= pseudo_set
-
-        self._validate_field_number_overlap(current_field_nums, historical_nums)
-        became_targets = self._validate_value_changes(self.history.values.values(), all_field_nums)
-        self._validate_duplicate_became_targets(self.history.values.values(), became_targets)
-        self._validate_version_list(self.history.versions, all_field_nums)
-
-    def _validate_field_number_overlap(self, current_nums: set[int], historical_nums: set[int]) -> None:
-        """Check that current and historical field numbers don't overlap.
+    def _validate_value_number_overlap(self, current_nums: set[int], historical_nums: set[int]) -> None:
+        """Check that current and historical value numbers don't overlap.
 
         Args:
-            current_nums: Set of field numbers in current enum
-            historical_nums: Set of field numbers in historical values
+            current_nums: Set of value numbers in current schema
+            historical_nums: Set of value numbers in historical values
 
         Raises:
-            ValueError: If there is overlap between current and historical field numbers
+            ValueError: If there is overlap between current and historical value numbers
         """
         overlap = current_nums.intersection(historical_nums)
         if overlap:
             msg = f"Value numbers {overlap} are used in both current and historical values"
             raise ValueError(msg)
 
-    def _validate_value_changes(
-        self,
-        historical_values: Iterable[HistoricalValueDef],
-        all_field_nums: set[int],
-    ) -> dict[int, int]:
-        """Validate changes to historical values.
-
-        Args:
-            historical_values: Iterator of historical value definitions
-            all_field_nums: Set of all field numbers (current and historical)
-
-        Returns:
-            Dict mapping target field numbers to source field numbers for 'became' transitions
-
-        Raises:
-            RuntimeError: If a value has no change version
-            ValueError: If change version is invalid
-        """
-        became_targets: dict[int, int] = {}
-
-        for hist_value in historical_values:
-            change_version = hist_value.removed_in_version or hist_value.became_field_num
-            if change_version is None:
-                msg = hist_value.append_error_line(f"Historical value {hist_value.field_num} has no change version")
-                raise RuntimeError(msg)
-
-            if change_version <= hist_value.field_num:
-                msg = hist_value.append_error_line(
-                    f"Historical value {hist_value.field_num} cannot be changed in version {change_version}"
-                )
-                raise ValueError(msg)
-
-            if change_version not in all_field_nums:
-                msg = hist_value.append_error_line(
-                    f"Historical value {hist_value.field_num} references non-existent version {change_version}"
-                )
-                raise ValueError(msg)
-
-            if hist_value.became_field_num is not None:
-                became_targets[hist_value.became_field_num] = hist_value.field_num
-
-        return became_targets
-
-    def _validate_duplicate_became_targets(
-        self,
-        historical_values: Iterable[HistoricalValueDef],
-        became_targets: dict[int, int],
-    ) -> None:
-        """Check that no two values become the same value.
-
-        Args:
-            historical_values: Iterator of historical value definitions
-            became_targets: Dict mapping target field numbers to source field numbers
-
-        Raises:
-            ValueError: If multiple values become the same value
-        """
-        for hist_value in historical_values:
-            if hist_value.became_field_num is not None and (
-                hist_value.became_field_num in became_targets
-                and became_targets[hist_value.became_field_num] != hist_value.field_num
-            ):
-                msg = (
-                    f"Historical values {became_targets[hist_value.became_field_num]} and {hist_value.field_num} "
-                    f"cannot both become value {hist_value.became_field_num}"
-                )
-                raise ValueError(msg)
-
-    def _validate_version_list(self, versions: list[int], all_field_nums: set[int]) -> None:
-        """Validate the version list.
-
-        Args:
-            versions: List of versions from history block
-            all_field_nums: Set of all field numbers (current and historical) and pseudoversions
-
-        Raises:
-            ValueError: If version list contains invalid versions or is missing current version
-        """
-        for version in versions:
-            if version not in all_field_nums:
-                msg = f"Version {version} is listed in version history but not defined by any value or pseudoversion"
-                raise ValueError(msg)
-
-        if self.cur_version() not in versions:
-            msg = f"Historical version does not include current version {self.cur_version()}"
-            raise ValueError(msg)
-
     def cur_version(self) -> int:
-        """Get the current version of the enum."""
-        max_value = max(self.values)
-        if self.history and self.history.pseudoversions:
-            max_pseudoversion = max(self.history.pseudoversions)
-            return max(max_value, max_pseudoversion)
-        return max_value
+        """Get the current version of the schema."""
+        return self.history.version if self.history else max(self.values)
 
     def resolve(self) -> ResolvedEnum:
         """Perform IR finalization."""
@@ -978,13 +306,9 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
         else:
             self._assign_integer_values()
 
-        if self.history:
-            resolved_history = self.history.resolve()
-            self._validate_history()
-        else:
-            resolved_history = EnumHistory(
-                versions=[self.cur_version()], pseudoversions=[], values={}, options=None
-            ).resolve()
+        if not self.history:
+            self.history = EnumHistory(version=self.cur_version(), legacy_became={}, removed=set())
+        self._validate_history()
 
         assert self.underlying_type is not None
         self.resolved = ResolvedEnum(
@@ -1003,20 +327,10 @@ class ClkEnum(typesys.TypeDef, node.CstNode[cst.Enum], node.DocRequiredEntity, n
             has_explicit_underlying_type=self.has_explicit_underlying_type,
             has_explicit_values=has_explicit_values,
             linter_overrides=self.linter_overrides,
-            history=resolved_history,
+            history=self.history,
+            attributes=self.attributes,
             source=self,
         )
-
-        # Validate that all historical versions can be constructed
-        # Skip current version as we already validated it
-        for version in resolved_history.versions:
-            if version != self.cur_version():
-                try:
-                    # This will cache the result internally
-                    self.resolved.get_enum_at_version(version)
-                except (ValueError, TypeError) as e:
-                    msg = self.append_error_line(f"Error validating historical version {version}: {e}")
-                    raise ValueError(msg) from e
 
         return self.resolved
 

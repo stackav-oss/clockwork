@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -42,6 +42,7 @@ from clockwork.dsl.ir.cog_metrics_schema_generation import (
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span, int_from_cst
 from clockwork.dsl.ir.diagnostics import DiagnosticsDef, InfraDiagnosticsDef
 from clockwork.dsl.ir.message_type import resolve_schema_interface
+from clockwork.dsl.ir.report_group import ReportGroupDef, ReportGroupInstance
 from typing_extensions import override
 
 if TYPE_CHECKING:
@@ -49,25 +50,29 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
+class Cog(
+    typesys.TypeDef, node.CstNode[cst.Cog | cst.PythonCog], typesys.InstantiatableEntity, typesys.MembershipEntity
+):
     """IR Node representing a Cog."""
 
     doc: node.Doc
     inner_scope: node.Scope
-    resources: dict[str, ResourceDef]
-    configs: dict[str, ConfigDef]
-    states: dict[str, StateDef]
-    diagnostics: dict[str, DiagnosticsDef]
-    infra_diagnostics: InfraDiagnosticsDef | None
-    inputs: dict[str, InputDef]
-    outputs: dict[str, OutputDef]
-    metrics_outputs: dict[str, MetricsOutputDef]
-    conditions: dict[str, ConditionDef]
-    rate_limits: dict[str, RateLimitSpec]
-    execution_spec: ExecutionSpec
-    simulation_options: SimulationOptions | None
-    python_options: PythonOptions | None
-    metrics_options: MetricsOptions
+    resources: dict[str, ResourceDef] = field(repr=False)
+    configs: dict[str, ConfigDef] = field(repr=False)
+    states: dict[str, StateDef] = field(repr=False)
+    diagnostics: dict[str, DiagnosticsDef] = field(repr=False)
+    infra_diagnostics: InfraDiagnosticsDef = field(repr=False)
+    inputs: dict[str, InputDef] = field(repr=False)
+    outputs: dict[str, OutputDef] = field(repr=False)
+    metrics_outputs: dict[str, MetricsOutputDef] = field(repr=False)
+    conditions: dict[str, ConditionDef] = field(repr=False)
+    rate_limits: dict[str, RateLimitSpec] = field(repr=False)
+    execution_spec: ExecutionSpec = field(repr=False)
+    simulation_options: SimulationOptions | None = field(repr=False)
+    python_options: PythonOptions | None = field(repr=False)
+    metrics_options: MetricsOptions = field(repr=False)
+    attributes: node.ClkAttributes | None = field(repr=False)
+    report_groups: dict[str, ReportGroupDef] = field(repr=False, default_factory=dict)
 
     def is_init(self) -> bool:
         """Determine if this is an init cog."""
@@ -77,6 +82,23 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         """Determine if this is a log reading cog."""
         return isinstance(self.execution_spec.condition, LogConditionExpr)
 
+    @override
+    def attribute(self, name: str) -> typesys.Value | None:
+        """Look up a member by name.
+
+        Returns:
+            The entity with that name or None if not found.
+        """
+        member = self.inner_scope.lookup(name, recursive=False)
+        if member is not None:
+            assert isinstance(member, typesys.Value), f"Expected member to be a Value, got {member.name}"
+            return member
+        return None
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
+
     # We must disable C901, PLR0912 and PLR0915 here (function complexity, branches, function size)
     # because we inherently have many branches, one for each type of module-level entity.
     # However, they're handled in a uniform way that isn't difficult to understand.
@@ -84,7 +106,9 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
     # branches, but it would be awkward and would not decouple the code in a
     # meaningful way.
     @classmethod
-    def from_cst(cls: type[Cog], parent_scope: node.Scope, cst_cog: cst.Cog, module: node.Module) -> Cog:  # noqa: PLR0912, PLR0915, C901 (see above)       """Create an IR Cog from a CST Cog."""
+    def from_cst(  # noqa: C901, PLR0912, PLR0915 (see above)
+        cls: type[Cog], parent_scope: node.Scope, cst_cog: cst.Cog | cst.PythonCog, module: node.Module
+    ) -> Cog:
         """Create an IR Cog from a CST Cog."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
@@ -92,8 +116,20 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
 
         name = get_span(cst_cog.child_identifier().child_value(), module.terminals)
         scope = parent_scope.make_child_scope(name)
+        attributes = module.handle_outer_attrs(cst_cog.maybe_clk_outer_attrs())
 
-        if resources_block := cst_cog.maybe_resources_block():
+        if (
+            isinstance(cst_cog, cst.PythonCog)
+            and module.generates
+            and node.GenerateTarget.py_cog not in module.generates
+        ):
+            msg = node.append_error_line(cst_cog, module, "Module must generate py_cpg to define python cogs.")
+            raise ValueError(msg)
+        if isinstance(cst_cog, cst.Cog) and module.generates and node.GenerateTarget.cpp_cog not in module.generates:
+            msg = node.append_error_line(cst_cog, module, "Module must generate cpp_cpg to define cogs.")
+            raise ValueError(msg)
+
+        if resources_block := cst_cog.child_cog_blocks().maybe_resources_block():
             resources = {
                 resource_def.name: resource_def
                 for resource_def in (
@@ -104,7 +140,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         else:
             resources = {}
 
-        if configs_block := cst_cog.maybe_configs_block():
+        if configs_block := cst_cog.child_cog_blocks().maybe_configs_block():
             configs = {
                 config_def.name: config_def
                 for config_def in (
@@ -114,7 +150,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         else:
             configs = {}
 
-        if states_block := cst_cog.maybe_states_block():
+        if states_block := cst_cog.child_cog_blocks().maybe_states_block():
             states = {
                 state_def.name: state_def
                 for state_def in (
@@ -124,7 +160,26 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         else:
             states = {}
 
-        if diagnostics_block := cst_cog.maybe_diagnostics_block():
+        if report_groups_cst := cst_cog.child_cog_blocks().maybe_report_groups():
+            if isinstance(cst_cog, cst.PythonCog):
+                msg = node.append_error_line(
+                    report_groups_cst, module, "Report groups are not suppported in python cogs"
+                )
+                raise ValueError(msg)
+            report_groups = {
+                report_group_def.name: report_group_def
+                for report_group_def in (
+                    ReportGroupDef.from_cst(report_groups_cst, module, scope)
+                    for report_groups_cst in report_groups_cst.children_report_group()
+                )
+            }
+        else:
+            report_groups = {}
+
+        if diagnostics_block := cst_cog.child_cog_blocks().maybe_diagnostics_block():
+            if isinstance(cst_cog, cst.PythonCog):
+                msg = node.append_error_line(diagnostics_block, module, "Diagnostics are not suppported in python cogs")
+                raise ValueError(msg)
             if diagnostics_defs := list(diagnostics_block.children_diagnostics_def()):
                 diagnostics_objs = [DiagnosticsDef.from_cst(i, module, scope) for i in diagnostics_defs]
             else:
@@ -133,7 +188,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         else:
             diagnostics = {}
 
-        if inputs_block := cst_cog.maybe_inputs_block():
+        if inputs_block := cst_cog.child_cog_blocks().maybe_inputs_block():
             inputs = {
                 input_def.name: input_def
                 for input_def in (
@@ -143,7 +198,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         else:
             inputs = {}
 
-        if outputs_block := cst_cog.maybe_outputs_block():
+        if outputs_block := cst_cog.child_cog_blocks().maybe_outputs_block():
             outputs = {
                 output_def.name: output_def
                 for output_def in (
@@ -155,22 +210,42 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
 
         infra_diagnostics = InfraDiagnosticsDef.make(module, scope, inputs.values(), outputs.values())
 
-        if simulation_options_block := cst_cog.maybe_simulation_options_block():
+        if simulation_options_block := cst_cog.child_cog_blocks().maybe_simulation_options_block():
             simulation_options = SimulationOptions.from_cst(simulation_options_block, module)
         else:
             simulation_options = None
 
-        if python_options_block := cst_cog.maybe_python_options_block():
-            python_options = PythonOptions.from_cst(python_options_block, module)
+        if python_options_block := cst_cog.child_cog_blocks().maybe_python_options_block():
+            if attributes is not None:
+                msg = node.append_error_line(
+                    python_options_block,
+                    module,
+                    "Python options are not supported when the generates attribute is set, use `python_cog` instead",
+                )
+                raise ValueError(msg)
+            if isinstance(cst_cog, cst.PythonCog):
+                msg = node.append_error_line(
+                    python_options_block, module, "Python options are not suppported in python cogs"
+                )
+                raise ValueError(msg)
+            python_options = PythonOptions.from_cst(python_options_block, module, name)
+        elif isinstance(cst_cog, cst.PythonCog):
+            python_options = PythonOptions(
+                module=module,
+                cst_node=None,
+                python_dial_class_name=None,
+                python_impl_class_name=None,
+                cog_name=name,
+            )
         else:
             python_options = None
 
-        exec_block = cst_cog.child_execution_block()
+        exec_block = cst_cog.child_cog_blocks().child_execution_block()
         exec_spec = exec_block.child_execute_when()
         name = get_span(cst_cog.child_identifier().child_value(), module.terminals)
         condition_defs, rate_limits = _unpack_execution_statements(exec_block, scope, module)
 
-        if metrics_options_block := cst_cog.maybe_metrics_options_block():
+        if metrics_options_block := cst_cog.child_cog_blocks().maybe_metrics_options_block():
             metrics_options = MetricsOptions.from_cst(metrics_options_block, module)
         else:
             metrics_options = MetricsOptions(
@@ -191,6 +266,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
             resources=resources,
             configs=configs,
             states=states,
+            report_groups=report_groups,
             diagnostics=diagnostics,
             infra_diagnostics=infra_diagnostics,
             inputs=inputs,
@@ -202,6 +278,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
             simulation_options=simulation_options,
             python_options=python_options,
             metrics_options=metrics_options,
+            attributes=attributes,
         )
 
     def _resolve_condition_expr(self, root: ConditionExpr) -> None:
@@ -236,6 +313,8 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
             config_def.resolve()
         for state_def in self.states.values():
             state_def.resolve()
+        for report_group in self.report_groups.values():
+            report_group.resolve(self.inner_scope, self.name)
         for input_def in self.inputs.values():
             input_def.resolve()
         for output_def in self.outputs.values():
@@ -254,8 +333,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
             self._check_init_requirements()
         for diagnostics_def in self.diagnostics.values():
             diagnostics_def.resolve()
-        if self.infra_diagnostics is not None:
-            self.infra_diagnostics.resolve()
+        self.infra_diagnostics.resolve()
         self._check_safety_margins()
 
     def _resolve_metrics_outputs(self) -> None:
@@ -298,7 +376,7 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
         base_msg = "Init cogs (as determined by 'execute when' expression)"
         if self.inputs:
             msg = node.append_error_line(
-                self.cst_node.child_inputs_block() if self.cst_node else None,
+                self.cst_node.child_cog_blocks().child_inputs_block() if self.cst_node else None,
                 self.module,
                 f"{base_msg} may not have message inputs.",
             )
@@ -306,38 +384,66 @@ class Cog(typesys.TypeDef, node.CstNode[cst.Cog], typesys.InstantiatableEntity):
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> CogInstance:
         """Create an instance of the entity."""
         return CogInstance.make(cog_class=self, cst_node=cst_node, module=module, scope=scope, name=name, doc=doc)
 
     def generated_repr(self) -> Iterable[representation.ReprInstantiation]:
-        """Get all generated representations from the Cog."""
+        """Get all generated representations from the Cog (metrics outputs only)."""
         representations = []
         for metrics_output in self.metrics_outputs.values():
             representations.extend(metrics_output.get_generated_repr_instantiations())
         return representations
 
     def generated_interfaces(self) -> Iterable[interface.InterfaceInstantiation]:
-        """Get all generated interfaces from the Cog."""
+        """Get all generated interfaces from the Cog (metrics outputs only)."""
         interfaces = []
         for metrics_output in self.metrics_outputs.values():
             interfaces.extend(metrics_output.get_generated_interfaces())
         return interfaces
 
     def generated_schemas(self) -> Iterable[schema.Schema]:
-        """Get all generated schemas from the Cog."""
+        """Get all generated schemas from the Cog (metrics outputs only)."""
         generated_schemas = []
         for metrics_output in self.metrics_outputs.values():
             generated_schemas.extend(metrics_output.get_generated_schemas())
         return generated_schemas
 
     def generated_enums(self) -> Iterable[clkenum.ClkEnum]:
-        """Get all generated enums from the Cog."""
+        """Get all generated enums from the Cog (metrics outputs only)."""
         generated_enums = []
         for metrics_output in self.metrics_outputs.values():
             generated_enums.extend(metrics_output.enums)
         return generated_enums
+
+    def generated_report_group_repr(self) -> Iterable[representation.ReprInstantiation]:
+        """Get all generated representations from report groups."""
+        representations = []
+        for report_group in self.report_groups.values():
+            representations.extend(report_group.generated_representations)
+        return representations
+
+    def generated_report_group_interfaces(self) -> Iterable[interface.InterfaceInstantiation]:
+        """Get all generated interfaces from report groups."""
+        interfaces = []
+        for report_group in self.report_groups.values():
+            interfaces.extend(report_group.generated_interfaces)
+        return interfaces
+
+    def generated_report_group_schemas(self) -> Iterable[schema.Schema]:
+        """Get all generated schemas from report groups."""
+        generated_schemas = []
+        for report_group in self.report_groups.values():
+            generated_schemas.extend(report_group.generated_schemas)
+        return generated_schemas
 
 
 def _unpack_execution_statements(
@@ -950,14 +1056,16 @@ class SimulationOptions(node.CstNode[cst.SimulationOptionsBlock]):
 class PythonOptions(node.CstNode[cst.PythonOptionsBlock]):
     """A specification of a cog's python options."""
 
-    python_dial_class_name: expr.Expr | str
-    python_impl_class_name: expr.Expr | str
+    cog_name: str
+    python_dial_class_name: expr.Expr | str | None
+    python_impl_class_name: expr.Expr | str | None
 
     @classmethod
     def from_cst(
         cls: type[PythonOptions],
         cst_node: cst.PythonOptionsBlock,
         module: node.Module,
+        cog_name: str,
     ) -> PythonOptions:
         """Construct an IR node from a CST node."""
         if module.terminals is None:
@@ -970,25 +1078,36 @@ class PythonOptions(node.CstNode[cst.PythonOptionsBlock]):
             cst_node=cst_node,
             python_dial_class_name=python_dial_class_name,
             python_impl_class_name=python_impl_class_name,
+            cog_name=cog_name,
         )
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
-        if not isinstance(self.python_dial_class_name, expr.Expr):
+        if isinstance(self.python_dial_class_name, str):
             msg = f"Attempt to resolve CppPythonCog twice: {self}"
             raise RuntimeError(msg)  # noqa: TRY004 (resolving twice is a runtime error)
-        dial_val = self.python_dial_class_name.evaluate()
-        assert isinstance(self.python_dial_class_name, expr.Expr)
-        if not isinstance(dial_val, primitive.StringValue):
-            msg = node.append_error_line(self.cst_node, self.module, "Invalid python dial class definition")
-            raise TypeError(msg)
-        assert isinstance(self.python_impl_class_name, expr.Expr)
-        impl_val = self.python_impl_class_name.evaluate()
-        if not isinstance(impl_val, primitive.StringValue):
-            msg = node.append_error_line(self.cst_node, self.module, "Invalid python dial class definition")
-            raise TypeError(msg)
-        self.python_dial_class_name = dial_val.value
-        self.python_impl_class_name = impl_val.value
+        if isinstance(self.python_dial_class_name, expr.Expr):
+            dial_val = self.python_dial_class_name.evaluate()
+            if not isinstance(dial_val, primitive.StringValue):
+                assert self.cst_node is not None
+                msg = node.append_error_line(self.cst_node, self.module, "Invalid python dial class definition")
+                raise TypeError(msg)
+            self.python_dial_class_name = dial_val.value
+        else:
+            self.python_dial_class_name = (
+                self.module.module_id.name.replace("::", ".") + f"_clk_py_dial.{self.cog_name}Dial"
+            )
+        if isinstance(self.python_impl_class_name, expr.Expr):
+            impl_val = self.python_impl_class_name.evaluate()
+            if not isinstance(impl_val, primitive.StringValue):
+                assert self.cst_node is not None
+                msg = node.append_error_line(self.cst_node, self.module, "Invalid python dial class definition")
+                raise TypeError(msg)
+            self.python_impl_class_name = impl_val.value
+        else:
+            self.python_impl_class_name = (
+                self.module.module_id.name.replace("::", ".") + f"_clk_py_impl.{self.cog_name}Impl"
+            )
 
 
 @dataclass
@@ -1008,8 +1127,10 @@ class CogInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAt
             | DiagnosticsDef
             | InfraDiagnosticsDef
             | MetricsOutputDef
+            | ReportGroupDef
         ]
-    ]
+    ] = field(repr=False)
+    report_group_instances: list[ReportGroupInstance] = field(default_factory=list, repr=False)
 
     # We have to suppress PLR0913 (too many args) because this is already an extremely simple function that can't be split but still needs all these args. The args are all different types so mypy will catch any mixups in the call sites, and we have made the args kwonly as extra assurance.
     @classmethod
@@ -1041,8 +1162,16 @@ class CogInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAt
             cog_class=cog_class,
             members=[],
         )
+        for report_group in cog_class.report_groups.values():
+            # Special handling for report groups. These instances are distinct from other members because they by
+            # necessity only can know their contained signal instances at instantiation time, therefore
+            # CogInstanceMember[T] does not suffice here.
+            rg_instance = report_group.make_instance(result.fqn)
+            result.report_group_instances.append(rg_instance)
+
         for entity in cog_class.inner_scope.names.values():
             result._make_member(entity)
+        result._make_member(cog_class.infra_diagnostics)
         return result
 
     def _make_member(  # noqa: C901 This is effectively a factory with a switch statement
@@ -1058,6 +1187,7 @@ class CogInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAt
             | DiagnosticsDef
             | InfraDiagnosticsDef
             | MetricsOutputDef
+            | ReportGroupDef
         ]
         | None
     ):
@@ -1072,6 +1202,7 @@ class CogInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAt
                 | DiagnosticsDef
                 | InfraDiagnosticsDef
                 | MetricsOutputDef
+                | ReportGroupDef
             ]
             | None
         ) = None
@@ -1093,6 +1224,8 @@ class CogInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAt
             # Other condition types do not generate connectable endpoints
         elif isinstance(entity, DiagnosticsDef | InfraDiagnosticsDef):
             result = CogInstanceMember.make(self, entity, clkbuiltins.COG_DIAGNOSTICS_INSTANCE_TYPE)
+        elif isinstance(entity, ReportGroupDef):
+            result = CogInstanceMember.make(self, entity, clkbuiltins.COG_REPORT_GROUP_INSTANCE_TYPE)
         else:
             msg = self.append_error_line(f"Unrecognized instance member {entity}")
             raise NotImplementedError(msg)
@@ -1123,7 +1256,7 @@ class CogInstanceMember(typesys.NamedAttribute, Generic[T]):
     """Represents a member (e.g., input/output/condition) of a Cog instance."""
 
     cog_instance: CogInstance
-    member: T
+    member: T = field(repr=False)
 
     @classmethod
     def make(

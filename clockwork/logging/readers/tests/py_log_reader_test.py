@@ -11,9 +11,7 @@ from typing import ClassVar
 from clockwork.logging.offboard.py_log_writer import LogWriter
 from clockwork.logging.readers.nb_types import LogTimestamp
 from clockwork.logging.readers.py_log_reader import LogReader
-
-# gazelle:ignore clockwork.logging.tests.support.py_test_message
-from clockwork.logging.tests.support import py_test_message
+from clockwork.logging.tests.support import test_message_clk_py
 
 
 class TestLogReaderClass:
@@ -27,13 +25,13 @@ class TestLogReaderClass:
         test_writer = LogWriter()
         test_writer.open(log_path, "")
         for channel_name in self.channel_names:
-            test_writer.create_tachyon_channel(channel_name, py_test_message.TestMessage)
+            test_writer.create_tachyon_channel(channel_name, test_message_clk_py.TestMessage)
         message_time = self.start_time.nanoseconds
         published_messages: list[str] = []
         for sequence_number in range(100):
             for channel_number in range(len(self.channel_names)):
                 message_string = f"{self.channel_names[channel_number]} {sequence_number}"
-                test_msg = py_test_message.TestMessage(message_string=message_string)
+                test_msg = test_message_clk_py.TestMessage(message_string=message_string)
                 test_writer.write_tachyon(
                     self.channel_names[channel_number],
                     sequence_number,
@@ -59,7 +57,7 @@ class TestLogReaderClass:
                 return True
 
             for channel in self.channel_names:
-                reader.add_topic(channel, py_test_message.TestMessage)
+                reader.add_topic(channel, test_message_clk_py.TestMessage)
 
             for msg in reader.messages():
                 assert msg.sequence_number == int(len(logged_messages) / len(self.channel_names))

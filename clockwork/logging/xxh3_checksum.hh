@@ -31,7 +31,7 @@ namespace clockwork_logging
 /// @param[in] data_spans Data spans
 void update_xxh3_checksum(XXH3_state_t& state, std::span<const std::span<const std::byte>> data_spans) noexcept;
 
-/// Compute the record checksum from the record data
+/// Update the checksum from the record data
 /// @param[in] data Data
 void update_xxh3_checksum(XXH3_state_t& state, std::span<const std::byte> data) noexcept;
 

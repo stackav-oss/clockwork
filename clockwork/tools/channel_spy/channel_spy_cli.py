@@ -34,6 +34,8 @@ class TachyClassJsonEncoder(json.JSONEncoder):
 
 _default_shm_dir: str = "/dev/shm"  # noqa: S108 /dev/shm is the default directory for pinion shm buffers
 _shm_dir_help: str = f"Root directory for channel shared memory. Default: {_default_shm_dir}"
+_default_tmp_dir: str = "/tmp"  # noqa: S108 /tmp is the default directory configuration files
+_tmp_dir_help: str = f"Temporary directory. Default: {_default_tmp_dir}"
 _socket_ns_help: str = "Optional namespace prefix for sockets."
 
 
@@ -44,10 +46,11 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--shm-root-dir", "-d", default=_default_shm_dir, help=_shm_dir_help)
+@click.option("--tmp-dir", "-t", default=_default_tmp_dir, help=_tmp_dir_help)
 @click.option("--socket_ns", "-n", default="", help=_socket_ns_help)
-def list_channels(shm_root_dir: str, socket_ns: str) -> None:
+def list_channels(shm_root_dir: str, tmp_dir: str, socket_ns: str) -> None:
     """List the channels that can be spied on the local machine."""
-    spy = channel_spy.ChannelSpy(shm_root_dir, socket_ns)
+    spy = channel_spy.ChannelSpy(shm_root_dir, tmp_dir, socket_ns)
     print()
     for channel_name in spy.channels:
         print(f"{channel_name}")
@@ -56,6 +59,7 @@ def list_channels(shm_root_dir: str, socket_ns: str) -> None:
 @cli.command()
 @click.argument("channel_name")
 @click.option("--shm-root-dir", "-d", default=_default_shm_dir, help=_shm_dir_help)
+@click.option("--tmp-dir", "-t", default=_default_tmp_dir, help=_tmp_dir_help)
 @click.option("--socket_ns", "-n", default="", help=_socket_ns_help)
 @click.option(
     "--message_count",
@@ -64,9 +68,9 @@ def list_channels(shm_root_dir: str, socket_ns: str) -> None:
     type=click.IntRange(min=1),
     help="Number of messages to echo before exiting. When not specified, echoes indefinitely.",
 )
-def echo(channel_name: str, shm_root_dir: str, socket_ns: str, message_count: int | None) -> None:
+def echo(channel_name: str, shm_root_dir: str, tmp_dir: str, socket_ns: str, message_count: int | None) -> None:
     """Echo the messages published on a channel."""
-    spy = channel_spy.ChannelSpy(shm_root_dir, socket_ns)
+    spy = channel_spy.ChannelSpy(shm_root_dir, tmp_dir, socket_ns)
 
     def echo_callback(sequence_number: int, message_time: int, message: Any) -> None:  # noqa: ANN401 Any type needed to handle arbitrary message types.
         nonlocal channel_name

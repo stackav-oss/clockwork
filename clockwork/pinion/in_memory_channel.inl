@@ -33,24 +33,36 @@ auto unwrap_try_make(Args&&... args)
   return *std::move(expected);
 }
 
-template <typename MsgType, size_t num_slots>
-InMemoryChannel<MsgType, num_slots>::InMemoryChannel(jewels::memory::MemoryResource resource)
+template <typename MsgType, size_t num_slots, bool is_published_once>
+InMemoryChannel<MsgType, num_slots, is_published_once>::InMemoryChannel(jewels::memory::MemoryResource resource)
   : storage_(jewels::memory::make_pmr_unique<Storage>(resource)),
     buffer_(unwrap_try_make<pinion::Buffer>(as_writable_bytes(std::span{storage_->bytes}), layout)),
     resource_(std::move(resource))
 {
 }
 
-template <typename MsgType, size_t num_slots>
-pinion::PublisherHandle InMemoryChannel<MsgType, num_slots>::make_publisher(size_t num_observers)
+template <typename MsgType, size_t num_slots, bool is_published_once>
+pinion::PublisherHandle InMemoryChannel<MsgType, num_slots, is_published_once>::make_publisher(size_t num_observers)
 {
   return pinion::PublisherHandle{jewels::memory::make_non_null_from_ref(buffer_), num_observers, resource_};
 }
 
-template <typename MsgType, size_t num_slots>
-pinion::SubscriberHandle InMemoryChannel<MsgType, num_slots>::make_subscriber()
+template <typename MsgType, size_t num_slots, bool is_published_once>
+pinion::SubscriberHandle InMemoryChannel<MsgType, num_slots, is_published_once>::make_subscriber()
 {
   return pinion::SubscriberHandle{jewels::memory::make_non_null_from_ref(buffer_)};
+}
+
+template <typename MsgType, size_t num_slots, bool is_published_once>
+pinion::Buffer& InMemoryChannel<MsgType, num_slots, is_published_once>::buffer()
+{
+  return buffer_;
+}
+
+template <typename MsgType, size_t num_slots, bool is_published_once>
+const pinion::Buffer& InMemoryChannel<MsgType, num_slots, is_published_once>::buffer() const
+{
+  return buffer_;
 }
 
 } // namespace clockwork

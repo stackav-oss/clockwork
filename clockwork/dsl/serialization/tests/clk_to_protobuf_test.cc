@@ -28,6 +28,6 @@ TEST_CASE("Make sure all the fields exist")
   auto* generic_member = better_than_inheritance.mutable_my_generic();
   generic_member->add_data(1.234f);
   generic_member->add_data(5.678f);
-  generic_member->set_my_hello(HelloEnum::ni_hao);
+  generic_member->set_my_hello(HelloEnum::HELLO_ENUM_NI_HAO);
 }
 } // namespace clockwork::my_proto

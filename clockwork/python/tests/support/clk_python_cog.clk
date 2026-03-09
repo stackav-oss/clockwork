@@ -1,0 +1,70 @@
+#![generate(cpp, py_cog)]
+#![cpp(namespace=clockwork::python::tests)]
+#![py_cog(wrapper_type=nanobind)]
+
+use[cpp] clockwork::python::python_state::{PythonState};
+use[cpp, nanobind] clockwork::python::tests::support::test_config;
+use[cpp, nanobind] clockwork::python::tests::support::test_input_message;
+use[cpp, nanobind] clockwork::python::tests::support::test_output_message;
+use[cpp, nanobind] clockwork::python::tests::support::test_state;
+
+// Python init cog to test python cog generation
+python_cog PythonInitCog
+{
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    state: Tappy<test_state::TestState>
+    {
+      mutable: true;
+    }
+  }
+
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// Python cog to test python cog generation
+python_cog PythonCog
+{
+  configs
+  {
+    config: Tappy<test_config::TestConfig>;
+  }
+
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    state: Tappy<test_state::TestState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    input1: Tappy<test_input_message::TestInputMessage>;
+    input2: Tappy<test_input_message::TestInputMessage>;
+  }
+
+  outputs
+  {
+    output1: Tappy<test_output_message::TestOutputMessage>;
+    output2: Tappy<test_output_message::TestOutputMessage>;
+  }
+
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=1);
+    execute when: new_input1 or new_input2;
+  }
+}

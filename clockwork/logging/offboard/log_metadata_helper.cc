@@ -20,7 +20,9 @@ namespace clockwork_logging::offboard
 {
 
 [[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_metadata_helper(
-  jewels::memory::MemoryResource memory_resource, const LogUri& log_uri, ChunkReaderWriterFactory& chunk_reader_factory)
+  jewels::memory::MemoryResource memory_resource,
+  const LogUri& log_uri,
+  ChunkReaderWriterFactory<>& chunk_reader_factory)
 {
   if (const auto exists_result = chunk_reader_factory.exists(log_uri.string());
       !exists_result || !exists_result.value())
@@ -33,20 +35,14 @@ namespace clockwork_logging::offboard
     jewels::log_cerr_error("Cannot access log under {}: {}", log_uri.string(), exists_result.error());
     return jewels::unexpected(exists_result.error());
   }
-  const auto log_metadata_uri = log_uri / log_metadata_filename;
-  if (const auto exists_result = chunk_reader_factory.exists(log_metadata_uri.string());
-      exists_result && exists_result.value())
-  {
-    return make_log_metadata_file_helper(memory_resource, log_metadata_uri, chunk_reader_factory);
-  }
   const auto log_union_uri = log_uri / log_union_filename;
   if (const auto exists_result = chunk_reader_factory.exists(log_union_uri.string());
       exists_result && exists_result.value())
   {
     return make_log_union_file_helper(memory_resource, log_union_uri, chunk_reader_factory);
   }
-  jewels::log_cerr_error("No log metadata found under {}: not a log", log_uri.string());
-  return jewels::unexpected(LogError::not_a_log);
+  const auto log_metadata_uri = log_uri / log_metadata_filename;
+  return make_log_metadata_file_helper(memory_resource, log_metadata_uri, chunk_reader_factory);
 }
 
 } // namespace clockwork_logging::offboard

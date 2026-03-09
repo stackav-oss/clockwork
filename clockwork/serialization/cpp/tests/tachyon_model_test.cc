@@ -4,11 +4,11 @@
 #include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/clk_type.hh"
 #include "clockwork/serialization/cpp/tachyon_model.hh"
-#include "clockwork/serialization/cpp/tests/support/test_schema_v2.hh"
+#include "clockwork/serialization/cpp/tests/support/test_schema_v2_clk_cc.hh"
 #include "clockwork/serialization/cpp/tests/support/validate_upgradability.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
-#include "clockwork/serialization/py/tests/support/broken_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/broken_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/broken_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/broken_schema_v2_clk_cc.hh"
 
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>

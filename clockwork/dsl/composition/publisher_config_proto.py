@@ -21,6 +21,7 @@ class PublishedChannelConfig(Tachyon["PublishedChannelConfig"]):
     module_name: str
     source_file_name: str
     class_name: str
+    is_published_once: bool
 
 
 @dataclass(kw_only=True)

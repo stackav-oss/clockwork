@@ -14,8 +14,8 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/format.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
 #include <tclap/UnlabeledValueArg.h>

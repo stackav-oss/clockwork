@@ -18,7 +18,7 @@ schema Foo
   }
 }
 
-cpp_target foo
+cpp_target foo_clk_cc
 {
   options
   {
@@ -28,15 +28,15 @@ cpp_target foo
   schema Foo;
 
   representation Tachyon<Foo>;
-  interface Tap<Tachyon<Foo>>;
+  interface Tappy<Foo>;
 }
 
 nanobind_target foo_clk_nb
 {
-  binding Tap<Tachyon<Foo>>;
+  binding Tappy<Foo>;
 }
 
 py_target foo_clk_py
 {
-  interface Tap<Tachyon<Foo>>;
+  interface Tappy<Foo>;
 }

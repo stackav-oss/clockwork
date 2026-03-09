@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/deterministic_runner.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -46,7 +48,7 @@ struct MessageInfoView
   jewels::time::SyncTime time_to_publish;
 
   /// Pointer to the raw message data, which should be valid for the lifetime of the object
-  std::span<std::byte> data;
+  std::span<const std::byte> data;
 
   /// Channel Name
   std::pmr::string channel;
@@ -84,6 +86,7 @@ struct MultiMessageInfoData // NOLINT(clang-analyzer-core.uninitialized.Assign) 
 class MessageFetcher
 {
 public:
+  virtual ~MessageFetcher() = default;
   ///
   /// Attempt to fetch a message from the underlying source
   /// @return The next message to publish. If there are no remaining messages, return a nullopt.
@@ -93,7 +96,10 @@ public:
   /// Initialize the message fetcher. Perform all setup that can potentially fail.
   /// @return A MonoError on failure, otherwise void.
   virtual jewels::expected<void, jewels::MonoError> initialize() = 0;
-  virtual ~MessageFetcher() = default;
+
+  ///
+  /// Reset the fetcher to the beginning of the message stream.
+  virtual jewels::BinaryOutcome reset() noexcept = 0;
 
   MessageFetcher() = default;
   MessageFetcher(const MessageFetcher&) = delete;
@@ -115,7 +121,7 @@ public:
   /// channels that the log publisher is publishing to.
   ChannelPublisher(
     jewels::memory::MemoryResource memory_resource,
-    jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config,
+    jewels::memory::ObjectPtr<const Tappy<clockwork_logging::ChannelPublisherConfig<>>> channel_publisher_config,
     const jewels::memory::NonNullSharedPtr<MessageFetcher>& message_fetcher,
     ShmPublisherMap channels,
     bool suppress_schema_mismatch_errors);
@@ -162,7 +168,7 @@ private:
   /// The message fetcher used to obtain the next message.
   jewels::memory::NonNullSharedPtr<MessageFetcher> message_fetcher_;
 
-  jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config_;
+  jewels::memory::ObjectPtr<const Tappy<clockwork_logging::ChannelPublisherConfig<>>> channel_publisher_config_;
   /// Potentially the next message to be published. This will be a nullopt if there are no remaining log messages to
   /// publish.
   std::optional<MultiMessageInfoData> next_message_;
@@ -175,8 +181,11 @@ private:
   /// @return The next message info or nullopt if there is none.
   std::optional<MultiMessageInfoData> get_next_message_info();
 
-  /// Set of channels that have been logged as mismatched. Used to throttle errors.
-  std::pmr::unordered_set<std::pmr::string> mismatched_channels_logged_;
+  /// Set of channels that should be ignored during publishing.
+  /// This includes:
+  /// - Channels with schema mismatches
+  /// - FirstMessage-only channels (UUID=0) that are consumed from log but not published
+  std::pmr::unordered_set<std::pmr::string> ignored_channels_;
 
   /// Suppress schema mismatch errors
   bool suppress_schema_mismatch_errors_;

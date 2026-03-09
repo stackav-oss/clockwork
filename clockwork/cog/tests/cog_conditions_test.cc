@@ -3,10 +3,11 @@
 
 #include "clockwork/cog/cog_conditions.hh"
 #include "clockwork/cog/input_condition.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -61,8 +62,7 @@ public:
 template <typename... Types, typename... Args>
 auto make_tuple_repeat(Args&... args)
 {
-  // NOLINTNEXTLINE(bugprone-use-after-move) TODO(DX-1794): Fix this
-  return std::tuple<Types...>(Types{std::forward<Args...>(args...)}...);
+  return std::tuple<Types...>(Types{args...}...);
 }
 
 template <typename ConditionPolicy>
@@ -82,13 +82,14 @@ struct CogConditionsFixture // NOLINT(clang-analyzer-optin.performance.Padding).
   static constexpr auto policy_count = sizeof...(Policies);
   using ConditionsType = CogConditions<Policies...>;
   using PinionDifferenceType = typename ConditionsType::PinionDifferenceType;
-  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::channel_size>...>;
+  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>...>;
   using PublishersArray = std::array<pinion::PublisherHandle, policy_count>;
   using SubscribersArray = std::array<pinion::SubscriberHandle, policy_count>;
 
   CogConditionsFixture()
     : resource(std::pmr::new_delete_resource()),
-      channels(make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::channel_size>...>(resource)),
+      channels(
+        make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>...>(resource)),
       publishers(
         std::apply([](auto&... channel) -> PublishersArray { return {channel.make_publisher(1)...}; }, channels)),
       subscribers(

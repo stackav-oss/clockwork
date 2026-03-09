@@ -1,33 +1,36 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_processor.hh"
 #include "clockwork/logging/readers/tests/support/test_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
-#include "clockwork/logging/writers/logger_status.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
+#include "clockwork/logging/writers/logger_status_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <initializer_list>
 #include <map>
@@ -99,7 +102,7 @@ TEST_CASE("LogProcessor callbacks")
               std::make_unique<TestLogReader>(
                 "test_log", std::optional<LogInterval>{}, std::optional<RelativeInterval>{}, msgs),
               {})
-              .add_tappy_callback<MsgType>(topic, [&](const auto& /*msg*/) { ++actual[topic]; })
+              .add_tappy_callback<MsgType>(topic, [&actual, &topic](const auto& /*msg*/) { ++actual[topic]; })
               .process());
 
     auto expected = std::map<std::string, size_t>({{topic, msgs.at(topic).size()}});
@@ -118,7 +121,7 @@ TEST_CASE("LogProcessor callbacks")
               {})
               .add_tappy_callback<MsgType>(
                 topic,
-                [&](const auto& publish_time, const auto& msg)
+                [&actual, &topic](const auto& publish_time, const auto& msg)
                 { actual[topic].push_back(TestMsgRecord{.publish_time = publish_time, .msg = msg}); })
               .process());
 
@@ -165,7 +168,7 @@ TEST_CASE("LogProcessor callbacks")
       // NOLINTNEXTLINE(cert-err33-c) False positive
       processor.add_tappy_callback<MsgType>(
         topic,
-        [&](const auto& publish_time, const auto& msg) -> void
+        [&actual, &topic](const auto& publish_time, const auto& msg) -> void
         { actual[topic].push_back(TestMsgRecord{.publish_time = publish_time, .msg = msg}); });
     }
     REQUIRE(processor.process());
@@ -186,7 +189,7 @@ TEST_CASE("LogProcessor callbacks")
     // NOLINTNEXTLINE(cert-err33-c) False positive
     processor.add_tappy_callback<MsgType>(
       topic,
-      [&](const auto& publish_time, const auto& msg) -> void
+      [&actual, &topic, &processor](const auto& publish_time, const auto& msg) -> void
       {
         actual[topic].push_back(TestMsgRecord{.publish_time = publish_time, .msg = msg});
         processor.abort();
@@ -210,7 +213,7 @@ TEST_CASE("LogProcessor callbacks")
     // NOLINTNEXTLINE(cert-err33-c) False positive
     processor.add_tappy_callback<MsgType>(
       topic,
-      [&](const auto& publish_time, const auto& msg) -> void
+      [&actual, &topic, &processor](const auto& publish_time, const auto& msg) -> void
       {
         actual[topic].push_back(TestMsgRecord{.publish_time = publish_time, .msg = msg});
         processor.abort();
@@ -233,31 +236,33 @@ TEST_CASE("LogProcessor callbacks")
     auto topic_result = processor.try_get_topic_metadata("/topic1");
     REQUIRE(topic_result);
     REQUIRE(
-      topic_result.value() == TopicMetadata{
-                                .name = "/topic1",
-                                .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-                                .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
-                                .channel_type = ChannelType::regular,
-                                .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
-                                .schema_definition =
-                                  std::string{
-                                    clockwork::LoggingTraits<MsgType>::schema_definition.data(),
-                                    clockwork::LoggingTraits<MsgType>::schema_definition.size()},
-                              });
+      topic_result.value() ==
+      TopicMetadata{
+        .name = "/topic1",
+        .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
+        .channel_type = ChannelType::regular,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
+        .schema_definition =
+          std::string{
+            clockwork::LoggingTraits<MsgType>::schema_definition.data(),
+            clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+      });
     topic_result = processor.try_get_topic_metadata("/topic2");
     REQUIRE(topic_result);
     REQUIRE(
-      topic_result.value() == TopicMetadata{
-                                .name = "/topic2",
-                                .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-                                .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
-                                .channel_type = ChannelType::regular,
-                                .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
-                                .schema_definition =
-                                  std::string{
-                                    clockwork::LoggingTraits<MsgType>::schema_definition.data(),
-                                    clockwork::LoggingTraits<MsgType>::schema_definition.size()},
-                              });
+      topic_result.value() ==
+      TopicMetadata{
+        .name = "/topic2",
+        .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
+        .channel_type = ChannelType::regular,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
+        .schema_definition =
+          std::string{
+            clockwork::LoggingTraits<MsgType>::schema_definition.data(),
+            clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+      });
     REQUIRE_FALSE(processor.try_get_topic_metadata("INVALID_TOPIC"));
   }
 }
@@ -336,7 +341,7 @@ TEST_CASE("LogProcesser - upgrade schema")
     auto channel2_count = 0U;
 
     auto config = LogReaderConfig{
-      .uri = test_log_path.string(),
+      .uri = std::string{test_log_path.c_str()},
       .interval = {},
       .relative_interval = {},
       .topic_filter = {},
@@ -345,17 +350,17 @@ TEST_CASE("LogProcesser - upgrade schema")
     REQUIRE(LogProcessor(config)
               .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
                 channel_name1,
-                [&](const auto& msg)
+                [&channel1_count](const auto& msg)
                 {
-                  ++channel1_count;
+                  channel1_count += 1U;
                   CHECK(msg.get_integer_field() == 42);
                   CHECK(msg.get_string_field().empty());
                 })
               .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
                 channel_name2,
-                [&](const auto& msg)
+                [&channel2_count](const auto& msg)
                 {
-                  ++channel2_count;
+                  channel2_count += 1U;
                   CHECK(msg.get_integer_field() == 42);
                   CHECK(msg.get_string_field() == "test");
                 })
@@ -371,7 +376,7 @@ TEST_CASE("LogProcesser - upgrade schema")
     auto channel2_count = 0U;
 
     auto config = LogReaderConfig{
-      .uri = test_log_path.string(),
+      .uri = std::string{test_log_path.c_str()},
       .interval = {},
       .relative_interval = {},
       .topic_filter = {},
@@ -380,18 +385,18 @@ TEST_CASE("LogProcesser - upgrade schema")
     REQUIRE(LogProcessor(config)
               .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
                 channel_name1,
-                [&](const LogTimestamp& timestamp, const auto& msg)
+                [&channel1_count](const LogTimestamp& timestamp, const auto& msg)
                 {
-                  ++channel1_count;
+                  channel1_count += 1U;
                   CHECK(timestamp.get_duration() == std::chrono::seconds(1));
                   CHECK(msg.get_integer_field() == 42);
                   CHECK(msg.get_string_field().empty());
                 })
               .add_tappy_callback<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>(
                 channel_name2,
-                [&](const LogTimestamp& timestamp, const auto& msg)
+                [&channel2_count](const LogTimestamp& timestamp, const auto& msg)
                 {
-                  ++channel2_count;
+                  channel2_count += 1U;
                   CHECK(timestamp.get_duration() == std::chrono::seconds(2));
                   CHECK(msg.get_integer_field() == 42);
                   CHECK(msg.get_string_field() == "test");

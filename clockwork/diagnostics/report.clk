@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::diagnostics)]
+
 // Type tag for diagnostic reporter Uuid
 tag ReporterId;
 
@@ -17,17 +20,4 @@ schema Report
     // Uuid for this reporter
     #4 id: Uuid<ReporterId>;
   }
-}
-
-cpp_target report
-{
-  options
-  {
-    namespace clockwork::diagnostics;
-  }
-
-  tag ReporterId;
-  schema Report;
-  representation Tachyon<Report>;
-  interface ReportTap : Tap<Tachyon<Report>>;
 }

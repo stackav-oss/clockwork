@@ -5,6 +5,9 @@
 #include "jewels/meta/concepts.hh"
 #include "jewels/std/functional.hh"
 
+#include <boost/iterator/iterator_facade.hpp>
+
+#include <concepts>
 #include <cstddef>
 #include <span>
 #include <type_traits>
@@ -94,6 +97,23 @@ template <typename FieldType>
 using FieldValueType =
   std::decay_t<std::invoke_result_t<decltype(FieldType::read_transform), typename FieldType::DestinationType>>;
 
+/// A field type that is an array of elements.
+template <class ElementFieldTypeIn, auto offset, auto count_in>
+struct ArrayField
+{
+  static_assert(count_in > 0UL);
+  static_assert(ElementFieldTypeIn::offset_bytes == 0U, "Sub element field types must not have an offset");
+
+  using ElementFieldType = ElementFieldTypeIn;
+  static constexpr auto offset_bytes = offset;
+  static constexpr auto count = count_in;
+  static constexpr auto size_bytes = ElementFieldTypeIn::size_bytes * count;
+};
+
+// Check if a field type is an array field type.
+template <class Type>
+concept IsArrayField = std::same_as<Type, ArrayField<typename Type::ElementFieldType, Type::offset_bytes, Type::count>>;
+
 /// Calculate the offset from the end of another Field
 /// @tparam FieldType The Field to calcluate the offset from
 /// @return The offset of the field + the size of the field, used to calculate the offset for the next field in a set
@@ -106,7 +126,19 @@ template <typename FieldType>
 /// @param data The span of bytes to read the field from
 /// @return The result of bitcasting the data in the region specified by @c FieldType from @c data
 template <typename FieldType, auto span_size>
+  requires(!IsArrayField<FieldType>)
 [[nodiscard]] FieldValueType<FieldType> read_field(std::span<const std::byte, span_size> data);
+
+/// Read an array field from a span of bytes
+/// @note If the element type is a const std::byte with no transform, the
+/// result is a std::span.  Otherwise it is a transform view over the
+/// input bytes.
+/// @tparam FieldType The array field type of field to read
+/// @tparam (deduced) The size of the span of bytes
+/// @param data The span of bytes to read the field from
+/// @return A lazy range that reads each field of the array from the byte span.
+template <IsArrayField FieldType, auto span_size>
+[[nodiscard]] auto read_field(std::span<const std::byte, span_size> data);
 
 /// Write a field into a span of bytes
 /// @tparam FieldType The type of field to read
@@ -114,7 +146,20 @@ template <typename FieldType, auto span_size>
 /// @param value The value to write
 /// @param data The buffer to write the value into
 template <typename FieldType, auto span_size>
+  requires(!IsArrayField<FieldType>)
 void write_field(const FieldValueType<FieldType>& value, std::span<std::byte, span_size> data);
+
+/// Write an array field into a span of bytes
+/// @note This does not support nested arrays.
+/// @tparam FieldType The type of field to read
+/// @tparam (deduced) The size of the span of bytes
+/// @param values The values to write
+/// @param data The buffer to write the value into
+template <typename FieldType, auto span_size>
+  requires(IsArrayField<FieldType>)
+void write_field(
+  std::span<const FieldValueType<typename FieldType::ElementFieldType>, FieldType::count> values,
+  std::span<std::byte, span_size> data);
 
 } // namespace jewels::memory
 

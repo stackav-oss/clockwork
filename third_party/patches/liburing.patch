@@ -87,13 +87,6 @@ index 0000000..de680bb
 +bazel_dep(name = "bazel_skylib")
 +bazel_dep(name = "platforms")
 +bazel_dep(name = "rules_cc")
-diff --git WORKSPACE WORKSPACE
-new file mode 100644
-index 0000000..8b13789
---- /dev/null
-+++ WORKSPACE
-@@ -0,0 +1 @@
-+
 diff --git compat.aarch64.h compat.aarch64.h
 new file mode 100644
 index 0000000..55ca103

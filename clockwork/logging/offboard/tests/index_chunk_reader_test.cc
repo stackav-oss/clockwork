@@ -12,6 +12,7 @@
 #include "clockwork/logging/offboard/index_chunk_writer.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/reader_types.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -25,7 +26,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <list>
 #include <memory>

@@ -4,11 +4,12 @@
 #pragma once
 
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -44,7 +45,7 @@ using ChannelMap = std::pmr::unordered_map<
 /// @return map of all shm channels in the system (subscribers / out-of-process publisher and local publishers)
 ///
 [[nodiscard]] jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
-  std::span<const common::PublishEndpointTap> descs,
+  std::span<const Tappy<common::PublishEndpoint<>>> descs,
   jewels::memory::MemoryResource memres,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
   pinion::ShmChannelFactory& factory);
@@ -61,7 +62,7 @@ using ChannelMap = std::pmr::unordered_map<
 /// @param[in] factory The channel factory used to generate the dummy channels
 /// @return Map of dummy channels for non-connected endpoints, or error on failure
 jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
-  std::span<const common::NotConnectedEndpointTap> endpoints,
+  std::span<const Tappy<common::NotConnectedEndpoint>> endpoints,
   AbstractCasing& casing,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory);
@@ -74,8 +75,8 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
 /// @return map of all shm channels in the system (subscribers / out-of-process publisher and local publishers)
 ///
 jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
-  std::span<const common::PublishEndpointTap> descs,
-  std::span<const clockwork_logging::PublishedChannelConfigTap> published_channels,
+  std::span<const Tappy<common::PublishEndpoint<>>> descs,
+  std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>> published_channels,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory);
 
@@ -90,7 +91,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
 ///
 [[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::MonoError>
 connect_subscribers(
-  std::span<const common::PubSubConnectionTap> connections,
+  std::span<const Tappy<common::PubSubConnection>> connections,
   jewels::memory::MemoryResource memres,
   ChannelMap& channels,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
@@ -104,7 +105,7 @@ connect_subscribers(
 /// @param casing the casing to request connections against
 ///
 [[nodiscard]] jewels::expected<void, jewels::MonoError> connect_publishers(
-  std::span<const common::PublishEndpointTap> endpoints,
+  std::span<const Tappy<common::PublishEndpoint<>>> endpoints,
   ChannelMap& channels,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
   AbstractCasing& casing);

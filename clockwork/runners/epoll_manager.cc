@@ -65,6 +65,18 @@ EPollManager::add(int efd, uint32_t events, const std::shared_ptr<AbstractEPollC
   return {};
 }
 
+[[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode> EPollManager::modify(int efd, uint32_t events)
+{
+  EPollEvent event{.events = events, .data = {.fd = efd}};
+  event.events = events;
+  event.data.fd = efd;
+  if (::epoll_ctl(*epoll_, EPOLL_CTL_MOD, efd, &event) == -1)
+  {
+    return jewels::unexpected(jewels::filesystem::ErrorCode{errno});
+  }
+  return {};
+}
+
 void EPollManager::remove(int efd)
 {
   bool removed_map = false;

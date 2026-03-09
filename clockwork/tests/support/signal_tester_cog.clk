@@ -1,0 +1,25 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::system_runner)]
+
+use clockwork::tests::support::signal_messages::{TriggerMessage, AckMessage};
+
+// Test driver cog that periodically sends trigger messages and validates ack responses
+cog SignalTesterCog
+{
+    inputs
+    {
+        ack: Tappy<AckMessage>;
+    }
+
+    outputs
+    {
+        trigger: Tappy<TriggerMessage>;
+    }
+
+    execution
+    {
+        condition new_ack: new_message(ack);
+        condition periodic_10hz: time_since_last_exec(100ms);
+        execute when: new_ack or periodic_10hz;
+    }
+}

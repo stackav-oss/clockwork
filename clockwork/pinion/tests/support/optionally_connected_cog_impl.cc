@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/tests/support/optionally_connected_cog_dial.hh"
 
 #include <catch2/catch_test_macros.hpp>

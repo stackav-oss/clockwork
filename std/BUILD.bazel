@@ -1,0 +1,44 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:package.bzl", "package")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "pcie.clk",
+    "signals.clk",
+    "snapshot.clk",
+])
+
+clk(
+    name = "pcie_clk",
+    srcs = ["pcie.clk"],
+    generate = ["none"],
+)
+
+clk(
+    name = "signals_clk",
+    srcs = ["signals.clk"],
+    outs = [
+        "signals_clk_cc.cc",
+        "signals_clk_cc.hh",
+        "signals_clk_cc.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "snapshot_clk",
+    srcs = ["snapshot.clk"],
+    generate = ["none"],
+)
+
+clk(
+    name = "traits_clk",
+    srcs = ["traits.clk"],
+    generate = ["none"],
+)

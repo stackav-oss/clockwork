@@ -3,7 +3,7 @@
 
 """Macros to support writing Python requirements files."""
 
-load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_file")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_file")
 
 def write_python_requirements_source_file(
         name,
@@ -77,5 +77,11 @@ def write_python_requirements_source_file(
         # repo_name() is the empty string if this is the root repository. It is non-empty if it is non-root.
         diff_test = not native.repo_name(),
     )
+
+    # We still need to make a target with the same name as the diff test, though.
+    # Otherwise the targets from within the repo are different than the ones from outside the repo,
+    # which confuses bazel-diff.
+    if native.repo_name():
+        native.filegroup(name = name + "_test")
 
     return generated_requirements_out

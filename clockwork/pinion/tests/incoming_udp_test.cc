@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh" // IWYU pragma: keep
-#include "clockwork/io/network_var_packet.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/network_var_packet_clk_cc.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
@@ -12,6 +12,7 @@
 #include "clockwork/pinion/incoming_udp.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/sockets.hh"
@@ -29,7 +30,6 @@
 #include "jewels/uuid/uuid.hh"
 
 #include <arpa/inet.h>
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -85,7 +85,7 @@ TEMPLATE_TEST_CASE(
 
   SECTION("Mismatched message sizes")
   {
-    auto channel = std::make_unique<InMemoryChannel<bool, num_slots>>(memres);
+    auto channel = std::make_unique<InMemoryChannel<bool, num_slots, false>>(memres);
     auto publisher = channel->make_publisher(0UL);
 
     // Size of message slot and size of UDP packet are not the same.
@@ -94,7 +94,7 @@ TEMPLATE_TEST_CASE(
       jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
   }
 
-  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots>>(memres);
+  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto subscriber = channel->make_subscriber();
   SECTION("Mismatched endpoint id")
   {
@@ -174,7 +174,7 @@ TEMPLATE_TEST_CASE(
 
   SECTION("Alternating write / read")
   {
-    pinion::BufferIterator next_to_consume{};
+    pinion::SlotRef next_to_consume{};
     for (uint32_t index : std::ranges::views::iota(0U, static_cast<uint32_t>(num_slots)))
     {
       REQUIRE(sender(as_bytes(jewels::as_single_item_span(index)), *assigned_addr) == sizeof(uint32_t));
@@ -199,7 +199,7 @@ TEMPLATE_TEST_CASE(
       REQUIRE(sender(as_bytes(jewels::as_single_item_span(index)), *assigned_addr) == sizeof(uint32_t));
     }
 
-    pinion::BufferIterator next_to_consume{};
+    pinion::SlotRef next_to_consume{};
     for (uint32_t index : std::ranges::views::iota(0U, static_cast<uint32_t>(num_slots)))
     {
       REQUIRE(support::wait_for_readable(incoming_udp->fd()));
@@ -240,7 +240,7 @@ TEMPLATE_TEST_CASE(
   REQUIRE(maybe_incoming_udp);
   auto incoming_udp = *std::move(maybe_incoming_udp);
 
-  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots>>(memres);
+  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto publisher = channel->make_publisher(0UL);
   auto subscriber = channel->make_subscriber();
 
@@ -266,7 +266,7 @@ TEMPLATE_TEST_CASE(
     // change.  So it is reliable enough for CI purposes.
     ::std::this_thread::yield();
 
-    pinion::BufferIterator next_to_consume{};
+    pinion::SlotRef next_to_consume{};
     for (const uint32_t index : std::ranges::views::iota(0U, static_cast<uint32_t>(num_batches)))
     {
       incoming_udp->read();
@@ -294,7 +294,7 @@ TEMPLATE_TEST_CASE(
     REQUIRE(sender(as_bytes(jewels::as_single_item_span(1U)), *assigned_addr) == sizeof(uint32_t));
     REQUIRE(support::wait_for_readable(incoming_udp->fd()));
     incoming_udp->read();
-    const pinion::BufferIterator next_to_consume{};
+    const pinion::SlotRef next_to_consume{};
     {
       auto available = pinion::available_starting_from(subscriber.available(), next_to_consume);
       REQUIRE(available);

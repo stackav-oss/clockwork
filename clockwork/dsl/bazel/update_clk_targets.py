@@ -15,7 +15,6 @@ from tempfile import TemporaryDirectory
 
 import click
 import runfiles
-from clockwork.dsl import clk_exception
 from clockwork.dsl.bazel import cc_targets, extract_targets, targets
 
 from tools.sort_build_file import sort_build_file
@@ -96,16 +95,18 @@ _SKIPPED_MODULE_PATTERNS = [
 ]
 
 _BAZEL_OUT_BIN_DIR_REGEX = r"^bazel-out/[^/]+/bin/"
+_BAZEL_EXTERNAL_DIR_REGEX = r"^external/[^/]+/"
 
 
-def _strip_bazel_out_bin_dir(some_path: str) -> str:
-    """Strips leading 'bazel-out/k8-*/bin/' if it exists (needed for genrules)."""
-    return re.sub(_BAZEL_OUT_BIN_DIR_REGEX, "", some_path)
+def _strip_bazel_extraneous_dirs(some_path: str) -> str:
+    """Strips leading 'bazel-out/k8-*/bin/' if it exists (needed for genrules) as well as any external/ paths."""
+    no_out_bin_dir = re.sub(_BAZEL_OUT_BIN_DIR_REGEX, "", some_path)
+    return re.sub(_BAZEL_EXTERNAL_DIR_REGEX, "", no_out_bin_dir)
 
 
 def _should_skip(clk_file: Path) -> bool:
     """Check if we should skip this clk module."""
-    module_path = _strip_bazel_out_bin_dir(str(clk_file))
+    module_path = _strip_bazel_extraneous_dirs(str(clk_file))
     return any(fnmatch.fnmatch(module_path, pattern) for pattern in _SKIPPED_MODULE_PATTERNS)
 
 
@@ -239,7 +240,7 @@ def _update_build_file(
     updated_build_file.write_text(args.input_build_file.read_text())
 
     # We need this file for buildozer to work.
-    (tempdir_path / "WORKSPACE").touch()
+    (tempdir_path / "MODULE.bazel").touch()
 
     # Read existing visibility, etc specifiers and then delete the existing copies of the rules, if any.
     # We do a separate buildozer call per target so that we don't have to do any parsing.
@@ -282,7 +283,7 @@ def _update_build_file(
 
     # Add all new rules at the end.
     with updated_build_file.open("a") as b:
-        package = f"//{_strip_bazel_out_bin_dir(str(args.clk_file.parent))}"
+        package = f"//{_strip_bazel_extraneous_dirs(str(args.clk_file.parent))}"
         for target_obj in all_targets:
             if (diags := target_diags.get(target_obj.name)) is not None and isinstance(
                 target_obj, cc_targets.CcLibrary
@@ -299,8 +300,12 @@ def _update_build_file(
             ):
                 target_with_short_labels = target_with_short_labels.removesuffix(")") + data + ")"
             # TODO(DX-1394): Remove this workaround
-            if target_obj.kind == "cc_library" and package.startswith(
-                "//platforms/visualization/vizlog_converter/visualizers"
+            if target_obj.kind == "cc_library" and (
+                package.startswith("//platforms/visualization/vizlog_converter/visualizers")
+                or (
+                    isinstance(target_obj, cc_targets.CcLibrary)
+                    and any(str(i).endswith("_dial") for i in target_obj.deps)
+                )
             ):
                 target_with_short_labels = target_with_short_labels.removesuffix(")") + "alwayslink = True,)"
             b.write(target_with_short_labels + "\n")
@@ -321,8 +326,4 @@ def _update_build_file(
 
 
 if __name__ == "__main__":
-    logger = clk_exception.get_logger(Path(__file__).name)
-    try:
-        update_targets_for_clk_file()
-    except (ValueError, TypeError, KeyError, SyntaxError, FileNotFoundError):
-        logger.exception("update_clk_targets -- Parsing Exception:")
+    update_targets_for_clk_file()

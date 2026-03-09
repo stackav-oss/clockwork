@@ -7,7 +7,7 @@
 #include "clockwork/cog/detail.hh"
 #include "clockwork/cog/time_since_last_exec_handler.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -113,6 +113,21 @@ jewels::expected<void, jewels::MonoError> CogTimers<Policies...>::prime(jewels::
   // To initialize the timers we pretend the last execution was at the start so
   // time_since_last_exec will be active at start + duration.
   return update_last_exec_time(start_time, ConditionsTuple{});
+}
+
+template <typename... Policies>
+template <size_t index>
+void CogTimers<Policies...>::set_unit_test_timer(
+  TimerPtr<typename std::tuple_element_t<index, PoliciesTuple>> timer_ptr)
+{
+  std::get<index>(timers_) = std::move(timer_ptr);
+}
+
+template <typename... Policies>
+void CogTimers<Policies...>::notify_expired_unit_test_timers(jewels::time::SyncTime now)
+{
+  [this, now]<std::size_t... index>(std::index_sequence<index...>)
+  { (std::get<index>(timers_)->notify_if_triggered(now), ...); }(std::make_index_sequence<policy_count>());
 }
 
 } // namespace clockwork

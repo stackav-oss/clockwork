@@ -51,7 +51,7 @@ def test_cpp_extern() -> None:
         """,
     )
     with pytest.raises(
-        ValueError, match="Use of cpp_extern is restricted and not allowed in module @clockwork::not_on_the_allowlist"
+        ValueError, match=r"Use of cpp_extern is restricted and not allowed in module @clockwork::not_on_the_allowlist"
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "not_on_the_allowlist"), importer=fs_importer)
 
@@ -80,7 +80,7 @@ def test_cpp_extern() -> None:
       } // namespace unused
       namespace unused
       {
-      // Interface aliases
+      // Interface and instantiation aliases
       } // namespace unused
     """).strip()
     assert header == expected_header
@@ -96,7 +96,7 @@ def test_cpp_extern() -> None:
       static_assert(std::is_same<decltype(::a::b::c::create_my_strong_type(std::declval<float>())), ::a::b::c::MyStrongType>::value);
       namespace unused
       {
-      // Interface aliases
+      // Interface and instantiation aliases
       } // namespace unused
     """).strip()
     assert implementation == expected_implementation
@@ -143,7 +143,7 @@ def test_cpp_extern_init_value() -> None:
         """,
     )
     with pytest.raises(
-        TypeError, match="Attempt to unify NumericType.FLOAT type with StrongType.name='MyInitStrongType'"
+        TypeError, match=r"Attempt to unify NumericType\.FLOAT type with StrongType\(name='MyInitStrongType'"
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "cpp_extern_test"), importer=fs_importer)
 
@@ -195,6 +195,6 @@ def test_cpp_extern_init_value_no_factory() -> None:
     assert strong_type.cur_name == "strong_type"
     with pytest.raises(
         RuntimeError,
-        match="Unable to convert to literal for StrongType 'MyInitStrongTypeNoFactory'.  Need to register an appropriate factory function in the cpp_target extern block.",
+        match=r"Unable to convert to literal for StrongType 'MyInitStrongTypeNoFactory'\.  Need to register an appropriate factory function in the cpp_target extern block\.",
     ):
-        tap._value_to_cpp(strong_type.init_value)
+        tap.value_to_cpp(strong_type.init_value)

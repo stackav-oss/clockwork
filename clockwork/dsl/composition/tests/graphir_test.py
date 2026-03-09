@@ -37,10 +37,10 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
     (
         mem_hello_conn,
         hello_config,
-        ro_hello,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-        ro_hello_to_rw_hello_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-        rw_hello_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-        extern_hello_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        _ro_hello,
+        _ro_hello_to_rw_hello_conn,
+        _rw_hello_conn,
+        _extern_hello_conn,
         latest_in,
         history_in,
         multi_in,
@@ -48,16 +48,17 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
         out_goodbye,
         out_multi1,
         out_multi2,
-        diagnositics_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        _diagnostics_conn,
         in_udp,
         out_udp,
-        ro_hello_init_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-        rw_hello_init_conn,  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        _ro_hello_init_conn,
+        _rw_hello_init_conn,
     ) = conns
     assert isinstance(mem_hello_conn, graphir.MemoryResourceConnection)
     assert mem_hello_conn.memory_resource.resource_type == box.MemResourceType.HEAP
     assert mem_hello_conn.memory_resource.max_size == 1e6
     assert isinstance(hello_config, graphir.ConfigConnection)
+    assert isinstance(hello_config.config_instance, box.SerializedDataFileInstance)
     assert hello_config.config_instance.file_path == Path("foo/bar.txtpb")
     assert isinstance(latest_in, graphir.ChannelToCogSubscribeConnection)
     assert isinstance(history_in, graphir.ChannelToCogSubscribeConnection)
@@ -98,7 +99,8 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
 
 def test_message_type_mismatch(fs_importer: FilesystemImporter) -> None:
     source_text = """
-use clockwork::dsl::tests::support::{hellocog, hellomsg};
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
 
 // Channel
 channel Chan
@@ -205,3 +207,51 @@ box BoxWrongSize
         match=r"Mismatched 'message_type' between socket 'SocketWrongBytes' and channel 'WrongMessageSize'.",
     ):
         graphir.from_ir_connection(box_ir.connections[0], module.context)
+
+
+def test_data_source_connections(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// TestChan
+channel TestChan
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+box TestBox
+{
+    new first_msg: FirstMessage(channel=TestChan);
+    new fallback_file: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="fallback.textproto");
+    connect fallback_file to first_msg.fallback;
+    new state: State(representation=Tachyon<hellomsg::HelloMsg>);
+    connect first_msg to state;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_data_source_connections"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("TestBox")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    # Find the relevant connections
+    fallback_conn = None
+    init_conn = None
+    for conn in box_ir.connections:
+        gconn = graphir.from_ir_connection(conn, module.context)
+        if isinstance(gconn, graphir.DataSourceFallbackConnection):
+            fallback_conn = gconn
+        if isinstance(gconn, graphir.InitDataSourceConnection):
+            init_conn = gconn
+    assert fallback_conn is not None, "DataSourceFallbackConnection not found"
+    assert init_conn is not None, "InitDataSourceConnection not found"
+    # Check types and fields
+    assert isinstance(fallback_conn.data_source, box.FirstMessageInstance)
+    assert isinstance(fallback_conn.fallback_data_source, box.SerializedDataFileInstance)
+    assert isinstance(init_conn.data_source, box.FirstMessageInstance)
+    assert isinstance(init_conn.target_instance, box.StateInstance)
+    # Fallback should match the fallback_file instance
+    assert fallback_conn.fallback_data_source.file_path == Path("fallback.textproto")
+    test_chan = graphir.lookup_channel("TestChan", module.context).ir_node
+    assert fallback_conn.data_source.channel is test_chan
+    assert init_conn.data_source.channel is test_chan

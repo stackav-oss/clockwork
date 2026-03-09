@@ -4,5 +4,5 @@
 platform(
     name = "host-clang",
     constraint_values = ["@bazel_tools//tools/cpp:clang"],
-    parents = ["@local_config_platform//:host"],
+    parents = ["@platforms//host"],
 )

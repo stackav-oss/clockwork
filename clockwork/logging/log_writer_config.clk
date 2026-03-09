@@ -1,20 +1,25 @@
-use clockwork::logging::message_encoding::MessageEncoding;
-use clockwork::logging::schema_encoding::SchemaEncoding;
-use clockwork::logging::channel_type::ChannelType;
-use clockwork::logging::log_uuid_tag::LogUuidTag;
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
+use clockwork::logging::channel_type::{ChannelType};
+use clockwork::logging::log_uuid_tag::{LogUuidTag};
+use clockwork::logging::message_encoding::{MessageEncoding};
+use clockwork::logging::schema_encoding::{SchemaEncoding};
+use[] clockwork::common::constants;
 
 // Logged channel configuration
-schema LoggedChannelConfig {
+schema LoggedChannelConfig
+{
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 20000;
+    #2 max_schema_definition_size = 30000;
   }
 
   fields
@@ -49,17 +54,18 @@ schema LoggedChannelConfig {
 }
 
 // Log writer configuration
-schema LogWriterConfig {
+schema LogWriterConfig
+{
   parameters
   {
     // Maximum channel name size
-    #0 max_channel_name_size = 300;
+    #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema name size
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 20000;
+    #2 max_schema_definition_size = 30000;
 
     // Maximum number of channels
     #3 max_num_channels = 2046;
@@ -77,18 +83,5 @@ schema LogWriterConfig {
   }
 }
 
-cpp_target log_writer_config
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-
-  schema LoggedChannelConfig;
-  representation Tachyon<LoggedChannelConfig<>>;
-  interface LoggedChannelConfigTap: Tap<Tachyon<LoggedChannelConfig<>>>;
-
-  schema LogWriterConfig;
-  representation Tachyon<LogWriterConfig<>>;
-  interface LogWriterConfigTap: Tap<Tachyon<LogWriterConfig<>>>;
-}
+instantiate LoggedChannelConfig<>;
+instantiate LogWriterConfig<>;

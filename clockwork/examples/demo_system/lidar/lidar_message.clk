@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::demo_system::lidar)]
+
 use clockwork::examples::demo_system::localization::pose_message;
 
 // Twenty raw lidar packets make up a full 360 degree sweep
@@ -99,34 +102,6 @@ schema LidarSweepMessage
   }
 }
 
-cpp_target lidar_message
-{
-  options
-  {
-    namespace clockwork::demo_system::lidar;
-  }
-
-  constant raw_messages_per_sweep;
-  constant returns_per_message;
-  constant points_per_return;
-  constant min_elevation_radians;
-  constant max_elevation_radians;
-  constant points_per_sweep;
-
-  schema RawLidarPoint;
-  schema RawLidarReturn;
-  schema RawLidarMessage;
-  schema LidarSweepMessage;
-
-  representation Tachyon<RawLidarPoint>;
-  interface Tappy<RawLidarPoint>;
-
-  representation Tachyon<RawLidarReturn<points_per_return>>;
-  interface Tappy<RawLidarReturn<points_per_return>>;
-
-  representation Tachyon<RawLidarMessage<returns_per_message, points_per_return>>;
-  interface Tappy<RawLidarMessage<returns_per_message, points_per_return>>;
-
-  representation Tachyon<LidarSweepMessage<points_per_sweep>>;
-  interface Tappy<LidarSweepMessage<points_per_sweep>>;
-}
+instantiate RawLidarReturn<points_per_return>;
+instantiate RawLidarMessage<returns_per_message, points_per_return>;
+instantiate LidarSweepMessage<points_per_sweep>;

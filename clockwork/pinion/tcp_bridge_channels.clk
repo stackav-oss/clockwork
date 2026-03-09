@@ -1,4 +1,6 @@
-use clockwork::pinion::bridge_status
+#![generate()]
+
+use clockwork::pinion::bridge_status;
 
 // TCP bridge status cannel
 channel BridgeStatusChannel

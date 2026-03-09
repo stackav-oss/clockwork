@@ -56,13 +56,28 @@ py_cc_binding(
     ],
 )
 
-cc_library(
-    name = "foo",
-    srcs = [
-        "foo.cc",
-        "foo.inl",
+clk(
+    name = "foo_clk",
+    srcs = ["foo.clk"],
+    outs = [
+        "foo_clk_cc.cc",
+        "foo_clk_cc.hh",
+        "foo_clk_cc.inl",
+        "foo_clk_nb.cc",
+        "foo_clk_nb.hh",
+        "foo_clk_nb.inl",
+        "foo_clk_py.py",
     ],
-    hdrs = ["foo.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "foo_clk_cc",
+    srcs = [
+        "foo_clk_cc.cc",
+        "foo_clk_cc.inl",
+    ],
+    hdrs = ["foo_clk_cc.hh"],
     data = [":foo_clk"],
     visibility = ["//visibility:public"],
     deps = [
@@ -72,21 +87,6 @@ cc_library(
         "//jewels/meta:concepts",
         "//jewels/uuid",
     ],
-)
-
-clk(
-    name = "foo_clk",
-    srcs = ["foo.clk"],
-    outs = [
-        "foo.cc",
-        "foo.hh",
-        "foo.inl",
-        "foo_clk_nb.cc",
-        "foo_clk_nb.hh",
-        "foo_clk_nb.inl",
-        "foo_clk_py.py",
-    ],
-    visibility = ["//visibility:public"],
 )
 
 py_cc_binding(
@@ -100,7 +100,7 @@ py_cc_binding(
     py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//jewels/nanobind/clk_bindings/tests:__subpackages__"],
     deps = [
-        ":foo",
+        ":foo_clk_cc",
         "//jewels/nanobind/clk_bindings/common:common_cc",
     ],
 )

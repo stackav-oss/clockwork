@@ -8,6 +8,7 @@ package(default_testonly = True)
 cc_test(
     name = "exit_condition_signal_test",
     srcs = ["exit_condition_signal_test.cc"],
+    args = ["--order=decl"],
     deps = [
         "//jewels/cli:exit_condition_signal",
         "@catch2//:catch2_main",

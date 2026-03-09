@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
 // Schema encoding
 enum SchemaEncoding
 {
@@ -45,13 +48,4 @@ enum SchemaEncoding
       underlying_value: 5;
     }
   }
-}
-
-cpp_target schema_encoding
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  enum SchemaEncoding;
 }

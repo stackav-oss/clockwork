@@ -203,6 +203,10 @@ public:
   /// @return Pending request count or log error on failure
   [[nodiscard]] LogExpected<size_t> get_pending_request_count() const;
 
+  /// Get the number of pending message data bytes
+  /// @return Number of pending message data bytes
+  [[nodiscard]] size_t get_pending_message_data_bytes() const;
+
   /// Get the current write backlog
   /// @note This method *MAY* be called by the thread that reports the writer state
   /// @param[in] Current steady time
@@ -303,6 +307,9 @@ private:
 
   /// Number of pending async operations
   size_t pending_request_count_{0U};
+
+  /// Number of message data bytes in outstanding async writes
+  size_t pending_message_data_bytes_{0U};
 
   /// Current log file offset
   size_t log_file_offset_{0U};

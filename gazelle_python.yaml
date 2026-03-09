@@ -11,8 +11,6 @@ manifest:
     _hypothesis_pytestplugin: hypothesis
     _pytest: pytest
     annotated_types: annotated_types
-    attr: attrs
-    attrs: attrs
     certifi: certifi
     charset_normalizer: charset_normalizer
     click: click

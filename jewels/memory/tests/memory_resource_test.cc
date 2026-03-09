@@ -58,13 +58,13 @@ TEST_CASE("Constructors")
 
 TEST_CASE("MemoryResource conversions")
 {
-  // MemoryResource should be implicitly converitable to a polymorphic allocator
+  // MemoryResource should be implicitly convertible to a polymorphic allocator
   STATIC_CHECK(std::is_nothrow_convertible_v<MemoryResource, std::pmr::polymorphic_allocator<int32_t>>);
-  // const MemoryResource should be implicitly converitable to a const polymorphic allocator
+  // const MemoryResource should be implicitly convertible to a const polymorphic allocator
   STATIC_CHECK(std::is_nothrow_convertible_v<const MemoryResource, const std::pmr::polymorphic_allocator<int32_t>>);
-  // MemoryResource should be converitable to a memory resource
+  // MemoryResource should be convertible to a memory resource
   STATIC_CHECK(std::is_nothrow_constructible_v<std::pmr::memory_resource*, MemoryResource>);
-  // const MemoryResource should be converitable to a const memory resource
+  // const MemoryResource should be convertible to a const memory resource
   STATIC_CHECK(std::is_nothrow_constructible_v<const std::pmr::memory_resource*, const MemoryResource>);
 }
 

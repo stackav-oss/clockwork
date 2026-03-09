@@ -81,7 +81,7 @@ struct MsgPolicy
 /// long as this view exists.
 ///
 /// @tparam MsgViewType The type of the message view.
-template <class MsgViewType, size_t max_size>
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
 class MessageInputDial
 {
   using CircularBuffer =
@@ -90,6 +90,8 @@ class MessageInputDial
 public:
   using MsgType = MsgViewType;
   static constexpr auto max_msgs = max_size;
+  static constexpr auto min_msgs = min_messages;
+  static constexpr auto min_new_msgs = min_new_messages;
 
   /// ViewType is the range view exposed to users.  It's guaranteed to provide
   /// O(1) random access and a size() method.
@@ -130,6 +132,24 @@ public:
   /// Get a view of all new messages view
   [[nodiscard]] constexpr auto get_new_msgs_view() const noexcept;
 
+  /// Get the latest message in the view, if it is guaranteed to exist.
+  [[nodiscard]] constexpr auto& get_latest_msg() const noexcept
+    requires(min_messages > 0);
+
+  /// Get the latest new message in the view, if it is guaranteed to exist.
+  [[nodiscard]] constexpr auto& get_latest_new_msg() const noexcept
+    requires(min_new_messages > 0);
+
+  /// Get a message view that is guaranteed to have at least one element because of an any_message or new_message
+  /// execution condition.
+  [[nodiscard]] constexpr auto get_nonempty_view() const noexcept
+    requires(min_messages > 0);
+
+  /// Get a view of new messages that is guaranteed to have at least one element because of an any_message execution
+  /// condition.
+  [[nodiscard]] constexpr auto get_nonempty_new_msgs_view() const noexcept
+    requires(min_new_messages > 0);
+
   /// Access the cursor iterator.  Might be end().
   [[nodiscard]] constexpr IteratorType get_cursor() const noexcept;
 
@@ -163,12 +183,12 @@ private:
 ///
 /// @note This is used only when the Cog has explicitly declared that it needs
 /// manual cursor control.  Otherwise cursor control is automated.
-template <class MsgType, size_t max_size>
-class MessageInputDialWithCursorControl : public MessageInputDial<MsgType, max_size>
+template <class MsgType, size_t max_size, size_t min_messages, size_t min_new_messages>
+class MessageInputDialWithCursorControl : public MessageInputDial<MsgType, max_size, min_messages, min_new_messages>
 {
 public:
-  using MessageInputDial<MsgType, max_size>::MessageInputDial;
-  using MessageInputDial<MsgType, max_size>::set_cursor;
+  using MessageInputDial<MsgType, max_size, min_messages, min_new_messages>::MessageInputDial;
+  using MessageInputDial<MsgType, max_size, min_messages, min_new_messages>::set_cursor;
 };
 
 } // namespace clockwork

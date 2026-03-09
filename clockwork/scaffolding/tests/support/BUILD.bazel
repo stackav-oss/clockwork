@@ -1,10 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
-load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
-load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
 
@@ -36,7 +32,7 @@ cc_library(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:exec_tools",
         "//clockwork/common:forward",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/common/tests/support:fake_cog",
         "//clockwork/pinion:observer",
         "//clockwork/pinion/tests/support:tmp_shm_namespace",
@@ -46,6 +42,7 @@ cc_library(
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -70,11 +67,12 @@ cc_library(
         ":test_cogs_diags",
         ":test_cogs_dial",
         ":test_cogs_impl",
-        ":test_msgs",
+        ":test_msgs_clk_cc",
         "//clockwork/cog:include_common",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -110,7 +108,7 @@ cc_library(
     deps = [
         ":cxx_state",
         ":test_cogs_diags",
-        ":test_msgs",
+        ":test_msgs_clk_cc",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
         "//clockwork/dial:include_common",
@@ -122,10 +120,10 @@ cc_library(
     srcs = ["test_cogs_impl.cc"],
     deps = [
         ":test_cogs_dial",
-        ":test_msgs",
+        ":test_msgs_clk_cc",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "@boost//:iterator",
@@ -138,7 +136,7 @@ cc_library(
     hdrs = ["test_io_connections.hh"],
     deps = [
         "//clockwork/common:abstract_epoll_manager",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/pinion:io_connection",
         "//clockwork/pinion:publisher_handle",
         "//clockwork/pinion:subscriber_handle",
@@ -153,84 +151,21 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "test_msgs",
-    srcs = [
-        "test_msgs.cc",
-        "test_msgs.inl",
-    ],
-    hdrs = ["test_msgs.hh"],
-    data = [":test_msgs_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "test_msgs_clk",
     srcs = ["test_msgs.clk"],
     outs = [
-        "test_msgs.cc",
-        "test_msgs.hh",
-        "test_msgs.inl",
-        "test_msgs_proto.proto",
-        "test_msgs_proto_conv.cc",
-        "test_msgs_proto_conv.hh",
-        "test_msgs_proto_conv.inl",
+        "test_msgs_clk_cc.cc",
+        "test_msgs_clk_cc.hh",
+        "test_msgs_clk_cc.inl",
+        "test_msgs_clk_proto.proto",
+        "test_msgs_clk_proto_conv.cc",
+        "test_msgs_clk_proto_conv.hh",
+        "test_msgs_clk_proto_conv.inl",
     ],
-)
-
-proto_library(
-    name = "test_msgs_proto",
-    srcs = ["test_msgs_proto.proto"],
-)
-
-proto_cc_library(
-    name = "test_msgs_proto_cc_library",
-    srcs = ["test_msgs_proto.pb.cc"],
-    hdrs = ["test_msgs_proto.pb.h"],
-    deps = ["@protobuf"],
-)
-
-proto_compile(
-    name = "test_msgs_proto_compile",
-    outputs = [
-        "test_msgs_proto.pb.h",
-        "test_msgs_proto.pb.cc",
-        "test_msgs_proto_pb2.py",
-        "test_msgs_proto_pb2.pyi",
+    generate = [
+        "cpp",
+        "proto",
+        "proto_conv",
     ],
-    plugins = [
-        "@build_stack_rules_proto//plugin/builtin:cpp",
-        "@build_stack_rules_proto//plugin/builtin:pyi",
-        "@build_stack_rules_proto//plugin/builtin:python",
-        "@clockwork//tools/gazelle:protoc-gen-nolint",
-    ],
-    proto = "test_msgs_proto",
-)
-
-cc_library(
-    name = "test_msgs_proto_conv",
-    srcs = [
-        "test_msgs_proto_conv.cc",
-        "test_msgs_proto_conv.inl",
-    ],
-    hdrs = ["test_msgs_proto_conv.hh"],
-    data = [":test_msgs_clk"],
-    deps = [
-        ":test_msgs",
-        ":test_msgs_proto_cc_library",
-        "//clockwork:repr_iface",
-        "//jewels/container/tap:protobuf_to_tap",
-    ],
-)
-
-proto_py_library(
-    name = "test_msgs_proto_py_library",
-    srcs = ["test_msgs_proto_pb2.py"],
-    data = ["test_msgs_proto_pb2.pyi"],
-    deps = ["@protobuf//:protobuf_python"],
 )

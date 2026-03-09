@@ -1,3 +1,6 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::tests)]
+
 // Test schema version 2
 schema SmokeTestSchemaV2
 {
@@ -12,11 +15,31 @@ schema SmokeTestSchemaV2
   }
   history
   {
-    versions: [1, 2];
+    version: 2;
   }
 }
 
-// Test schema version 1
+// Test schema version 2 (unchanged from version 1)
+schema ParameterizedSchemaV2
+{
+  uuid: f5a4fa18-6a69-4645-924e-d0f08446873e;
+  parameters
+  {
+    // type of values to be stored
+    #1 value_type: Type;
+
+    // maximum number of objects that the store can hold
+    #2 max_size: UInt64;
+  }
+  fields
+  {
+    // Variable array field
+    #3 vararray_field: VarArray<value_type, max_size=max_size>;
+  }
+}
+
+
+// Test schema version 2
 schema Int8UpgradeTestSchemaV2
 {
   uuid: 5c02a305-f2aa-4215-933e-6518d4dd6882;
@@ -26,385 +49,354 @@ schema Int8UpgradeTestSchemaV2
     #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #9 int16_field: Int16;
+    #11 int16_field: Int16;
 
     // Int32 field (in version2)
-    #10 int32_field: Int32;
+    #12 int32_field: Int32;
 
     // Int64 field (in version2)
-    #11 int64_field: Int64;
+    #13 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #12 uint8_field: UInt8;
+    #14 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #13 uint16_field: UInt16;
+    #15 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #16 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #17 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #18 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #19 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: Int8 = -42;
+    #20 new_field: Int8 = -42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #2 int16_field: Int8 -> became #9;
-      #3 int32_field: Int8 -> became #10;
-      #4 int64_field: Int8 -> became #11;
-      #5 uint8_field: Int8 -> became #12;
-      #6 uint16_field: Int8 -> became #13;
-      #7 uint32_field: Int8 -> became #14;
-      #8 uint64_field: Int8 -> became #15;
-    }
+    version: 11;
+    legacy_became: [2->11, 3->12, 4->13, 5->14, 6->15, 7->16, 8->17, 9->18, 10->19];
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema Int16UpgradeTestSchemaV2
 {
   uuid: c7dd7e06-4216-45f7-991a-01062f80fc28;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
     #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #10 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #11 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #12 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #13 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: Int16 = -42;
+    #11 new_field: Int16 = -42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: Int16 -> became #9;
-      #3 int32_field: Int16 -> became #10;
-      #4 int64_field: Int16 -> became #11;
-      #5 uint8_field: Int16 -> became #12;
-      #6 uint16_field: Int16 -> became #13;
-      #7 uint32_field: Int16 -> became #14;
-      #8 uint64_field: Int16 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema Int32UpgradeTestSchemaV2
 {
   uuid: 4da72a39-17a2-447a-9f68-a3308469327e;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
     #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #11 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #12 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #13 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: Int32 = -42;
+    #11 new_field: Int32 = -42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: Int32 -> became #9;
-      #2 int16_field: Int32 -> became #10;
-      #4 int64_field: Int32 -> became #11;
-      #5 uint8_field: Int32 -> became #12;
-      #6 uint16_field: Int32 -> became #13;
-      #7 uint32_field: Int32 -> became #14;
-      #8 uint64_field: Int32 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema Int64UpgradeTestSchemaV2
 {
   uuid: e18a4d93-0908-4ebc-bb24-1373e9051ef4;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #11 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
     #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #12 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #13 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: Int64 = -42;
+    #11 new_field: Int64 = -42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: Int64 -> became #9;
-      #2 int16_field: Int64 -> became #10;
-      #3 int32_field: Int64 -> became #11;
-      #5 uint8_field: Int64 -> became #12;
-      #6 uint16_field: Int64 -> became #13;
-      #7 uint32_field: Int64 -> became #14;
-      #8 uint64_field: Int64 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema UInt8UpgradeTestSchemaV2
 {
   uuid: 25f0b51c-c05f-45d8-b0e4-67538baef4b2;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #11 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #12 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
     #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #13 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: UInt8 = 42;
+    #11 new_field: UInt8 = 42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: UInt8 -> became #9;
-      #2 int16_field: UInt8 -> became #10;
-      #3 int32_field: UInt8 -> became #11;
-      #4 int64_field: UInt8 -> became #12;
-      #6 uint16_field: UInt8 -> became #13;
-      #7 uint32_field: UInt8 -> became #14;
-      #8 uint64_field: UInt8 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema UInt16UpgradeTestSchemaV2
 {
   uuid: 64d751ce-c9ee-4fad-bcbd-15c791bda017;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #11 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #12 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #13 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
     #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #14 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: UInt16 = 42;
+    #11 new_field: UInt16 = 42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: UInt16 -> became #9;
-      #2 int16_field: UInt16 -> became #10;
-      #3 int32_field: UInt16 -> became #11;
-      #4 int64_field: UInt16 -> became #12;
-      #5 uint8_field: UInt16 -> became #13;
-      #7 uint32_field: UInt16 -> became #14;
-      #8 uint64_field: UInt16 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema UInt32UpgradeTestSchemaV2
 {
   uuid: 7a8a6789-9933-4ff0-ba6a-2a0dbd3bd803;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #11 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #12 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #13 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #14 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
     #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
-    #15 uint64_field: UInt64;
+    #8 uint64_field: UInt64;
+
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #16 new_field: UInt32 = 42;
+    #11 new_field: UInt32 = 42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: UInt32 -> became #9;
-      #2 int16_field: UInt32 -> became #10;
-      #3 int32_field: UInt32 -> became #11;
-      #4 int64_field: UInt32 -> became #12;
-      #5 uint8_field: UInt32 -> became #13;
-      #6 uint16_field: UInt32 -> became #14;
-      #8 uint64_field: UInt32 -> became #15;
-    }
+    version: 11;
   }
 }
 
-// Test schema version 1
+// Test schema version 2
 schema UInt64UpgradeTestSchemaV2
 {
   uuid: 787dbd7c-c1fc-4612-97cd-5d09a21c8103;
   fields
   {
     // Int8 field (in version2)
-    #9 int8_field: Int8;
+    #1 int8_field: Int8;
 
     // Int16 field (in version2)
-    #10 int16_field: Int16;
+    #2 int16_field: Int16;
 
     // Int32 field (in version2)
-    #11 int32_field: Int32;
+    #3 int32_field: Int32;
 
     // Int64 field (in version2)
-    #12 int64_field: Int64;
+    #4 int64_field: Int64;
 
     // UInt8 field (in version2)
-    #13 uint8_field: UInt8;
+    #5 uint8_field: UInt8;
 
     // UInt16 field (in version2)
-    #14 uint16_field: UInt16;
+    #6 uint16_field: UInt16;
 
     // UInt32 field (in version2)
-    #15 uint32_field: UInt32;
+    #7 uint32_field: UInt32;
 
     // UInt64 field (in version2)
     #8 uint64_field: UInt64;
 
+    // Float32 field (in version2)
+    #9 float32_field: Float32;
+
+    // Float64 field (in version2)
+    #10 float64_field: Float64;
+
     // New field with initializer
-    #16 new_field: UInt64 = 42;
+    #11 new_field: UInt64 = 42;
   }
   history
   {
-    versions: [8, 16];
-    fields
-    {
-      #1 int8_field: UInt64 -> became #9;
-      #2 int16_field: UInt64 -> became #10;
-      #3 int32_field: UInt64 -> became #11;
-      #4 int64_field: UInt64 -> became #12;
-      #5 uint8_field: UInt64 -> became #13;
-      #6 uint16_field: UInt64 -> became #14;
-      #7 uint32_field: UInt64 -> became #15;
-    }
+    version: 11;
   }
 }
 
@@ -429,19 +421,15 @@ schema UpgradedMemberSchemaTypeV2
   fields
   {
     // Field upgraded in version 2
-    #3 upgraded_field: UInt64;
+    #2 upgraded_field: UInt64;
 
     // Field added in version 2
-    #4 added_field: Int16 = 42;
+    #3 added_field: Int16 = 42;
   }
   history
   {
-    versions: [2, 4];
-    fields
-    {
-      #1 removed_field: Int8 -> removed #4;
-      #2 upgraded_field: UInt32 -> became #3;
-    }
+    version: 3;
+    removed: [1];
   }
 }
 
@@ -459,11 +447,8 @@ schema SchemaUpgradeTestSchemaV2
   }
   history
   {
-    versions: [2, 3];
-    fields
-    {
-      #1 removed_field: UpgradedMemberSchemaTypeV2 -> removed #3;
-    }
+    version: 3;
+    removed: [1];
   }
 }
 
@@ -473,22 +458,42 @@ schema Float32UpgradeTestSchemaV2
   uuid: e95085a9-76aa-4b1d-b9e6-fb242d493fad;
   fields
   {
+    // Int8 field (in version2)
+    #1 int8_field: Int8;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int16;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int32;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int64;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt8;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt16;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt32;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt64;
+
     // Float32 field (in version2)
-    #1 float32_field: Float32;
+    #9 float32_field: Float32;
 
     // Float64 field (in version2)
-    #3 float64_field: Float64;
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #4 new_field: Float32 = 51.2;
+    #11 new_field: Float32 = 51.2;
   }
   history
   {
-    versions: [2, 4];
-    fields
-    {
-      #2 float64_field: Float32 -> became #3;
-    }
+    version: 11;
   }
 }
 
@@ -498,22 +503,42 @@ schema Float64UpgradeTestSchemaV2
   uuid: 32e04907-e23c-4133-bf14-8b5528504241;
   fields
   {
+    // Int8 field (in version2)
+    #1 int8_field: Int8;
+
+    // Int16 field (in version2)
+    #2 int16_field: Int16;
+
+    // Int32 field (in version2)
+    #3 int32_field: Int32;
+
+    // Int64 field (in version2)
+    #4 int64_field: Int64;
+
+    // UInt8 field (in version2)
+    #5 uint8_field: UInt8;
+
+    // UInt16 field (in version2)
+    #6 uint16_field: UInt16;
+
+    // UInt32 field (in version2)
+    #7 uint32_field: UInt32;
+
+    // UInt64 field (in version2)
+    #8 uint64_field: UInt64;
+
     // Float32 field (in version2)
-    #3 float32_field: Float32;
+    #9 float32_field: Float32;
 
     // Float64 field (in version2)
-    #2 float64_field: Float64;
+    #10 float64_field: Float64;
 
     // New field with initializer
-    #4 new_field: Float64 = 51.2;
+    #11 new_field: Float64 = 51.2;
   }
   history
   {
-    versions: [2, 4];
-    fields
-    {
-      #1 float32_field: Float64 -> became #3;
-    }
+    version: 11;
   }
 }
 
@@ -543,7 +568,7 @@ schema PrimitiveUpgradeTestSchemaV2
   }
   history
   {
-    versions: [3, 6];
+    version: 6;
   }
 }
 
@@ -554,46 +579,35 @@ schema SyncTimeUpgradeTestSchemaV2
   fields
   {
     // Int8 field (upgraded to SyncTime in version2)
-    #10 int8_field: SyncTime;
+    #1 int8_field: SyncTime;
 
     // Int16 field (upgraded to SyncTime in version2)
-    #11 int16_field: SyncTime;
+    #2 int16_field: SyncTime;
 
     // Int32 field (upgraded to SyncTime in version2)
-    #12 int32_field: SyncTime;
+    #3 int32_field: SyncTime;
 
     // Int64 field (upgraded to SyncTime in version2)
-    #13 int64_field: SyncTime;
+    #4 int64_field: SyncTime;
 
     // UInt8 field (upgraded to SyncTime in version2)
-    #14 uint8_field: SyncTime;
+    #5 uint8_field: SyncTime;
 
     // UInt16 field (upgraded to SyncTime in version2)
-    #15 uint16_field: SyncTime;
+    #6 uint16_field: SyncTime;
 
     // UInt32 field (upgraded to SyncTime in version2)
-    #16 uint32_field: SyncTime;
+    #7 uint32_field: SyncTime;
 
     // UInt64 field (upgraded to SyncTime in version2)
-    #17 uint64_field: SyncTime;
+    #8 uint64_field: SyncTime;
 
     // SyncTime field
     #9 synctime_field: SyncTime;
   }
   history
   {
-    versions: [9, 17];
-    fields
-    {
-      #1 int8_field: Int8 -> became #10;
-      #2 int16_field: Int16 -> became #11;
-      #3 int32_field: Int32 -> became #12;
-      #4 int64_field: Int64 -> became #13;
-      #5 uint8_field: UInt8 -> became #14;
-      #6 uint16_field: UInt16 -> became #15;
-      #7 uint32_field: UInt32 -> became #16;
-      #8 uint64_field: UInt64 -> became #17;
-    }
+    version: 10;
   }
 }
 
@@ -604,74 +618,68 @@ schema DurationUpgradeTestSchemaV2
   fields
   {
     // Int8 field (upgraded to Duration in version2)
-    #10 int8_field: Duration;
+    #1 int8_field: Duration;
 
     // Int16 field (upgraded to Duration in version2)
-    #11 int16_field: Duration;
+    #2 int16_field: Duration;
 
     // Int32 field (upgraded to Duration in version2)
-    #12 int32_field: Duration;
+    #3 int32_field: Duration;
 
     // Int64 field (upgraded to Duration in version2)
-    #13 int64_field: Duration;
+    #4 int64_field: Duration;
 
     // UInt8 field (upgraded to Duration in version2)
-    #14 uint8_field: Duration;
+    #5 uint8_field: Duration;
 
     // UInt16 field (upgraded to Duration in version2)
-    #15 uint16_field: Duration;
+    #6 uint16_field: Duration;
 
     // UInt32 field (upgraded to Duration in version2)
-    #16 uint32_field: Duration;
+    #7 uint32_field: Duration;
 
     // UInt64 field (upgraded to Duration in version2)
-    #17 uint64_field: Duration;
+    #8 uint64_field: Duration;
 
     // Duration field
     #9 duration_field: Duration;
   }
   history
   {
-    versions: [9, 17];
-    fields
-    {
-      #1 int8_field: Int8 -> became #10;
-      #2 int16_field: Int16 -> became #11;
-      #3 int32_field: Int32 -> became #12;
-      #4 int64_field: Int64 -> became #13;
-      #5 uint8_field: UInt8 -> became #14;
-      #6 uint16_field: UInt16 -> became #15;
-      #7 uint32_field: UInt32 -> became #16;
-      #8 uint64_field: UInt64 -> became #17;
-    }
+    version: 10;
   }
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int32)]
 strong_type StrongInt32
 {
   underlying_type: Int32;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int64)]
 strong_type StrongInt64
 {
   underlying_type: Int64;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float32)]
 strong_type StrongFloat32
 {
   underlying_type: Float32;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float64)]
 strong_type StrongFloat64
 {
   underlying_type: Float64;
 }
 
 // Test strong type
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_byte)]
 strong_type StrongByte
 {
   underlying_type: Byte;
@@ -684,66 +692,53 @@ schema StrongTypeUpgradeTestSchemaV2
   fields
   {
     // Int32 field
-    #11 int32_field: StrongInt64;
+    #1 int32_field: StrongInt64;
 
     // StrongInt32 field
-    #12 strong_int32_field: Int64;
+    #2 strong_int32_field: Int64;
 
     // Int64 field
-    #13 int64_field: StrongInt32;
+    #3 int64_field: StrongInt32;
 
     // StrongInt64 field
-    #14 strong_int64_field: Int32;
+    #4 strong_int64_field: Int32;
 
     // Float32 field
-    #15 float32_field: StrongFloat64;
+    #5 float32_field: StrongFloat64;
 
     // StrongFloat32 field
-    #16 strong_float32_field: Float64;
+    #6 strong_float32_field: Float64;
 
     // Float64 field
-    #17 float64_field: StrongFloat32;
+    #7 float64_field: StrongFloat32;
 
     // StrongFloat64 field
-    #18 strong_float64_field: Float32;
+    #8 strong_float64_field: Float32;
 
     // Byte field
-    #19 byte_field: StrongByte;
+    #9 byte_field: StrongByte;
 
     // StrongByte field
-    #20 strong_byte_field: Byte;
+    #10 strong_byte_field: Byte;
 
     // Added StrongInt32 field
-    #21 added_strong_int32_field: StrongInt32 = 21;
+    #11 added_strong_int32_field: StrongInt32 = 21;
 
     // Added StrongInt64 field
-    #22 added_strong_int64_field: StrongInt64 = 22;
+    #12 added_strong_int64_field: StrongInt64 = 22;
 
     // Added StrongFloat32 field
-    #23 added_strong_float32_field: StrongFloat32 = 23.23;
+    #13 added_strong_float32_field: StrongFloat32 = 23.23;
 
     // Added StrongFloat64 field
-    #24 added_strong_float64_field: StrongFloat64 = 24.24;
+    #14 added_strong_float64_field: StrongFloat64 = 24.24;
 
     // Added StrongByte field
-    #25 added_strong_byte_field: StrongByte;
+    #15 added_strong_byte_field: StrongByte;
   }
   history
   {
-    versions: [10, 25];
-    fields
-    {
-      #1 int32_field: Int32 -> became #11;
-      #2 strong_int32_field: StrongInt32 -> became #12;
-      #3 int64_field: Int64 -> became #13;
-      #4 strong_int64_field: StrongInt64 -> became #14;
-      #5 float32_field: Float32 -> became #15;
-      #6 strong_float32_field: StrongFloat32 -> became #16;
-      #7 float64_field: Float64 -> became #17;
-      #8 strong_float64_field: StrongFloat64 -> became #18;
-      #9 byte_field: Byte -> became #19;
-      #10 strong_byte_field: StrongByte -> became #20;
-    }
+    version: 11;
   }
 }
 
@@ -754,55 +749,44 @@ schema FixedArrayUpgradeTestSchemaV2
   fields
   {
     // Int32 array field (in version 2)
-    #12 int32_array_field: FixedArray<Int32, size=2>;
+    #1 int32_array_field: FixedArray<Int32, size=2>;
 
     // Float64 array field (in version 2)
-    #13 float64_array_field: FixedArray<Float64, size=2>;
+    #2 float64_array_field: FixedArray<Float64, size=2>;
 
     // UUID array field
     #3 uuid_array_field: FixedArray<Uuid<Int8>, size=2>;
 
     // Two dimensional array of UInt32 (in version 2)
-    #14 uint64_2d_array_field: FixedArray<FixedArray<UInt64, size=2>, size=2>;
+    #4 uint64_2d_array_field: FixedArray<FixedArray<UInt64, size=2>, size=2>;
 
     // Two dimensional array of schema type (in version 2)
     #5 schema_2d_array_field: FixedArray<FixedArray<UpgradedMemberSchemaTypeV2, size=2>, size=2>;
 
     // Added two dimensional array of schema type
-    #15 added_schema_2d_array_field: FixedArray<FixedArray<UpgradedMemberSchemaTypeV2, size=2>, size=2>;
+    #12 added_schema_2d_array_field: FixedArray<FixedArray<UpgradedMemberSchemaTypeV2, size=2>, size=2>;
 
     // Array of CopyableMemberSchemaTypeV2 (in version 2)
     #6 schema_array_field: FixedArray<CopyableMemberSchemaTypeV2, size=4>;
 
     // Array of UpgradedMemberSchemaTypeV2 (in version 2)
-    #16 upgraded_instance_field: FixedArray<UpgradedMemberSchemaTypeV2, size=1>;
+    #7 upgraded_instance_field: FixedArray<UpgradedMemberSchemaTypeV2, size=1>;
 
     // Array of Array of Int32 (in version 2)
-    #17 upgraded_fixed_array_field: FixedArray<FixedArray<Int32, size=2>, size=1>;
+    #8 upgraded_fixed_array_field: FixedArray<FixedArray<Int32, size=2>, size=1>;
 
     // Array of CopyableMemberSchemaTypeV2 (in version 2)
-    #18 upgraded_vararray_field: FixedArray<CopyableMemberSchemaTypeV2, size=2>;
+    #9 upgraded_vararray_field: FixedArray<CopyableMemberSchemaTypeV2, size=2>;
 
     // Array of Int8 (in version 2)
-    #19 upgraded_varstring_field: FixedArray<Int8, size=7>;
+    #10 upgraded_varstring_field: FixedArray<Int8, size=7>;
 
     // Array of UUID (in version 2)
-    #20 upgraded_optional_field: FixedArray<Uuid<Int8>, size=1>;
+    #11 upgraded_optional_field: FixedArray<Uuid<Int8>, size=1>;
   }
   history
   {
-    versions: [11, 20];
-    fields
-    {
-      #1 int32_array_field: FixedArray<Int64, size=2> -> became #12;
-      #2 float64_array_field: FixedArray<Float32, size=2> -> became #13;
-      #4 uint64_2d_array_field: FixedArray<FixedArray<UInt32, size=2>, size=2> -> became #14;
-      #7 upgraded_instance_field: UpgradedMemberSchemaTypeV2 -> became #16;
-      #8 upgraded_fixed_array_field: FixedArray<UInt64, size=2> -> became #17;
-      #9 upgraded_vararray_field: VarArray<CopyableMemberSchemaTypeV2, max_size=2> -> became #18;
-      #10 upgraded_varstring_field: VarString<max_size=8> -> became #19;
-      #11 upgraded_optional_field: Optional<Uuid<Int8>> -> became #20;
-    }
+    version: 12;
   }
 }
 
@@ -813,55 +797,44 @@ schema VarArrayUpgradeTestSchemaV2
   fields
   {
     // Int32 array field (in version 2)
-    #12 int32_array_field: VarArray<Int32, max_size=2>;
+    #1 int32_array_field: VarArray<Int32, max_size=2>;
 
     // Float64 array field (in version 2)
-    #13 float64_array_field: VarArray<Float64, max_size=2>;
+    #2 float64_array_field: VarArray<Float64, max_size=2>;
 
     // UUID array field
     #3 uuid_array_field: VarArray<Uuid<Int8>, max_size=2>;
 
     // Two dimensional array of UInt32 (in version 2)
-    #14 uint64_2d_array_field: VarArray<VarArray<UInt64, max_size=2>, max_size=2>;
+    #4 uint64_2d_array_field: VarArray<VarArray<UInt64, max_size=2>, max_size=2>;
 
     // Two dimensional array of schema type (in version 2)
     #5 schema_2d_array_field: VarArray<VarArray<UpgradedMemberSchemaTypeV2, max_size=2>, max_size=2>;
 
     // Added two dimensional array of schema type
-    #15 added_schema_2d_array_field: VarArray<VarArray<UpgradedMemberSchemaTypeV2, max_size=2>, max_size=2>;
+    #12 added_schema_2d_array_field: VarArray<VarArray<UpgradedMemberSchemaTypeV2, max_size=2>, max_size=2>;
 
     // Array of CopyableMemberSchemaTypeV2 (in version 2)
     #6 schema_array_field: VarArray<CopyableMemberSchemaTypeV2, max_size=4>;
 
     // Array of UpgradedMemberSchemaTypeV2 (in version 2)
-    #16 upgraded_instance_field: VarArray<UpgradedMemberSchemaTypeV2, max_size=1>;
+    #7 upgraded_instance_field: VarArray<UpgradedMemberSchemaTypeV2, max_size=1>;
 
     // Array of CopyableMemberSchemaTypeV2 (in version 2)
-    #17 upgraded_fixed_array_field: VarArray<CopyableMemberSchemaTypeV2, max_size=2>;
+    #8 upgraded_fixed_array_field: VarArray<CopyableMemberSchemaTypeV2, max_size=2>;
 
     // Array of array of Int32 (in version 2)
-    #18 upgraded_vararray_field: VarArray<VarArray<Int32, max_size=2>, max_size=2>;
+    #9 upgraded_vararray_field: VarArray<VarArray<Int32, max_size=2>, max_size=2>;
 
     // Array of Int8 (in version 2)
-    #19 upgraded_varstring_field: VarArray<Int8, max_size=7>;
+    #10 upgraded_varstring_field: VarArray<Int8, max_size=7>;
 
     // Array of UUID (in version 2)
-    #20 upgraded_optional_field: VarArray<Uuid<Int8>, max_size=1>;
+    #11 upgraded_optional_field: VarArray<Uuid<Int8>, max_size=1>;
   }
   history
   {
-    versions: [11, 20];
-    fields
-    {
-      #1 int32_array_field: VarArray<Int64, max_size=2> -> became #12;
-      #2 float64_array_field: VarArray<Float32, max_size=2> -> became #13;
-      #4 uint64_2d_array_field: VarArray<VarArray<UInt32, max_size=2>, max_size=2> -> became #14;
-      #7 upgraded_instance_field: UpgradedMemberSchemaTypeV2 -> became #16;
-      #8 upgraded_fixedarray_field: FixedArray<CopyableMemberSchemaTypeV2, size=2> -> became #17;
-      #9 upgraded_vararray_field: VarArray<UInt64, max_size=2> -> became #18;
-      #10 upgraded_varstring_field: VarString<max_size=8> -> became #19;
-      #11 upgraded_optional_field: Optional<Uuid<Int8>> -> became #20;
-    }
+    version: 12;
   }
 }
 
@@ -872,10 +845,10 @@ schema OptionalUpgradeTestSchemaV2
   fields
   {
     // Int32 optional field (in version 2)
-    #10 int32_optional_field: Optional<Int64>;
+    #1 int32_optional_field: Optional<Int64>;
 
     // Float64 optional field (in version 2)
-    #11 float64_optional_field: Optional<Float32>;
+    #2 float64_optional_field: Optional<Float32>;
 
     // UUID optional field
     #3 uuid_optional_field: Optional<Uuid<Int8>>;
@@ -887,33 +860,24 @@ schema OptionalUpgradeTestSchemaV2
     #5 schema_optional_field2: Optional<CopyableMemberSchemaTypeV2>;
 
     // Added optional of FixedArray<UpgradedMemberSchemaTypeV2>
-    #12 added_schema_optional_field: Optional<UpgradedMemberSchemaTypeV2>;
+    #10 added_schema_optional_field: Optional<UpgradedMemberSchemaTypeV2>;
 
     // Optional VarString (in version 2)
-    #13 upgraded_instance_field: Optional<VarString<max_size=8>>;
+    #6 upgraded_instance_field: Optional<VarString<max_size=8>>;
 
     // Optional CopyableMemberSchemaTypeV2 (in version 2)
-    #14 upgraded_fixed_array_field: Optional<CopyableMemberSchemaTypeV2>;
+    #7 upgraded_fixed_array_field: Optional<CopyableMemberSchemaTypeV2>;
 
     // Optional Int32 (in version 2)
-    #15 upgraded_vararray_field: Optional<UInt32>;
+    #8 upgraded_vararray_field: Optional<UInt32>;
 
     // Optional Int8 (in version 2)
-    #16 upgraded_varstring_field: Optional<Int8>;
+    #9 upgraded_varstring_field: Optional<Int8>;
 
   }
   history
   {
-    versions: [9, 16];
-    fields
-    {
-      #1 int32_optional_field: Optional<Int64> -> became #10;
-      #2 float64_optional_field: Optional<Float32> -> became #11;
-      #6 upgraded_instance_field: VarString<max_size=8> -> became #13;
-      #7 upgraded_fixed_array_field: FixedArray<CopyableMemberSchemaTypeV2, size=1> -> became #14;
-      #8 upgraded_vararray_field: VarArray<UInt64, max_size=2> -> became #15;
-      #9 upgraded_varstring_field: VarString<max_size=8> -> became #16;
-    }
+    version: 10;
   }
 }
 
@@ -924,49 +888,38 @@ schema VarStringUpgradeTestSchemaV2
   fields
   {
     // VarString<max_size=17> field (in version 2)
-    #10 varstring_17_field: VarString<max_size=17>;
+    #1 varstring_17_field: VarString<max_size=17>;
 
     // VarString<max_size=27> field (in version 2)
-    #11 varstring_27_field: VarString<max_size=27>;
+    #2 varstring_27_field: VarString<max_size=27>;
 
     // VarString<max_size=32> field (in version 2)
-    #12 varstring_32_field: VarString<max_size=32>;
+    #3 varstring_32_field: VarString<max_size=32>;
 
     // VarString<max_size=64> field (in version 2)
-    #13 varstring_64_field: VarString<max_size=64>;
+    #4 varstring_64_field: VarString<max_size=64>;
 
     // VarString<max_size=16> field (in version 2)
     #5 varstring_16_field: VarString<max_size=16>;
 
     // Added VarString field
-    #14 added_varstring_32_field: VarString<max_size=32>;
+    #10 added_varstring_32_field: VarString<max_size=32>;
 
     // VarString<max_size=4> field (in version 2)
-    #15 upgraded_vararray_field: VarString<max_size=4>;
+    #6 upgraded_vararray_field: VarString<max_size=4>;
 
     // VarString<max_size=4> field (in version 2)
-    #16 upgraded_fixed_array_field: VarString<max_size=4>;
+    #7 upgraded_fixed_array_field: VarString<max_size=4>;
 
     // VarString<max_size=2> field (in version 2)
-    #17 upgraded_optional_field: VarString<max_size=2>;
+    #8 upgraded_optional_field: VarString<max_size=2>;
 
     // VarString<max_size=2> field (in version 2)
-    #18 upgraded_int8_field: VarString<max_size=2>;
+    #9 upgraded_int8_field: VarString<max_size=2>;
   }
   history
   {
-    versions: [9, 18];
-    fields
-    {
-      #1 varstring_17_field: VarString<max_size=27> -> became #10;
-      #2 varstring_27_field: VarString<max_size=17> -> became #11;
-      #3 varstring_32_field: VarString<max_size=64> -> became #12;
-      #4 varstring_64_field: VarString<max_size=32> -> became #13;
-      #6 upgraded_vararray_field: VarArray<Int8, max_size=3> -> became #15;
-      #7 upgraded_fixed_array_field: FixedArray<Int8, size=3> -> became #16;
-      #8 upgraded_optional_field: Optional<Int8> -> became #17;
-      #9 upgraded_int8_field: Int8 -> became #18;
-    }
+    version: 10;
   }
 }
 
@@ -977,15 +930,11 @@ schema BuildTimeUpgradeFailureTestSchemaV2
   fields
   {
     // Incompatible type (in version 2)
-    #2 float64_field: Float64;
+    #1 float64_field: Float64;
   }
   history
   {
-    versions: [1, 2];
-    fields
-    {
-      #1 float64_field: Float32 -> became #2;
-    }
+    version: 2;
   }
 }
 
@@ -996,15 +945,11 @@ schema RunTimeUpgradeFailureTestSchemaV2
   fields
   {
     // Too small for value (in version 2)
-    #2 varstring_field: VarString<max_size=8>;
+    #1 varstring_field: VarString<max_size=8>;
   }
   history
   {
-    versions: [1, 2];
-    fields
-    {
-      #1 varstring_field: VarString<max_size=16> -> became #2;
-    }
+    version: 2;
   }
 }
 
@@ -1052,30 +997,9 @@ enum Int8ValueEnumV2
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 9;
+    legacy_became: [1->6, 2->7, 4->8];
+    removed: [3];
   }
 }
 
@@ -1101,29 +1025,21 @@ schema Int8ValueEnumUpgradeTestSchemaV2
     #11 field11: Int8ValueEnumV2 = Int8ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: Int8ValueEnumV2;
+    #6 field12: Int8ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: Int8ValueEnumV2;
+    #7 field13: Int8ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: Int8ValueEnumV2;
+    #9 field14: Int8ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: Int8ValueEnumV2;
+    #10 field15: Int8ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: Int8ValueEnumV2 -> removed #15;
-      #6 field6: Int8 -> became #12;
-      #7 field7: Int8 -> became #13;
-      #8 field8: Int8 -> removed #15;
-      #9 field9: Int8 -> became #14;
-      #10 field10: Int8 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1141,19 +1057,19 @@ enum Int16ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1165,37 +1081,15 @@ enum Int16ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1221,29 +1115,21 @@ schema Int16ValueEnumUpgradeTestSchemaV2
     #11 field11: Int16ValueEnumV2 = Int16ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: Int16ValueEnumV2;
+    #6 field12: Int16ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: Int16ValueEnumV2;
+    #7 field13: Int16ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: Int16ValueEnumV2;
+    #9 field14: Int16ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: Int16ValueEnumV2;
+    #10 field15: Int16ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: Int16ValueEnumV2 -> removed #15;
-      #6 field6: Int16 -> became #12;
-      #7 field7: Int16 -> became #13;
-      #8 field8: Int16 -> removed #15;
-      #9 field9: Int16 -> became #14;
-      #10 field10: Int16 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1261,19 +1147,19 @@ enum Int32ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1285,37 +1171,15 @@ enum Int32ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1341,29 +1205,21 @@ schema Int32ValueEnumUpgradeTestSchemaV2
     #11 field11: Int32ValueEnumV2 = Int32ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: Int32ValueEnumV2;
+    #6 field12: Int32ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: Int32ValueEnumV2;
+    #7 field13: Int32ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: Int32ValueEnumV2;
+    #9 field14: Int32ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: Int32ValueEnumV2;
+    #10 field15: Int32ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: Int32ValueEnumV2 -> removed #15;
-      #6 field6: Int32 -> became #12;
-      #7 field7: Int32 -> became #13;
-      #8 field8: Int32 -> removed #15;
-      #9 field9: Int32 -> became #14;
-      #10 field10: Int32 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1381,19 +1237,19 @@ enum Int64ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1405,37 +1261,15 @@ enum Int64ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1461,29 +1295,21 @@ schema Int64ValueEnumUpgradeTestSchemaV2
     #11 field11: Int64ValueEnumV2 = Int64ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: Int64ValueEnumV2;
+    #6 field12: Int64ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: Int64ValueEnumV2;
+    #7 field13: Int64ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: Int64ValueEnumV2;
+    #9 field14: Int64ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: Int64ValueEnumV2;
+    #10 field15: Int64ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: Int64ValueEnumV2 -> removed #15;
-      #6 field6: UInt64 -> became #12;
-      #7 field7: UInt64 -> became #13;
-      #8 field8: UInt64 -> removed #15;
-      #9 field9: UInt64 -> became #14;
-      #10 field10: UInt64 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1500,19 +1326,19 @@ enum UInt8ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1524,37 +1350,15 @@ enum UInt8ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1580,29 +1384,21 @@ schema UInt8ValueEnumUpgradeTestSchemaV2
     #11 field11: UInt8ValueEnumV2 = UInt8ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt8ValueEnumV2;
+    #6 field12: UInt8ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt8ValueEnumV2;
+    #7 field13: UInt8ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt8ValueEnumV2;
+    #9 field14: UInt8ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt8ValueEnumV2;
+    #10 field15: UInt8ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt8ValueEnumV2 -> removed #15;
-      #6 field6: UInt8 -> became #12;
-      #7 field7: UInt8 -> became #13;
-      #8 field8: UInt8 -> removed #15;
-      #9 field9: UInt8 -> became #14;
-      #10 field10: UInt8 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1620,19 +1416,19 @@ enum UInt16ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1644,37 +1440,15 @@ enum UInt16ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1700,29 +1474,21 @@ schema UInt16ValueEnumUpgradeTestSchemaV2
     #11 field11: UInt16ValueEnumV2 = UInt16ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt16ValueEnumV2;
+    #6 field12: UInt16ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt16ValueEnumV2;
+    #7 field13: UInt16ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt16ValueEnumV2;
+    #9 field14: UInt16ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt16ValueEnumV2;
+    #10 field15: UInt16ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt16ValueEnumV2 -> removed #15;
-      #6 field6: UInt16 -> became #12;
-      #7 field7: UInt16 -> became #13;
-      #8 field8: UInt16 -> removed #15;
-      #9 field9: UInt16 -> became #14;
-      #10 field10: UInt16 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1740,19 +1506,19 @@ enum UInt32ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1764,37 +1530,15 @@ enum UInt32ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1820,29 +1564,21 @@ schema UInt32ValueEnumUpgradeTestSchemaV2
     #11 field11: UInt32ValueEnumV2 = UInt32ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt32ValueEnumV2;
+    #6 field12: UInt32ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt32ValueEnumV2;
+    #7 field13: UInt32ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt32ValueEnumV2;
+    #9 field14: UInt32ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt32ValueEnumV2;
+    #10 field15: UInt32ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt32ValueEnumV2 -> removed #15;
-      #6 field6: UInt32 -> became #12;
-      #7 field7: UInt32 -> became #13;
-      #8 field8: UInt32 -> removed #15;
-      #9 field9: UInt32 -> became #14;
-      #10 field10: UInt32 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -1860,19 +1596,19 @@ enum UInt64ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -1884,37 +1620,15 @@ enum UInt64ValueEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -1940,29 +1654,21 @@ schema UInt64ValueEnumUpgradeTestSchemaV2
     #11 field11: UInt64ValueEnumV2 = UInt64ValueEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt64ValueEnumV2;
+    #6 field12: UInt64ValueEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt64ValueEnumV2;
+    #7 field13: UInt64ValueEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt64ValueEnumV2;
+    #9 field14: UInt64ValueEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt64ValueEnumV2;
+    #10 field15: UInt64ValueEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt64ValueEnumV2 -> removed #15;
-      #6 field6: UInt64 -> became #12;
-      #7 field7: UInt64 -> became #13;
-      #8 field8: UInt64 -> removed #15;
-      #9 field9: UInt64 -> became #14;
-      #10 field10: UInt64 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -2011,30 +1717,9 @@ enum UInt8BitFlagEnumV2
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 9;
+    legacy_became: [1->6, 2->7, 4->8];
+    removed: [3];
   }
 }
 
@@ -2060,29 +1745,21 @@ schema UInt8BitFlagEnumUpgradeTestSchemaV2
     #11 field11: UInt8BitFlagEnumV2 = UInt8BitFlagEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt8BitFlagEnumV2;
+    #6 field12: UInt8BitFlagEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt8BitFlagEnumV2;
+    #7 field13: UInt8BitFlagEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt8BitFlagEnumV2;
+    #9 field14: UInt8BitFlagEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt8BitFlagEnumV2;
+    #10 field15: UInt8BitFlagEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt8BitFlagEnumV2 -> removed #15;
-      #6 field6: UInt8 -> became #12;
-      #7 field7: UInt8 -> became #13;
-      #8 field8: UInt8 -> removed #15;
-      #9 field9: UInt8 -> became #14;
-      #10 field10: UInt8 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -2101,19 +1778,19 @@ enum UInt16BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -2125,37 +1802,15 @@ enum UInt16BitFlagEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -2181,29 +1836,21 @@ schema UInt16BitFlagEnumUpgradeTestSchemaV2
     #11 field11: UInt16BitFlagEnumV2 = UInt16BitFlagEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt16BitFlagEnumV2;
+    #6 field12: UInt16BitFlagEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt16BitFlagEnumV2;
+    #7 field13: UInt16BitFlagEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt16BitFlagEnumV2;
+    #9 field14: UInt16BitFlagEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt16BitFlagEnumV2;
+    #10 field15: UInt16BitFlagEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt16BitFlagEnumV2 -> removed #15;
-      #6 field6: UInt16 -> became #12;
-      #7 field7: UInt16 -> became #13;
-      #8 field8: UInt16 -> removed #15;
-      #9 field9: UInt16 -> became #14;
-      #10 field10: UInt16 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -2222,19 +1869,19 @@ enum UInt32BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -2246,37 +1893,15 @@ enum UInt32BitFlagEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -2302,29 +1927,21 @@ schema UInt32BitFlagEnumUpgradeTestSchemaV2
     #11 field11: UInt32BitFlagEnumV2 = UInt32BitFlagEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt32BitFlagEnumV2;
+    #6 field12: UInt32BitFlagEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt32BitFlagEnumV2;
+    #7 field13: UInt32BitFlagEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt32BitFlagEnumV2;
+    #9 field14: UInt32BitFlagEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt32BitFlagEnumV2;
+    #10 field15: UInt32BitFlagEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt32BitFlagEnumV2 -> removed #15;
-      #6 field6: UInt32 -> became #12;
-      #7 field7: UInt32 -> became #13;
-      #8 field8: UInt32 -> removed #15;
-      #9 field9: UInt32 -> became #14;
-      #10 field10: UInt32 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
@@ -2343,19 +1960,19 @@ enum UInt64BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
+    #1 value0
     {
       underlying_value: 1;
     }
 
     // Value is 0 in V2
-    #7 value1 default
+    #2 value1 default
     {
       underlying_value: 0;
     }
 
     // Name is value3_1 in V2
-    #8 value3_1
+    #4 value3_1
     {
       underlying_value: 4;
     }
@@ -2367,37 +1984,15 @@ enum UInt64BitFlagEnumV2
     }
 
     // Value added in V2
-    #9 value5
+    #6 value5
     {
       underlying_value: 16;
     }
   }
   history
   {
-    versions: [5, 9];
-    values
-    {
-      // Value is 1 in V2
-      #1 value0 default
-      {
-        underlying_value: 0;
-      } -> became #6;
-      // Value is 0 in V2
-      #2 value1
-      {
-        underlying_value: 1;
-      } -> became #7;
-      // Removed in v2
-      #3 value2
-      {
-        underlying_value: 2;
-      } -> removed #9;
-      // Name is value3_1 in V2
-      #4 value3
-      {
-        underlying_value: 4;
-      } -> became #8;
-    }
+    version: 6;
+    removed: [3];
   }
 }
 
@@ -2423,335 +2018,227 @@ schema UInt64BitFlagEnumUpgradeTestSchemaV2
     #11 field11: UInt64BitFlagEnumV2 = UInt64BitFlagEnumV2::value5;
 
     // Initialized to V2 value0
-    #12 field12: UInt64BitFlagEnumV2;
+    #6 field12: UInt64BitFlagEnumV2;
 
     // Initialized to V2 value1
-    #13 field13: UInt64BitFlagEnumV2;
+    #7 field13: UInt64BitFlagEnumV2;
 
     // Initialized to V2 value3_1
-    #14 field14: UInt64BitFlagEnumV2;
+    #9 field14: UInt64BitFlagEnumV2;
 
     // Initialized to V2 value4
-    #15 field15: UInt64BitFlagEnumV2;
+    #10 field15: UInt64BitFlagEnumV2;
   }
   history
   {
-    versions: [10, 15];
-    fields
-    {
-      #3 field3: UInt64BitFlagEnumV2 -> removed #15;
-      #6 field6: UInt64 -> became #12;
-      #7 field7: UInt64 -> became #13;
-      #8 field8: UInt64 -> removed #15;
-      #9 field9: UInt64 -> became #14;
-      #10 field10: UInt64 -> became #15;
-    }
+    version: 11;
+    removed: [3, 8];
   }
 }
 
-py_target py_test_schema_v2
+// SoA element schema version 2
+schema SoaElementSchemaV2
 {
-  enum Int8ValueEnumV2;
-  enum Int16ValueEnumV2;
-  enum Int32ValueEnumV2;
-  enum Int64ValueEnumV2;
-  enum UInt8ValueEnumV2;
-  enum UInt16ValueEnumV2;
-  enum UInt32ValueEnumV2;
-  enum UInt64ValueEnumV2;
-  enum UInt8BitFlagEnumV2;
-  enum UInt16BitFlagEnumV2;
-  enum UInt32BitFlagEnumV2;
-  enum UInt64BitFlagEnumV2;
-
-  interface Tappy<SmokeTestSchemaV2>;
-  interface Tappy<Int8UpgradeTestSchemaV2>;
-  interface Tappy<Int16UpgradeTestSchemaV2>;
-  interface Tappy<Int32UpgradeTestSchemaV2>;
-  interface Tappy<Int64UpgradeTestSchemaV2>;
-  interface Tappy<UInt8UpgradeTestSchemaV2>;
-  interface Tappy<UInt16UpgradeTestSchemaV2>;
-  interface Tappy<UInt32UpgradeTestSchemaV2>;
-  interface Tappy<UInt64UpgradeTestSchemaV2>;
-  interface Tappy<CopyableMemberSchemaTypeV2>;
-  interface Tappy<UpgradedMemberSchemaTypeV2>;
-  interface Tappy<SchemaUpgradeTestSchemaV2>;
-  interface Tappy<Float32UpgradeTestSchemaV2>;
-  interface Tappy<Float64UpgradeTestSchemaV2>;
-  interface Tappy<PrimitiveUpgradeTestSchemaV2>;
-  interface Tappy<SyncTimeUpgradeTestSchemaV2>;
-  interface Tappy<DurationUpgradeTestSchemaV2>;
-  interface Tappy<StrongTypeUpgradeTestSchemaV2>;
-  interface Tappy<FixedArrayUpgradeTestSchemaV2>;
-  interface Tappy<VarArrayUpgradeTestSchemaV2>;
-  interface Tappy<OptionalUpgradeTestSchemaV2>;
-  interface Tappy<VarStringUpgradeTestSchemaV2>;
-  interface Tappy<BuildTimeUpgradeFailureTestSchemaV2>;
-  interface Tappy<RunTimeUpgradeFailureTestSchemaV2>;
-  interface Tappy<Int8ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int16ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int32ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int64ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV2>;
-}
-
-nanobind_target test_schema_v2_clk_nb
-{
-  binding Int8ValueEnumV2;
-  binding Int16ValueEnumV2;
-  binding Int32ValueEnumV2;
-  binding Int64ValueEnumV2;
-  binding UInt8ValueEnumV2;
-  binding UInt16ValueEnumV2;
-  binding UInt32ValueEnumV2;
-  binding UInt64ValueEnumV2;
-  binding UInt8BitFlagEnumV2;
-  binding UInt16BitFlagEnumV2;
-  binding UInt32BitFlagEnumV2;
-  binding UInt64BitFlagEnumV2;
-
-  binding Tappy<SmokeTestSchemaV2>;
-  binding Tappy<Int8UpgradeTestSchemaV2>;
-  binding Tappy<Int16UpgradeTestSchemaV2>;
-  binding Tappy<Int32UpgradeTestSchemaV2>;
-  binding Tappy<Int64UpgradeTestSchemaV2>;
-  binding Tappy<UInt8UpgradeTestSchemaV2>;
-  binding Tappy<UInt16UpgradeTestSchemaV2>;
-  binding Tappy<UInt32UpgradeTestSchemaV2>;
-  binding Tappy<UInt64UpgradeTestSchemaV2>;
-  binding Tappy<CopyableMemberSchemaTypeV2>;
-  binding Tappy<UpgradedMemberSchemaTypeV2>;
-  binding Tappy<SchemaUpgradeTestSchemaV2>;
-  binding Tappy<Float32UpgradeTestSchemaV2>;
-  binding Tappy<Float64UpgradeTestSchemaV2>;
-  binding Tappy<PrimitiveUpgradeTestSchemaV2>;
-  binding Tappy<SyncTimeUpgradeTestSchemaV2>;
-  binding Tappy<DurationUpgradeTestSchemaV2>;
-  binding Tappy<StrongTypeUpgradeTestSchemaV2>;
-  binding Tappy<FixedArrayUpgradeTestSchemaV2>;
-  binding Tappy<VarArrayUpgradeTestSchemaV2>;
-  binding Tappy<OptionalUpgradeTestSchemaV2>;
-  binding Tappy<VarStringUpgradeTestSchemaV2>;
-  binding Tappy<BuildTimeUpgradeFailureTestSchemaV2>;
-  binding Tappy<RunTimeUpgradeFailureTestSchemaV2>;
-  binding Tappy<Int8ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<Int16ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<Int32ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<Int64ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt8ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt16ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt32ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt64ValueEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt8BitFlagEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt16BitFlagEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt32BitFlagEnumUpgradeTestSchemaV2>;
-  binding Tappy<UInt64BitFlagEnumUpgradeTestSchemaV2>;
-}
-
-cpp_target test_schema_v2
-{
-  options
+  uuid: 8f2a4b91-3c5d-4e8f-9a1b-7d6e5c4f3a2b;
+  options { soa_enabled: true; constructor: source_code_order; }
+  fields
   {
-    namespace clockwork::tests;
-  }
+    // ID field (unchanged from version 1)
+    #1 id: Int32;
 
-  extern
+    // X coordinate (upgraded from Int32 to Int64)
+    #2 x: Int64;
+
+    // Y coordinate (upgraded from Float32 to Float64)
+    #3 y: Float64;
+
+    // W coordinate (new field in version 2 with default value)
+    // Note: Z coordinate (#4) was removed in version 2
+    #5 w: Float32 = 0.0;
+
+    // Nested schema member (upgraded from V1 to V2)
+    #6 nested: UpgradedMemberSchemaTypeV2;
+
+    // VarArray of schema types (elements upgraded from V1 to V2)
+    #7 items: VarArray<UpgradedMemberSchemaTypeV2, max_size=5>;
+  }
+  history
   {
-    header_file: "clockwork/serialization/cpp/tests/support/strong_type_factory.hh";
-    namespace: clockwork::tests;
-
-    type
-    {
-      name: StrongInt32;
-      factory: make_strong_int32;
-    }
-
-    type
-    {
-      name: StrongInt64;
-      factory: make_strong_int64;
-    }
-
-    type
-    {
-      name: StrongFloat32;
-      factory: make_strong_float32;
-    }
-
-    type
-    {
-      name: StrongFloat64;
-      factory: make_strong_float64;
-    }
-
-    type
-    {
-      name: StrongByte;
-      factory: make_strong_byte;
-    }
+    version: 2;
+    removed: [4];
   }
-
-  enum Int8ValueEnumV2;
-  enum Int16ValueEnumV2;
-  enum Int32ValueEnumV2;
-  enum Int64ValueEnumV2;
-  enum UInt8ValueEnumV2;
-  enum UInt16ValueEnumV2;
-  enum UInt32ValueEnumV2;
-  enum UInt64ValueEnumV2;
-  enum UInt8BitFlagEnumV2;
-  enum UInt16BitFlagEnumV2;
-  enum UInt32BitFlagEnumV2;
-  enum UInt64BitFlagEnumV2;
-
-  schema SmokeTestSchemaV2;
-  representation Tachyon<SmokeTestSchemaV2>;
-  interface Tappy<SmokeTestSchemaV2>;
-
-  schema Int8UpgradeTestSchemaV2;
-  representation Tachyon<Int8UpgradeTestSchemaV2>;
-  interface Tappy<Int8UpgradeTestSchemaV2>;
-
-  schema Int16UpgradeTestSchemaV2;
-  representation Tachyon<Int16UpgradeTestSchemaV2>;
-  interface Tappy<Int16UpgradeTestSchemaV2>;
-
-  schema Int32UpgradeTestSchemaV2;
-  representation Tachyon<Int32UpgradeTestSchemaV2>;
-  interface Tappy<Int32UpgradeTestSchemaV2>;
-
-  schema Int64UpgradeTestSchemaV2;
-  representation Tachyon<Int64UpgradeTestSchemaV2>;
-  interface Tappy<Int64UpgradeTestSchemaV2>;
-
-  schema UInt8UpgradeTestSchemaV2;
-  representation Tachyon<UInt8UpgradeTestSchemaV2>;
-  interface Tappy<UInt8UpgradeTestSchemaV2>;
-
-  schema UInt16UpgradeTestSchemaV2;
-  representation Tachyon<UInt16UpgradeTestSchemaV2>;
-  interface Tappy<UInt16UpgradeTestSchemaV2>;
-
-  schema UInt32UpgradeTestSchemaV2;
-  representation Tachyon<UInt32UpgradeTestSchemaV2>;
-  interface Tappy<UInt32UpgradeTestSchemaV2>;
-
-  schema UInt64UpgradeTestSchemaV2;
-  representation Tachyon<UInt64UpgradeTestSchemaV2>;
-  interface Tappy<UInt64UpgradeTestSchemaV2>;
-
-  schema CopyableMemberSchemaTypeV2;
-  representation Tachyon<CopyableMemberSchemaTypeV2>;
-  interface Tappy<CopyableMemberSchemaTypeV2>;
-
-  schema UpgradedMemberSchemaTypeV2;
-  representation Tachyon<UpgradedMemberSchemaTypeV2>;
-  interface Tappy<UpgradedMemberSchemaTypeV2>;
-
-  schema SchemaUpgradeTestSchemaV2;
-  representation Tachyon<SchemaUpgradeTestSchemaV2>;
-  interface Tappy<SchemaUpgradeTestSchemaV2>;
-
-  schema Float32UpgradeTestSchemaV2;
-  representation Tachyon<Float32UpgradeTestSchemaV2>;
-  interface Tappy<Float32UpgradeTestSchemaV2>;
-
-  schema Float64UpgradeTestSchemaV2;
-  representation Tachyon<Float64UpgradeTestSchemaV2>;
-  interface Tappy<Float64UpgradeTestSchemaV2>;
-
-  schema PrimitiveUpgradeTestSchemaV2;
-  representation Tachyon<PrimitiveUpgradeTestSchemaV2>;
-  interface Tappy<PrimitiveUpgradeTestSchemaV2>;
-
-  schema SyncTimeUpgradeTestSchemaV2;
-  representation Tachyon<SyncTimeUpgradeTestSchemaV2>;
-  interface Tappy<SyncTimeUpgradeTestSchemaV2>;
-
-  schema DurationUpgradeTestSchemaV2;
-  representation Tachyon<DurationUpgradeTestSchemaV2>;
-  interface Tappy<DurationUpgradeTestSchemaV2>;
-
-  schema StrongTypeUpgradeTestSchemaV2;
-  representation Tachyon<StrongTypeUpgradeTestSchemaV2>;
-  interface Tappy<StrongTypeUpgradeTestSchemaV2>;
-
-  schema FixedArrayUpgradeTestSchemaV2;
-  representation Tachyon<FixedArrayUpgradeTestSchemaV2>;
-  interface Tappy<FixedArrayUpgradeTestSchemaV2>;
-
-  schema VarArrayUpgradeTestSchemaV2;
-  representation Tachyon<VarArrayUpgradeTestSchemaV2>;
-  interface Tappy<VarArrayUpgradeTestSchemaV2>;
-
-  schema OptionalUpgradeTestSchemaV2;
-  representation Tachyon<OptionalUpgradeTestSchemaV2>;
-  interface Tappy<OptionalUpgradeTestSchemaV2>;
-
-  schema VarStringUpgradeTestSchemaV2;
-  representation Tachyon<VarStringUpgradeTestSchemaV2>;
-  interface Tappy<VarStringUpgradeTestSchemaV2>;
-
-  schema BuildTimeUpgradeFailureTestSchemaV2;
-  representation Tachyon<BuildTimeUpgradeFailureTestSchemaV2>;
-  interface Tappy<BuildTimeUpgradeFailureTestSchemaV2>;
-
-  schema RunTimeUpgradeFailureTestSchemaV2;
-  representation Tachyon<RunTimeUpgradeFailureTestSchemaV2>;
-  interface Tappy<RunTimeUpgradeFailureTestSchemaV2>;
-
-  schema Int8ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<Int8ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int8ValueEnumUpgradeTestSchemaV2>;
-
-  schema Int16ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<Int16ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int16ValueEnumUpgradeTestSchemaV2>;
-
-  schema Int32ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<Int32ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int32ValueEnumUpgradeTestSchemaV2>;
-
-  schema Int64ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<Int64ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<Int64ValueEnumUpgradeTestSchemaV2>;
-
-  schema UInt8ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt8ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt8ValueEnumUpgradeTestSchemaV2>;
-
-  schema UInt16ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt16ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt16ValueEnumUpgradeTestSchemaV2>;
-
-  schema UInt32ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt32ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt32ValueEnumUpgradeTestSchemaV2>;
-
-  schema UInt64ValueEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt64ValueEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt64ValueEnumUpgradeTestSchemaV2>;
-
-  schema UInt8BitFlagEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt8BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt8BitFlagEnumUpgradeTestSchemaV2>;
-
-  schema UInt16BitFlagEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt16BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt16BitFlagEnumUpgradeTestSchemaV2>;
-
-  schema UInt32BitFlagEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt32BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt32BitFlagEnumUpgradeTestSchemaV2>;
-
-  schema UInt64BitFlagEnumUpgradeTestSchemaV2;
-  representation Tachyon<UInt64BitFlagEnumUpgradeTestSchemaV2>;
-  interface Tappy<UInt64BitFlagEnumUpgradeTestSchemaV2>;
 }
+
+// Test schema version 2 with FixedSoa
+schema FixedSoaUpgradeTestSchemaV2
+{
+  uuid: 9f3b5c92-4d6e-5f9a-0b2c-8e7f6d5e4b3c;
+  fields
+  {
+    // FixedSoa field with 5 elements (same as V1)
+    #1 soa_field: FixedSoa<SoaElementSchemaV2, size=5>;
+  }
+}
+
+// Test schema version 2 with VarSoa
+schema VarSoaUpgradeTestSchemaV2
+{
+  uuid: 0a4c6d93-5e7f-6a0b-1c3d-9f8a7b6c5d4e;
+  fields
+  {
+    // VarSoa field with max 10 elements (same as V1)
+    #1 soa_field: VarSoa<SoaElementSchemaV2, max_size=10>;
+  }
+}
+
+// Test schema for FixedSoa -> VarSoa conversion (version 2)
+schema FixedToVarSoaConversionTestSchemaV2
+{
+  uuid: 5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b;
+  fields
+  {
+    // VarSoa with max 10 elements (larger than V1's FixedSoa size of 3)
+    #1 soa_field: VarSoa<SoaElementSchemaV2, max_size=10>;
+  }
+}
+
+// Test schema for VarSoa -> FixedSoa conversion (version 2)
+schema VarToFixedSoaConversionTestSchemaV2
+{
+  uuid: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c;
+  fields
+  {
+    // FixedSoa with 3 elements (must match size of data in V1)
+    #1 soa_field: FixedSoa<SoaElementSchemaV2, size=3>;
+  }
+}
+
+// Test schema for FixedArray -> FixedSoa conversion (version 2)
+// Uses FixedSoa in V2 (converted from FixedArray in V1)
+schema FixedArrayToFixedSoaTestSchemaV2
+{
+  uuid: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d;
+  fields
+  {
+    // FixedSoa of schema elements (transposed from FixedArray)
+    #1 array_field: FixedSoa<SoaElementSchemaV2, size=3>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for VarArray -> VarSoa conversion (version 2)
+// Uses VarSoa in V2 (converted from VarArray in V1)
+schema VarArrayToVarSoaTestSchemaV2
+{
+  uuid: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e;
+  fields
+  {
+    // VarSoa of schema elements (transposed from VarArray)
+    #1 array_field: VarSoa<SoaElementSchemaV2, max_size=5>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for FixedSoa -> FixedArray conversion (version 2)
+// Uses FixedArray in V2 (converted from FixedSoa in V1)
+schema FixedSoaToFixedArrayTestSchemaV2
+{
+  uuid: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f;
+  fields
+  {
+    // FixedArray of schema elements (un-transposed from FixedSoa)
+    #1 soa_field: FixedArray<SoaElementSchemaV2, size=3>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for VarSoa -> VarArray conversion (version 2)
+// Uses VarArray in V2 (converted from VarSoa in V1)
+schema VarSoaToVarArrayTestSchemaV2
+{
+  uuid: 4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a;
+  fields
+  {
+    // VarArray of schema elements (un-transposed from VarSoa)
+    #1 soa_field: VarArray<SoaElementSchemaV2, max_size=5>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for Optional -> FixedSoa conversion (version 2)
+// Uses FixedSoa in V2 (converted from Optional in V1)
+schema OptionalToFixedSoaTestSchemaV2
+{
+  uuid: 5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b;
+  fields
+  {
+    // FixedSoa with size=1 (transposed from Optional)
+    #1 optional_field: FixedSoa<SoaElementSchemaV2, size=1>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for Optional -> VarSoa conversion (version 2)
+// Uses VarSoa in V2 (converted from Optional in V1)
+schema OptionalToVarSoaTestSchemaV2
+{
+  uuid: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c;
+  fields
+  {
+    // VarSoa with max_size=1 (transposed from Optional)
+    #1 optional_field: VarSoa<SoaElementSchemaV2, max_size=1>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for FixedSoa -> Optional conversion (version 2)
+// Uses Optional in V2 (converted from FixedSoa in V1)
+schema FixedSoaToOptionalTestSchemaV2
+{
+  uuid: 7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d;
+  fields
+  {
+    // Optional (un-transposed from FixedSoa<size=1>)
+    #1 soa_field: Optional<SoaElementSchemaV2>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Test schema for VarSoa -> Optional conversion (version 2)
+// Uses Optional in V2 (converted from VarSoa in V1)
+schema VarSoaToOptionalTestSchemaV2
+{
+  uuid: 8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e;
+  fields
+  {
+    // Optional (un-transposed from VarSoa<max_size=1>)
+    #1 soa_field: Optional<SoaElementSchemaV2>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+instantiate ParameterizedSchemaV2_3: ParameterizedSchemaV2<SmokeTestSchemaV2, 3>;
+instantiate ParameterizedSchemaV2_4: ParameterizedSchemaV2<SmokeTestSchemaV2, 4>;

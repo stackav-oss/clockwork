@@ -3,15 +3,15 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"

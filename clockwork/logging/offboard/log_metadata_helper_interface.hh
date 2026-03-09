@@ -37,7 +37,7 @@ public:
   /// @param[in] chunk_reader_factory Chunk reader/writer factory
   /// @return LogError on failure
   [[nodiscard]] virtual LogExpected<void>
-  initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory& chunk_reader_factory) = 0;
+  initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory<>& chunk_reader_factory) = 0;
 
   /// Get a list of log files to that are part of the log and contain messages for
   /// the desired channels and desired time range

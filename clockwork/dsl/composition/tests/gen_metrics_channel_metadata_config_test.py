@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from clockwork.dsl.composition import (
+    constants,
     gen_metrics_channel_metadata_configs,
     metrics_channel_metadata_config,
     metrics_channel_metadata_config_proto,
@@ -79,7 +80,7 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
         }
     assert (
         config_by_domain[cpu1_uuid].metrics_metadata_report_schema_name
-        == "@clockwork::clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_config::MetricsChannelMetadataReport<max_channel_name_size=300,max_num_channels=2046>"
+        == f"@clockwork::clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_config::MetricsChannelMetadataReport<max_channel_name_size={constants.MAX_CHANNEL_NAME_SIZE},max_num_channels=2046>"
     )
 
     for channel in config_by_domain[cpu2_uuid].metrics_channels:
@@ -90,5 +91,5 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
         }
     assert (
         config_by_domain[cpu2_uuid].metrics_metadata_report_schema_name
-        == "@clockwork::clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_config::MetricsChannelMetadataReport<max_channel_name_size=300,max_num_channels=2046>"
+        == f"@clockwork::clockwork::tools::metrics_channel_metadata::metrics_channel_metadata_config::MetricsChannelMetadataReport<max_channel_name_size={constants.MAX_CHANNEL_NAME_SIZE},max_num_channels=2046>"
     )

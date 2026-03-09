@@ -23,10 +23,10 @@ namespace clockwork_logging::offboard
 /// @param[in] memory_resource Memory resource
 /// @param[in] log_uri Log URI
 /// @param[in] chunk_reader_factory Chunk reader factory
-/// @return Pointer to a log metadata helper of LogError on failure
+/// @return Pointer to a log metadata helper or LogError on failure
 [[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_metadata_helper(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& log_uri,
-  ChunkReaderWriterFactory& chunk_reader_factory);
+  ChunkReaderWriterFactory<>& chunk_reader_factory);
 
 } // namespace clockwork_logging::offboard

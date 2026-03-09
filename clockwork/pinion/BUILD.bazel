@@ -3,7 +3,6 @@
 
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
-load("//tools/rules:python.bzl", "py_cc_binding")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -37,9 +36,9 @@ cc_library(
         ":sock_opt",
         ":subscriber_handle",
         "//clockwork/common:abstract_epoll_manager",
-        "//clockwork/common:process_description",
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
         "//jewels/memory:memory_resource",
@@ -54,50 +53,20 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "bridge_status",
-    srcs = [
-        "bridge_status.cc",
-        "bridge_status.inl",
-    ],
-    hdrs = ["bridge_status.hh"],
-    data = [":bridge_status_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "bridge_status_clk",
     srcs = ["bridge_status.clk"],
     outs = [
-        "bridge_status.cc",
-        "bridge_status.hh",
-        "bridge_status.inl",
+        "bridge_status_clk_cc.cc",
+        "bridge_status_clk_cc.hh",
+        "bridge_status_clk_cc.inl",
         "bridge_status_clk_nb.cc",
         "bridge_status_clk_nb.hh",
         "bridge_status_clk_nb.inl",
     ],
-)
-
-py_cc_binding(
-    name = "bridge_status_clk_nb",
-    srcs = [
-        "bridge_status_clk_nb.cc",
-        "bridge_status_clk_nb.hh",
-        "bridge_status_clk_nb.inl",
-    ],
-    data = [":bridge_status_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":bridge_status",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
+    generate = [
+        "cpp",
+        "nanobind",
     ],
 )
 
@@ -118,7 +87,6 @@ cc_library(
         "//jewels/math:power_of_two",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "@boost//:atomic",
         "@boost//:iterator",
     ],
 )
@@ -136,10 +104,10 @@ cc_library(
         ":buffer",
         ":channel_observer_client",
         ":observer",
-        "//clockwork/logging:channel_type",
+        ":slot_ref",
+        "//clockwork/logging:channel_type_clk_cc",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
-        "@boost//:iterator",
     ],
 )
 
@@ -148,6 +116,7 @@ cc_library(
     hdrs = ["channel_observer_client.hh"],
     deps = [
         ":buffer",
+        ":slot_ref",
         "//jewels/time:sync_time",
     ],
 )
@@ -187,9 +156,9 @@ cc_library(
         ":slot",
         ":sock_opt",
         "//clockwork/common:abstract_epoll_manager",
-        "//clockwork/common:process_description",
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/pinion/detail:socket_payload",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
@@ -215,7 +184,7 @@ cc_library(
         ":observer",
         ":publisher_handle",
         ":subscriber_handle",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/uuid",
@@ -243,11 +212,12 @@ cc_library(
         ":io_connection",
         ":observer",
         ":slot",
+        ":slot_ref",
         ":sock_opt",
         ":subscriber_handle",
-        "//clockwork/common:process_description",
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/pinion/detail:socket_payload",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
@@ -261,8 +231,26 @@ cc_library(
         "//jewels/networking:socket_endpoint",
         "//jewels/std:expected",
         "//jewels/uuid",
-        "@boost//:iterator",
         "@fmt",
+    ],
+)
+
+cc_library(
+    name = "publishable",
+    srcs = ["publishable.inl"],
+    hdrs = ["publishable.hh"],
+    deps = [
+        ":buffer",
+        ":buffer_index",
+        ":error",
+        ":observer",
+        ":publisher_handle",
+        ":slot",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@wise_enum",
     ],
 )
 
@@ -396,6 +384,23 @@ cc_library(
 )
 
 cc_library(
+    name = "slot_ref",
+    srcs = [
+        "slot_ref.cc",
+        "slot_ref.inl",
+    ],
+    hdrs = ["slot_ref.hh"],
+    deps = [
+        ":aligned_pointer",
+        ":buffer",
+        ":slot",
+        "//jewels/math:power_of_two",
+        "//jewels/memory:pointers",
+        "//jewels/meta:concepts",
+    ],
+)
+
+cc_library(
     name = "sock_opt",
     srcs = [
         "sock_opt.cc",
@@ -406,7 +411,7 @@ cc_library(
         "//jewels/filesystem:error_code",
         "//jewels/log_cerr",
         "//jewels/meta:concepts",
-        "//jewels/networking:ifaddrs",
+        "//jewels/meta:overloaded",
         "//jewels/networking:sock_opt",
         "//jewels/std:expected",
     ],
@@ -423,112 +428,18 @@ cc_library(
         ":buffer",
         ":error",
         ":slot",
+        ":slot_ref",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "@boost//:iterator",
-    ],
-)
-
-clk(
-    name = "tcp_bridge_channel_policies_clk",
-    srcs = ["tcp_bridge_channel_policies.clk"],
-    deps = [
-        ":tcp_bridge_channels_clk",
-        "//clockwork/logging:channel_policy_clk",
-    ],
-)
-
-clk(
-    name = "tcp_bridge_channels_clk",
-    srcs = ["tcp_bridge_channels.clk"],
-    deps = [":bridge_status_clk"],
-)
-
-cc_library(
-    name = "tcp_bridge_client",
-    srcs = ["tcp_bridge_client.cc"],
-    hdrs = ["tcp_bridge_client.hh"],
-    deps = [
-        ":buffer",
-        ":error",
-        ":publisher_handle",
-        ":slot",
-        ":subscriber_handle",
-        ":tcp_bridge_common",
-        ":tcp_bridge_config",
-        "//clockwork/common:abstract_epoll_manager",
-        "//clockwork/common:process_description",
-        "//clockwork/logging:lite_compressor",
-        "//clockwork/logging:log_error",
-        "//clockwork/logging:xxh3_checksum",
-        "//clockwork/pinion/detail:tcp_socket",
-        "//jewels/filesystem:error_code",
-        "//jewels/filesystem:file_descriptor",
-        "//jewels/log_cerr",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/memory:pointers",
-        "//jewels/networking:sock_opt",
-        "//jewels/networking:socket_address",
-        "//jewels/std:expected",
-        "//jewels/std:span",
-        "//jewels/time:sync_time",
-        "@boost//:iterator",
-        "@wise_enum",
     ],
 )
 
 cc_library(
-    name = "tcp_bridge_common",
-    srcs = ["tcp_bridge_common.cc"],
-    hdrs = ["tcp_bridge_common.hh"],
+    name = "tcp_bridge",
+    srcs = ["tcp_bridge.cc"],
+    hdrs = ["tcp_bridge.hh"],
     deps = [
-        ":bridge_status",
-        "//clockwork:repr_iface",
-        "//jewels/container/tap:var_string",
-    ],
-)
-
-cc_library(
-    name = "tcp_bridge_config",
-    srcs = [
-        "tcp_bridge_config.cc",
-        "tcp_bridge_config.inl",
-    ],
-    hdrs = ["tcp_bridge_config.hh"],
-    data = [":tcp_bridge_config_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/common:platform_diagnostics_config",
-        "//clockwork/common:process_description",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
-clk(
-    name = "tcp_bridge_config_clk",
-    srcs = ["tcp_bridge_config.clk"],
-    outs = [
-        "tcp_bridge_config.cc",
-        "tcp_bridge_config.hh",
-        "tcp_bridge_config.inl",
-    ],
-    deps = [
-        "//clockwork/common:platform_diagnostics_config_clk",
-        "//clockwork/common:process_description_clk",
-    ],
-)
-
-cc_binary(
-    name = "tcp_bridge_main",
-    srcs = ["tcp_bridge_main.cc"],
-    linkopts = ["-pthread"],
-    deps = [
-        ":bridge_status",
+        ":bridge_status_clk_cc",
         ":buffer",
         ":error",
         ":publisher_handle",
@@ -539,17 +450,18 @@ cc_binary(
         ":slot",
         ":tcp_bridge_client",
         ":tcp_bridge_common",
-        ":tcp_bridge_config",
+        ":tcp_bridge_config_clk_cc",
         ":tcp_bridge_server",
         "//clockwork:repr_iface",
-        "//clockwork/common:abstract_epoll_manager",
-        "//clockwork/common:exec_tools",
-        "//clockwork/common:platform_diagnostics_config",
-        "//clockwork/common:process_description",
+        "//clockwork/common:platform_diagnostics_config_clk_cc",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/runners:epoll_manager",
         "//clockwork/scaffolding:channels",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/container:compare",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
@@ -562,9 +474,110 @@ cc_binary(
         "//jewels/time:sync_time",
         "//jewels/uuid",
         "//jewels/uuid:uuid_hasher",
-        "@tclap",
         "@wise_enum",
         "@xxhash",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_channel_policies_clk",
+    srcs = ["tcp_bridge_channel_policies.clk"],
+    generate = ["none"],
+    deps = [
+        ":tcp_bridge_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_channels_clk",
+    srcs = ["tcp_bridge_channels.clk"],
+    generate = ["none"],
+    deps = [":bridge_status_clk"],
+)
+
+cc_library(
+    name = "tcp_bridge_client",
+    srcs = ["tcp_bridge_client.cc"],
+    hdrs = ["tcp_bridge_client.hh"],
+    deps = [
+        ":buffer",
+        ":error",
+        ":publisher_handle",
+        ":slot",
+        ":slot_ref",
+        ":subscriber_handle",
+        ":tcp_bridge_common",
+        ":tcp_bridge_config_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/pinion/detail:socket_common",
+        "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/container:compare",
+        "//jewels/filesystem:error_code",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/networking:sock_opt",
+        "//jewels/networking:socket_address",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "tcp_bridge_common",
+    srcs = ["tcp_bridge_common.cc"],
+    hdrs = ["tcp_bridge_common.hh"],
+    deps = [
+        ":bridge_status_clk_cc",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:var_string",
+        "@wise_enum",
+    ],
+)
+
+clk(
+    name = "tcp_bridge_config_clk",
+    srcs = ["tcp_bridge_config.clk"],
+    outs = [
+        "tcp_bridge_config_clk_cc.cc",
+        "tcp_bridge_config_clk_cc.hh",
+        "tcp_bridge_config_clk_cc.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/common:platform_diagnostics_config_clk_cc",
+        "//clockwork/common:process_description_clk_cc",
+    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
+    deps = [
+        "//clockwork/common:platform_diagnostics_config_clk",
+        "//clockwork/common:process_description_clk",
+    ],
+)
+
+cc_binary(
+    name = "tcp_bridge_main",
+    srcs = ["tcp_bridge_main.cc"],
+    linkopts = ["-pthread"],
+    deps = [
+        ":shm_channel_factory",
+        ":tcp_bridge",
+        ":tcp_bridge_config_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/common:exec_tools",
+        "//jewels/callsig:outcome",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "@tclap",
     ],
 )
 
@@ -573,20 +586,21 @@ cc_library(
     srcs = ["tcp_bridge_server.cc"],
     hdrs = ["tcp_bridge_server.hh"],
     deps = [
-        ":buffer",
         ":error",
         ":observer",
         ":slot",
+        ":slot_ref",
         ":subscriber_handle",
         ":tcp_bridge_common",
-        ":tcp_bridge_config",
+        ":tcp_bridge_config_clk_cc",
+        "//clockwork:repr_iface",
         "//clockwork/common:abstract_epoll_manager",
         "//clockwork/logging:lite_compressor",
         "//clockwork/logging:xxh3_checksum",
         "//clockwork/logging/onboard:types",
-        "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:tcp_socket",
         "//jewels/callsig:outparam",
+        "//jewels/container:compare",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
         "//jewels/log_cerr",
@@ -599,7 +613,6 @@ cc_library(
         "//jewels/std:span",
         "//jewels/time:sync_time",
         "//jewels/uuid",
-        "@boost//:iterator",
         "@wise_enum",
     ],
 )

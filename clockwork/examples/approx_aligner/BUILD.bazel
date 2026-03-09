@@ -9,80 +9,42 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
-    name = "approx_aligner_cog",
-    srcs = [
-        "approx_aligner_cog.cc",
-        "approx_aligner_cog.inl",
-    ],
-    hdrs = ["approx_aligner_cog.hh"],
-    data = [":approx_aligner_cog_clk"],
-    deps = [
-        ":approx_aligner_cog_dial",
-        ":approx_aligner_cog_impl",
-        ":approx_aligner_msgs",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
 clk(
     name = "approx_aligner_cog_clk",
     srcs = ["approx_aligner_cog.clk"],
     outs = [
-        "approx_aligner_cog.cc",
-        "approx_aligner_cog.hh",
-        "approx_aligner_cog.inl",
-        "approx_aligner_cog_dial.cc",
-        "approx_aligner_cog_dial.hh",
-        "approx_aligner_cog_dial.inl",
+        "approx_aligner_cog_clk_cc.cc",
+        "approx_aligner_cog_clk_cc.hh",
+        "approx_aligner_cog_clk_cc.inl",
+        "approx_aligner_cog_clk_cc_dial.cc",
+        "approx_aligner_cog_clk_cc_dial.hh",
+        "approx_aligner_cog_clk_cc_dial.inl",
+    ],
+    cpp_deps = [
+        ":approx_aligner_msgs_clk_cc",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
     ],
     deps = [
         ":approx_aligner_msgs_clk",
         "//clockwork/dial:approx_aligner_config_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
     ],
 )
 
 cc_library(
-    name = "approx_aligner_cog_dial",
-    srcs = [
-        "approx_aligner_cog_dial.cc",
-        "approx_aligner_cog_dial.inl",
-    ],
-    hdrs = ["approx_aligner_cog_dial.hh"],
-    data = [":approx_aligner_cog_clk"],
+    name = "approx_aligner_cog_clk_cc_impl",
+    srcs = ["approx_aligner_cog_clk_cc_impl.cc"],
     deps = [
-        ":approx_aligner_msgs",
-        "//clockwork/dial:approx_aligner_config",
-        "//clockwork/dial:include_common",
-    ],
-)
-
-cc_library(
-    name = "approx_aligner_cog_impl",
-    srcs = ["approx_aligner_cog_impl.cc"],
-    visibility = [
-        "//clockwork/scaffolding/tests:__subpackages__",
-        "//clockwork/tests:__subpackages__",
-    ],
-    deps = [
-        ":approx_aligner_cog_dial",
-        ":approx_aligner_msgs",
-        "//clockwork/dial:alignment_type",
+        ":approx_aligner_cog_clk_cc_dial",
+        ":approx_aligner_msgs_clk_cc",
+        "//clockwork/dial:alignment_type_clk_cc",
         "//clockwork/dial:approx_aligner",
-        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:approx_aligner_policies",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "//jewels/container:circular_buffer",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
@@ -90,30 +52,15 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "approx_aligner_msgs",
-    srcs = [
-        "approx_aligner_msgs.cc",
-        "approx_aligner_msgs.inl",
-    ],
-    hdrs = ["approx_aligner_msgs.hh"],
-    data = [":approx_aligner_msgs_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "approx_aligner_msgs_clk",
     srcs = ["approx_aligner_msgs.clk"],
     outs = [
-        "approx_aligner_msgs.cc",
-        "approx_aligner_msgs.hh",
-        "approx_aligner_msgs.inl",
+        "approx_aligner_msgs_clk_cc.cc",
+        "approx_aligner_msgs_clk_cc.hh",
+        "approx_aligner_msgs_clk_cc.inl",
     ],
+    cpp_deps = ["//clockwork/dial:approx_aligner_config_clk_cc"],
+    generate = ["cpp"],
     deps = ["//clockwork/dial:approx_aligner_config_clk"],
 )

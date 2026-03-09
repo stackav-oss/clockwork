@@ -28,9 +28,19 @@ class NotConnectedEndpointType(Protocol):
 
     # The point is that the only way to get an instance of the enum is via the
     # dynamic runtime enum class.  The type here is just to be able to disambiguate
+    # between different enum types. The real enum values get set at runtime.
+    # So this just needs to be a protocol that nothing can ever satisfy.
+    _please_never_define_a_class_with_this_attribute_not_connected_endpoint_type: None
+
+
+class DataSourceType(Protocol):
+    """Fake enum type for values of DataSourceType."""
+
+    # The point is that the only way to get an instance of the enum is via the
+    # dynamic runtime enum class.  The type here is just to be able to disambiguate
     #  between different enum types. The real enum values get set at runtime.
     #  So this just needs to be a protocol that nothing can ever satisfy.
-    _please_never_define_a_class_with_this_attribute_not_connected_endpoint_type: None
+    _please_never_define_a_class_with_this_attribute_data_source_type: None
 
 
 class MemoryResourceTypeEnum(Protocol):
@@ -44,6 +54,13 @@ class NotConnectedEndpointTypeEnum(Protocol):
 
     publisher: NotConnectedEndpointType
     subscriber: NotConnectedEndpointType
+
+
+class DataSourceTypeEnum(Protocol):
+    """Type of data source."""
+
+    file: DataSourceType
+    log_first_message: DataSourceType
 
 
 @dataclass(kw_only=True)
@@ -61,6 +78,8 @@ class ProcessDescription(Tachyon["ProcessDescription"]):
     log_cog: UUID
     io_connections: list[IoConnectionInstanceDescription]
     not_connected_endpoints: list[NotConnectedEndpoint]
+    snapshot_configs: list[SnapshotConfig]
+    data_sources: list[DataSource]
 
 
 @dataclass(kw_only=True)
@@ -103,6 +122,7 @@ class PublishEndpoint(Tachyon["PublishEndpoint"]):
     buffer_layout: PinionBufferLayout
     num_subscribers: int
     channel_name: str
+    is_bulk_data: bool
 
 
 @dataclass(kw_only=True)
@@ -111,6 +131,7 @@ class PinionBufferLayout(Tachyon["PinionBufferLayout"]):
 
     num_slots: int
     message_size: int
+    is_published_once: bool
 
 
 @dataclass(kw_only=True)
@@ -139,6 +160,7 @@ class StateInstanceDescription(Tachyon["StateInstanceDescription"]):
     instance_path_name: str
     maybe_buffer_layout: PinionBufferLayout | None
     maybe_memory_resource: UUID | None
+    init_data_source: int
 
 
 @dataclass(kw_only=True)
@@ -159,12 +181,11 @@ class ConfigGraph(Tachyon["ConfigGraph"]):
 
 @dataclass(kw_only=True)
 class ConfigInstanceDescription(Tachyon["ConfigInstanceDescription"]):
-    """Describes a Config instances."""
+    """Describes a Config instance."""
 
-    representation_id: UUID
     config_instance_id: UUID
     instance_path_name: str
-    config_file_path: str
+    init_data_source: int
 
 
 @dataclass(kw_only=True)
@@ -173,6 +194,16 @@ class ConfigConnection(Tachyon["ConfigConnection"]):
 
     config_id: UUID
     endpoint_id: UUID
+
+
+@dataclass(kw_only=True)
+class DataSource(Tachyon["DataSource"]):
+    """Describes a data source for config or state initialization."""
+
+    representation_id: UUID
+    data_source_type: DataSourceType
+    source_path_or_name: str
+    fallback_source: int
 
 
 @dataclass(kw_only=True)
@@ -227,3 +258,17 @@ class NotConnectedEndpoint(Tachyon["NotConnectedEndpoint"]):
     endpoint_id: UUID
     endpoint_type: NotConnectedEndpointType
     buffer_layout: PinionBufferLayout
+
+
+@dataclass(kw_only=True)
+class SnapshotConfig(Tachyon["SnapshotConfig"]):
+    """Configuration for snapshotting a state or config endpoint.
+
+    For state snapshots (TakeSnapshots policy), at least one of interval_ns or cycles must be set.
+    For config snapshots (SnapshotOnce policy), both interval_ns and cycles will be None.
+    """
+
+    endpoint_id: UUID
+    snapshot_publisher_id: UUID
+    interval: int | None
+    cycles: int | None

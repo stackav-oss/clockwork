@@ -3,8 +3,8 @@
 #include <span>
 #pragma once
 
-#include "clockwork/io/network_var_packet.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/io/network_var_packet_clk_cc.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"

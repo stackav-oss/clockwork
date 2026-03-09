@@ -1,0 +1,23 @@
+#![generate()]
+
+cpu_domain HostA
+{
+  simplelaunch_node: "a";
+  simplelaunch_src: "//clockwork/dsl/tests/support:host_a_simplelaunch_config.textproto";
+  simplelaunch_src: "//clockwork/dsl/tests/support:host_b_simplelaunch_config.textproto";
+  bridge_cpus: 0;
+  default_cpus: 1 - 3;
+}
+cpu_domain HostB;
+
+ethernet Lan1
+{
+    ipv4_address 1.2.3.4: HostA
+    {
+        bridge_ports: 16000 - 18000;
+    }
+    ipv4_address 1.2.3.5: HostB
+    {
+        bridge_ports: 16000 - 18000;
+    }
+}

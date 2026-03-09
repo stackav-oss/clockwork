@@ -22,7 +22,7 @@ namespace clockwork::scaffolding
 using ProcessInstanceUuid = jewels::Uuid<common::ProcessInstanceId>;
 
 jewels::expected<MemResMap, jewels::MonoError> setup_memory_resources(
-  std::span<const common::MemoryResourceTap> descs,
+  std::span<const Tappy<common::MemoryResource<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   jewels::memory::MemoryResource memres_meta)
 {
@@ -41,7 +41,9 @@ jewels::expected<MemResMap, jewels::MonoError> setup_memory_resources(
 }
 
 [[nodiscard]] jewels::expected<void, jewels::MonoError> connect_memory_resources(
-  std::span<const common::MemoryResourceConnectionTap> connections, const MemResMap& memres_map, AbstractCasing& casing)
+  std::span<const Tappy<common::MemoryResourceConnection>> connections,
+  const MemResMap& memres_map,
+  AbstractCasing& casing)
 {
   for (const auto& connection : connections)
   {

@@ -6,6 +6,7 @@
 #include "clockwork/tools/channel_spy/tests/support/test_message.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_publisher.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -13,8 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <memory>
+#include <memory_resource>
 #include <string>
 #include <vector>
 

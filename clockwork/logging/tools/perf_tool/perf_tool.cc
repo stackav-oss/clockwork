@@ -1,20 +1,20 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/clockwork_writer_policy.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -23,7 +23,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <tclap/ArgException.h>
 #include <tclap/CmdLine.h>
 #include <tclap/ValueArg.h>
@@ -117,6 +117,7 @@ make_aligned_buffer(jewels::memory::MemoryResource memory_resource, size_t buffe
   return clockwork::pinion::BufferLayout{
     .num_slots = num_slots,
     .message_size = message_size,
+    .is_published_once = false,
   };
 }
 
@@ -470,7 +471,7 @@ void LogPerfImpl<MessageHandleType>::test_thread_fn()
 
     const auto write_result = writer_.log_clockwork_message(
       channel_name,
-      onboard::ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer_), pinion_buffer_iterator},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer_), pinion_buffer_iterator),
       LogTimestamp{now.time_since_epoch()},
       jewels::time::SteadyClock::now());
     if (!write_result)

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "clockwork/dial/cond_messages_present.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/std/expected.hh"
 
@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <ranges>
+
 namespace clockwork
 {
 
@@ -62,17 +63,16 @@ public:
 
   /// Update the last viewed value with the saved iterator from make input.
   /// @param[in] last_viewed The iterator of the last viewed message on this input.
-  void commit(pinion::BufferIterator last_viewed);
+  void commit(pinion::SlotRef last_viewed);
 
 private:
   /// The underlying subscriber handle.
   std::optional<pinion::SubscriberHandle> subscriber_;
   /// Iterator for the last viewed message.
-  pinion::BufferIterator last_viewed_;
+  pinion::SlotRef last_viewed_;
 
   /// Get the available range based on the policy.
-  [[nodiscard]] jewels::expected<std::ranges::subrange<pinion::BufferIterator>, pinion::ProgressError>
-  available_range() const;
+  [[nodiscard]] jewels::expected<std::ranges::subrange<pinion::SlotRef>, pinion::ProgressError> available_range() const;
 };
 
 } // namespace clockwork

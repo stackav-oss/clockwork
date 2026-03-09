@@ -8,6 +8,7 @@
 #include "jewels/aligner/aligner.hh"
 #include "jewels/container/at.hh"
 #include "jewels/container/circular_buffer.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -26,7 +27,6 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
 #include <memory_resource>
 #include <ranges>
@@ -67,7 +67,7 @@ TEST_CASE("BufferedReader")
   constexpr size_t write_data_size = 1011U;
   std::array<std::byte, write_data_size> write_data{};
   tests::fill_with_random_bytes({write_data});
-  std::ofstream ofs(test_file_path.string());
+  std::ofstream ofs(test_file_path.c_str());
   ofs.write(nolint_helper::char_ptr_to_span_element(write_data), write_data.size());
   REQUIRE(ofs);
   ofs.close();
@@ -227,7 +227,7 @@ TEST_CASE("BufferedReader")
     }
     std::memcpy(
       &pattern_write_data.at(pattern_write_data.size() - pattern.size() + 1U), pattern.data(), pattern.size() - 1U);
-    ofs.open(test_file_path.string(), std::ios::trunc);
+    ofs.open(test_file_path.c_str(), std::ios::trunc);
     ofs.write(nolint_helper::char_ptr_to_span_element(pattern_write_data), pattern_write_data.size());
     REQUIRE(ofs);
     ofs.close();
@@ -253,7 +253,7 @@ TEST_CASE("BufferedReader")
     {
       jewels::at(test_write_data, static_cast<ssize_t>(non_zero_offset)) = std::byte{'X'};
     }
-    ofs.open(test_file_path.string(), std::ios::trunc);
+    ofs.open(test_file_path.c_str(), std::ios::trunc);
     ofs.write(nolint_helper::char_ptr_to_span_element(test_write_data), test_write_data.size());
     REQUIRE(ofs);
     ofs.close();
@@ -390,7 +390,7 @@ TEST_CASE("BufferedReader")
     SECTION("Read fails in skip pad bytes")
     {
       std::array<std::byte, write_data_size> test_write_data{};
-      ofs.open(test_file_path.string(), std::ios::trunc);
+      ofs.open(test_file_path.c_str(), std::ios::trunc);
       ofs.write(nolint_helper::char_ptr_to_span_element(test_write_data), test_write_data.size());
       REQUIRE(ofs);
       ofs.close();
@@ -416,7 +416,7 @@ TEST_CASE("BufferedReader")
     {
       constexpr std::array pattern = {'_', 'A', 'B', 'C'};
       std::array<std::byte, write_data_size> test_write_data{};
-      ofs.open(test_file_path.string(), std::ios::trunc);
+      ofs.open(test_file_path.c_str(), std::ios::trunc);
       ofs.write(nolint_helper::char_ptr_to_span_element(test_write_data), test_write_data.size());
       REQUIRE(ofs);
       ofs.close();

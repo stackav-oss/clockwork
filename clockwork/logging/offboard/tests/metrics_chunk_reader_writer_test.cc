@@ -13,6 +13,7 @@
 #include "clockwork/logging/offboard/metrics_chunk_writer.hh"
 #include "clockwork/logging/offboard/reader_types.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -24,7 +25,6 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <memory_resource>

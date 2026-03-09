@@ -1,16 +1,17 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>      // IWYU pragma: keep
@@ -40,14 +41,14 @@ NB_MODULE(nb_log_writer_impl, mod)
 
   mod.doc() = "Log writer";
 
-  nanobind::class_<Writer>(mod, "LogWriter")
+  nanobind::class_<Writer<>>(mod, "LogWriter")
     .def(
       "__init__",
-      [](Writer* ptr) { new (ptr) Writer{jewels::memory::MemoryResource{std::pmr::new_delete_resource()}}; },
+      [](Writer<>* ptr) { new (ptr) Writer<>{jewels::memory::MemoryResource{std::pmr::new_delete_resource()}}; },
       "Constructor.")
     .def(
       "open",
-      [](Writer& obj, const std::string& out_uri, const std::string& config)
+      [](Writer<>& obj, const std::string& out_uri, const std::string& config)
       {
         if (const auto open_result = obj.open(out_uri, config); !open_result)
         {
@@ -60,7 +61,7 @@ NB_MODULE(nb_log_writer_impl, mod)
       "Open the log.")
     .def(
       "close",
-      [](Writer& obj)
+      [](Writer<>& obj)
       {
         if (const auto close_result = obj.close(); !close_result)
         {
@@ -72,7 +73,7 @@ NB_MODULE(nb_log_writer_impl, mod)
     .def(
       "create_channel",
       [](
-        Writer& obj,
+        Writer<>& obj,
         const std::string& channel_name,
         const std::string& message_encoding,
         const std::string& channel_type,
@@ -107,7 +108,7 @@ NB_MODULE(nb_log_writer_impl, mod)
       "Create a logged channel.")
     .def(
       "create_channel_from_metadata",
-      [](Writer& obj, const LoggedChannelMetadata& channel_metadata)
+      [](Writer<>& obj, const LoggedChannelMetadata& channel_metadata)
       {
         if (const auto create_result = obj.create_channel(channel_metadata); !create_result)
         {
@@ -121,7 +122,7 @@ NB_MODULE(nb_log_writer_impl, mod)
     .def(
       "write",
       [](
-        Writer& obj,
+        Writer<>& obj,
         std::string_view channel_name,
         uint32_t sequence_number,
         LogTimestamp log_time,
@@ -152,7 +153,7 @@ NB_MODULE(nb_log_writer_impl, mod)
       "Write a message to the log.")
     .def(
       "write_logged_message",
-      [](Writer& obj, const LoggedMessage& logged_message)
+      [](Writer<>& obj, const LoggedMessage& logged_message)
       {
         if (const auto write_result = obj.write(logged_message); !write_result)
         {

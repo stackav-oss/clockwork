@@ -1,5 +1,8 @@
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::imu::imu_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::imu)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::imu::imu_channels;
 use clockwork::examples::demo_system::imu::imu_message;
 
 // Cog to simulate the IMU device sending raw IMU packets over UDP
@@ -32,20 +35,9 @@ cog ImuDriverCog
 
   execution
   {
-    condition new_raw_imu: new_message(raw_imu, min=1, max=1);
+    condition new_raw_imu: new_message(raw_imu, max=1);
     execute when: new_raw_imu;
   }
-}
-
-cpp_target imu_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::imu;
-  }
-
-  cog ImuDeviceCog;
-  cog ImuDriverCog;
 }
 
 box ImuBox
@@ -58,18 +50,10 @@ box ImuBox
   connect driver_cog.imu to imu_channels::ImuChannel;
 }
 
-cpp_executable imu_exe
-{
-  casing
-  {
-    box ImuBox;
-  }
-}
-
 box ImuExe
 {
   new imu_box: ImuBox;
-  new imu_proc: Process(executable=imu_exe);
+  new imu_proc: Process(executable=imu_clk_exe);
   apply HostProcess(process=imu_proc) in imu_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to imu_proc;
 }

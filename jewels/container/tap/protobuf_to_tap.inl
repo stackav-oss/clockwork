@@ -4,6 +4,7 @@
 #include "jewels/container/tap/protobuf_to_tap.hh"
 
 #include "jewels/container/at.hh"
+#include "jewels/container/tap/optional.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -44,6 +45,21 @@ ConversionStatusExpected protobuf_to_tap(tap::VarString<capacity>& output, std::
     return jewels::unexpected(jewels::MonoError{});
   }
 
+  return ConversionStatusExpected{};
+}
+
+template <size_t capacity>
+ConversionStatusExpected
+protobuf_to_tap(jewels::tap::Optional<tap::VarString<capacity>>& output, std::string_view input)
+{
+  tap::VarString<capacity> var_string;
+  const bool is_success = var_string.try_set(input);
+  if (!is_success)
+  {
+    jewels::log_cerr_error("Attempted to set an optional var string with a capacity of {}, with {}", capacity, input);
+    return jewels::unexpected(jewels::MonoError{});
+  }
+  output = var_string;
   return ConversionStatusExpected{};
 }
 

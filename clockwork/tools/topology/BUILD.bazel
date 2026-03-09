@@ -5,7 +5,10 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//tools/rules:python.bzl", "py_binary", "py_library")
 
 package(
-    default_visibility = [":__subpackages__"],
+    default_visibility = [
+        ":__subpackages__",
+        "//clockwork:__pkg__",
+    ],
 )
 
 py_library(
@@ -35,6 +38,7 @@ py_binary(
     deps = [
         ":topology",
         "//clockwork:logical_system_interface",
+        "//clockwork/dsl/composition:system",
         "//clockwork/dsl/ir:module_id",
         "@clockwork_pip//click",
         "@root_repo//:root_repo_py",

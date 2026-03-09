@@ -93,7 +93,7 @@ def test_string_literal(fs_importer: FilesystemImporter) -> None:
     # literals are allowed syntactically. So to test this, we unfortunately
     # need to depend on the Channel implementation.
     source: Final = r"""
-use clockwork::dsl::tests::support::hellomsg
+use clockwork::dsl::tests::support::hellomsg;
 // Chan1
 channel Chan1
 {

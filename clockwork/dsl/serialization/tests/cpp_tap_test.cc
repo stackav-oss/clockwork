@@ -3,7 +3,7 @@
 
 #include "clockwork/dsl/tests/support/tapmsg.hh"
 #include "clockwork/dsl/tests/support/taptag.hh"
-#include "clockwork/dsl/tests/support/taptags.hh"
+#include "clockwork/dsl/tests/support/taptags_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/optional.hh"
@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -436,6 +437,42 @@ TEST_CASE("Methods")
         REQUIRE(!msg.has_optional());
       }
     }
+  }
+  SECTION("Schema.clear")
+  {
+    const Tappy<TapMsg> empty{};
+    Tappy<TapMsg> test{};
+    // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison) this also checks the 'unused' area
+    REQUIRE(std::memcmp(&empty, &test, sizeof(empty)) == 0);
+    test.clear();
+    // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison) this also checks the 'unused' area
+    CHECK(std::memcmp(&empty, &test, sizeof(empty)) == 0);
+
+    test.set_integer(342);
+    test.set_floating_point(264.);
+    test.set_boolean(true);
+    REQUIRE(test.try_set_array_of_primitives(std::array<int32_t, 4>{5, 6, 7, 8}));
+    REQUIRE(test.try_set_array_of_array(std::array<jewels::tap::VarString<3>, 1>{jewels::tap::VarString<3>("aa")}));
+    test.set_uuid(*::jewels::Uuid<SubMsg>::from_string("11111111111111111111111111111111"));
+    test.set_default_enum(SomeEnum::second_value);
+    test.set_enum_with_init(SomeEnum::first_value);
+    test.set_default_flags(SomeFlags::flag1);
+    test.set_flags_with_init(SomeFlags::flag1);
+    test.get_mutable_nested_schema().set_field(342);
+    test.get_underlying_array_of_schema().emplace_back();
+    test.get_underlying_array_of_schema()[0].set_field(1342);
+    test.set_duration(std::chrono::nanoseconds(123456));
+    test.set_optional(6);
+    test.set_bool_with_init(false);
+    test.set_fixed_array(std::array<int32_t, 2>{3, 4});
+    REQUIRE(test.try_set_var_string("a"));
+    test.set_integer_with_init(894568);
+    // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison) this also checks the 'unused' area
+    CHECK(std::memcmp(&empty, &test, sizeof(empty)) != 0);
+
+    test.clear();
+    // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison) this also checks the 'unused' area
+    CHECK(std::memcmp(&empty, &test, sizeof(empty)) == 0);
   }
 }
 
@@ -857,6 +894,8 @@ TEST_CASE("From buffers")
   {
     Tappy<TapMsg> msg{};
     const auto bytes = read_binary_file("clockwork/dsl/serialization/tests/resources/tapmsg_default.bin");
+    REQUIRE(!std::ranges::equal(as_bytes(jewels::as_single_item_span(msg)), as_bytes(std::span{bytes})));
+    msg.get_mutable_nested_schema().set_field(0);
     REQUIRE(std::ranges::equal(as_bytes(jewels::as_single_item_span(msg)), as_bytes(std::span{bytes})));
   }
   SECTION("Full")

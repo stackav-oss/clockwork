@@ -76,7 +76,9 @@ stat_file(std::string_view path, jewels::memory::MemoryResource memory_resource,
 }
 
 [[nodiscard]] jewels::expected<std::pmr::string, ErrorCode> prepare_template_for_temporary(
-  std::optional<filesystem::Path> parent_path, jewels::memory::MemoryResource memory_resource, Filesystem& filesystem)
+  std::optional<filesystem::Path> parent_path,
+  jewels::memory::MemoryResource memory_resource,
+  const Filesystem& filesystem)
 {
   filesystem::Path template_path{"/tmp", memory_resource};
   if (parent_path.has_value() && parent_path->is_absolute())
@@ -125,7 +127,7 @@ void Filesystem::set_verbosity(ErrorVerbosity verbosity) noexcept
 }
 
 [[nodiscard]] jewels::expected<FileDescriptor, ErrorCode>
-Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
+Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms) const
 {
   const std::pmr::string file_path_str{file_path, memory_resource_};
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg, hicpp-signed-bitwise) Needed to use the open API
@@ -142,7 +144,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
   return {std::move(file_desc)};
 }
 
-[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_size(const FileDescriptor& file_desc)
+[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_size(const FileDescriptor& file_desc) const
 {
   const auto stat_result = stat_file(file_desc, verbosity_);
   if (!stat_result)
@@ -152,7 +154,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
   return static_cast<size_t>(stat_result->st_size);
 }
 
-[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_size(std::string_view file_path)
+[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_size(std::string_view file_path) const
 {
   const auto stat_result = stat_file(file_path, memory_resource_, verbosity_);
   if (!stat_result)
@@ -162,7 +164,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
   return static_cast<size_t>(stat_result->st_size);
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::touch(std::string_view path)
+[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::touch(std::string_view path) const
 {
   const filesystem::Path file_path{path, memory_resource_};
   if (is_directory(file_path.parent_path()) != true)
@@ -187,7 +189,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
 }
 
 [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode>
-Filesystem::create_temporary_directory(std::optional<filesystem::Path> parent_path)
+Filesystem::create_temporary_directory(std::optional<filesystem::Path> parent_path) const
 {
   auto possible_created_template = prepare_template_for_temporary(std::move(parent_path), memory_resource_, *this);
   if (!possible_created_template)
@@ -208,7 +210,7 @@ Filesystem::create_temporary_directory(std::optional<filesystem::Path> parent_pa
 }
 
 [[nodiscard]] jewels::expected<std::pair<filesystem::Path, FileDescriptor>, ErrorCode>
-Filesystem::create_temporary_file(std::optional<filesystem::Path> parent_path)
+Filesystem::create_temporary_file(std::optional<filesystem::Path> parent_path) const
 {
   auto possible_created_template = prepare_template_for_temporary(std::move(parent_path), memory_resource_, *this);
   if (!possible_created_template)
@@ -230,7 +232,7 @@ Filesystem::create_temporary_file(std::optional<filesystem::Path> parent_path)
 }
 
 [[nodiscard]] jewels::expected<jewels::time::SyncTime, ErrorCode>
-Filesystem::get_last_write_time(const FileDescriptor& file_desc)
+Filesystem::get_last_write_time(const FileDescriptor& file_desc) const
 {
   const auto stat_result = stat_file(file_desc, verbosity_);
   if (!stat_result)
@@ -242,7 +244,7 @@ Filesystem::get_last_write_time(const FileDescriptor& file_desc)
 }
 
 [[nodiscard]] jewels::expected<jewels::time::SyncTime, ErrorCode>
-Filesystem::get_last_write_time(std::string_view file_path)
+Filesystem::get_last_write_time(std::string_view file_path) const
 {
   const auto stat_result = stat_file(file_path, memory_resource_, verbosity_);
   if (!stat_result)
@@ -254,7 +256,7 @@ Filesystem::get_last_write_time(std::string_view file_path)
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::set_last_write_time(const FileDescriptor& file_desc, jewels::time::SyncTime time_to_set)
+Filesystem::set_last_write_time(const FileDescriptor& file_desc, jewels::time::SyncTime time_to_set) const
 {
   const std::chrono::nanoseconds time_since_epoch = time_to_set.time_since_epoch();
   const auto time_s = std::chrono::duration_cast<std::chrono::seconds>(time_since_epoch);
@@ -275,7 +277,7 @@ Filesystem::set_last_write_time(const FileDescriptor& file_desc, jewels::time::S
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::set_last_write_time(std::string_view file_path, jewels::time::SyncTime time_to_set)
+Filesystem::set_last_write_time(std::string_view file_path, jewels::time::SyncTime time_to_set) const
 {
   const auto open_result = open(file_path, O_RDWR);
   if (!open_result)
@@ -286,7 +288,7 @@ Filesystem::set_last_write_time(std::string_view file_path, jewels::time::SyncTi
 }
 
 [[nodiscard]] jewels::expected<size_t, ErrorCode>
-Filesystem::read(const FileDescriptor& file_desc, std::span<std::byte> data)
+Filesystem::read(const FileDescriptor& file_desc, std::span<std::byte> data) const
 {
   const auto ret = ::read(*file_desc, data.data(), data.size());
   if (ret < 0)
@@ -302,7 +304,7 @@ Filesystem::read(const FileDescriptor& file_desc, std::span<std::byte> data)
 }
 
 [[nodiscard]] jewels::expected<size_t, ErrorCode>
-Filesystem::read(const FileDescriptor& file_desc, size_t offset, std::span<std::byte> data)
+Filesystem::read(const FileDescriptor& file_desc, size_t offset, std::span<std::byte> data) const
 {
   const auto ret = ::pread(*file_desc, data.data(), data.size(), static_cast<off_t>(offset));
   if (ret < 0)
@@ -318,7 +320,7 @@ Filesystem::read(const FileDescriptor& file_desc, size_t offset, std::span<std::
 }
 
 [[nodiscard]] jewels::expected<size_t, ErrorCode>
-Filesystem::write(const FileDescriptor& file_desc, std::span<const std::byte> data)
+Filesystem::write(const FileDescriptor& file_desc, std::span<const std::byte> data) const
 {
   const auto ret = ::write(*file_desc, data.data(), data.size());
   if (ret < 0)
@@ -334,7 +336,7 @@ Filesystem::write(const FileDescriptor& file_desc, std::span<const std::byte> da
 }
 
 [[nodiscard]] jewels::expected<size_t, ErrorCode>
-Filesystem::write(const FileDescriptor& file_desc, size_t offset, std::span<const std::byte> data)
+Filesystem::write(const FileDescriptor& file_desc, size_t offset, std::span<const std::byte> data) const
 {
   const auto ret = ::pwrite(*file_desc, data.data(), data.size(), static_cast<off_t>(offset));
   if (ret < 0)
@@ -349,7 +351,7 @@ Filesystem::write(const FileDescriptor& file_desc, size_t offset, std::span<cons
   return static_cast<size_t>(ret);
 }
 
-[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_position(const FileDescriptor& file_desc)
+[[nodiscard]] jewels::expected<size_t, ErrorCode> Filesystem::get_position(const FileDescriptor& file_desc) const
 {
   const auto ret = ::lseek(*file_desc, 0, SEEK_CUR);
   if (ret < 0)
@@ -364,7 +366,8 @@ Filesystem::write(const FileDescriptor& file_desc, size_t offset, std::span<cons
   return static_cast<size_t>(ret);
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::set_position(const FileDescriptor& file_desc, size_t offset)
+[[nodiscard]] jewels::expected<void, ErrorCode>
+Filesystem::set_position(const FileDescriptor& file_desc, size_t offset) const
 {
   if (const auto ret = ::lseek(*file_desc, static_cast<ssize_t>(offset), SEEK_SET); ret < 0)
   {
@@ -379,11 +382,11 @@ Filesystem::write(const FileDescriptor& file_desc, size_t offset, std::span<cons
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::copy_file(std::string_view source_path, std::string_view destination_path)
+Filesystem::copy_file(std::string_view source_path, std::string_view destination_path) const
 {
   const std::pmr::string source_path_str{source_path, memory_resource_};
   const std::pmr::string destination_path_str{destination_path, memory_resource_};
-  const auto possible_open_result = open(source_path_str, O_RDWR);
+  const auto possible_open_result = open(source_path_str, O_RDONLY);
   if (!possible_open_result)
   {
     return jewels::unexpected(possible_open_result.error());
@@ -416,7 +419,7 @@ Filesystem::copy_file(std::string_view source_path, std::string_view destination
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::rename(std::string_view old_path, std::string_view new_path, bool copy_delete_cross_filesystem)
+Filesystem::rename(std::string_view old_path, std::string_view new_path, bool copy_delete_cross_filesystem) const
 {
   const std::pmr::string old_path_str{old_path, memory_resource_};
   const std::pmr::string new_path_str{new_path, memory_resource_};
@@ -444,7 +447,7 @@ Filesystem::rename(std::string_view old_path, std::string_view new_path, bool co
   return {};
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::unlink(std::string_view path)
+[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::unlink(std::string_view path) const
 {
   const std::pmr::string path_str{path, memory_resource_};
   if (const auto ret = ::unlink(path_str.c_str()); ret < 0)
@@ -459,7 +462,8 @@ Filesystem::rename(std::string_view old_path, std::string_view new_path, bool co
   return {};
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::create_directory(std::string_view path, uint32_t perms)
+[[nodiscard]] jewels::expected<void, ErrorCode>
+Filesystem::create_directory(std::string_view path, uint32_t perms) const
 {
   const std::pmr::string path_str{path, memory_resource_};
   if (const auto ret = ::mkdir(path_str.c_str(), perms); ret < 0)
@@ -474,7 +478,8 @@ Filesystem::rename(std::string_view old_path, std::string_view new_path, bool co
   return {};
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::create_directories(std::string_view path, uint32_t perms)
+[[nodiscard]] jewels::expected<void, ErrorCode>
+Filesystem::create_directories(std::string_view path, uint32_t perms) const
 {
   std::pmr::list<Path> create_paths{memory_resource_};
   filesystem::Path dir_path{path, memory_resource_};
@@ -518,7 +523,7 @@ Filesystem::rename(std::string_view old_path, std::string_view new_path, bool co
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::create_symlink(std::string_view target_path, std::string_view link_path)
+Filesystem::create_symlink(std::string_view target_path, std::string_view link_path) const
 {
   const std::pmr::string target_path_str{target_path, memory_resource_};
   const std::pmr::string link_path_str{link_path, memory_resource_};
@@ -534,7 +539,7 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
   return {};
 }
 
-[[nodiscard]] jewels::expected<std::pmr::string, ErrorCode> Filesystem::read_symlink(std::string_view link_path)
+[[nodiscard]] jewels::expected<std::pmr::string, ErrorCode> Filesystem::read_symlink(std::string_view link_path) const
 {
   struct stat statbuf{};
   const std::pmr::string link_path_str{link_path, memory_resource_};
@@ -566,7 +571,7 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
   return {std::move(target_str)};
 }
 
-[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::exists(std::string_view path)
+[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::exists(std::string_view path) const
 {
   const auto stat_result = stat_file(path, memory_resource_, verbosity_);
   if (!stat_result)
@@ -580,7 +585,7 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
   return true;
 }
 
-[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::is_directory(std::string_view path)
+[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::is_directory(std::string_view path) const
 {
   const auto stat_result = stat_file(path, memory_resource_, verbosity_);
   if (!stat_result)
@@ -594,7 +599,7 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
   return (stat_result->st_mode & static_cast<uint32_t>(S_IFMT)) == S_IFDIR;
 }
 
-[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::is_regular_file(std::string_view path)
+[[nodiscard]] jewels::expected<bool, ErrorCode> Filesystem::is_regular_file(std::string_view path) const
 {
   const auto stat_result = stat_file(path, memory_resource_, verbosity_);
   if (!stat_result)
@@ -609,7 +614,7 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
 }
 
 [[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directory(std::string_view path)
+Filesystem::read_directory(std::string_view path) const
 {
   return read_directory(
     path,
@@ -621,7 +626,7 @@ Filesystem::read_directory(std::string_view path)
 }
 
 [[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directories(std::string_view path, bool ignore_permission_denied)
+Filesystem::read_directories(std::string_view path, bool ignore_permission_denied) const
 {
   return read_directories(
     path,
@@ -634,7 +639,7 @@ Filesystem::read_directories(std::string_view path, bool ignore_permission_denie
 }
 
 [[nodiscard]] jewels::expected<Filesystem::SpaceInformation, ErrorCode>
-Filesystem::get_space_information(std::string_view path)
+Filesystem::get_space_information(std::string_view path) const
 {
   struct statfs statbuf{};
   const std::pmr::string path_str{path, memory_resource_};
@@ -654,7 +659,7 @@ Filesystem::get_space_information(std::string_view path)
   return space_info;
 }
 
-jewels::expected<void, ErrorCode> Filesystem::remove(std::string_view path)
+jewels::expected<void, ErrorCode> Filesystem::remove(std::string_view path) const
 {
   const std::pmr::string path_str{path, memory_resource_};
   const auto result = ::remove(path_str.c_str());
@@ -670,7 +675,7 @@ jewels::expected<void, ErrorCode> Filesystem::remove(std::string_view path)
   return {};
 }
 
-jewels::expected<size_t, ErrorCode> Filesystem::remove_all(std::string_view path)
+jewels::expected<size_t, ErrorCode> Filesystem::remove_all(std::string_view path) const
 {
   size_t count{0UL};
 

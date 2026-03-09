@@ -90,7 +90,7 @@ def test_generic_missing_repr(fs_importer: FilesystemImporter) -> None:
     )
     with pytest.raises(
         ValueError,
-        match="Unable to locate representation for interface.",
+        match=r"Unable to locate representation for interface\.",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
@@ -126,7 +126,7 @@ def test_generic_unsupported_param(fs_importer: FilesystemImporter) -> None:
     assert isinstance(target, py_target.PyTarget)
     with pytest.raises(
         NotImplementedError,
-        match="Unsupported parameter type:",
+        match=r"Unsupported parameter type:",
     ):
         target.render_to_str()
 
@@ -304,7 +304,7 @@ def test_generic_no_alias(fs_importer: FilesystemImporter) -> None:
     )
     with pytest.raises(
         ValueError,
-        match="Python interfaces for generic schemas must have an alias.",
+        match=r"Python interfaces for generic schemas must have an alias\.",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 

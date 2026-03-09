@@ -1,751 +1,408 @@
+#![generate(cpp)]
+#![cpp(namespace=unused)]
+
 // Degrees.
+#[cpp(type_namespace=au, type_header="jewels/units/degrees.hh", type_factory=degrees)]
 strong_type DegreesF
 {
   underlying_type: Float32;
 }
 
 // Degrees.
+#[cpp(type_namespace=au, type_header="jewels/units/degrees.hh", type_factory=degrees)]
 strong_type DegreesD
 {
   underlying_type: Float64;
 }
 
 // Degrees.
+#[cpp(type_namespace=au, type_header="jewels/units/degrees.hh", type_factory=degrees)]
 strong_type DegreesU16
 {
   underlying_type: UInt16;
 }
 
 // Centidegrees.
+#[cpp(type_namespace=au, type_header="jewels/units/degrees.hh", type_factory=centidegrees)]
 strong_type CentiDegreesU16
 {
   underlying_type: UInt16;
 }
 
 // Radians.
+#[cpp(type_namespace=au, type_header="jewels/units/radians.hh", type_factory=radians)]
 strong_type RadiansF
 {
   underlying_type: Float32;
 }
 
 // Radians.
+#[cpp(type_namespace=au, type_header="jewels/units/radians.hh", type_factory=radians)]
 strong_type RadiansD
 {
   underlying_type: Float64;
 }
 
 // Gravity.
+#[cpp(type_namespace=au, type_header="jewels/units/earth.hh", type_factory=earth_surface_gs)]
 strong_type GravityF
 {
   underlying_type: Float32;
 }
 
 // Gravity.
+#[cpp(type_namespace=au, type_header="jewels/units/earth.hh", type_factory=earth_surface_gs)]
 strong_type GravityD
 {
   underlying_type: Float64;
 }
 
 // Hertz.
+#[cpp(type_namespace=au, type_header="jewels/units/hertz.hh", type_factory=hertz)]
 strong_type HertzF
 {
   underlying_type: Float32;
 }
 
 // Hertz.
+#[cpp(type_namespace=au, type_header="jewels/units/hertz.hh", type_factory=hertz)]
 strong_type HertzD
 {
   underlying_type: Float64;
 }
 
 // Meters.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=meters)]
 strong_type MetersF
 {
   underlying_type: Float32;
 }
 
 // Meters.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=meters)]
 strong_type MetersD
 {
   underlying_type: Float64;
 }
 
 // Kilometers.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=kilometers)]
 strong_type KilometersF
 {
   underlying_type: Float32;
 }
 
 // Kilometers.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=kilometers)]
 strong_type KilometersD
 {
   underlying_type: Float64;
 }
 
 // MetersSquared.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=meters_squared)]
 strong_type MetersSquaredF
 {
   underlying_type: Float32;
 }
 
 // MetersSquared.
+#[cpp(type_namespace=au, type_header="jewels/units/meters.hh", type_factory=meters_squared)]
 strong_type MetersSquaredD
 {
   underlying_type: Float64;
 }
 
 // Feet.
+#[cpp(type_namespace=au, type_header="jewels/units/feet.hh", type_factory=feet)]
 strong_type FeetF
 {
   underlying_type: Float32;
 }
 
 // Feet.
+#[cpp(type_namespace=au, type_header="jewels/units/feet.hh", type_factory=feet)]
 strong_type FeetD
 {
   underlying_type: Float64;
 }
 
 // Seconds.
+#[cpp(type_namespace=au, type_header="jewels/units/seconds.hh", type_factory=seconds)]
 strong_type SecondsF
 {
   underlying_type: Float32;
 }
 
 // Seconds.
+#[cpp(type_namespace=au, type_header="jewels/units/seconds.hh", type_factory=seconds)]
 strong_type SecondsD
 {
   underlying_type: Float64;
 }
 
 // Meters per second cubed.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mpsss)]
 strong_type MetersPerSecondCubedF
 {
   underlying_type: Float32;
 }
 
 // Meters per second cubed.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mpsss)]
 strong_type MetersPerSecondCubedD
 {
   underlying_type: Float64;
 }
 
 // Meters per second squared.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mpss)]
 strong_type MetersPerSecondSquaredF
 {
   underlying_type: Float32;
 }
 
 // Meters per second squared.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mpss)]
 strong_type MetersPerSecondSquaredD
 {
   underlying_type: Float64;
 }
 
 // Meters per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mps)]
 strong_type MetersPerSecondF
 {
   underlying_type: Float32;
 }
 
 // Meters per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=mps)]
 strong_type MetersPerSecondD
 {
   underlying_type: Float64;
 }
 
 // Kilometers per hour.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=kilometers_per_hour)]
 strong_type KilometersPerHourF
 {
   underlying_type: Float32;
 }
 
 // Kilometers per hour.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=kilometers_per_hour)]
 strong_type KilometersPerHourD
 {
   underlying_type: Float64;
 }
 
 // Miles per hour.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=miles_per_hour)]
 strong_type MilesPerHourF
 {
   underlying_type: Float32;
 }
 
 // Miles per hour.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=miles_per_hour)]
 strong_type MilesPerHourD
 {
   underlying_type: Float64;
 }
 
 // One per second (1/s).
+#[cpp(type_namespace=au, type_header="jewels/units/seconds.hh", type_factory=one_per_second)]
 strong_type OnePerSecondF
 {
   underlying_type: Float32;
 }
 
 // One per second (1/s).
+#[cpp(type_namespace=au, type_header="jewels/units/seconds.hh", type_factory=one_per_second)]
 strong_type OnePerSecondD
 {
   underlying_type: Float64;
 }
 
 // One per meter.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=one_per_meter)]
 strong_type OnePerMeterF
 {
   underlying_type: Float32;
 }
 
 // One per meter.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=one_per_meter)]
 strong_type OnePerMeterD
 {
   underlying_type: Float64;
 }
 
 // One per meter per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=one_per_meter_per_second)]
 strong_type OnePerMeterPerSecondF
 {
   underlying_type: Float32;
 }
 
 // One per meter per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=one_per_meter_per_second)]
 strong_type OnePerMeterPerSecondD
 {
   underlying_type: Float64;
 }
 
 // Radians per meter.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_meter)]
 strong_type RadsPerMeterF
 {
   underlying_type: Float32;
 }
 
-// One per meter.
+// Radians per meter.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_meter)]
 strong_type RadsPerMeterD
 {
   underlying_type: Float64;
 }
 
 // Radians per meter per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_meter_per_second)]
 strong_type RadsPerMeterPerSecondF
 {
   underlying_type: Float32;
 }
 
 // Radians per meter per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_meter_per_second)]
 strong_type RadsPerMeterPerSecondD
 {
   underlying_type: Float64;
 }
 
 // Rads per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second)]
 strong_type RadsPerSecondF
 {
   underlying_type: Float32;
 }
 
 // Rads per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second)]
 strong_type RadsPerSecondD
 {
   underlying_type: Float64;
 }
 
 // Rads per second squared.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second_squared)]
 strong_type RadsPerSecondSquaredF
 {
   underlying_type: Float32;
 }
 
 // Rads per second squared.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second_squared)]
 strong_type RadsPerSecondSquaredD
 {
   underlying_type: Float64;
 }
 
 // Rads per second cubed.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second_cubed)]
 strong_type RadsPerSecondCubedF
 {
   underlying_type: Float32;
 }
 
 // Rads per second cubed.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=rads_per_second_cubed)]
 strong_type RadsPerSecondCubedD
 {
   underlying_type: Float64;
 }
 
 // Degrees per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=degps)]
 strong_type DegreesPerSecondF
 {
   underlying_type: Float32;
 }
 
 // Degrees per second.
+#[cpp(type_namespace=au, type_header="jewels/units/kinematics.hh", type_factory=degps)]
 strong_type DegreesPerSecondD
 {
   underlying_type: Float64;
 }
 
 // Pounds mass.
+#[cpp(type_namespace=au, type_header="jewels/units/pounds_mass.hh", type_factory=pounds_mass)]
 strong_type PoundsMassF
 {
   underlying_type: Float32;
 }
 
 // Pounds mass.
+#[cpp(type_namespace=au, type_header="jewels/units/pounds_mass.hh", type_factory=pounds_mass)]
 strong_type PoundsMassD
 {
   underlying_type: Float64;
 }
 
 // Kilograms
+#[cpp(type_namespace=au, type_header="jewels/units/kilograms.hh", type_factory=kilograms)]
 strong_type KilogramsF
 {
   underlying_type: Float32;
 }
 
 // Kilograms
+#[cpp(type_namespace=au, type_header="jewels/units/kilograms.hh", type_factory=kilograms)]
 strong_type KilogramsD
 {
   underlying_type: Float64;
 }
 
 // KilogramsPerMeterCubed
+#[cpp(type_namespace=au, type_header="jewels/units/density.hh", type_factory=kg_per_m3)]
 strong_type KilogramsPerMeterCubedF
 {
   underlying_type: Float32;
 }
 
 // KilogramsPerMeterCubed
+#[cpp(type_namespace=au, type_header="jewels/units/density.hh", type_factory=kg_per_m3)]
 strong_type KilogramsPerMeterCubedD
 {
   underlying_type: Float64;
 }
 
 // Newtons
+#[cpp(type_namespace=au, type_header="jewels/units/newtons.hh", type_factory=newtons)]
 strong_type NewtonsF
 {
   underlying_type: Float32;
 }
 
 // Newtons
+#[cpp(type_namespace=au, type_header="jewels/units/newtons.hh", type_factory=newtons)]
 strong_type NewtonsD
 {
   underlying_type: Float64;
 }
 
 // NewtonMeters
+#[cpp(type_namespace=au, type_header="jewels/units/newtons.hh", type_factory=newton_meters)]
 strong_type NewtonMetersF
 {
   underlying_type: Float32;
 }
 
 // NewtonMeters
+#[cpp(type_namespace=au, type_header="jewels/units/newtons.hh", type_factory=newton_meters)]
 strong_type NewtonMetersD
 {
   underlying_type: Float64;
-}
-
-cpp_target au
-{
-  options
-  {
-    namespace unused;
-  }
-
-  extern
-  {
-    header_file: "jewels/units/degrees.hh";
-    namespace: au;
-
-    type
-    {
-      name: DegreesF;
-      factory: degrees;
-    }
-
-    type
-    {
-      name: DegreesD;
-      factory: degrees;
-    }
-
-    type
-    {
-      name: DegreesU16;
-      factory: degrees;
-    }
-
-    type
-    {
-      name: CentiDegreesU16;
-      factory: centidegrees;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/radians.hh";
-    namespace: au;
-
-    type
-    {
-      name: RadiansF;
-      factory: radians;
-    }
-
-    type
-    {
-      name: RadiansD;
-      factory: radians;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/earth.hh";
-    namespace: au;
-
-    type
-    {
-      name: GravityF;
-      factory: earth_surface_gs;
-    }
-
-    type
-    {
-      name: GravityD;
-      factory: earth_surface_gs;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/hertz.hh";
-    namespace: au;
-
-    type
-    {
-      name: HertzF;
-      factory: hertz;
-    }
-
-    type
-    {
-      name: HertzD;
-      factory: hertz;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/meters.hh";
-    namespace: au;
-
-    type
-    {
-      name: MetersF;
-      factory: meters;
-    }
-
-    type
-    {
-      name: MetersD;
-      factory: meters;
-    }
-
-    type
-    {
-      name: MetersSquaredF;
-      factory: meters_squared;
-    }
-
-    type
-    {
-      name: MetersSquaredD;
-      factory: meters_squared;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/feet.hh";
-    namespace: au;
-
-    type
-    {
-      name: FeetF;
-      factory: feet;
-    }
-
-    type
-    {
-      name: FeetD;
-      factory: feet;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/seconds.hh";
-    namespace: au;
-
-    type
-    {
-      name: SecondsF;
-      factory: seconds;
-    }
-
-    type
-    {
-      name: SecondsD;
-      factory: seconds;
-    }
-
-    type
-    {
-      name: OnePerSecondF;
-      factory: one_per_second;
-    }
-
-    type
-    {
-      name: OnePerSecondD;
-      factory: one_per_second;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/kinematics.hh";
-    namespace: au;
-
-    type
-    {
-      name: MetersPerSecondCubedF;
-      factory: mpsss;
-    }
-
-    type
-    {
-      name: MetersPerSecondCubedD;
-      factory: mpsss;
-    }
-
-    type
-    {
-      name: MetersPerSecondSquaredF;
-      factory: mpss;
-    }
-
-    type
-    {
-      name: MetersPerSecondSquaredD;
-      factory: mpss;
-    }
-
-    type
-    {
-      name: MetersPerSecondF;
-      factory: mps;
-    }
-
-    type
-    {
-      name: MetersPerSecondD;
-      factory: mps;
-    }
-
-    type
-    {
-      name: MilesPerHourF;
-      factory: miles_per_hour;
-    }
-
-    type
-    {
-      name: MilesPerHourD;
-      factory: miles_per_hour;
-    }
-
-    type
-    {
-      name: OnePerMeterF;
-      factory: one_per_meter;
-    }
-
-    type
-    {
-      name: OnePerMeterD;
-      factory: one_per_meter;
-    }
-
-    type
-    {
-      name: OnePerMeterPerSecondF;
-      factory: one_per_meter_per_second;
-    }
-
-    type
-    {
-      name: OnePerMeterPerSecondD;
-      factory: one_per_meter_per_second;
-    }
-
-    type
-    {
-      name: RadsPerMeterF;
-      factory: rads_per_meter;
-    }
-
-    type
-    {
-      name: RadsPerMeterD;
-      factory: rads_per_meter;
-    }
-
-    type
-    {
-      name: RadsPerMeterPerSecondF;
-      factory: rads_per_meter_per_second;
-    }
-
-    type
-    {
-      name: RadsPerMeterPerSecondD;
-      factory: rads_per_meter_per_second;
-    }
-
-    type
-    {
-      name: RadsPerSecondF;
-      factory: rads_per_second;
-    }
-
-    type
-    {
-      name: RadsPerSecondD;
-      factory: rads_per_second;
-    }
-
-    type
-    {
-      name: RadsPerSecondSquaredF;
-      factory: rads_per_second_squared;
-    }
-
-    type
-    {
-      name: RadsPerSecondSquaredD;
-      factory: rads_per_second_squared;
-    }
-
-    type
-    {
-      name: RadsPerSecondCubedF;
-      factory: rads_per_second_cubed;
-    }
-
-    type
-    {
-      name: RadsPerSecondCubedD;
-      factory: rads_per_second_cubed;
-    }
-
-    type
-    {
-      name: DegreesPerSecondF;
-      factory: degps;
-    }
-
-    type
-    {
-      name: DegreesPerSecondD;
-      factory: degps;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/pounds_mass.hh";
-    namespace: au;
-
-    type
-    {
-      name: PoundsMassF;
-      factory: pounds_mass;
-    }
-
-    type
-    {
-      name: PoundsMassD;
-      factory: pounds_mass;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/kilograms.hh";
-    namespace: au;
-
-    type
-    {
-      name: KilogramsF;
-      factory: kilograms;
-    }
-
-    type
-    {
-      name: KilogramsD;
-      factory: kilograms;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/density.hh";
-    namespace: au;
-
-    type
-    {
-      name: KilogramsPerMeterCubedF;
-      factory: kg_per_m3;
-    }
-
-    type
-    {
-      name: KilogramsPerMeterCubedD;
-      factory: kg_per_m3;
-    }
-  }
-
-  extern
-  {
-    header_file: "jewels/units/newtons.hh";
-    namespace: au;
-
-    type
-    {
-      name: NewtonsF;
-      factory: newtons;
-    }
-
-    type
-    {
-      name: NewtonsD;
-      factory: newtons;
-    }
-
-    type
-    {
-      name: NewtonMetersF;
-      factory: newton_meters;
-    }
-
-    type
-    {
-      name: NewtonMetersD;
-      factory: newton_meters;
-    }
-  }
 }

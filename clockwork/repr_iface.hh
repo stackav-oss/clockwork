@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/cpp_message_encoding.hh"
+#include "clockwork/logging/cpp_schema_encoding.hh"
 
 #include <type_traits> // IWYU pragma: keep
 
@@ -70,8 +70,9 @@ struct LoggingTraits<Tap<Tachyon<T>>> : public LoggingTraits<Tachyon<T>>
 
 struct TachyonLoggingTraits
 {
-  static constexpr auto message_encoding = clockwork_logging::MessageEncoding::tachyon;
-  static constexpr auto schema_encoding = clockwork_logging::SchemaEncoding::clockwork_tachyon;
+  static constexpr auto has_metadata = true;
+  static constexpr auto message_encoding = clockwork_logging::CppMessageEncoding::tachyon;
+  static constexpr auto schema_encoding = clockwork_logging::CppSchemaEncoding::clockwork_tachyon;
 };
 
 namespace detail

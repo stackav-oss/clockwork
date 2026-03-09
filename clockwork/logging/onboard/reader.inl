@@ -4,17 +4,17 @@
 
 #include "clockwork/logging/onboard/reader.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/log_uuid.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "clockwork/logging/zstd_helper.hh"
 #include "jewels/container/at.hh"
@@ -27,7 +27,7 @@
 #include "jewels/std/span.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 #include <xxh3.h>
 
 #include <algorithm>
@@ -236,7 +236,7 @@ Reader<BufferedReaderType>::list_log_files_for_interval(
   requires DiskBufferedReaderType<BufferedReaderType>
 {
   auto list_result = list_log_files(memory_resource, log_path);
-  if (!list_result || list_result->size() <= 1U)
+  if (!list_result || list_result->empty())
   {
     return list_result;
   }
@@ -248,6 +248,10 @@ Reader<BufferedReaderType>::list_log_files_for_interval(
   }
   std::pmr::vector<LogExpected<LogInterval>> interval_results(
     log_files.size(), jewels::unexpected(LogError::not_initialized), memory_resource);
+  if (log_files.size() == 1U)
+  {
+    return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+  }
   // Reading the last log file is expensive if the log is being written, check the second to last file first
   interval_results.at(log_files.size() - 2U) =
     get_file_log_interval(memory_resource, log_files.at(log_files.size() - 2U), TimeFilterOption::log_time);

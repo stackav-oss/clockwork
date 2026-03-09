@@ -128,6 +128,7 @@ proto_py_library(
     name = "service_py_library",
     srcs = ["service_pb2.py"],
     data = ["service_pb2.pyi"],
+    imports = ["../../.."],
     visibility = ["//visibility:public"],
     deps = ["@protobuf//:protobuf_python"],
 )

@@ -1,0 +1,494 @@
+namespace test
+{
+
+template <class SchemaType, size_t size> class ComprehensiveTest_FixedSoaElementRef;
+template <class SchemaType, size_t size> class ComprehensiveTest_FixedSoaElementConstRef;
+template <class SchemaType, size_t max_size> class ComprehensiveTest_VarSoaElementRef;
+template <class SchemaType, size_t max_size> class ComprehensiveTest_VarSoaElementConstRef;
+
+/// Proxy reference to access a single ComprehensiveTest element in a SoA
+template <size_t size>
+class ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>
+{
+public:
+  friend class ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>;
+
+  ComprehensiveTest_FixedSoaElementRef(::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa, size_t index);
+  ComprehensiveTest_FixedSoaElementRef(const ComprehensiveTest_FixedSoaElementRef&) = default;
+  ComprehensiveTest_FixedSoaElementRef(ComprehensiveTest_FixedSoaElementRef&&) = default;
+  ~ComprehensiveTest_FixedSoaElementRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint32_t& get_id() const;
+  [[nodiscard]] uint32_t& get_mutable_id();
+  void set_id(uint32_t new_value);
+  [[nodiscard]] const int64_t& get_timestamp() const;
+  [[nodiscard]] int64_t& get_mutable_timestamp();
+  void set_timestamp(int64_t new_value);
+  [[nodiscard]] const bool& get_flag() const;
+  [[nodiscard]] bool& get_mutable_flag();
+  void set_flag(bool new_value);
+  [[nodiscard]] const float& get_confidence() const;
+  [[nodiscard]] float& get_mutable_confidence();
+  void set_confidence(float new_value);
+  [[nodiscard]] const ::std::array<float, 3U>& get_position() const;
+  [[nodiscard]] ::std::array<float, 3U>& get_mutable_position();
+  void set_position(::std::array<float, 3U> new_value);
+  [[nodiscard]] ::std::span<const float> get_measurements() const;
+  [[nodiscard]] ::std::span<float> get_mutable_measurements();
+  [[nodiscard]] const ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() const &;
+  [[nodiscard]] ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() &;
+  ::jewels::BinaryOutcome try_set_measurements(::std::span<const float> input_span) &;
+  [[nodiscard]] const ::jewels::tap::VarString<32U>& get_label() const;
+  [[nodiscard]] ::jewels::tap::VarString<32U>& get_mutable_label();
+  void set_label(::jewels::tap::VarString<32U> new_value);
+  [[nodiscard]] const ::jewels::tap::Optional<double>& get_optional_score() const;
+  [[nodiscard]] ::jewels::tap::Optional<double>& get_mutable_optional_score();
+  void set_optional_score(::jewels::tap::Optional<double> new_value);
+  [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_center() const;
+  [[nodiscard]] ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_mutable_center();
+  void set_center(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>> new_value);
+
+  // Assignment operators
+  ComprehensiveTest_FixedSoaElementRef& operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap);
+  ComprehensiveTest_FixedSoaElementRef& operator=(const ComprehensiveTest_FixedSoaElementRef& other);
+  ComprehensiveTest_FixedSoaElementRef& operator=(ComprehensiveTest_FixedSoaElementRef&& other);
+  ComprehensiveTest_FixedSoaElementRef& operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init);
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const;
+
+  bool operator==(const ComprehensiveTest_FixedSoaElementRef& other) const;
+
+  // Swap for lvalue references (called by std::swap)
+  friend void swap(ComprehensiveTest_FixedSoaElementRef& ref_a, ComprehensiveTest_FixedSoaElementRef& ref_b) noexcept
+  {
+    const auto temp_id = ref_a.get_id();
+    const auto temp_timestamp = ref_a.get_timestamp();
+    const auto temp_flag = ref_a.get_flag();
+    const auto temp_confidence = ref_a.get_confidence();
+    const auto temp_position = ref_a.get_position();
+    const auto temp_measurements = ref_a.get_underlying_measurements();
+    const auto temp_label = ref_a.get_label();
+    const auto temp_optional_score = ref_a.get_optional_score();
+    const auto temp_center = ref_a.get_center();
+    ref_a.get_mutable_id() = ref_b.get_id();
+    ref_a.get_mutable_timestamp() = ref_b.get_timestamp();
+    ref_a.get_mutable_flag() = ref_b.get_flag();
+    ref_a.get_mutable_confidence() = ref_b.get_confidence();
+    ref_a.get_mutable_position() = ref_b.get_position();
+    ref_a.get_underlying_measurements() = ref_b.get_underlying_measurements();
+    ref_a.get_mutable_label() = ref_b.get_label();
+    ref_a.get_mutable_optional_score() = ref_b.get_optional_score();
+    ref_a.get_mutable_center() = ref_b.get_center();
+    ref_b.get_mutable_id() = temp_id;
+    ref_b.get_mutable_timestamp() = temp_timestamp;
+    ref_b.get_mutable_flag() = temp_flag;
+    ref_b.get_mutable_confidence() = temp_confidence;
+    ref_b.get_mutable_position() = temp_position;
+    ref_b.get_underlying_measurements() = temp_measurements;
+    ref_b.get_mutable_label() = temp_label;
+    ref_b.get_mutable_optional_score() = temp_optional_score;
+    ref_b.get_mutable_center() = temp_center;
+  }
+
+  // Swap for rvalue references (called by std::iter_swap via *it)
+  friend void swap(
+    ComprehensiveTest_FixedSoaElementRef&& ref_a,           // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+    ComprehensiveTest_FixedSoaElementRef&& ref_b) noexcept  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+  {
+    swap(ref_a, ref_b);
+  }
+
+private:
+  ::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa_;
+  size_t index_;
+};
+
+/// Proxy const reference to access a single ComprehensiveTest element in a SoA
+template <size_t size>
+class ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>
+{
+public:
+  ComprehensiveTest_FixedSoaElementConstRef(const ::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa, size_t index);
+  explicit ComprehensiveTest_FixedSoaElementConstRef(const ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ref);
+  ComprehensiveTest_FixedSoaElementConstRef(const ComprehensiveTest_FixedSoaElementConstRef&) = default;
+  ComprehensiveTest_FixedSoaElementConstRef(ComprehensiveTest_FixedSoaElementConstRef&&) = default;
+  ~ComprehensiveTest_FixedSoaElementConstRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint32_t& get_id() const;
+  [[nodiscard]] const int64_t& get_timestamp() const;
+  [[nodiscard]] const bool& get_flag() const;
+  [[nodiscard]] const float& get_confidence() const;
+  [[nodiscard]] const ::std::array<float, 3U>& get_position() const;
+  [[nodiscard]] ::std::span<const float> get_measurements() const;
+  [[nodiscard]] const ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() const &;
+  [[nodiscard]] const ::jewels::tap::VarString<32U>& get_label() const;
+  [[nodiscard]] const ::jewels::tap::Optional<double>& get_optional_score() const;
+  [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_center() const;
+
+  // Assignment operators deleted
+  void operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>&) = delete;
+  void operator=(const ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>&) = delete;
+  void operator=(const ComprehensiveTest_FixedSoaElementConstRef&) = delete;
+  void operator=(ComprehensiveTest_FixedSoaElementConstRef&&) = delete;
+  void operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>&) = delete;
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const;
+
+  bool operator==(const ComprehensiveTest_FixedSoaElementConstRef& other) const;
+
+private:
+  const ::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa_;
+  size_t index_;
+};
+
+/// Proxy reference to access a single ComprehensiveTest element in a SoA
+template <size_t max_size>
+class ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>
+{
+public:
+  friend class ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>;
+
+  ComprehensiveTest_VarSoaElementRef(::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa, size_t index);
+  ComprehensiveTest_VarSoaElementRef(const ComprehensiveTest_VarSoaElementRef&) = default;
+  ComprehensiveTest_VarSoaElementRef(ComprehensiveTest_VarSoaElementRef&&) = default;
+  ~ComprehensiveTest_VarSoaElementRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint32_t& get_id() const;
+  [[nodiscard]] uint32_t& get_mutable_id();
+  void set_id(uint32_t new_value);
+  [[nodiscard]] const int64_t& get_timestamp() const;
+  [[nodiscard]] int64_t& get_mutable_timestamp();
+  void set_timestamp(int64_t new_value);
+  [[nodiscard]] const bool& get_flag() const;
+  [[nodiscard]] bool& get_mutable_flag();
+  void set_flag(bool new_value);
+  [[nodiscard]] const float& get_confidence() const;
+  [[nodiscard]] float& get_mutable_confidence();
+  void set_confidence(float new_value);
+  [[nodiscard]] const ::std::array<float, 3U>& get_position() const;
+  [[nodiscard]] ::std::array<float, 3U>& get_mutable_position();
+  void set_position(::std::array<float, 3U> new_value);
+  [[nodiscard]] ::std::span<const float> get_measurements() const;
+  [[nodiscard]] ::std::span<float> get_mutable_measurements();
+  [[nodiscard]] const ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() const &;
+  [[nodiscard]] ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() &;
+  ::jewels::BinaryOutcome try_set_measurements(::std::span<const float> input_span) &;
+  [[nodiscard]] const ::jewels::tap::VarString<32U>& get_label() const;
+  [[nodiscard]] ::jewels::tap::VarString<32U>& get_mutable_label();
+  void set_label(::jewels::tap::VarString<32U> new_value);
+  [[nodiscard]] const ::jewels::tap::Optional<double>& get_optional_score() const;
+  [[nodiscard]] ::jewels::tap::Optional<double>& get_mutable_optional_score();
+  void set_optional_score(::jewels::tap::Optional<double> new_value);
+  [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_center() const;
+  [[nodiscard]] ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_mutable_center();
+  void set_center(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>> new_value);
+
+  // Assignment operators
+  ComprehensiveTest_VarSoaElementRef& operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap);
+  ComprehensiveTest_VarSoaElementRef& operator=(const ComprehensiveTest_VarSoaElementRef& other);
+  ComprehensiveTest_VarSoaElementRef& operator=(ComprehensiveTest_VarSoaElementRef&& other);
+  ComprehensiveTest_VarSoaElementRef& operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init);
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const;
+
+  bool operator==(const ComprehensiveTest_VarSoaElementRef& other) const;
+
+  // Swap for lvalue references (called by std::swap)
+  friend void swap(ComprehensiveTest_VarSoaElementRef& ref_a, ComprehensiveTest_VarSoaElementRef& ref_b) noexcept
+  {
+    const auto temp_id = ref_a.get_id();
+    const auto temp_timestamp = ref_a.get_timestamp();
+    const auto temp_flag = ref_a.get_flag();
+    const auto temp_confidence = ref_a.get_confidence();
+    const auto temp_position = ref_a.get_position();
+    const auto temp_measurements = ref_a.get_underlying_measurements();
+    const auto temp_label = ref_a.get_label();
+    const auto temp_optional_score = ref_a.get_optional_score();
+    const auto temp_center = ref_a.get_center();
+    ref_a.get_mutable_id() = ref_b.get_id();
+    ref_a.get_mutable_timestamp() = ref_b.get_timestamp();
+    ref_a.get_mutable_flag() = ref_b.get_flag();
+    ref_a.get_mutable_confidence() = ref_b.get_confidence();
+    ref_a.get_mutable_position() = ref_b.get_position();
+    ref_a.get_underlying_measurements() = ref_b.get_underlying_measurements();
+    ref_a.get_mutable_label() = ref_b.get_label();
+    ref_a.get_mutable_optional_score() = ref_b.get_optional_score();
+    ref_a.get_mutable_center() = ref_b.get_center();
+    ref_b.get_mutable_id() = temp_id;
+    ref_b.get_mutable_timestamp() = temp_timestamp;
+    ref_b.get_mutable_flag() = temp_flag;
+    ref_b.get_mutable_confidence() = temp_confidence;
+    ref_b.get_mutable_position() = temp_position;
+    ref_b.get_underlying_measurements() = temp_measurements;
+    ref_b.get_mutable_label() = temp_label;
+    ref_b.get_mutable_optional_score() = temp_optional_score;
+    ref_b.get_mutable_center() = temp_center;
+  }
+
+  // Swap for rvalue references (called by std::iter_swap via *it)
+  friend void swap(
+    ComprehensiveTest_VarSoaElementRef&& ref_a,           // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+    ComprehensiveTest_VarSoaElementRef&& ref_b) noexcept  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+  {
+    swap(ref_a, ref_b);
+  }
+
+private:
+  ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa_;
+  size_t index_;
+};
+
+/// Proxy const reference to access a single ComprehensiveTest element in a SoA
+template <size_t max_size>
+class ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>
+{
+public:
+  ComprehensiveTest_VarSoaElementConstRef(const ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa, size_t index);
+  explicit ComprehensiveTest_VarSoaElementConstRef(const ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ref);
+  ComprehensiveTest_VarSoaElementConstRef(const ComprehensiveTest_VarSoaElementConstRef&) = default;
+  ComprehensiveTest_VarSoaElementConstRef(ComprehensiveTest_VarSoaElementConstRef&&) = default;
+  ~ComprehensiveTest_VarSoaElementConstRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint32_t& get_id() const;
+  [[nodiscard]] const int64_t& get_timestamp() const;
+  [[nodiscard]] const bool& get_flag() const;
+  [[nodiscard]] const float& get_confidence() const;
+  [[nodiscard]] const ::std::array<float, 3U>& get_position() const;
+  [[nodiscard]] ::std::span<const float> get_measurements() const;
+  [[nodiscard]] const ::jewels::tap::VarArray<float, 10U>& get_underlying_measurements() const &;
+  [[nodiscard]] const ::jewels::tap::VarString<32U>& get_label() const;
+  [[nodiscard]] const ::jewels::tap::Optional<double>& get_optional_score() const;
+  [[nodiscard]] const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& get_center() const;
+
+  // Assignment operators deleted
+  void operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>&) = delete;
+  void operator=(const ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>&) = delete;
+  void operator=(const ComprehensiveTest_VarSoaElementConstRef&) = delete;
+  void operator=(ComprehensiveTest_VarSoaElementConstRef&&) = delete;
+  void operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>&) = delete;
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const;
+
+  bool operator==(const ComprehensiveTest_VarSoaElementConstRef& other) const;
+
+private:
+  const ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa_;
+  size_t index_;
+};
+
+} // namespace test
+
+// Specialize SoaTraits in jewels::tap namespace to break CRTP circular dependency
+namespace jewels::tap
+{
+
+template <size_t size>
+struct SoaTraits<::clockwork::FixedSoa<::test::ComprehensiveTest, size>>
+{
+  using ElementRef = ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>;
+  using ElementConstRef = ::test::ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>;
+};
+
+template <size_t max_size>
+struct SoaTraits<::clockwork::VarSoa<::test::ComprehensiveTest, max_size>>
+{
+  using ElementRef = ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>;
+  using ElementConstRef = ::test::ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>;
+};
+
+} // namespace jewels::tap
+
+namespace clockwork
+{
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpacked-non-pod"
+/// Fixed-size Struct-of-Arrays for ComprehensiveTest.
+template <size_t size>
+struct __attribute__((__packed__)) alignas(8)
+  FixedSoa<::test::ComprehensiveTest, size> : public ::jewels::tap::SoaInterface<::clockwork::FixedSoa<::test::ComprehensiveTest, size>, ::test::ComprehensiveTest, size, false>
+{
+public:
+  using Base = ::jewels::tap::SoaInterface<::clockwork::FixedSoa<::test::ComprehensiveTest, size>, ::test::ComprehensiveTest, size, false>;
+  using ElementRef = ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>;
+  using ElementConstRef = ::test::ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>;
+  friend Base;
+  friend ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>;
+  friend ::test::ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>;
+
+  FixedSoa() = default;
+
+  /// Return a span view of the 'id' field array.
+  [[nodiscard]] inline ::std::span<uint32_t> view_id();
+  /// Return a const span view of the 'id' field array.
+  [[nodiscard]] inline ::std::span<const uint32_t> view_id() const;
+  /// Return a span view of the 'timestamp' field array.
+  [[nodiscard]] inline ::std::span<int64_t> view_timestamp();
+  /// Return a const span view of the 'timestamp' field array.
+  [[nodiscard]] inline ::std::span<const int64_t> view_timestamp() const;
+  /// Return a span view of the 'flag' field array.
+  [[nodiscard]] inline ::std::span<bool> view_flag();
+  /// Return a const span view of the 'flag' field array.
+  [[nodiscard]] inline ::std::span<const bool> view_flag() const;
+  /// Return a span view of the 'confidence' field array.
+  [[nodiscard]] inline ::std::span<float> view_confidence();
+  /// Return a const span view of the 'confidence' field array.
+  [[nodiscard]] inline ::std::span<const float> view_confidence() const;
+  /// Return a span view of the 'position' field array.
+  [[nodiscard]] inline ::std::span<::std::array<float, 3U>> view_position();
+  /// Return a const span view of the 'position' field array.
+  [[nodiscard]] inline ::std::span<const ::std::array<float, 3U>> view_position() const;
+  /// Return a span view of the 'measurements' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::VarArray<float, 10U>> view_measurements();
+  /// Return a const span view of the 'measurements' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::VarArray<float, 10U>> view_measurements() const;
+  /// Return a span view of the 'label' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::VarString<32U>> view_label();
+  /// Return a const span view of the 'label' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::VarString<32U>> view_label() const;
+  /// Return a span view of the 'optional_score' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::Optional<double>> view_optional_score();
+  /// Return a const span view of the 'optional_score' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::Optional<double>> view_optional_score() const;
+  /// Return a span view of the 'center' field array.
+  [[nodiscard]] inline ::std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>> view_center();
+  /// Return a const span view of the 'center' field array.
+  [[nodiscard]] inline ::std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>> view_center() const;
+
+  /// Compile-time layout verification (accesses private members for static_assert).
+  /// Only valid for size == 1.
+  static constexpr void verify_layout() noexcept requires (size == 1);
+
+private:
+  /// Array storage for field 'measurements': Variable-size array of measurements
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::VarArray<float, 10U>>, size> measurements_{};
+  /// Array storage for field 'label': Variable-length string label
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::VarString<32U>>, size> label_{};
+  /// Array storage for field 'optional_score': Optional score value
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::Optional<double>>, size> optional_score_{};
+  /// Array storage for field 'timestamp': 64-bit timestamp
+  ::std::array<::jewels::memory::AlignedStorage<int64_t>, size> timestamp_{};
+  /// Array storage for field 'position': Fixed-size array of 3 floats
+  ::std::array<::jewels::memory::AlignedStorage<::std::array<float, 3U>>, size> position_{};
+  /// Array storage for field 'center': Nested Point2D subschema
+  ::std::array<::jewels::memory::AlignedStorage<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>, size> center_{};
+  /// Array storage for field 'id': Unsigned 32-bit identifier
+  ::std::array<::jewels::memory::AlignedStorage<uint32_t>, size> id_{};
+  /// Array storage for field 'confidence': Floating point confidence value
+  ::std::array<::jewels::memory::AlignedStorage<float>, size> confidence_{};
+  /// Array storage for field 'flag': Boolean flag
+  ::std::array<::jewels::memory::AlignedStorage<bool>, size> flag_{};
+
+  /// Compare field data (CRTP method for SoaInterface).
+  inline bool compare_fields(const ::clockwork::FixedSoa<::test::ComprehensiveTest, size>& other, size_t count) const;
+
+  void wipe_range(size_t begin, size_t end);
+  void construct_range(size_t begin, size_t end);
+  void construct_element(size_t index);
+  void construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap);
+  void construct_element(size_t index, const ElementRef& ref);
+  void construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init);
+};
+#pragma clang diagnostic pop
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpacked-non-pod"
+/// Variable-size Struct-of-Arrays for ComprehensiveTest.
+template <size_t max_size>
+struct __attribute__((__packed__)) alignas(8)
+  VarSoa<::test::ComprehensiveTest, max_size> : public ::jewels::tap::SoaInterface<::clockwork::VarSoa<::test::ComprehensiveTest, max_size>, ::test::ComprehensiveTest, max_size, true>
+{
+public:
+  using Base = ::jewels::tap::SoaInterface<::clockwork::VarSoa<::test::ComprehensiveTest, max_size>, ::test::ComprehensiveTest, max_size, true>;
+  using ElementRef = ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>;
+  using ElementConstRef = ::test::ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>;
+  friend Base;
+  friend ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>;
+  friend ::test::ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>;
+
+  VarSoa() = default;
+
+  /// Return a span view of the 'id' field array.
+  [[nodiscard]] inline ::std::span<uint32_t> view_id();
+  /// Return a const span view of the 'id' field array.
+  [[nodiscard]] inline ::std::span<const uint32_t> view_id() const;
+  /// Return a span view of the 'timestamp' field array.
+  [[nodiscard]] inline ::std::span<int64_t> view_timestamp();
+  /// Return a const span view of the 'timestamp' field array.
+  [[nodiscard]] inline ::std::span<const int64_t> view_timestamp() const;
+  /// Return a span view of the 'flag' field array.
+  [[nodiscard]] inline ::std::span<bool> view_flag();
+  /// Return a const span view of the 'flag' field array.
+  [[nodiscard]] inline ::std::span<const bool> view_flag() const;
+  /// Return a span view of the 'confidence' field array.
+  [[nodiscard]] inline ::std::span<float> view_confidence();
+  /// Return a const span view of the 'confidence' field array.
+  [[nodiscard]] inline ::std::span<const float> view_confidence() const;
+  /// Return a span view of the 'position' field array.
+  [[nodiscard]] inline ::std::span<::std::array<float, 3U>> view_position();
+  /// Return a const span view of the 'position' field array.
+  [[nodiscard]] inline ::std::span<const ::std::array<float, 3U>> view_position() const;
+  /// Return a span view of the 'measurements' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::VarArray<float, 10U>> view_measurements();
+  /// Return a const span view of the 'measurements' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::VarArray<float, 10U>> view_measurements() const;
+  /// Return a span view of the 'label' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::VarString<32U>> view_label();
+  /// Return a const span view of the 'label' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::VarString<32U>> view_label() const;
+  /// Return a span view of the 'optional_score' field array.
+  [[nodiscard]] inline ::std::span<::jewels::tap::Optional<double>> view_optional_score();
+  /// Return a const span view of the 'optional_score' field array.
+  [[nodiscard]] inline ::std::span<const ::jewels::tap::Optional<double>> view_optional_score() const;
+  /// Return a span view of the 'center' field array.
+  [[nodiscard]] inline ::std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>> view_center();
+  /// Return a const span view of the 'center' field array.
+  [[nodiscard]] inline ::std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>> view_center() const;
+
+  /// Compile-time layout verification (accesses private members for static_assert).
+  /// Only valid for max_size == 1.
+  static constexpr void verify_layout() noexcept requires (max_size == 1);
+
+private:
+  /// Array storage for field 'measurements': Variable-size array of measurements
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::VarArray<float, 10U>>, max_size> measurements_{};
+  /// Array storage for field 'label': Variable-length string label
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::VarString<32U>>, max_size> label_{};
+  /// Array storage for field 'optional_score': Optional score value
+  ::std::array<::jewels::memory::AlignedStorage<::jewels::tap::Optional<double>>, max_size> optional_score_{};
+  /// Array storage for field 'timestamp': 64-bit timestamp
+  ::std::array<::jewels::memory::AlignedStorage<int64_t>, max_size> timestamp_{};
+  /// Array storage for field 'position': Fixed-size array of 3 floats
+  ::std::array<::jewels::memory::AlignedStorage<::std::array<float, 3U>>, max_size> position_{};
+  /// Array storage for field 'center': Nested Point2D subschema
+  ::std::array<::jewels::memory::AlignedStorage<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>, max_size> center_{};
+  /// Array storage for field 'id': Unsigned 32-bit identifier
+  ::std::array<::jewels::memory::AlignedStorage<uint32_t>, max_size> id_{};
+  /// Array storage for field 'confidence': Floating point confidence value
+  ::std::array<::jewels::memory::AlignedStorage<float>, max_size> confidence_{};
+  /// Array storage for field 'flag': Boolean flag
+  ::std::array<::jewels::memory::AlignedStorage<bool>, max_size> flag_{};
+  /// Number of elements currently in the SoA.
+  ::jewels::tap::compact_size_t<max_size> size_{};
+
+  /// Compare field data (CRTP method for SoaInterface).
+  inline bool compare_fields(const ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>& other, size_t count) const;
+
+  void wipe_range(size_t begin, size_t end);
+  void construct_range(size_t begin, size_t end);
+  void construct_element(size_t index);
+  void construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap);
+  void construct_element(size_t index, const ElementRef& ref);
+  void construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init);
+};
+#pragma clang diagnostic pop
+
+} // namespace clockwork

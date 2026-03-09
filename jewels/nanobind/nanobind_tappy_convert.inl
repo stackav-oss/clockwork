@@ -9,7 +9,7 @@
 #include "jewels/std/span.hh"
 
 #include <Python.h>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/eval.h>
 #include <nanobind/nanobind.h>
 #include <wise_enum.h> // IWYU pragma: keep

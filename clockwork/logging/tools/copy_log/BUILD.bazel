@@ -13,6 +13,7 @@ cc_binary(
         "//jewels/filesystem:error_code",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
+        "//jewels/otel",
         "//jewels/std:expected",
         "@tclap",
     ],

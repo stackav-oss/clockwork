@@ -5,7 +5,8 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -37,7 +38,7 @@ using CogMap = std::pmr::unordered_map<
 /// @return the list of cog instances if successful
 ///
 [[nodiscard]] jewels::expected<CogMap, jewels::MonoError> setup_cogs(
-  std::span<const common::CogInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::CogInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   jewels::memory::MemoryResource memres_exec,
   const std::shared_ptr<AbstractCogQueue>& queue,

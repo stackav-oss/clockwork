@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Final, TypeAlias
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import clkbuiltins, clkenum, primitive, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, primitive, schema, typesys
 from typing_extensions import override
 
 
@@ -30,6 +30,39 @@ class FieldConstraint:
     def array_stride(self) -> int:
         """Determine the stride of an array of elements with this constraint."""
         return math.ceil(self.size / self.alignment) * self.alignment
+
+
+@dataclass(frozen=True, eq=True, slots=True)
+class FieldLayoutInfo:
+    """Layout information for a single field in an SoA structure.
+
+    Attributes:
+        field_num: The field number from the schema.
+        size: Size in bytes of one element of this field.
+        alignment: Alignment requirement for this field.
+        offset: Byte offset of this field array in the SoA layout.
+    """
+
+    field_num: int
+    size: int
+    alignment: int
+    offset: int
+
+
+@dataclass(frozen=True, eq=True, slots=True)
+class SoaLayoutInfo:
+    """Complete layout information for an SoA structure.
+
+    Attributes:
+        field_layouts: List of field layout information in memory order.
+                      For VarSoa, includes a size field with field_num=SIZE_FIELD_NUM.
+        total_size: Total size of the SoA structure in bytes (including size field if present).
+        max_alignment: Maximum alignment requirement across all fields.
+    """
+
+    field_layouts: tuple[FieldLayoutInfo, ...]
+    total_size: int
+    max_alignment: int
 
 
 TypeKey: TypeAlias = str
@@ -73,6 +106,9 @@ PRIMITIVE_CONSTRAINTS: Final[dict[str, tuple[str | None, FieldConstraint]]] = {
 
 SIZE_FIELD_SIZE: Final = 8
 SIZE_FIELD_ALIGNMENT: Final = 8
+
+# Sentinel value for size field in SoA layouts (not a real schema field)
+SIZE_FIELD_NUM: Final = -999
 
 
 class TachyonRegistry(Context):
@@ -124,10 +160,154 @@ class TachyonRegistryKey(ContextKey[TachyonRegistry]):
         register_generic_type(None, clkbuiltins.VAR_ARRAY, _var_array_factory, _registry=registry)
         register_generic_type(None, clkbuiltins.VAR_STRING, _var_string_factory, _registry=registry)
 
+        # Register SoA types with their factories
+        register_generic_type(None, clkbuiltins.FIXED_SOA, _fixed_soa_factory, _registry=registry)
+        register_generic_type(None, clkbuiltins.VAR_SOA, _var_soa_factory, _registry=registry)
+
         return registry
 
 
 TACHYON_REGISTRY_KEY: Final = TachyonRegistryKey("TachyonRegistry")
+
+# Maximum values for unsigned integer types (used for SoA size field selection)
+UINT8_MAX: Final = 0xFF
+UINT16_MAX: Final = 0xFFFF
+UINT32_MAX: Final = 0xFFFFFFFF
+UINT64_MAX: Final = 0xFFFFFFFFFFFFFFFF
+
+
+def align_offset(offset: int, alignment: int) -> int:
+    """Round up offset to the next alignment boundary.
+
+    Args:
+        offset: The current offset.
+        alignment: The alignment requirement.
+
+    Returns:
+        The aligned offset.
+    """
+    if alignment <= 0:
+        return offset
+    return offset + (alignment - (offset % alignment)) % alignment
+
+
+def get_compact_size_type_info(
+    max_size: int,
+) -> tuple[clkbuiltins.IntegerPrimitiveBuiltinSerializable, FieldConstraint]:
+    """Get the compact size type and constraint for a given max_size.
+
+    Selects the smallest unsigned integer type that can hold max_size values.
+
+    Args:
+        max_size: The maximum number of elements the container can hold.
+
+    Returns:
+        Tuple of (type_val, field_constraint)
+        - type_val: clkbuiltins type (UINT8, UINT16, UINT32, or UINT64)
+        - field_constraint: The FieldConstraint for that type
+
+    Raises:
+        ValueError: If max_size exceeds UINT64_MAX
+    """
+    if max_size <= UINT8_MAX:
+        return (clkbuiltins.UINT8, UINT8_CONSTRAINT)
+    if max_size <= UINT16_MAX:
+        return (clkbuiltins.UINT16, UINT16_CONSTRAINT)
+    if max_size <= UINT32_MAX:
+        return (clkbuiltins.UINT32, UINT32_CONSTRAINT)
+    if max_size > UINT64_MAX:
+        msg = f"max_size {max_size} exceeds maximum representable size {UINT64_MAX}"
+        raise ValueError(msg)
+    return (clkbuiltins.UINT64, UINT64_CONSTRAINT)
+
+
+def compute_soa_layout(
+    compiler_context: CompilerContext,
+    schema_ir: schema.InstantiatedSchema,
+    max_size: int,
+    *,
+    include_size_field: bool = False,
+) -> SoaLayoutInfo:
+    """Compute SoA memory layout for a schema.
+
+    SoA layout differs from traditional Array-of-Structs (AoS) in that fields are
+    laid out as separate contiguous arrays, eliminating inter-element padding.
+    Each field array is sized to hold 'max_size' elements with proper alignment. Fields are sorted by alignment (descending), size (descending), field_num (ascending), which minimizes padding. The size field (for variable-sized arrays) is sized to hold the max size and comes last.
+
+    Args:
+        compiler_context: The compiler context.
+        schema_ir: The instantiated schema to compute layout for.
+        max_size: The maximum number of elements in the SoA.
+        include_size_field: If True, append a size field to the layout (for VarSoa).
+
+    Returns:
+        SoaLayoutInfo containing field layouts, total size, and max alignment.
+        For VarSoa (include_size_field=True), field_layouts includes a size field
+        with field_num=SIZE_FIELD_NUM.
+
+    Raises:
+        ValueError: If any field has an unknown constraint.
+    """
+    if max_size == 0:
+        return SoaLayoutInfo(field_layouts=(), total_size=0, max_alignment=1)
+
+    field_constraints_list: list[tuple[int, FieldConstraint]] = []
+    for field in schema_ir.fields.values():
+        field_constraint = constraint_for_type(compiler_context, field.type_info)
+        if field_constraint is None:
+            msg = f"Cannot determine constraint for field '{field.cur_name}' of type {field.type_info}"
+            raise ValueError(msg)
+        field_constraints_list.append((field.num, field_constraint))
+
+    def _field_constraint_sort_key(x: tuple[int, FieldConstraint]) -> tuple[int, int, int]:
+        field_num, field_constraint = x
+        return (-field_constraint.alignment, -field_constraint.size, field_num)
+
+    field_constraints_list.sort(key=_field_constraint_sort_key)
+
+    field_layouts: list[FieldLayoutInfo] = []
+    total_offset = 0
+    max_alignment = 1
+
+    for field_num, field_constraint in field_constraints_list:
+        max_alignment = max(max_alignment, field_constraint.alignment)
+
+        total_offset = align_offset(total_offset, field_constraint.alignment)
+
+        field_layouts.append(
+            FieldLayoutInfo(
+                field_num=field_num,
+                size=field_constraint.size,
+                alignment=field_constraint.alignment,
+                offset=total_offset,
+            )
+        )
+
+        field_array_size = max_size * field_constraint.size
+        total_offset += field_array_size
+
+    # Add size field if requested (for VarSoa)
+    if include_size_field:
+        _size_type, size_field_constraint = get_compact_size_type_info(max_size)
+        max_alignment = max(max_alignment, size_field_constraint.alignment)
+        total_offset = align_offset(total_offset, size_field_constraint.alignment)
+
+        field_layouts.append(
+            FieldLayoutInfo(
+                field_num=SIZE_FIELD_NUM,
+                size=size_field_constraint.size,
+                alignment=size_field_constraint.alignment,
+                offset=total_offset,
+            )
+        )
+
+        total_offset += size_field_constraint.size
+
+    # Align the total size to the maximum alignment requirement
+    # This is necessary because the struct has alignas(max_alignment)
+    total_size = align_offset(total_offset, max_alignment)
+
+    return SoaLayoutInfo(field_layouts=tuple(field_layouts), total_size=total_size, max_alignment=max_alignment)
 
 
 def constraint_for_type(
@@ -369,3 +549,66 @@ def _optional_factory(compiler_context: CompilerContext | None, typ: typesys.Ins
         msg = f"Bad value type for type parameter: {value_type}"
         raise TypeError(msg)
     return _add_bool_field(constraint_for_type(compiler_context, value_type))
+
+
+def _soa_factory_impl(
+    compiler_context: CompilerContext | None,
+    element_type: typesys.Value,
+    size: typesys.Value,
+    *,
+    include_size_field: bool = False,
+) -> FieldConstraint | None:
+    """Helper function to determine constraints for SoA types.
+
+    SoA layout differs from arrays in that fields are laid out as separate contiguous arrays,
+    eliminating inter-element padding. Each field array is sized to hold 'size' elements with
+    proper alignment. The total size is the sum of all field arrays, each padded to maintain
+    its alignment requirement.
+
+    Args:
+        compiler_context: The compiler context.
+        element_type: The schema type for SoA elements.
+        size: The maximum number of elements (as a DecimalValue).
+        include_size_field: If True, include a size field (for VarSoa).
+
+    Returns:
+        FieldConstraint for the SoA type, or None on error.
+    """
+    if not isinstance(size, primitive.DecimalValue):
+        msg = f"Bad value type for size parameter: {size}"
+        raise RuntimeError(msg)  # noqa: TRY004 # This is an internal compiler error, not a user error.
+
+    if not isinstance(element_type, schema.InstantiatedSchema):
+        msg = f"SoA element type must be a schema type, got: {element_type.value_key()} = {type(element_type)}"
+        raise TypeError(msg)
+    schema_ir = element_type
+
+    size_int = primitive.unsigned_decimal_to_int(size)
+
+    if compiler_context is None:
+        msg = "CompilerContext required for SoA layout computation"
+        raise ValueError(msg)
+
+    layout_info = compute_soa_layout(compiler_context, schema_ir, size_int, include_size_field=include_size_field)
+
+    return FieldConstraint(size=layout_info.total_size, alignment=layout_info.max_alignment)
+
+
+def _fixed_soa_factory(compiler_context: CompilerContext | None, typ: typesys.Instantiation) -> FieldConstraint | None:
+    """Constraint factory for FixedSoa."""
+    if typ.instantiates is not clkbuiltins.FIXED_SOA:
+        msg = f"Expected FixedSoa but got {typ.instantiates}"
+        raise RuntimeError(msg)
+    element_type = typ.arguments["type"]
+    size = typ.arguments["size"]
+    return _soa_factory_impl(compiler_context, element_type, size, include_size_field=False)
+
+
+def _var_soa_factory(compiler_context: CompilerContext | None, typ: typesys.Instantiation) -> FieldConstraint | None:
+    """Constraint factory for VarSoa."""
+    if typ.instantiates is not clkbuiltins.VAR_SOA:
+        msg = f"Expected VarSoa but got {typ.instantiates}"
+        raise RuntimeError(msg)
+    element_type = typ.arguments["type"]
+    max_size = typ.arguments["max_size"]
+    return _soa_factory_impl(compiler_context, element_type, max_size, include_size_field=True)

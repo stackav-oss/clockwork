@@ -1,5 +1,9 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
 // Channel type
-enum ChannelType {
+enum ChannelType
+{
   options
   {
     underlying_type: UInt8;
@@ -19,13 +23,4 @@ enum ChannelType {
       underlying_value: 1;
     }
   }
-}
-
-cpp_target channel_type
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  enum ChannelType;
 }

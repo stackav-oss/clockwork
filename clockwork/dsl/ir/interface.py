@@ -8,11 +8,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, schema, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.representation import RepresentationReference
-from clockwork.dsl.serialization import tap
+from clockwork.dsl.serialization import tap_render
 
 if TYPE_CHECKING:
     from clockwork.dsl.cpp.context import CppModuleChunks
@@ -122,6 +122,45 @@ class InterfaceInstantiation(node.NamedEntity, node.CstNode[cst.CppInterface]):
             typespec=typespec,
         )
 
+    @classmethod
+    def from_schema(
+        cls: type[InterfaceInstantiation],
+        schema_ir: schema.Schema | typesys.Instantiation,
+        module: node.Module,
+        name: str | None = None,
+    ) -> InterfaceInstantiation:
+        """Create a resolved interface instantiation from a resolved schema or schema instantiation.
+
+        Arguments:
+            schema_ir: Resolved schema or schema instantiation
+            module: Module containing the schema.
+            name: Instantiation name
+
+        Returns:
+            Resolved interface instantion for the schema.
+        """
+        repr_typespec = typesys.Instantiation(
+            instantiates=clkbuiltins.TACHYON,
+            arguments={"schema": schema_ir},
+            type_info=clkbuiltins.TYPE_TYPE,
+        )
+        return cls(
+            module=module,
+            cst_node=None,
+            name=name or "",
+            scope=module.inner_scope,
+            representation=RepresentationReference(
+                schema_ir=schema.InstantiatedSchema.from_typespec(schema_ir),
+                typespec=repr_typespec,
+            ),
+            is_generic=False,
+            typespec=typesys.Instantiation(
+                instantiates=clkbuiltins.TAP,
+                arguments={"representation": repr_typespec},
+                type_info=clkbuiltins.TYPE_TYPE,
+            ),
+        )
+
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         if not isinstance(self.typespec, expr.Expr):
@@ -174,9 +213,11 @@ class InterfaceInstantiation(node.NamedEntity, node.CstNode[cst.CppInterface]):
     def render(self, enclosing_namespace: str) -> CppModuleChunks:
         """Render to C++ code."""
         typespec = self._render_pre_check()
-        return tap.render(self.module.context, typespec, enclosing_namespace)
+        return tap_render.render(
+            compiler_context=self.module.context, typespec=typespec, enclosing_namespace=enclosing_namespace
+        )
 
     def render_alias(self, enclosing_namespace: str) -> CppModuleChunks:
         """Render alias to C++ code."""
         typespec = self._render_pre_check()
-        return tap.render_alias(self.module.context, typespec, enclosing_namespace, self.name)
+        return tap_render.render_alias(self.module.context, typespec, enclosing_namespace, self.name)

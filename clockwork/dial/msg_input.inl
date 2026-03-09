@@ -39,15 +39,16 @@ auto MsgPolicy<T>::get(const storage_type& storage) -> const_reference
 
 } // namespace detail
 
-template <class MsgViewType, size_t max_size>
-constexpr MessageInputDial<MsgViewType, max_size>::MessageInputDial(
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::MessageInputDial(
   ViewType buffer_view, IteratorType cursor, IteratorType first_new, bool connected) noexcept
-  : MessageInputDial<MsgViewType, max_size>::MessageInputDial(buffer_view, cursor, first_new, 0, connected)
+  : MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::MessageInputDial(
+      buffer_view, cursor, first_new, 0, connected)
 {
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr MessageInputDial<MsgViewType, max_size>::MessageInputDial(
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::MessageInputDial(
   ViewType buffer_view, IteratorType cursor, IteratorType first_new, size_t skip_count, bool connected) noexcept
   : buffer_view_(std::move(buffer_view)),
     cursor_(std::move(cursor)),
@@ -57,56 +58,94 @@ constexpr MessageInputDial<MsgViewType, max_size>::MessageInputDial(
 {
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::get_view() const noexcept -> const ViewType&
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_view() const noexcept
+  -> const ViewType&
 {
   return buffer_view_;
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::get_cursor() const noexcept -> IteratorType
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_cursor() const noexcept
+  -> IteratorType
 {
   return cursor_;
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::get_cursor_view() const noexcept
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_cursor_view() const noexcept
 {
   return std::ranges::subrange<IteratorType>(get_cursor(), end());
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::get_new_msgs_view() const noexcept
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_new_msgs_view() const noexcept
 {
   return std::ranges::subrange<IteratorType>(get_first_new(), end());
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::get_first_new() const noexcept -> IteratorType
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto& MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_latest_msg() const noexcept
+  requires(min_messages > 0)
+{
+  return get_view().back();
+}
+
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto&
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_latest_new_msg() const noexcept
+  requires(min_new_messages > 0)
+{
+  return get_new_msgs_view().back();
+}
+
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_nonempty_view() const noexcept
+  requires(min_messages > 0)
+{
+  return get_view();
+}
+
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_nonempty_new_msgs_view() const noexcept
+  requires(min_new_messages > 0)
+{
+  return get_new_msgs_view();
+}
+
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::get_first_new() const noexcept
+  -> IteratorType
 {
   return first_new_;
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::end() const noexcept -> IteratorType
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::end() const noexcept
+  -> IteratorType
 {
   return buffer_view_.end();
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr auto MessageInputDial<MsgViewType, max_size>::num_messages_skipped() const noexcept -> size_t
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr auto
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::num_messages_skipped() const noexcept -> size_t
 {
   return skip_count_;
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr void MessageInputDial<MsgViewType, max_size>::set_cursor(IteratorType cursor) noexcept
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr void
+MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::set_cursor(IteratorType cursor) noexcept
 {
   cursor_ = cursor;
 }
 
-template <class MsgViewType, size_t max_size>
-constexpr bool MessageInputDial<MsgViewType, max_size>::connected() const noexcept
+template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+constexpr bool MessageInputDial<MsgViewType, max_size, min_messages, min_new_messages>::connected() const noexcept
 {
   return connected_;
 }

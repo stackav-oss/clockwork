@@ -4,7 +4,6 @@
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
-load("//tools/rules:cc.bzl", "cc_binary")
 
 package(
     default_testonly = True,
@@ -19,6 +18,7 @@ simplelaunch_runner(
 clk(
     name = "cpu_domain_clk",
     srcs = ["cpu_domain.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
 )
 
@@ -38,8 +38,10 @@ clk(
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_signal_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_simplelaunch_config.textproto",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
+        "demo_system.demo_system_sys.diagnostics_database_config.tachyon",
         "demo_system.demo_system_sys.logged_channel_metadata.pbbin",
     ],
     visibility = ["//visibility:public"],
@@ -81,15 +83,17 @@ merge_simplelaunch_config(
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_signal_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
-        ":logger_exe",
-        ":spy_exe",
-        "//clockwork/examples/demo_system/camera:camera_exe",
-        "//clockwork/examples/demo_system/gps:gps_exe",
-        "//clockwork/examples/demo_system/imu:imu_exe",
-        "//clockwork/examples/demo_system/lidar:lidar_exe",
-        "//clockwork/examples/demo_system/localization:localization_exe",
-        "//clockwork/examples/demo_system/perception:perception_exe",
+        "demo_system.demo_system_sys.diagnostics_database_config.tachyon",
+        ":logger_clk_exe",
+        ":spy_clk_exe",
+        "//clockwork/examples/demo_system/camera:camera_clk_exe",
+        "//clockwork/examples/demo_system/gps:gps_clk_exe",
+        "//clockwork/examples/demo_system/imu:imu_clk_exe",
+        "//clockwork/examples/demo_system/lidar:lidar_clk_exe",
+        "//clockwork/examples/demo_system/localization:localization_clk_exe",
+        "//clockwork/examples/demo_system/perception:perception_clk_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
@@ -98,9 +102,28 @@ clk(
     name = "logger_clk",
     srcs = ["logger.clk"],
     outs = [
-        "logger_exe.cc",
-        "logger_exe.hh",
-        "logger_exe.inl",
+        "logger_clk_exe.cc",
+        "logger_clk_exe.hh",
+        "logger_clk_exe.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/logging:log_writer_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_status_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    data = [
+        "//clockwork/examples/demo_system/resources:channel_rates_config.pbtxt",
+        "//clockwork/examples/demo_system/resources:logger_config.pbtxt",
+    ],
+    generate = ["cpp_exe"],
+    proto_deps = [
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto",
+        "//clockwork/logging/writers:logger_config_clk_proto",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -114,75 +137,25 @@ clk(
     ],
 )
 
-cc_binary(
-    name = "logger_exe",
-    srcs = [
-        "logger_exe.cc",
-        "logger_exe.hh",
-        "logger_exe.inl",
-    ],
-    data = [
-        "demo_system.demo_system_sys.logged_channel_metadata.pbbin",
-        "//clockwork/examples/demo_system/resources:channel_rates_config.pbtxt",
-        "//clockwork/examples/demo_system/resources:logger_config.pbtxt",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/logging:log_writer_config",
-        "//clockwork/logging/writers:channel_message_rates",
-        "//clockwork/logging/writers:channel_message_rates_config",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_cc_library",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_conv",
-        "//clockwork/logging/writers:logger_cog",
-        "//clockwork/logging/writers:logger_cog_state",
-        "//clockwork/logging/writers:logger_config",
-        "//clockwork/logging/writers:logger_config_proto_cc_library",
-        "//clockwork/logging/writers:logger_config_proto_conv",
-        "//clockwork/logging/writers:logger_status",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "spy_clk",
     srcs = ["spy.clk"],
     outs = [
-        "spy_exe.cc",
-        "spy_exe.hh",
-        "spy_exe.inl",
+        "spy_clk_exe.cc",
+        "spy_clk_exe.hh",
+        "spy_clk_exe.inl",
     ],
+    cpp_deps = [
+        "//clockwork/tools/channel_spy:channel_spy_config_clk_cc",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = ["cpp_exe"],
     visibility = ["//visibility:public"],
     deps = [
         ":cpu_domain_clk",
         "//clockwork/tools/channel_spy:channel_spy_config_clk",
         "//clockwork/tools/channel_spy:channel_spy_config_init_clk",
-    ],
-)
-
-cc_binary(
-    name = "spy_exe",
-    srcs = [
-        "spy_exe.cc",
-        "spy_exe.hh",
-        "spy_exe.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//clockwork/tools/channel_spy:channel_spy_config",
-        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
     ],
 )
 

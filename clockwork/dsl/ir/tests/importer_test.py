@@ -32,9 +32,9 @@ def test_multiple_import() -> None:
     """Tests that modules/entities used more than once are only imported once."""
     source_text = """
 use clockwork::dsl::tests::support::hellomsg;
-use clockwork::dsl::tests::support::hellomsg as hellomsg2
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
-use clockwork::dsl::tests::support::hellomsg::HelloMsg as HelloMsg2;
+use clockwork::dsl::tests::support::hellomsg as hellomsg2;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg as HelloMsg2};
 
 // Schema
 schema Schema
@@ -74,9 +74,16 @@ def test_empty_use() -> None:
         cst_node=None,
         unresolved_imports=[],
         context=compiler_context.CompilerContext(),
+        generates=None,
+        inner_attrs=None,
     )
     with pytest.raises(ValueError, match="Cannot import an empty path: "):
-        fs_importer.resolve_import(module, node.Module.UseResult(repo=None, path=(), alias=None))
+        fs_importer.resolve_import(
+            module,
+            node.Module.UseResult(
+                repo=None, path=(), alias=None, use_targets=None, use_type=node.UseResultType.module_or_entity
+            ),
+        )
 
 
 def test_missing_module() -> None:
@@ -89,14 +96,25 @@ def test_missing_module() -> None:
         cst_node=None,
         unresolved_imports=[],
         context=compiler_context.CompilerContext(),
+        generates=None,
+        inner_attrs=None,
     )
-    with pytest.raises(FileNotFoundError, match="Module not found: doesnotexist::Foo"):
-        fs_importer.resolve_import(module, node.Module.UseResult(repo=None, path=("doesnotexist", "Foo"), alias=None))
+    with pytest.raises(FileNotFoundError, match=r"Module not found: doesnotexist::Foo"):
+        fs_importer.resolve_import(
+            module,
+            node.Module.UseResult(
+                repo=None,
+                path=("doesnotexist", "Foo"),
+                alias=None,
+                use_targets=None,
+                use_type=node.UseResultType.module_or_entity,
+            ),
+        )
 
 
 def test_missing_entity() -> None:
     source_text = """
-use clockwork::dsl::tests::support::hellomsg::Foo;
+use clockwork::dsl::tests::support::hellomsg::{Foo};
 
 // Schema
 schema Schema
@@ -111,14 +129,14 @@ schema Schema
     fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
     with pytest.raises(
         ValueError,
-        match='Entity named "Foo" not found in module at "clockwork/dsl/tests/support/hellomsg.clk"',
+        match=r'Entity named "Foo" not found in module at "clockwork/dsl/tests/support/hellomsg\.clk"',
     ):
         compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
 
 
 def test_no_reexport() -> None:
     source_text = """
-use clockwork::dsl::tests::support::hellocog::hellomsg;
+use clockwork::dsl::tests::support::hellocog::{hellomsg};
 
 // Schema
 schema Schema
@@ -133,7 +151,7 @@ schema Schema
     fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
     with pytest.raises(
         ValueError,
-        match='Entity named "hellomsg" not found in module at "clockwork/dsl/tests/support/hellocog.clk"',
+        match=r'Entity named "hellomsg" not found in module at "clockwork/dsl/tests/support/hellocog\.clk"',
     ):
         compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
 

@@ -1,0 +1,43 @@
+use clockwork::dsl::tests::support::hellomod;
+use clockwork::dsl::tests::support::hellomsg;
+use std::snapshot::{TakeSnapshots, SnapshotOnce};
+
+cpu_domain TestCpu;
+
+// ro_hello snapshots
+channel RoHelloSnapshots
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// rw_hello snapshots
+channel RwHelloSnapshots
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// cfg_hello snapshots
+channel CfgHelloSnapshots
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+box TestSnapshotSystem
+{
+    new hello_box: hellomod::HelloBox;
+
+    apply TakeSnapshots(channel=RoHelloSnapshots, interval=100ms, cycles=10) to hello_box.hello_cog.ro_hello;
+    apply TakeSnapshots(channel=RwHelloSnapshots, interval=10ms) to hello_box.hello_cog.rw_hello;
+    apply SnapshotOnce(channel=CfgHelloSnapshots) to hello_box.hello_cog.cfg_hello;
+    new proc: Process(executable=hellomod::helloworld_exe);
+    apply HostProcess(process=proc) in hello_box;
+    apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+}
+
+system_target test_snapshot_system
+{
+    box: TestSnapshotSystem;
+}

@@ -3,8 +3,8 @@
 
 #include "clockwork/scaffolding/channels.hh"
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
@@ -40,7 +40,7 @@ namespace clockwork::scaffolding
 {
 
 jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
-  std::span<const common::PublishEndpointTap> descs,
+  std::span<const Tappy<common::PublishEndpoint<>>> descs,
   jewels::memory::MemoryResource memres,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
   pinion::ShmChannelFactory& factory)
@@ -48,7 +48,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
   using Role = pinion::ShmChannel::Role;
   ChannelMap channels(descs.size(), memres);
 
-  std::pmr::list<std::reference_wrapper<const common::PublishEndpointTap>> pending(memres);
+  std::pmr::list<std::reference_wrapper<const Tappy<common::PublishEndpoint<>>>> pending(memres);
   for (const auto& config : descs)
   {
     pending.push_back(std::ref(config));
@@ -62,6 +62,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
       auto layout = pinion::BufferLayout{
         .num_slots = config.get_buffer_layout().get_num_slots(),
         .message_size = config.get_buffer_layout().get_message_size(),
+        .is_published_once = config.get_buffer_layout().get_is_published_once(),
       };
       auto role = (config.get_process_id() == process_id ? Role::publisher : Role::subscriber);
       auto uuid_str = config.get_publisher_id().to_string(memres);
@@ -93,8 +94,8 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
 }
 
 jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
-  std::span<const common::PublishEndpointTap> descs,
-  std::span<const clockwork_logging::PublishedChannelConfigTap> published_channels,
+  std::span<const Tappy<common::PublishEndpoint<>>> descs,
+  std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>> published_channels,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory)
 {
@@ -104,7 +105,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   bool error = false;
   std::mutex mutex;
   auto config_it = descs.begin();
-  auto next_config = [&]() -> const common::PublishEndpointTap*
+  auto next_config = [&config_it, &descs, &mutex]() -> const Tappy<common::PublishEndpoint<>>*
   {
     const std::scoped_lock lock(mutex);
     if (config_it != descs.end())
@@ -113,13 +114,14 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
     }
     return nullptr;
   };
-  auto worker = [&]()
+  auto worker = [&next_config, &error, &mutex, &channels, &factory, &memres]()
   {
     for (const auto* config = next_config(); !error && config != nullptr; config = next_config())
     {
       auto layout = pinion::BufferLayout{
         .num_slots = config->get_buffer_layout().get_num_slots(),
         .message_size = config->get_buffer_layout().get_message_size(),
+        .is_published_once = config->get_buffer_layout().get_is_published_once(),
       };
       auto uuid_str = config->get_publisher_id().to_string(memres);
       auto channel =
@@ -152,16 +154,22 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   }
 
   // This is to handle the case where a channel is meant to be published by the log publisher and consumed only by the
-  // deterministic log writer. In that case the channel will not be described in the PublishEndpointTap so we add any
+  // deterministic log writer. In that case the channel will not be described in the PublishEndpoint so we add any
   // such channels below.
   for (const auto& channel_config : published_channels)
   {
     auto channel_uuid = jewels::Uuid<::clockwork::common::EndpointInstanceId>(channel_config.get_uuid().uuid);
+    if (channel_uuid == jewels::Uuid<::clockwork::common::EndpointInstanceId>{})
+    {
+      // These are here as FirstMessage data sources, not connected to any Pinion channel.
+      continue;
+    }
     if (!channels.contains(channel_uuid))
     {
       auto layout = pinion::BufferLayout{
         .num_slots = channel_config.get_num_slots(),
         .message_size = channel_config.get_message_size(),
+        .is_published_once = channel_config.get_is_published_once(),
       };
       auto uuid_str = channel_config.get_uuid().to_string(memres);
       // For this case the only subscriber should be the deterministic log writer.
@@ -184,7 +192,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
 }
 
 jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
-  std::span<const common::NotConnectedEndpointTap> endpoints,
+  std::span<const Tappy<common::NotConnectedEndpoint>> endpoints,
   AbstractCasing& casing,
   jewels::memory::MemoryResource memres,
   pinion::ShmChannelFactory& factory)
@@ -196,6 +204,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
     auto layout = pinion::BufferLayout{
       .num_slots = endpoint.get_buffer_layout().get_num_slots(),
       .message_size = endpoint.get_buffer_layout().get_message_size(),
+      .is_published_once = endpoint.get_buffer_layout().get_is_published_once(),
     };
     if (endpoint.get_endpoint_type() == common::NotConnectedEndpointType::subscriber)
     {
@@ -250,7 +259,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
 }
 
 jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::MonoError> connect_subscribers(
-  std::span<const common::PubSubConnectionTap> connections,
+  std::span<const Tappy<common::PubSubConnection>> connections,
   jewels::memory::MemoryResource memres,
   ChannelMap& channels,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
@@ -291,7 +300,7 @@ jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::Mo
 }
 
 jewels::expected<void, jewels::MonoError> connect_publishers(
-  std::span<const common::PublishEndpointTap> endpoints,
+  std::span<const Tappy<common::PublishEndpoint<>>> endpoints,
   ChannelMap& channels,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
   AbstractCasing& casing)

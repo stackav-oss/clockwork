@@ -18,7 +18,17 @@ Dig into the Clockwork schema language starting with these pages:
 - [Schema language complete reference guide](reference/schemas.md): details the Schema-related features of the Clockwork language.
 - [Schema representations and interfaces reference guide](reference/repr_iface.md): guide for defining and customizing schema representations and interfaces.
 - [Schemas, representations, and interfaces concept guide](concepts/schema_repr_iface.md): introduction to the concepts of schemas, representations, and interfaces.
-- [Module import syntax](reference/use.md): reference for importing Clockwork modules in other Clockwork modules.
+- [Struct-of-Arrays containers](reference/soa.md): reference for `FixedSoa` and `VarSoa` container types which provide SoA data layout.
+- [Attributes and code generation](reference/attributes.md): reference for the attributes that tell the compiler what code to generate.
+
+For system composition and Cog execution:
+
+- [System composition guide](concepts/composition.md): explains how to compose Cogs, state, and config into systems, including [init Cogs and state initialization](concepts/composition.md#init-cogs-and-state-initialization).
+- [Execution conditions reference](reference/exec_conditions.md): details execution conditions including the `init` condition for init Cogs.
+
+For runtime expressions and computations:
+
+- [DFL (Declarative Functional Language)](reference/dfl/README.md): a pure-functional sublanguage for runtime computations such as signal transforms, detector conditions, and aligner constraints.
 
 ## Guidance
 
@@ -31,3 +41,7 @@ For guidance on best practices for using Clockwork features, read:
 ## Getting help
 
 Check out the [Clockwork troubleshooting guide](troubleshooting.md) for help debugging and resolving common issues when building or deploying a Clockwork system.
+
+## Migrating to the new reduced boilerplate Clockwork file format
+
+- [Reduced boilerplate migration](reference/reduced_boilerplate_migration.md): provides guidance for migrating to the new reduced boilerplate Clockwork format.

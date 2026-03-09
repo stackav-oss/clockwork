@@ -1,25 +1,25 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
 #include "jewels/aligner/aligner.hh"
 #include "jewels/container/circular_buffer.hh"
@@ -49,7 +49,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <list>
@@ -189,6 +188,7 @@ TEST_CASE("Read metadata")
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
     .message_size = message_data_size,
+    .is_published_once = false,
   };
 
   clockwork::pinion::support::BufferStorage<pinion_layout> pinion_buffer_storage{};
@@ -240,7 +240,7 @@ TEST_CASE("Read metadata")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator),
     log_time1,
     time1));
 
@@ -521,6 +521,7 @@ TEST_CASE("Log messages")
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
     .message_size = message_data_size,
+    .is_published_once = false,
   };
 
   clockwork::pinion::support::BufferStorage<pinion_layout> pinion_buffer_storage{};
@@ -619,7 +620,7 @@ TEST_CASE("Log messages")
 
     REQUIRE(writer.log_clockwork_message_wait(
       index % 2U == 0 ? channel_name1 : channel_name2,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator),
       log_time,
       time1));
     REQUIRE(writer.drain_async_operations());

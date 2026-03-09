@@ -4,6 +4,7 @@
 #pragma once
 
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/time/sync_time.hh"
 
 #include <string_view>
@@ -30,10 +31,9 @@ public:
   /// @param[in] buffer_ptr Pinion buffer pointer
   /// @param[in] buffer_iterator Pinion buffer iterator
   virtual void message_callback(
-    jewels::time::SyncTime current_time,
+    ::jewels::time::SyncTime current_time,
     std::string_view channel_name,
-    jewels::memory::ObjectPtr<const clockwork::pinion::Buffer> buffer_ptr,
-    const clockwork::pinion::BufferIterator& buffer_iterator) = 0;
+    const ::clockwork::pinion::SlotRef& message_ref) = 0;
 
   /// Process a message drop notification from an observer
   /// @param[in] channel_name Channel name

@@ -9,17 +9,28 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
-from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_python_type
+from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label, get_bazel_label_for_python_type
 from clockwork.dsl.cog.cppcog import to_camel, to_dial_name
-from clockwork.dsl.ir import cog, expr, node, primitive
+from clockwork.dsl.ir import (
+    clkbuiltins,
+    cog,
+    expr,
+    extern_type,
+    interface,
+    module_id,
+    node,
+    primitive,
+    schema_reg,
+    typesys,
+)
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.python import py_context
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from clockwork.dsl import cst
+    from clockwork.dsl import clockwork_cst as cst
 
 PYTHON_STATE_NAME: Final = "python_state"
 
@@ -124,25 +135,64 @@ class PythonDialType:
     """Represents the python type for config, state, input, or output."""
 
     cst_node: (
-        cst.PyPythonCogConfigType | cst.PyPythonCogStateType | cst.PyPythonCogInputType | cst.PyPythonCogOutputType
+        cst.PyPythonCogConfigType
+        | cst.PyPythonCogStateType
+        | cst.PyPythonCogInputType
+        | cst.PyPythonCogOutputType
+        | None
     )
     python_type: expr.Expr | str
+    type_repo: str | None = None
 
-    def get_bazel_label_for_type(self) -> Label | None:
+    def get_bazel_label_for_type(self, current_repo: str) -> Label | None:
         """Get the bazel label for the python type.
 
         Returns:
             Bazel label or None if the type is not qualified.
         """
         assert isinstance(self.python_type, str)
-        return get_bazel_label_for_python_type(self.python_type)
+        assert isinstance(self.type_repo, str)
+        label = get_bazel_label_for_python_type(self.python_type)
+        if current_repo != module_id.CLK_REPO and self.type_repo == module_id.CLK_REPO and label is not None:
+            label = get_bazel_label_for_clk_label(current_repo, str(label))
+        return label
+
+    @classmethod
+    def from_interface_instantiation(
+        cls: type[PythonDialType],
+        interface_ir: interface.InterfaceInstantiation,
+        wrapper_type: node.PyCogWrapperType,
+    ) -> PythonDialType:
+        """Create an instance from an interface instantiation.
+
+        Arguments:
+            interface_ir: Interface instantiation
+            wrapper_type: Python cog wrapper type
+
+        Returns:
+            PythonDialType instance
+        """
+        assert isinstance(interface_ir.typespec, typesys.Instantiation)
+        assert interface_ir.typespec.instantiates == clkbuiltins.TAP
+        assert interface_ir.representation is not None
+        assert isinstance(interface_ir.representation.typespec, typesys.Instantiation)
+        assert interface_ir.representation.typespec.instantiates == clkbuiltins.TACHYON
+        class_name = interface_ir.name or interface_ir.representation.schema_ir.schema_name
+        module_prefix = interface_ir.module.module_id.name.replace("::", ".")
+        wrapper_suffix = "_clk_py" if wrapper_type == node.PyCogWrapperType.python else "_clk_nb"
+        python_type = f"{module_prefix}{wrapper_suffix}.{class_name}"
+        return cls(
+            cst_node=None,
+            python_type=python_type,
+            type_repo=interface_ir.module.module_id.repo,
+        )
 
 
 @dataclass
 class PythonCogDial:
     """Instantiates a python cog dial inside a py_target."""
 
-    cst_node: cst.PyPythonCogDial
+    cst_node: cst.PyPythonCogDial | None
     module: node.Module
     cog_ir: cog.Cog | expr.Expr
     dial_class_name: str | None
@@ -198,11 +248,75 @@ class PythonCogDial:
             mutable_states=set(),
         )
 
+    @classmethod
+    def from_generate_py_cog(
+        cls: type[PythonCogDial], module: node.Module, cog_ir: cog.Cog, wrapper_type: node.PyCogWrapperType
+    ) -> PythonCogDial:
+        """Construct an IR node from a cog defined in a module."""
+        config_types: dict[str, PythonDialType] = {}
+        state_types: dict[str, PythonDialType] = {}
+        input_types: dict[str, PythonDialType] = {}
+        output_types: dict[str, PythonDialType] = {}
+        mutable_states: set[str] = set()
+
+        for state_key, state_def in cog_ir.states.items():
+            assert state_def.resolved
+            if state_key == PYTHON_STATE_NAME:
+                if not state_def.resolved.params.mutable:
+                    msg = cog_ir.append_error_line(f"{PYTHON_STATE_NAME} is not mutable")
+                    raise ValueError(msg)
+                assert isinstance(state_def.resolved.message_type, extern_type.ExternType)
+            else:
+                assert isinstance(state_def.resolved.message_type, schema_reg.InterfaceInfo)
+                if state_def.resolved.params.mutable:
+                    mutable_states.add(state_key)
+                state_types[state_key] = PythonDialType.from_interface_instantiation(
+                    state_def.resolved.message_type.interface_ir, wrapper_type
+                )
+
+        for config_key, config_def in cog_ir.configs.items():
+            assert config_def.resolved
+            assert isinstance(config_def.resolved.message_type, schema_reg.InterfaceInfo)
+            config_types[config_key] = PythonDialType.from_interface_instantiation(
+                config_def.resolved.message_type.interface_ir, wrapper_type
+            )
+
+        for input_key, input_def in cog_ir.inputs.items():
+            assert isinstance(input_def.message_type, schema_reg.InterfaceInfo)
+            input_types[input_key] = PythonDialType.from_interface_instantiation(
+                input_def.message_type.interface_ir, wrapper_type
+            )
+
+        for output_key, output_def in cog_ir.outputs.items():
+            assert isinstance(output_def.message_type, schema_reg.InterfaceInfo)
+            output_types[output_key] = PythonDialType.from_interface_instantiation(
+                output_def.message_type.interface_ir, wrapper_type
+            )
+        return cls(
+            cst_node=None,
+            module=module,
+            cog_ir=cog_ir,
+            dial_class_name=to_dial_name(cog_ir.name),
+            config_types=config_types,
+            state_types=state_types,
+            input_types=input_types,
+            output_types=output_types,
+            mutable_states=mutable_states,
+        )
+
     def _resolve_dial_types(
-        self, member_type: str, dial_types: dict[str, PythonDialType], cog_members: set[str]
+        self, member_type: str, dial_types: dict[str, PythonDialType], cog_member_repos: dict[str, str]
     ) -> None:
+        """Resolve the types in a cog dial and check that the python cog has the same members as the original cog.
+
+        Arguments:
+            member_type: String name of the member type to resolve.
+            dial_types: Dictionary with python dial types for each member of the python cog dial.
+            cog_member_repos: Dictionary with the repo name for each nember of the cog dial.
+        """
         dial_keys = set(dial_types.keys())
-        if not cog_members:
+        cog_member_keys = set(cog_member_repos.keys())
+        if not cog_member_keys:
             if dial_keys:
                 msg = node.append_error_line(
                     self.cst_node, self.module, f"Mismatch in type definitions for {member_type}: {dial_keys}"
@@ -211,26 +325,29 @@ class PythonCogDial:
             return
 
         if not dial_keys:
-            if cog_members:
+            if cog_member_keys:
                 msg = node.append_error_line(
-                    self.cst_node, self.module, f"Mismatch in type definitions for {member_type}: {cog_members}"
+                    self.cst_node, self.module, f"Mismatch in type definitions for {member_type}: {cog_member_keys}"
                 )
                 raise ValueError(msg)
             return
 
-        if dial_keys != cog_members:
+        if dial_keys != cog_member_keys:
             msg = node.append_error_line(
-                self.cst_node, self.module, f"Mismatch in type definitions for {member_type}: {dial_keys ^ cog_members}"
+                self.cst_node,
+                self.module,
+                f"Mismatch in type definitions for {member_type}: {dial_keys ^ cog_member_keys}",
             )
             raise ValueError(msg)
 
-        for py_type in dial_types.values():
+        for py_key, py_type in dial_types.items():
             if isinstance(py_type.python_type, expr.Expr):
                 type_val = py_type.python_type.evaluate()
                 if not isinstance(type_val, primitive.StringValue):
                     msg = node.append_error_line(py_type.cst_node, self.module, "Invalid python type definition")
                     raise TypeError(msg)
                 py_type.python_type = type_val.value
+                py_type.type_repo = cog_member_repos[py_key]
 
     def resolve(self) -> None:
         """Perform IR finalization."""
@@ -244,23 +361,37 @@ class PythonCogDial:
         self.cog_ir = typespec
         self.dial_class_name = to_dial_name(self.cog_ir.name)
         self.cog_ir = typespec
-        self._resolve_dial_types("configs", self.config_types, set(self.cog_ir.configs.keys()))
+        config_repos = {
+            config_key: config_value.get_resolved().message_type.interface_ir.module.module_id.repo
+            for config_key, config_value in self.cog_ir.configs.items()
+        }
+        self._resolve_dial_types("configs", self.config_types, config_repos)
         if PYTHON_STATE_NAME not in self.cog_ir.states:
             msg = self.cog_ir.append_error_line(f"Missing mandatory {PYTHON_STATE_NAME} in cog states")
             raise ValueError(msg)
+        state_repos: dict[str, str] = {}
         for state_key, state_def in self.cog_ir.states.items():
             assert state_def.resolved
             if state_key == PYTHON_STATE_NAME:
                 if not state_def.resolved.params.mutable:
                     msg = self.cog_ir.append_error_line(f"{PYTHON_STATE_NAME} is not mutable")
                     raise ValueError(msg)
-            elif state_def.resolved.params.mutable:
-                self.mutable_states.add(state_key)
-        state_keys = set(self.cog_ir.states.keys())
-        state_keys.discard(PYTHON_STATE_NAME)
-        self._resolve_dial_types("states", self.state_types, state_keys)
-        self._resolve_dial_types("inputs", self.input_types, set(self.cog_ir.inputs.keys()))
-        self._resolve_dial_types("outputs", self.output_types, set(self.cog_ir.outputs.keys()))
+            else:
+                assert isinstance(state_def.resolved.message_type, schema_reg.InterfaceInfo)
+                state_repos[state_key] = state_def.resolved.message_type.interface_ir.module.module_id.repo
+                if state_def.resolved.params.mutable:
+                    self.mutable_states.add(state_key)
+        self._resolve_dial_types("states", self.state_types, state_repos)
+        input_repos = {
+            input_key: input_value.get_interface_info().interface_ir.module.module_id.repo
+            for input_key, input_value in self.cog_ir.inputs.items()
+        }
+        self._resolve_dial_types("inputs", self.input_types, input_repos)
+        output_repos = {
+            input_key: output_value.get_interface_info().interface_ir.module.module_id.repo
+            for input_key, output_value in self.cog_ir.outputs.items()
+        }
+        self._resolve_dial_types("outputs", self.output_types, output_repos)
 
     def _render_configs(self) -> py_context.PythonChunks:
         """Render the python dial configs definition.
@@ -567,7 +698,7 @@ class {self.dial_class_name}:
         for py_type in chain(
             self.config_types.values(), self.state_types.values(), self.input_types.values(), self.output_types.values()
         ):
-            label = py_type.get_bazel_label_for_type()
+            label = py_type.get_bazel_label_for_type(self.module.module_id.repo)
             if label:
                 bazel_targets.append(label)
         return bazel_targets

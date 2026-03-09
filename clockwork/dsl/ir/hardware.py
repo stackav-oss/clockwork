@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.compiler_context import CompilerContext, ContextKey
 from clockwork.dsl.ir import (
     clkbuiltins,
@@ -99,7 +100,7 @@ class CpuDomain(node.CstNode[cst.CpuDomain], node.DocableEntity, node.NamedEntit
             cst_node=cst_node,
             simplelaunch_node=simplelaunch_node,
             simplelaunch_srcs=simplelaunch_srcs,
-            bridge_cpus=bridge_cpus,
+            bridge_cpus=bridge_cpus or default_cpus,
             default_cpus=default_cpus,
             logging_backup=logging_backup,
         )
@@ -316,3 +317,153 @@ def get_cpu_domain_connection(system_module: node.Module, cpu_domain: CpuDomain)
         return context.lan_nodes[cpu_domain.value_key()]
     except KeyError:
         return None
+
+
+@dataclass
+class ResolvedPcieLink(node.CstNode[cst.PcieLink], node.DocableEntity):
+    """IR Node representing a pcie_link declaration."""
+
+    # The CPU domains that share the link. The order doesn't matter.
+    domain_a: CpuDomain
+    domain_b: CpuDomain
+
+
+@dataclass
+class PcieLink(ABC):
+    """IR Node representing a pcie_link declaration."""
+
+    # The CPU domains that share the link. The order doesn't matter.
+    domain_a: node.DeferredLookup[CpuDomain]
+    domain_b: node.DeferredLookup[CpuDomain]
+    resolved: ResolvedPcieLink | None
+
+    @classmethod
+    def from_cst(cls: type[PcieLink], cst_node: cst.PcieLink, module: node.Module) -> PcieLink:
+        """Construct a PcieLink from a CST node."""
+        if module.terminals is None:
+            msg = "Cannot construct IR nodes from CST without a TerminalSource"
+            raise ValueError(msg)
+        domain_a = node.DeferredLookup.make(
+            cst_identifier=cst_node.child_domain_a(),
+            terminals=module.terminals,
+            expected_type=CpuDomain,
+        )
+        domain_b = node.DeferredLookup.make(
+            cst_identifier=cst_node.child_domain_b(),
+            terminals=module.terminals,
+            expected_type=CpuDomain,
+        )
+
+        link_type: cst.Identifier | None = None
+        params: dict[str, cst.PcieLinkParam] = {}
+
+        for param_cst in cst_node.children_pcie_link_param():
+            param_name = get_span(param_cst.child_param().child_value(), module.terminals)
+            if param_name == "type":
+                if link_type_cst := param_cst.child_value().maybe_identifier():
+                    link_type = link_type_cst
+                    continue
+
+                msg = node.append_error_line(
+                    param_cst.child_value(),
+                    module,
+                    f"pcie_link type must be an identifier, but got {param_cst.child_value().child()[0]}",
+                )
+                raise TypeError(msg)
+
+            params[param_name] = param_cst
+
+        if link_type is None:
+            msg = node.append_error_line(cst_node, module, "Missing required field 'type'")
+            raise ValueError(msg)
+
+        link_type_str = get_span(link_type.child_value(), module.terminals)
+
+        msg = node.append_error_line(link_type, module, f"Got invalid pcie_link type: {link_type_str}")
+        raise ValueError(msg)
+
+    @abstractmethod
+    def resolve(self) -> ResolvedPcieLink:
+        """Perform finalization."""
+
+    def get_resolved(self) -> ResolvedPcieLink:
+        """Get a resolved version of this object."""
+        if not self.resolved:
+            msg = "Attempt to access unresolved object"
+            raise RuntimeError(msg)
+        return self.resolved
+
+
+@dataclass
+class PcieLinkContext:
+    """A place to store infomration about PCI-Express links between CPU domains."""
+
+    # Mapping from pairs of CpuDomain identifiers to the links that connect them.
+    links: dict[tuple[str, str], ResolvedPcieLink]
+
+    def import_from(self, other: PcieLinkContext) -> None:
+        """Combine this context with items from another."""
+        for link in other.links.values():
+            self.register_link(link, importing=True)
+
+    def register_link(self, link: ResolvedPcieLink, importing: bool = False) -> None:
+        """Register a PCI-Express link."""
+        key_parts = sorted((link.domain_a.name, link.domain_b.name))
+        key = (key_parts[0], key_parts[1])
+        if key in self.links:
+            if importing and self.links[key] is link:
+                # Nothing to do here. We've already imported this link from some
+                # other include.
+                return
+
+            msg = node.append_error_line(
+                link.cst_node,
+                link.module,
+                f"Got duplicate PCI-Express link between {link.domain_a.name} and {link.domain_b.name}",
+            )
+            raise ValueError(msg)
+
+        self.links[key] = link
+
+    def lookup_link(self, domain_a: CpuDomain, domain_b: CpuDomain) -> ResolvedPcieLink | None:
+        """Lookup a PCI-Express link between two CPU domains."""
+        key_parts = sorted((domain_a.name, domain_b.name))
+        key = (key_parts[0], key_parts[1])
+        return self.links.get(key, None)
+
+
+class PcieLinkKey(ContextKey[PcieLinkContext]):
+    """Compiler context key."""
+
+    @override
+    def make_default(self, compiler_context: CompilerContext) -> PcieLinkContext:
+        """Create a default (empty) instance of the context."""
+        return PcieLinkContext(links={})
+
+
+_PCIE_LINK_KEY: Final = PcieLinkKey("PciLinkKey")
+
+
+def register_pcie_link(link: PcieLink, module: node.Module) -> None:
+    """Register a PCI-Express link."""
+    context = module.context[_PCIE_LINK_KEY]
+    context.register_link(link.get_resolved())
+
+
+def lookup_pcie_link(domain_a: CpuDomain, domain_b: CpuDomain, module: node.Module) -> ResolvedPcieLink | None:
+    """Lookup a PCI-Express link between two CPU domains."""
+    context = module.context[_PCIE_LINK_KEY]
+    return context.lookup_link(domain_a, domain_b)
+
+
+def get_pcie_neighbors(domain: CpuDomain, module: node.Module) -> dict[str, ResolvedPcieLink]:
+    """Get all of the PCI-Express links involving a CPU domain."""
+    context = module.context[_PCIE_LINK_KEY]
+    links = {}
+    for (domain_a, domain_b), link in context.links.items():
+        if domain.name == domain_a:
+            links[domain_b] = link
+        elif domain.name == domain_b:
+            links[domain_a] = link
+
+    return links

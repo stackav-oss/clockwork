@@ -1,28 +1,29 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
-#include "clockwork/logging/writers/logger_config.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/writers/logger_config_clk_cc.hh"
 #include "clockwork/logging/writers/message_writer.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/repr_iface.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -42,7 +43,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -168,7 +168,7 @@ TEST_CASE("Log messages")
     auto test_writer_ptr = std::make_unique<MessageWriter>(
       memory_resource, *log_writer_config_ptr, *logger_config_ptr, *channel_rates_config_ptr);
     auto& test_writer = *test_writer_ptr;
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(*log_writer_config_ptr));
     test_writer.run_for(run_interval);
 
     for (auto& publisher : test_publishers)

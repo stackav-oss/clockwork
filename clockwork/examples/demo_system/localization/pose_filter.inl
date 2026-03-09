@@ -4,11 +4,11 @@
 #include "clockwork/examples/demo_system/localization/pose_filter.hh"
 
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/examples/demo_system/localization/pose_message.hh"
+#include "clockwork/examples/demo_system/localization/pose_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <stdexcept>
@@ -16,9 +16,10 @@
 namespace clockwork::demo_system::localization
 {
 
-template <size_t max_size>
+template <size_t max_size, size_t min_messages, size_t min_new_messages>
 PoseFilter::PoseFilter(
-  jewels::memory::MemoryResource memory_resource, const MessageInputDial<Tappy<PoseMessage>, max_size>& pose_input)
+  jewels::memory::MemoryResource memory_resource,
+  const MessageInputDial<Tappy<PoseMessage>, max_size, min_messages, min_new_messages>& pose_input)
   : pose_map_(memory_resource)
 {
   if (pose_input.get_view().size() < 2U)

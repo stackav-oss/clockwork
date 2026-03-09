@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory_resource>
 #include <stdexcept>
@@ -38,8 +39,51 @@ struct MoveOnlyInt
   MoveOnlyInt(MoveOnlyInt&&) = default;
   MoveOnlyInt& operator=(MoveOnlyInt&&) = default;
 
-  int value;
+  std::int32_t value;
 };
+
+struct Base
+{
+  Base() = default;
+
+  virtual ~Base() = default;
+  Base(const Base&) = default;
+  Base& operator=(const Base&) = default;
+  Base(Base&&) = default;
+  Base& operator=(Base&&) = default;
+};
+
+struct alignas(alignof(std::max_align_t)) Derived final : public Base
+{
+  Derived()
+  {
+    ++active_instance_count_;
+  }
+  ~Derived() override
+  {
+    --active_instance_count_;
+  }
+  Derived(const Derived&) = default;
+  Derived& operator=(const Derived&) = default;
+  Derived(Derived&&) = default;
+  Derived& operator=(Derived&&) = default;
+
+  static size_t get_active_instance_count()
+  {
+    return active_instance_count_;
+  }
+
+  bool derived_value{false};
+
+private:
+  static size_t active_instance_count_;
+};
+
+size_t Derived::active_instance_count_ = 0;
+
+// Properties must hold for the test to be valid
+static_assert(sizeof(Base) < sizeof(Derived));
+static_assert(alignof(Base) != alignof(Derived));
 
 } // namespace
 
@@ -96,6 +140,42 @@ TEST_CASE("unique_pmr_ptr")
 
     ptr = {};
     REQUIRE_FALSE(ptr);
+  }
+
+  SECTION("polymorphic conversion")
+  {
+    SECTION("Move construction")
+    {
+      auto derived_ptr = make_pmr_unique<Derived, true>(resource);
+      REQUIRE(derived_ptr);
+      CHECK(Derived::get_active_instance_count() == 1);
+
+      jewels::memory::pmr_unique_ptr<Base, true> base_ptr = std::move(derived_ptr);
+      REQUIRE(base_ptr);
+      CHECK(Derived::get_active_instance_count() == 1);
+
+      base_ptr = {};
+      REQUIRE_FALSE(base_ptr);
+      CHECK(Derived::get_active_instance_count() == 0);
+    }
+
+    SECTION("Move assignment")
+    {
+      auto derived_ptr = make_pmr_unique<Derived, true>(resource);
+      REQUIRE(derived_ptr);
+      CHECK(Derived::get_active_instance_count() == 1);
+
+      jewels::memory::pmr_unique_ptr<Base, true> base_ptr;
+      REQUIRE_FALSE(base_ptr);
+
+      base_ptr = std::move(derived_ptr);
+      REQUIRE(base_ptr);
+      CHECK(Derived::get_active_instance_count() == 1);
+
+      base_ptr = {};
+      REQUIRE_FALSE(base_ptr);
+      CHECK(Derived::get_active_instance_count() == 0);
+    }
   }
 
   CHECK(memory.used() == 0);

@@ -1,5 +1,8 @@
 // Helloworld schemas
 
+#![generate(cpp)]
+#![cpp(namespace=clockwork::helloworld)]
+
 // A simple multi-purpose schema
 //
 // This is just for the Hello, World! tutorial.
@@ -11,16 +14,4 @@ schema SimpleSchema
         // A scalar field.
         #0 a_field: Int64;
     }
-}
-
-cpp_target schema
-{
-    options
-    {
-        namespace clockwork::helloworld;
-    }
-
-    schema SimpleSchema;
-    representation Tachyon<SimpleSchema>;
-    interface Tappy<SimpleSchema>;
 }

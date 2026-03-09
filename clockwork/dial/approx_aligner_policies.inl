@@ -9,6 +9,7 @@
 #include <iterator>
 #include <limits>
 #include <tuple>
+#include <type_traits>
 
 namespace clockwork
 {
@@ -116,6 +117,45 @@ constexpr auto ApproxAlignerPolicies<InputPolicies...>::variance_objective(const
 
   auto variance = sum_sqr_diff / count;
   return variance;
+}
+
+template <typename... InputPolicies>
+constexpr typename ApproxAlignerPolicies<InputPolicies...>::ValueType
+ApproxAlignerPolicies<InputPolicies...>::follower_objective(const ValuePtrsArray& values)
+{
+  static_assert(
+    !std::is_unsigned_v<typename ApproxAlignerPolicies<InputPolicies...>::ValueType>,
+    "The follower objective requires a signed ValueType.");
+  static_assert(input_count >= 2UL, "The follower objective requires at least two inputs.");
+
+  const auto reference_value_ptr{values.front()};
+  if (reference_value_ptr == nullptr)
+  {
+    return std::numeric_limits<ValueType>::max();
+  }
+
+  const auto min_iter{std::min_element(
+    std::next(values.begin()),
+    values.end(),
+    [](const auto& lhs, const auto& rhs)
+    {
+      if (lhs == nullptr)
+      {
+        return false;
+      }
+      if (rhs == nullptr)
+      {
+        return true;
+      }
+      return *lhs < *rhs;
+    })};
+
+  if (min_iter == values.end() || *min_iter == nullptr)
+  {
+    return std::numeric_limits<ValueType>::max();
+  }
+
+  return *reference_value_ptr - **min_iter;
 }
 
 } // namespace clockwork

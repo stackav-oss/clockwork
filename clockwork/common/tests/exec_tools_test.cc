@@ -4,6 +4,7 @@
 #include "clockwork/common/exec_tools.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
@@ -17,7 +18,6 @@
 #include <chrono>
 #include <cstdint>
 #include <fcntl.h>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <optional>
@@ -40,7 +40,7 @@ TEST_CASE("PinionArgs")
   const PinionArgs pinion_args{memres, cmd};
 
   const jewels::testing::TmpDirectoryGuard tmpdir;
-  const std::string arg_pinion_dir = tmpdir.get_path().native();
+  const std::string arg_pinion_dir{tmpdir.get_path().c_str()};
   const std::string arg_pinion_ns = "ns12345";
 
   std::array args = {
@@ -114,17 +114,17 @@ TEST_CASE("read_tachyon_config")
 
   {
     const auto bytes = std::as_bytes(jewels::as_single_item_span(input));
-    const jewels::filesystem::File file{file_path.native(), O_CREAT | O_WRONLY};
+    const jewels::filesystem::File file{file_path, O_CREAT | O_WRONLY};
     REQUIRE(::write(file.descriptor(), bytes.data(), bytes.size()) == static_cast<ssize_t>(bytes.size()));
   }
   SECTION("read tachyon config to stack")
   {
-    auto output = read_tachyon_config<Data>(file_path.native());
+    auto output = read_tachyon_config<Data>(file_path);
     REQUIRE(output);
     CHECK(output->x == input.x);
     CHECK(output->y == input.y);
 
-    auto output_missing = read_tachyon_config<Data>((tmpdir.get_path() / "missing").native());
+    auto output_missing = read_tachyon_config<Data>(tmpdir.get_path() / "missing");
     REQUIRE(!output_missing);
 
     struct DataX
@@ -132,18 +132,18 @@ TEST_CASE("read_tachyon_config")
       int16_t x;
       int64_t y;
     };
-    auto output_wrong = read_tachyon_config<DataX>(file_path.native());
+    auto output_wrong = read_tachyon_config<DataX>(file_path);
     REQUIRE(!output_wrong);
   }
 
   SECTION("read tachyon config to heap")
   {
-    auto output = read_tachyon_config_to_heap<Data>(file_path.native());
+    auto output = read_tachyon_config_to_heap<Data>(file_path);
     REQUIRE(output);
     CHECK((*output)->x == input.x);
     CHECK((*output)->y == input.y);
 
-    auto output_missing = read_tachyon_config_to_heap<Data>((tmpdir.get_path() / "missing").native());
+    auto output_missing = read_tachyon_config_to_heap<Data>(tmpdir.get_path() / "missing");
     REQUIRE(!output_missing);
 
     struct DataX
@@ -151,7 +151,7 @@ TEST_CASE("read_tachyon_config")
       int16_t x;
       int64_t y;
     };
-    auto output_wrong = read_tachyon_config_to_heap<DataX>(file_path.native());
+    auto output_wrong = read_tachyon_config_to_heap<DataX>(file_path);
     REQUIRE(!output_wrong);
   }
 }

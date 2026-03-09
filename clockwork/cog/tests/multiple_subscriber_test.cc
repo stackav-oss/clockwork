@@ -13,13 +13,14 @@
 #include "clockwork/cog/simple_cog.hh"
 #include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/cond_time_since_last_exec.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -133,7 +134,8 @@ struct PublisherCogPolicy : testing::FakeCogPolicy<0, 1>
     typename PublishersType::PublishablesTuple publishables,
     typename TimersType::ConditionsTuple& /*timer_conditions*/,
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
-    typename DiagnosticsType::ReporterType& /*diagnostics*/)
+    typename DiagnosticsType::ReporterType& /*diagnostics*/,
+    SignalApiType& /*signals*/)
   {
     // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return PublisherCogDial{
@@ -163,7 +165,7 @@ struct SubscriberCogDial
 {
   jewels::time::SyncTime start_time;
   jewels::memory::ObjectPtr<SubscriberState> state;
-  jewels::memory::ObjectPtr<const MessageInputDial<SequenceMsg, 1>> input;
+  jewels::memory::ObjectPtr<const MessageInputDial<SequenceMsg, 1, 0, 0>> input;
 };
 
 /// An periodic publisher cog for testing multiple subscribers
@@ -204,6 +206,8 @@ struct SubscriberCogPolicy : testing::FakeCogPolicy<1, 0>
       jewels::Uuid<common::EndpointClassId>::from_string("ac2c14ce-b909-4793-af02-7d2dbe27a2b1").value();
     static constexpr std::string_view name = "InputPolicy";
     static constexpr auto max_view_size = 1U;
+    static constexpr auto min_msgs = 0U;
+    static constexpr auto min_new_msgs = 0U;
     static constexpr std::optional<::ssize_t> safety_margin{};
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
@@ -230,7 +234,8 @@ struct SubscriberCogPolicy : testing::FakeCogPolicy<1, 0>
     typename PublishersType::PublishablesTuple /*publishables*/,
     typename TimersType::ConditionsTuple& /*timer_conditions*/,
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
-    typename DiagnosticsType::ReporterType& /*diagnostics*/)
+    typename DiagnosticsType::ReporterType& /*diagnostics*/,
+    SignalApiType& /*signals*/)
   {
     // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return SubscriberCogDial{
@@ -265,7 +270,7 @@ TEST_CASE("multiple subscribers", "[simple_cog]")
   auto subscriber0_state = std::make_shared<CogStateDataImpl<SubscriberState>>(resource);
   auto subscriber1_state = std::make_shared<CogStateDataImpl<SubscriberState>>(resource);
 
-  InMemoryChannel<SequenceMsg, 1000> channel(resource);
+  InMemoryChannel<SequenceMsg, 1000, false> channel(resource);
 
   auto publisher_cog = std::make_unique<SimpleCog<PublisherCogPolicy>>(
     resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue));

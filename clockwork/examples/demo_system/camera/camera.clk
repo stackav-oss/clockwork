@@ -1,8 +1,12 @@
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::camera::video_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::camera)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::camera::video_channels;
 use clockwork::examples::demo_system::camera::video_message;
 
 // Camera driver state to generate random numbers
+#[cpp(type_namespace=clockwork::demo_system::camera, type_header="clockwork/examples/demo_system/camera/camera_state.hh")]
 extern_type CameraState;
 
 // Cog to simulate receiving YUV411 video frames from the camera
@@ -43,30 +47,9 @@ cog CameraDriverCog
 
   execution
   {
-    condition new_raw_camera: new_message(raw_camera, min=1, max=1);
+    condition new_raw_camera: new_message(raw_camera, max=1);
     execute when: new_raw_camera;
   }
-}
-
-cpp_target camera_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::camera;
-  }
-
-  extern
-  {
-    header_file: "clockwork/examples/demo_system/camera/camera_state.hh";
-    namespace: clockwork::demo_system::camera;
-    type
-    {
-        name: CameraState;
-    }
-  }
-
-  cog CameraDeviceCog;
-  cog CameraDriverCog;
 }
 
 box CameraBox
@@ -83,19 +66,10 @@ box CameraBox
   connect driver_cog.camera to video_channels::VideoChannel;
 }
 
-cpp_executable camera_exe
-{
-  casing
-  {
-    extern CameraState;
-    box CameraBox;
-  }
-}
-
 box CameraExe
 {
   new camera_box: CameraBox;
-  new camera_proc: Process(executable=camera_exe);
+  new camera_proc: Process(executable=camera_clk_exe);
   apply HostProcess(process=camera_proc) in camera_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to camera_proc;
 }

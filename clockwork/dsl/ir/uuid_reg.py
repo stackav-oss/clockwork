@@ -70,13 +70,16 @@ def uuid_from_name(name: str) -> UUID:
     return uuid5(_UUID_NAMESPACE, name)
 
 
-def register_entity(compiler_context: CompilerContext, entity: Value, name: str) -> UUID:
+def register_entity(
+    compiler_context: CompilerContext, entity: Value, name: str, *, allow_existing: bool = False
+) -> UUID:
     """Register an entity with an internally generated UUID based on name.
 
     Args:
         compiler_context: Compiler context containing the registry.
         entity: The Value to register
         name: Unique name representing the entity and will be part of the hash to generate its UUID
+        allow_existing: Allow re-registering an existing entity with the same UUID
 
     Returns:
         Generated UUID
@@ -85,16 +88,19 @@ def register_entity(compiler_context: CompilerContext, entity: Value, name: str)
         Exceptions raised by register_uuid
     """
     uuid = uuid_from_name(name)
-    register_uuid(compiler_context, entity, uuid)
+    register_uuid(compiler_context, entity, uuid, allow_existing=allow_existing)
     return uuid
 
 
-def register_entity_with_stable_key(compiler_context: CompilerContext, entity: NamedAttribute | NamedValue) -> UUID:
+def register_entity_with_stable_key(
+    compiler_context: CompilerContext, entity: NamedAttribute | NamedValue, *, allow_existing: bool = False
+) -> UUID:
     """Register an entity with stable key, which will be used the key as well as the name for UUID hashing.
 
     Args:
         compiler_context: Compiler context containing the registry.
         entity: The entity to register
+        allow_existing: Allow re-registering an existing entity with the same UUID
 
     Returns:
         Generated UUID
@@ -103,28 +109,32 @@ def register_entity_with_stable_key(compiler_context: CompilerContext, entity: N
         Exceptions raised by register_uuid
     """
     name = entity.value_key()
-    return register_entity(compiler_context, entity, name)
+    return register_entity(compiler_context, entity, name, allow_existing=allow_existing)
 
 
-def register_uuid(compiler_context: CompilerContext, entity: Value, uuid: UUID) -> None:
+def register_uuid(
+    compiler_context: CompilerContext, entity: Value, uuid: UUID, *, allow_existing: bool = False
+) -> None:
     """Register an entity with user-provided UUID.
 
     Args:
         compiler_context: Compiler context containing the registry.
         entity: The Value to register
         uuid: UUID to use
+        allow_existing: Allow re-registering an existing entity with the same UUID
 
     Raises:
         RuntimeError: if entity is already registered or if uuid is already in use
     """
     registry = compiler_context[UUID_REGISTRY_KEY]
     key = entity.value_key()
-    if key in registry.key_to_uuid:
-        msg = f"Entity with value_key {key} already exists."
-        raise RuntimeError(msg)
-    if uuid in registry.uuid_to_ir:
-        msg = f"UUID {uuid!s} already exists."
-        raise RuntimeError(msg)
+    if not allow_existing:
+        if key in registry.key_to_uuid:
+            msg = f"Entity with value_key {key} already exists."
+            raise RuntimeError(msg)
+        if uuid in registry.uuid_to_ir:
+            msg = f"UUID {uuid!s} already exists."
+            raise RuntimeError(msg)
     registry.key_to_uuid[key] = uuid
     registry.uuid_to_ir[uuid] = entity
 

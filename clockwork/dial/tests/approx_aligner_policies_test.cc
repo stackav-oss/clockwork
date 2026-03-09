@@ -5,6 +5,7 @@
 #include "clockwork/dial/tests/support/approx_aligner_fixture.hh"
 
 #include <boost/iterator/iterator_facade.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -220,6 +221,60 @@ TEST_CASE_METHOD(DoubleTestApproxAlignerFixture, "objective", "[Policies::varian
     auto values = std::array<ValueType, input_count>{1, 1, 1};
     auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
     REQUIRE(0.0 == DoubleAlignerPolicies::variance_objective(value_ptrs));
+  }
+}
+
+TEST_CASE_METHOD(DoubleTestApproxAlignerFixture, "objective", "[Policies::follower_objective]")
+{
+  SECTION("0/3 aligned (i.e. no inputs)")
+  {
+    auto value_ptrs = ValuePtrArray{};
+    CHECK(std::numeric_limits<ValueType>::max() == DoubleAlignerPolicies::follower_objective(value_ptrs));
+  }
+
+  SECTION("1/3 aligned")
+  {
+    {
+      auto values = std::array<ValueType, input_count>{3, 1, 2};
+      auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == Catch::Approx(2.0));
+    }
+
+    {
+      auto values = std::array<ValueType, input_count>{3, 1, 2};
+      auto value_ptrs = ValuePtrArray{nullptr, &values.at(1), nullptr};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == std::numeric_limits<ValueType>::max());
+    }
+  }
+
+  SECTION("2/3 aligned")
+  {
+    {
+      auto values = std::array<ValueType, input_count>{2, 1, 3};
+      auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == Catch::Approx(1.0));
+    }
+
+    {
+      auto values = std::array<ValueType, input_count>{2, 3, 1};
+      auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == Catch::Approx(1.0));
+    }
+  }
+
+  SECTION("3/3 aligned")
+  {
+    {
+      auto values = std::array<ValueType, input_count>{1, 1, 1};
+      auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == Catch::Approx(0.0));
+    }
+
+    {
+      auto values = std::array<ValueType, input_count>{1, 2, 3};
+      auto value_ptrs = ValuePtrArray{&values.at(0), &values.at(1), &values.at(2)};
+      CHECK(DoubleAlignerPolicies::follower_objective(value_ptrs) == Catch::Approx(-1.0));
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 
 """Query the topology of a clockwork system."""
 
+import itertools
 import os
 import subprocess
 from pathlib import Path
@@ -94,7 +95,7 @@ def list_cpus(ctx: click.Context) -> None:
 
 @cli.command(
     short_help="Describe a specific cpu.",
-    help="For each channel on a cpu, show what publishes it, what subscribes to it, if it remains local to that cpu or if it is inbound/outbound from another cpu.",
+    help="List processes and entities on a cpu and describe channel topology.",
 )
 @click.argument(
     "cpu_name",
@@ -116,28 +117,90 @@ def cpu(ctx: click.Context, cpu_name: str) -> None:
     channel_flow = topology.channel_flow_for_cpu(cpu_name, system, channel_to_publisher_cpu, channel_to_subscriber_cpu)
 
     print(f"CPU: {cpu_name}")
+    print("Processes")
+    for process in sorted(system.cpus[cpu_name].processes):
+        print(f"  - {process}")
+    print("Entities")
+    for entity in sorted(
+        itertools.chain.from_iterable(system.processes[proc].entities for proc in system.cpus[cpu_name].processes)
+    ):
+        print(f"  - {entity}")
     print("Local channels")
     for channel_name in sorted(channel_flow.local_channels):
         channel = system.channels[channel_name]
         print(f"  - {channel.name}")
-        print(f"    Type: {channel.message_type}")
-        print(f"    Size: {channel.message_size} bytes")
+        print(f"    Size:         {channel.size} messages")
+        print(f"    Type:         {channel.message_type}")
+        print(f"    Message Size: {channel.message_size} bytes")
 
     print("Outbound channels")
     for channel_name in sorted(channel_flow.outbound_channels):
         channel = system.channels[channel_name]
         print(f"  - {channel.name}")
+        print(f"    Size:         {channel.size} messages")
         print(f"    Type:         {channel.message_type}")
-        print(f"    Size:         {channel.message_size} bytes")
+        print(f"    Message Size: {channel.message_size} bytes")
         print(f"    Destinations: {', '.join(sorted(channel_to_subscriber_cpu[channel_name]))}")
 
     print("Inbound channels")
     for channel_name in sorted(channel_flow.inbound_channels):
         channel = system.channels[channel_name]
         print(f"  - {channel.name}")
-        print(f"    Type:   {channel.message_type}")
-        print(f"    Size:   {channel.message_size} bytes")
-        print(f"    Origin: {channel_to_publisher_cpu[channel_name]}")
+        print(f"    Size:         {channel.size} messages")
+        print(f"    Type:         {channel.message_type}")
+        print(f"    Message Size: {channel.message_size} bytes")
+        print(f"    Origin:       {channel_to_publisher_cpu[channel_name]}")
+
+
+@cli.command(short_help="List all processes in the system.")
+@click.pass_context
+def list_processes(ctx: click.Context) -> None:
+    """List all processes in the system."""
+    system = ctx.obj["system"]
+    print("\n".join(sorted(system.processes)))
+
+
+@cli.command(
+    short_help="Describe a specific process.",
+    help="List the entities in a process.",
+)
+@click.argument(
+    "process_name",
+    type=str,
+    required=True,
+)
+@click.pass_context
+def process(ctx: click.Context, process_name: str) -> None:
+    """Extract topology information for a specific process from a system target."""
+    system = ctx.obj["system"]
+
+    if process_name not in system.processes:
+        msg = f"Invalid process name.  Expected one of: {', '.join(system.processes.keys())}"
+        raise ValueError(msg)
+
+    process = system.processes[process_name]
+    print(f"Process: {process.name}")
+    print(f"  - CPU: {process.cpu}")
+    print("Entities")
+    for entity in sorted(process.entities):
+        print(f"  - {entity}")
+
+
+def _format_route_extra(route: topology.Route) -> str:
+    if route.bridge_type == "tcp" and route.endpoint:
+        return f" (Port: {route.endpoint})"
+    if route.bridge_type == "pcie" and route.endpoint:
+        return f" (Endpoint: {route.endpoint})"
+    return ""
+
+
+def _print_channel_routes(channel: topology.Channel) -> None:
+    if not channel.routes:
+        return
+    print("  Routes:")
+    for route in sorted(channel.routes, key=lambda r: (r.source_cpu, r.dest_cpu)):
+        extra = _format_route_extra(route)
+        print(f"    - {route.source_cpu} -> {route.dest_cpu}: {route.bridge_type}{extra}")
 
 
 @cli.command(
@@ -161,15 +224,16 @@ def channel(ctx: click.Context, channel_name: str) -> None:
     channel = system.channels[channel_name]
 
     print(f"Channel: {channel.name}")
+    print(f"  Size: {channel.size} messages ({channel.size * channel.message_size} bytes)")
     print(f"  Type: {channel.message_type}")
-    print(f"  Size: {channel.message_size} bytes")
+    print(f"  Message Size: {channel.message_size} bytes")
 
     pubs = {}
     for pub_name in channel.publishers:
-        pubs.setdefault(system.entities[pub_name].cpu, []).append(pub_name)
+        pubs.setdefault(system.processes[system.entities[pub_name].process].cpu, []).append(pub_name)
     subs = {}
     for sub_name in channel.subscribers:
-        subs.setdefault(system.entities[sub_name].cpu, []).append(sub_name)
+        subs.setdefault(system.processes[system.entities[sub_name].process].cpu, []).append(sub_name)
 
     print("  Publishers:")
     for cpu in sorted(pubs):
@@ -182,6 +246,8 @@ def channel(ctx: click.Context, channel_name: str) -> None:
         print(f"    - CPU: {cpu}")
         for sub in sorted(subs[cpu]):
             print(f"        - {sub}")
+
+    _print_channel_routes(channel)
 
 
 @cli.command(
@@ -205,7 +271,8 @@ def entity(ctx: click.Context, entity_name: str) -> None:
     entity = system.entities[entity_name]
 
     print(f"Enity: {entity.name}")
-    print(f"  CPU: {entity.cpu}")
+    print(f"  Process: {entity.process}")
+    print(f"  CPU: {system.processes[entity.process].cpu}")
     print("  Inputs:")
     for input_name in sorted(entity.inputs):
         print(f"    - {input_name}")

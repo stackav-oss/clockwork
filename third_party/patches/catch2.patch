@@ -1,16 +1,36 @@
 diff --git src/catch2/catch_config.hpp src/catch2/catch_config.hpp
-index 17e983e5..3191a7ec 100644
+index cdf286ad..ebdb40da 100644
 --- src/catch2/catch_config.hpp
 +++ src/catch2/catch_config.hpp
 @@ -77,7 +77,7 @@ namespace Catch {
          ShowDurations showDurations = ShowDurations::DefaultForReporter;
          double minDuration = -1;
-         TestRunOrder runOrder = TestRunOrder::Declared;
+         TestRunOrder runOrder = TestRunOrder::Randomized;
 -        ColourMode defaultColourMode = ColourMode::PlatformDefault;
 +        ColourMode defaultColourMode = ColourMode::ANSI;
          WaitForKeypress::When waitForKeypress = WaitForKeypress::Never;
  
          std::string defaultOutputFilename;
+diff --git src/catch2/internal/catch_output_redirect.hpp src/catch2/internal/catch_output_redirect.hpp
+index 51b796ba..e5a133af 100644
+--- src/catch2/internal/catch_output_redirect.hpp
++++ src/catch2/internal/catch_output_redirect.hpp
+@@ -10,13 +10,14 @@
+ 
+ #include <catch2/internal/catch_unique_ptr.hpp>
+ 
++#include <atomic>
+ #include <cassert>
+ #include <string>
+ 
+ namespace Catch {
+ 
+     class OutputRedirect {
+-        bool m_redirectActive = false;
++        std::atomic<bool> m_redirectActive = false;
+         virtual void activateImpl() = 0;
+         virtual void deactivateImpl() = 0;
+     public:
 diff --git src/catch2/internal/catch_test_macro_impl.hpp src/catch2/internal/catch_test_macro_impl.hpp
 index ccd5bb35..0f348b39 100644
 --- src/catch2/internal/catch_test_macro_impl.hpp
@@ -34,23 +54,3 @@ index ccd5bb35..0f348b39 100644
  
  ///////////////////////////////////////////////////////////////////////////////
  #define INTERNAL_CATCH_IF( macroName, resultDisposition, ... ) \
-diff --git src/catch2/internal/catch_output_redirect.hpp src/catch2/internal/catch_output_redirect.hpp
-index 51b796ba..e5a133af 100644
---- src/catch2/internal/catch_output_redirect.hpp
-+++ src/catch2/internal/catch_output_redirect.hpp
-@@ -10,13 +10,14 @@
-
- #include <catch2/internal/catch_unique_ptr.hpp>
-
-+#include <atomic>
- #include <cassert>
- #include <string>
-
- namespace Catch {
-
-     class OutputRedirect {
--        bool m_redirectActive = false;
-+        std::atomic<bool> m_redirectActive = false;
-         virtual void activateImpl() = 0;
-         virtual void deactivateImpl() = 0;
-     public:

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/examples/demo_system/localization/pose_message.hh"
+#include "clockwork/examples/demo_system/localization/pose_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/time/sync_time.hh"
@@ -25,9 +25,10 @@ public:
   /// Construct a pose filter from a PoseMessage dial input
   /// @tparam max_size Maximum size of the pose message input view
   /// @param[in] pose_input Pose message input
-  template <size_t max_size>
+  template <size_t max_size, size_t min_messages, size_t min_new_messages>
   PoseFilter(
-    jewels::memory::MemoryResource memory_resource, const MessageInputDial<Tappy<PoseMessage>, max_size>& pose_input);
+    jewels::memory::MemoryResource memory_resource,
+    const MessageInputDial<Tappy<PoseMessage>, max_size, min_messages, min_new_messages>& pose_input);
 
   ~PoseFilter() noexcept = default;
 

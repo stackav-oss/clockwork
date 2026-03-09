@@ -3,9 +3,17 @@
 
 #include "jewels/testing/tmp_directory_guard.hh"
 
-#include <boost/filesystem.hpp>
+#include "jewels/filesystem/filesystem.hh"
+#include "jewels/memory/default_memory_resource.hh"
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/std/expected.hh"
 
 #include <cstdlib>
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <tuple>
 
 namespace jewels::testing
 {
@@ -18,7 +26,7 @@ constexpr auto* bazel_test_tmpdir_env_name = "TEST_TMPDIR";
 
 } // namespace
 
-TmpDirectoryGuard::TmpDirectoryGuard()
+jewels::filesystem::Path get_bazel_temp_dir(jewels::memory::MemoryResource memory_resource)
 {
   // NOLINTNEXTLINE(concurrency-mt-unsafe) There's a warning in the documentation for this type.
   const auto* temp_dir = std::getenv(bazel_test_tmpdir_env_name);
@@ -26,19 +34,33 @@ TmpDirectoryGuard::TmpDirectoryGuard()
   {
     temp_dir = "/tmp";
   }
-  path_ = (boost::filesystem::path(temp_dir) / boost::filesystem::unique_path()).string();
-  std::filesystem::create_directories(path_);
+  return {std::string_view(temp_dir), memory_resource};
+}
+
+TmpDirectoryGuard::TmpDirectoryGuard(std::optional<jewels::memory::MemoryResource> memory_resource)
+  : memory_resource_(memory_resource.value_or(jewels::memory::get_default_memory_resource())),
+    filesystem_(memory_resource_),
+    path_(memory_resource_)
+{
+  const auto temp_dir = get_bazel_temp_dir(memory_resource_);
+  auto maybe_path = filesystem_.create_temporary_directory(temp_dir);
+  if (!maybe_path)
+  {
+    throw std::filesystem::filesystem_error(
+      "Could not create directory", std::make_error_code(std::errc::no_such_file_or_directory));
+  }
+  path_ = jewels::filesystem::Path(maybe_path->string_view(), memory_resource_);
 }
 
 TmpDirectoryGuard::~TmpDirectoryGuard()
 {
   if (!path_.empty())
   {
-    std::filesystem::remove_all(path_);
+    std::ignore = filesystem_.remove_all(path_);
   }
 }
 
-[[nodiscard]] const std::filesystem::path& TmpDirectoryGuard::get_path() const
+[[nodiscard]] const jewels::filesystem::Path& TmpDirectoryGuard::get_path() const
 {
   return path_;
 }

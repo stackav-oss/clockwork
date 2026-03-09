@@ -4,7 +4,7 @@
 #include "jewels/container/bounded_string.hh"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h> // IWYU pragma: keep
+#include <fmt/format.h> // IWYU pragma: keep
 
 #include <cstring>
 

@@ -10,13 +10,17 @@
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/epoll_snooper.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/filesystem.hh"
 #include "jewels/filesystem/mmap_region.hh"
+#include "jewels/filesystem/path.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -24,14 +28,12 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <initializer_list>
 #include <memory>
@@ -137,6 +139,7 @@ TEST_CASE("ShmChannel main")
   const pinion::BufferLayout buffer_layout{
     .num_slots = num_slots,
     .message_size = message_size,
+    .is_published_once = false,
   };
 
   const std::string channel_uuid_str = jewels::Uuid<Tag>::random_uuid().to_string();
@@ -145,12 +148,13 @@ TEST_CASE("ShmChannel main")
 
   const support::TmpShmNamespace tmp_namespace;
   const auto& socket_ns = tmp_namespace.get_namespace();
-  auto channel_root = Directory::create_open(Directory::at_cwd, tmp_namespace.get_full_path().native());
+  auto channel_root = Directory::create_open(Directory::at_cwd, tmp_namespace.get_full_path());
   REQUIRE(channel_root);
 
   SECTION("file tests")
   {
-    auto open = [&](std::string_view channel_uuid_str, const BufferLayout& layout, ShmChannel::Role role)
+    auto open =
+      [&memres, &channel_root](std::string_view channel_uuid_str, const BufferLayout& layout, ShmChannel::Role role)
     { return ShmChannelOpenHack::open_buffer(memres, *channel_root, channel_uuid_str, layout, role, resume_behavior); };
 
     SECTION("basic creation")
@@ -176,6 +180,7 @@ TEST_CASE("ShmChannel main")
         const pinion::BufferLayout bad_layout{
           .num_slots = num_slots - 1,
           .message_size = message_size,
+          .is_published_once = false,
         };
         auto result = open(channel_uuid_str, bad_layout, role);
         REQUIRE(!result);
@@ -389,7 +394,7 @@ TEST_CASE("ShmChannel main")
   SECTION("factory")
   {
     ShmChannelFactory factory(memres, std::move(*channel_root), tmp_namespace.get_namespace(), resume_behavior);
-    auto opener = [&](auto role)
+    auto opener = [&factory, &channel_uuid_str, &channel_name, &buffer_layout, &max_observer](auto role)
     { return factory.open(role, channel_uuid_str, channel_name, buffer_layout, max_observer); };
 
     auto shm_publisher = opener(ShmChannel::Role::publisher);
@@ -416,30 +421,27 @@ TEST_CASE("ShmChannel main")
     auto ns0_factory = ShmChannelFactory::make(memres);
     CHECK(ns0_factory->socket_ns() == "/clockwork/pinion/pub");
 
+    jewels::filesystem::Filesystem filesystem{jewels::memory::get_default_memory_resource()};
+
     const support::TmpShmNamespace ns1;
-    auto ns1_factory = ShmChannelFactory::make(memres, ns1.get_namespace(), ns1.get_full_path().native());
+    auto ns1_factory = ShmChannelFactory::make(memres, ns1.get_namespace(), ns1.get_full_path());
     REQUIRE(ns1_factory);
     auto ns1_publisher =
       ns1_factory->open_publisher(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     auto ns1_subscriber =
       ns1_factory->open_subscriber(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     CHECK(ns1_factory->socket_ns() == std::pmr::string("/clockwork/" + ns1.get_namespace() + "/pinion/pub"));
-    CHECK(
-      std::filesystem::exists(
-        ns1.get_full_path() / "clockwork" / ns1.get_namespace() / "pinion/pub" / channel_uuid_str));
+    CHECK(filesystem.exists(ns1.get_full_path() / "clockwork" / ns1.get_namespace() / "pinion/pub" / channel_uuid_str));
 
     const support::TmpShmNamespace ns2;
-    auto ns2_factory = ShmChannelFactory::make(memres, ns2.get_namespace(), ns2.get_full_path().native());
+    auto ns2_factory = ShmChannelFactory::make(memres, ns2.get_namespace(), ns2.get_full_path());
     REQUIRE(ns2_factory);
     auto ns2_publisher =
       ns2_factory->open(Role::publisher, channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     auto ns2_subscriber =
       ns2_factory->open(Role::subscriber, channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     CHECK(ns2_factory->socket_ns() == std::pmr::string("/clockwork/" + ns2.get_namespace() + "/pinion/pub"));
-    CHECK(
-      std::filesystem::exists(
-        ns2.get_full_path() / "clockwork" / ns2.get_namespace() / "pinion/pub" / channel_uuid_str));
-
+    CHECK(filesystem.exists(ns2.get_full_path() / "clockwork" / ns2.get_namespace() / "pinion/pub" / channel_uuid_str));
     TestObserver ns1_events;
     CHECK(ns1_publisher->add_observer(jewels::memory::make_non_null_from_ref(ns1_events)));
     TestObserver ns2_events;
@@ -482,6 +484,7 @@ TEST_CASE("Reconnect when resume is allowed")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = sizeof(uint64_t),
+    .is_published_once = false,
   };
 
   constexpr jewels::time::SyncTime fake_send_timestamp{std::chrono::seconds(12345)};
@@ -585,6 +588,7 @@ TEST_CASE("Reconnect fails when resume is disallowed")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = sizeof(uint64_t),
+    .is_published_once = false,
   };
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
   const jewels::testing::TmpDirectoryGuard shm_dir;

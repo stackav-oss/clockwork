@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_memory_resources.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -55,7 +55,7 @@ TEST_CASE_METHOD(MemoryResourcePolicyFixture, "basic operation", "[cog_memory_re
   // Set memory_resources
 
   auto memory_resource1 = std::make_shared<jewels::memory::MemoryResource>(std::pmr::new_delete_resource());
-  auto memory_resource2 = std::make_shared<jewels::memory::MemoryResource>(std::pmr::new_delete_resource());
+  auto memory_resource2 = std::make_shared<jewels::memory::MemoryResource>(std::pmr::null_memory_resource());
 
   SECTION("set_handle unknown id")
   {
@@ -64,19 +64,47 @@ TEST_CASE_METHOD(MemoryResourcePolicyFixture, "basic operation", "[cog_memory_re
     REQUIRE_FALSE(memory_resource.set_handle(unknown_id, memory_resource1));
   }
 
-  REQUIRE_FALSE(memory_resource.validate());
-  REQUIRE(memory_resource.set_handle(MemoryResourcePolicy1::endpoint_id, *memory_resource1));
-  REQUIRE_FALSE(memory_resource.validate());
-  REQUIRE(memory_resource.set_handle(MemoryResourcePolicy2::endpoint_id, *memory_resource2));
-  REQUIRE(memory_resource.validate());
+  SECTION("set_handle")
+  {
+    REQUIRE_FALSE(memory_resource.validate());
+    REQUIRE(memory_resource.set_handle(MemoryResourcePolicy1::endpoint_id, *memory_resource1));
+    REQUIRE_FALSE(memory_resource.validate());
+    REQUIRE(memory_resource.set_handle(MemoryResourcePolicy2::endpoint_id, *memory_resource2));
+    REQUIRE(memory_resource.validate());
 
-  auto memory_resources = memory_resource.make_memory_resources();
-  REQUIRE(2 == std::tuple_size<decltype(memory_resources)>());
+    auto memory_resources = memory_resource.make_memory_resources();
+    REQUIRE(2 == std::tuple_size<decltype(memory_resources)>());
 
-  auto actual1 = std::get<0>(memory_resources);
-  REQUIRE(*memory_resource1 == actual1);
-  auto actual2 = std::get<1>(memory_resources);
-  REQUIRE(*memory_resource2 == actual2);
+    auto actual1 = std::get<0>(memory_resources);
+    REQUIRE(*memory_resource1 == actual1);
+    auto actual2 = std::get<1>(memory_resources);
+    REQUIRE(*memory_resource2 == actual2);
+  }
+
+  SECTION("set_memory_resource")
+  {
+    REQUIRE_FALSE(memory_resource.validate());
+    REQUIRE_FALSE(memory_resource.is_memory_resource_set<0>());
+    REQUIRE_FALSE(memory_resource.is_memory_resource_set<1>());
+    REQUIRE(jewels::ok(memory_resource.set_memory_resource<0>(*memory_resource1)));
+    REQUIRE_FALSE(memory_resource.validate());
+    REQUIRE(memory_resource.is_memory_resource_set<0>());
+    REQUIRE_FALSE(memory_resource.is_memory_resource_set<1>());
+    REQUIRE(jewels::ok(memory_resource.set_memory_resource<1>(*memory_resource2)));
+    REQUIRE(memory_resource.validate());
+    REQUIRE(memory_resource.is_memory_resource_set<0>());
+    REQUIRE(memory_resource.is_memory_resource_set<1>());
+
+    REQUIRE(jewels::fails(memory_resource.set_memory_resource<0>(*memory_resource1)));
+    REQUIRE(jewels::fails(memory_resource.set_memory_resource<1>(*memory_resource2)));
+
+    jewels::FactoryResult<std::reference_wrapper<const jewels::memory::MemoryResource>> memres1;
+    REQUIRE(jewels::ok(memory_resource.get_memory_resource<0>(jewels::Out{memres1})));
+    REQUIRE(*memory_resource1 == *memres1);
+    jewels::FactoryResult<std::reference_wrapper<const jewels::memory::MemoryResource>> memres2;
+    REQUIRE(jewels::ok(memory_resource.get_memory_resource<1>(jewels::Out{memres2})));
+    REQUIRE(*memory_resource2 == *memres2);
+  }
 }
 
 using ZeroMemoryResourcesPolicyFixture = CogMemoryResourcesFixture<>;

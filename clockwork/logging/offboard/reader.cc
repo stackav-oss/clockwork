@@ -3,16 +3,12 @@
 
 #include "clockwork/logging/offboard/reader.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
-#include "clockwork/logging/offboard/index_chunk_reader.hh"
-#include "clockwork/logging/offboard/log_file_trailer.hh"
-#include "clockwork/logging/offboard/log_format.hh"
+#include "clockwork/logging/offboard/chunk_reader.hh"
 #include "clockwork/logging/offboard/log_metadata_helper.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
-#include "clockwork/logging/offboard/metadata_chunk_reader.hh"
-#include "clockwork/logging/offboard/metrics_chunk_reader.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -378,157 +374,6 @@ void Reader::MessageReader::advance()
   return decompressed_message;
 }
 
-Reader::FileReaderState::FileReaderState(
-  jewels::memory::MemoryResource memory_resource,
-  jewels::memory::NonNullSharedPtr<ChunkReader> chunk_reader_ptr,
-  jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr)
-  : memory_resource_(std::move(memory_resource)),
-    chunk_reader_ptr_(std::move(chunk_reader_ptr)),
-    chunk_compressor_ptr_(std::move(chunk_compressor_ptr)),
-    channel_metadata_map_(memory_resource_)
-{
-}
-
-[[nodiscard]] LogExpected<std::pmr::list<reader::MessageChunkHandle>> Reader::FileReaderState::get_message_chunk_list(
-  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
-  std::optional<LogInterval> maybe_log_interval)
-{
-  if (!metadata_map_ptr_)
-  {
-    if (const auto metadata_result = load_metadata(); !metadata_result)
-    {
-      return jewels::unexpected(metadata_result.error());
-    }
-  }
-  const auto& index_chunk_handle = log_file_trailer_info_ptr_->index_chunk_handle;
-  return read_index_chunk(
-    memory_resource_,
-    index_chunk_handle.location,
-    *metadata_map_ptr_,
-    maybe_log_interval,
-    maybe_desired_channels,
-    chunk_reader_ptr_,
-    chunk_compressor_ptr_);
-}
-
-[[nodiscard]] LogExpected<jewels::memory::ObjectPtr<const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>>>
-Reader::FileReaderState::get_metadata()
-{
-  if (!metadata_map_ptr_)
-  {
-    if (const auto metadata_result = load_metadata(); !metadata_result)
-    {
-      return jewels::unexpected(metadata_result.error());
-    }
-  }
-  return jewels::memory::make_non_null_from_ref(*metadata_map_ptr_); // metadata_map_ptr_ set in load_metadata()
-}
-
-[[nodiscard]] LogExpected<jewels::memory::ObjectPtr<const reader::LoggedChannelInfo>>
-Reader::FileReaderState::get_channel_metadata(std::string_view channel_name)
-{
-  if (!metadata_map_ptr_)
-  {
-    if (const auto metadata_result = load_metadata(); !metadata_result)
-    {
-      return jewels::unexpected(metadata_result.error());
-    }
-  }
-  const auto iter = channel_metadata_map_.find(channel_name);
-  if (iter == channel_metadata_map_.end())
-  {
-    return jewels::unexpected(LogError::unknown_channel);
-  }
-  return iter->second;
-}
-
-[[nodiscard]] LogExpected<jewels::memory::ObjectPtr<const reader::LogMetrics>> Reader::FileReaderState::get_metrics()
-{
-  if (!metadata_map_ptr_)
-  {
-    if (const auto metadata_result = load_metadata(); !metadata_result)
-    {
-      return jewels::unexpected(metadata_result.error());
-    }
-  }
-  if (!log_metrics_ptr_)
-  {
-    const auto& metrics_chunk_handle = log_file_trailer_info_ptr_->metrics_chunk_handle;
-    auto metrics_result = read_metrics_chunk(
-      memory_resource_,
-      metrics_chunk_handle.location,
-      *metadata_map_ptr_,
-      *metrics_chunk_handle.chunk_reader_ptr,
-      *metrics_chunk_handle.chunk_compressor_ptr);
-    if (!metrics_result)
-    {
-      jewels::log_cerr_error(
-        "Failed to metrics metadata chunk from {}: {}", get_file_uri().string(), metrics_result.error());
-      return jewels::unexpected(metrics_result.error());
-    }
-    log_metrics_ptr_ = std::allocate_shared<reader::LogMetrics, std::pmr::polymorphic_allocator<reader::LogMetrics>>(
-      memory_resource_, std::move(metrics_result).value());
-  }
-  return jewels::memory::make_non_null_from_ref(*log_metrics_ptr_); // log_metrics_ptr_ set above
-}
-
-[[nodiscard]] const LogUri& Reader::FileReaderState::get_file_uri() const
-{
-  return chunk_reader_ptr_->file_uri();
-}
-
-[[nodiscard]] LogExpected<void> Reader::FileReaderState::load_metadata()
-{
-  if (s3_access_is_denied_)
-  {
-    return jewels::unexpected(LogError::s3_access_denied);
-  }
-  if (!log_file_trailer_info_ptr_)
-  {
-    auto trailer_result = read_log_file_trailer(chunk_reader_ptr_, chunk_compressor_ptr_);
-    if (!trailer_result)
-    {
-      if (trailer_result.error() == LogError::s3_access_denied)
-      {
-        s3_access_is_denied_ = true;
-      }
-      else
-      {
-        jewels::log_cerr_error("Failed to read trailer from {}: {}", get_file_uri().string(), trailer_result.error());
-      }
-      return jewels::unexpected(trailer_result.error());
-    }
-    log_file_trailer_info_ptr_ =
-      std::allocate_shared<reader::LogFileTrailerInfo, std::pmr::polymorphic_allocator<reader::LogFileTrailerInfo>>(
-        memory_resource_, std::move(trailer_result).value());
-  }
-  if (!metadata_map_ptr_)
-  {
-    const auto& metadata_chunk_handle = log_file_trailer_info_ptr_->metadata_chunk_handle;
-    auto metadata_result = read_metadata_chunk(
-      memory_resource_,
-      metadata_chunk_handle.location,
-      *metadata_chunk_handle.chunk_reader_ptr,
-      *metadata_chunk_handle.chunk_compressor_ptr);
-    if (!metadata_result)
-    {
-      jewels::log_cerr_error(
-        "Failed to read metadata chunk from {}: {}", get_file_uri().string(), metadata_result.error());
-      return jewels::unexpected(metadata_result.error());
-    }
-    metadata_map_ptr_ = std::allocate_shared<
-      std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>,
-      std::pmr::polymorphic_allocator<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>>>(
-      memory_resource_, std::move(metadata_result).value());
-    for (const auto& channel_metadata : std::views::values(*metadata_map_ptr_))
-    {
-      channel_metadata_map_.emplace(
-        channel_metadata.channel_name, jewels::memory::make_non_null_from_ref(channel_metadata));
-    }
-  }
-  return {};
-}
-
 Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view uri_str)
   : memory_resource_(std::move(memory_resource)),
     uri_str_(uri_str, memory_resource_),
@@ -536,7 +381,7 @@ Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view 
     chunk_compressor_ptr_(
       jewels::memory::allocate_shared<ChunkCompressor, std::pmr::polymorphic_allocator<ChunkCompressor>>(
         memory_resource_, memory_resource_)),
-    file_reader_state_map_(memory_resource_)
+    log_file_reader_map_(memory_resource_)
 {
 }
 
@@ -557,9 +402,9 @@ Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view 
       return jewels::unexpected(init_result.error());
     }
   }
-  if (!file_reader_state_ptr_)
+  if (!log_file_readers_ptr_)
   {
-    if (const auto init_result = initialize_file_reader_state(); !init_result)
+    if (const auto init_result = initialize_log_file_readers(); !init_result)
     {
       return jewels::unexpected(init_result.error());
     }
@@ -577,11 +422,11 @@ Reader::Reader(jewels::memory::MemoryResource memory_resource, std::string_view 
   std::pmr::list<reader::MessageChunkHandle> message_chunk_list{memory_resource_};
   std::pmr::unordered_map<std::string_view, std::pmr::list<reader::MessageChunkHandle>> persistent_message_chunk_map{
     memory_resource_};
-  for (auto& reader_state : *file_reader_state_ptr_)
+  for (auto& log_file_reader : *log_file_readers_ptr_)
   {
-    if (filtered_log_file_set.contains(reader_state.get_file_uri().string()))
+    if (filtered_log_file_set.contains(log_file_reader.get_file_uri().string()))
     {
-      auto chunk_list_result = reader_state.get_message_chunk_list(maybe_desired_channels, maybe_log_interval);
+      auto chunk_list_result = log_file_reader.get_message_chunk_list(maybe_desired_channels, maybe_log_interval);
       if (const auto process_result = process_chunk_list_result(
             memory_resource_, chunk_list_result, maybe_log_interval, persistent_message_chunk_map, message_chunk_list);
           !process_result)
@@ -661,17 +506,17 @@ Reader::get_metadata()
 {
   if (!metadata_map_ptr_)
   {
-    if (!file_reader_state_ptr_)
+    if (!log_file_readers_ptr_)
     {
-      if (const auto init_result = initialize_file_reader_state(); !init_result)
+      if (const auto init_result = initialize_log_file_readers(); !init_result)
       {
         return jewels::unexpected(init_result.error());
       }
     }
     std::pmr::map<std::string_view, LoggedChannelMetadata> metadata_map{memory_resource_};
-    for (auto& reader_state : *file_reader_state_ptr_)
+    for (auto& log_file_reader : *log_file_readers_ptr_)
     {
-      const auto metadata_result = reader_state.get_metadata();
+      const auto metadata_result = log_file_reader.get_metadata();
       if (!metadata_result)
       {
         if (metadata_result.error() == LogError::s3_access_denied)
@@ -679,7 +524,7 @@ Reader::get_metadata()
           continue;
         }
         jewels::log_cerr_error(
-          "Failed to load metadata from {}: {}", reader_state.get_file_uri().string(), metadata_result.error());
+          "Failed to load metadata from {}: {}", log_file_reader.get_file_uri().string(), metadata_result.error());
         return jewels::unexpected(metadata_result.error());
       }
       for (const auto& channel_metadata : std::views::values(*metadata_result.value()))
@@ -700,9 +545,9 @@ Reader::get_metadata()
 
 [[nodiscard]] LogExpected<LoggedChannelMetadata> Reader::get_channel_metadata(std::string_view channel_name)
 {
-  if (!file_reader_state_ptr_)
+  if (!log_file_readers_ptr_)
   {
-    if (const auto init_result = initialize_file_reader_state(); !init_result)
+    if (const auto init_result = initialize_log_file_readers(); !init_result)
     {
       return jewels::unexpected(init_result.error());
     }
@@ -718,10 +563,10 @@ Reader::get_metadata()
   }
   for (const auto& log_file : filter_result.value())
   {
-    if (auto reader_state_iter = file_reader_state_map_.find(log_file);
-        reader_state_iter != file_reader_state_map_.end())
+    if (auto log_file_reader_iter = log_file_reader_map_.find(log_file);
+        log_file_reader_iter != log_file_reader_map_.end())
     {
-      const auto metadata_result = reader_state_iter->second->get_channel_metadata(channel_name);
+      const auto metadata_result = log_file_reader_iter->second->get_channel_metadata(channel_name);
       if (metadata_result)
       {
         const auto& channel_metadata = *metadata_result.value();
@@ -747,9 +592,9 @@ Reader::get_metadata()
 {
   if (!metrics_ptr_)
   {
-    if (!file_reader_state_ptr_)
+    if (!log_file_readers_ptr_)
     {
-      if (const auto init_result = initialize_file_reader_state(); !init_result)
+      if (const auto init_result = initialize_log_file_readers(); !init_result)
       {
         return jewels::unexpected(init_result.error());
       }
@@ -760,9 +605,9 @@ Reader::get_metadata()
       .transmit_time_interval = {},
       .metrics_map = std::pmr::map<std::string_view, LoggedChannelMetrics>{memory_resource_},
     };
-    for (auto& reader_state : *file_reader_state_ptr_)
+    for (auto& log_file_reader : *log_file_readers_ptr_)
     {
-      const auto metrics_result = reader_state.get_metrics();
+      const auto metrics_result = log_file_reader.get_metrics();
       if (!metrics_result)
       {
         if (metrics_result.error() == LogError::s3_access_denied)
@@ -770,7 +615,7 @@ Reader::get_metadata()
           continue;
         }
         jewels::log_cerr_error(
-          "Failed to load metrics from {}: {}", reader_state.get_file_uri().string(), metrics_result.error());
+          "Failed to load metrics from {}: {}", log_file_reader.get_file_uri().string(), metrics_result.error());
         return jewels::unexpected(metrics_result.error());
       }
       const auto& log_metrics = *metrics_result.value();
@@ -815,7 +660,7 @@ Reader::get_metadata()
   return {};
 }
 
-[[nodiscard]] LogExpected<void> Reader::initialize_file_reader_state()
+[[nodiscard]] LogExpected<void> Reader::initialize_log_file_readers()
 {
   if (!log_metadata_helper_ptr_)
   {
@@ -824,7 +669,7 @@ Reader::get_metadata()
       return jewels::unexpected(helper_result.error());
     }
   }
-  if (!file_reader_state_ptr_)
+  if (!log_file_readers_ptr_)
   {
     auto list_result = log_metadata_helper_ptr_->list_log_files({}, {});
     if (!list_result)
@@ -833,8 +678,8 @@ Reader::get_metadata()
       return jewels::unexpected(list_result.error());
     }
     auto& log_file_uris = list_result.value();
-    std::pmr::vector<FileReaderState> reader_state_vector{memory_resource_};
-    reader_state_vector.reserve(log_file_uris.size());
+    std::pmr::vector<LogFileReader> log_file_reader_vector{memory_resource_};
+    log_file_reader_vector.reserve(log_file_uris.size());
     for (auto& file_uri : log_file_uris)
     {
       auto reader_result = chunk_reader_factory_.make_chunk_reader(file_uri);
@@ -845,17 +690,17 @@ Reader::get_metadata()
       }
       if (const auto open_result = reader_result.value()->open(); !open_result)
       {
-        jewels::log_cerr_error("Failed to open chunk reader for {}: {}", file_uri, reader_result.error());
+        jewels::log_cerr_error("Failed to open chunk reader for {}: {}", file_uri, open_result.error());
         return jewels::unexpected(open_result.error());
       }
-      reader_state_vector.emplace_back(memory_resource_, std::move(reader_result).value(), chunk_compressor_ptr_);
-      file_reader_state_map_.emplace(
-        std::move(file_uri), jewels::memory::make_non_null_from_ref(reader_state_vector.back()));
+      log_file_reader_vector.emplace_back(memory_resource_, std::move(reader_result).value(), chunk_compressor_ptr_);
+      log_file_reader_map_.emplace(
+        std::move(file_uri), jewels::memory::make_non_null_from_ref(log_file_reader_vector.back()));
     }
-    file_reader_state_ptr_ = std::allocate_shared<
-      std::pmr::vector<FileReaderState>,
-      std::pmr::polymorphic_allocator<std::pmr::vector<FileReaderState>>>(
-      memory_resource_, std::move(reader_state_vector));
+    log_file_readers_ptr_ = std::allocate_shared<
+      std::pmr::vector<LogFileReader>,
+      std::pmr::polymorphic_allocator<std::pmr::vector<LogFileReader>>>(
+      memory_resource_, std::move(log_file_reader_vector));
   }
   return {};
 }

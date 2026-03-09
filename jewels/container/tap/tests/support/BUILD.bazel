@@ -1,0 +1,32 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "test_point",
+    srcs = [
+        "test_point.cc",
+        "test_point.inl",
+    ],
+    hdrs = ["test_point.hh"],
+    visibility = ["//jewels/container/tap/tests:__pkg__"],
+)
+
+cc_library(
+    name = "test_point_soa",
+    srcs = [
+        "test_point_soa.cc",
+        "test_point_soa.inl",
+    ],
+    hdrs = ["test_point_soa.hh"],
+    visibility = ["//jewels/container/tap/tests:__pkg__"],
+    deps = [
+        ":test_point",
+        "//jewels/container/tap:soa",
+        "//jewels/memory:aligned_storage",
+        "//jewels/meta:concepts",
+    ],
+)

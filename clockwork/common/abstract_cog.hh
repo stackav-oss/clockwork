@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "clockwork/common/cog_execution_error.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/common/forward.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"

@@ -1,0 +1,105 @@
+diff --git api/include/opentelemetry/nostd/internal/absl/types/internal/variant.h api/include/opentelemetry/nostd/internal/absl/types/internal/variant.h
+index 43e7285b..4436b532 100644
+--- api/include/opentelemetry/nostd/internal/absl/types/internal/variant.h
++++ api/include/opentelemetry/nostd/internal/absl/types/internal/variant.h
+@@ -45,7 +45,7 @@ OTABSL_NAMESPACE_BEGIN
+ template <class... Types>
+ class variant;
+ 
+-OTABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, -1);
++OTABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, static_cast<std::size_t>(-1));
+ 
+ template <class T>
+ struct variant_size;
+diff --git api/include/opentelemetry/nostd/string_view.h api/include/opentelemetry/nostd/string_view.h
+index f0e5bd9e..a0c80814 100644
+--- api/include/opentelemetry/nostd/string_view.h
++++ api/include/opentelemetry/nostd/string_view.h
+@@ -124,7 +124,7 @@ class string_view
+       auto found = Traits::find(data() + pos, length() - pos, ch);
+       if (found)
+       {
+-        res = found - data();
++        res = static_cast<size_type>(found - data());
+       }
+     }
+     return res;
+diff --git api/include/opentelemetry/trace/span_id.h api/include/opentelemetry/trace/span_id.h
+index 19511040..6537f77f 100644
+--- api/include/opentelemetry/trace/span_id.h
++++ api/include/opentelemetry/trace/span_id.h
+@@ -17,7 +17,7 @@ class SpanId final
+ {
+ public:
+   // The size in bytes of the SpanId.
+-  static constexpr int kSize = 8;
++  static constexpr size_t kSize = 8;
+ 
+   // An invalid SpanId (all zeros).
+   SpanId() noexcept : rep_{0} {}
+@@ -29,7 +29,7 @@ class SpanId final
+   void ToLowerBase16(nostd::span<char, 2 * kSize> buffer) const noexcept
+   {
+     constexpr char kHex[] = "0123456789abcdef";
+-    for (int i = 0; i < kSize; ++i)
++    for (size_t i = 0; i < kSize; ++i)
+     {
+       buffer[i * 2 + 0] = kHex[(rep_[i] >> 4) & 0xF];
+       buffer[i * 2 + 1] = kHex[(rep_[i] >> 0) & 0xF];
+diff --git api/include/opentelemetry/trace/trace_id.h api/include/opentelemetry/trace/trace_id.h
+index 3a262c7a..53303712 100644
+--- api/include/opentelemetry/trace/trace_id.h
++++ api/include/opentelemetry/trace/trace_id.h
+@@ -20,7 +20,7 @@ class TraceId final
+ {
+ public:
+   // The size in bytes of the TraceId.
+-  static constexpr int kSize = 16;
++  static constexpr size_t kSize = 16;
+ 
+   // An invalid TraceId (all zeros).
+   TraceId() noexcept : rep_{0} {}
+@@ -35,7 +35,7 @@ class TraceId final
+   void ToLowerBase16(nostd::span<char, 2 * kSize> buffer) const noexcept
+   {
+     constexpr char kHex[] = "0123456789abcdef";
+-    for (int i = 0; i < kSize; ++i)
++    for (size_t i = 0; i < kSize; ++i)
+     {
+       buffer[i * 2 + 0] = kHex[(rep_[i] >> 4) & 0xF];
+       buffer[i * 2 + 1] = kHex[(rep_[i] >> 0) & 0xF];
+diff --git sdk/include/opentelemetry/sdk/common/attribute_utils.h sdk/include/opentelemetry/sdk/common/attribute_utils.h
+index a1ac74b2..3277d80d 100644
+--- sdk/include/opentelemetry/sdk/common/attribute_utils.h
++++ sdk/include/opentelemetry/sdk/common/attribute_utils.h
+@@ -197,7 +197,7 @@ class AttributeMap : public std::unordered_map<std::string, OwnedAttributeValue>
+   void ConstructFrom(const opentelemetry::common::KeyValueIterable &attributes)
+   {
+     attributes.ForEachKeyValue(
+-        [&](nostd::string_view key, const opentelemetry::common::AttributeValue &value) noexcept {
++        [this](nostd::string_view key, const opentelemetry::common::AttributeValue &value) noexcept {
+           SetAttribute(key, value);
+           return true;
+         });
+@@ -259,7 +259,7 @@ class OrderedAttributeMap : public std::map<std::string, OwnedAttributeValue>
+       : OrderedAttributeMap()
+   {
+     attributes.ForEachKeyValue(
+-        [&](nostd::string_view key, opentelemetry::common::AttributeValue value) noexcept {
++        [this](nostd::string_view key, opentelemetry::common::AttributeValue value) noexcept {
+           SetAttribute(key, value);
+           return true;
+         });
+diff --git sdk/include/opentelemetry/sdk/common/custom_hash_equality.h sdk/include/opentelemetry/sdk/common/custom_hash_equality.h
+index d1b5555b..f3474b6e 100644
+--- sdk/include/opentelemetry/sdk/common/custom_hash_equality.h
++++ sdk/include/opentelemetry/sdk/common/custom_hash_equality.h
+@@ -149,7 +149,7 @@ inline auto find_heterogeneous(MapType &&map, opentelemetry::nostd::string_view
+   return map.find(std::string(key));
+ #else
+   // libstdc++ + C++20: heterogeneous lookup works
+-  return map.find(key);
++  return map.find(std::string{key});
+ #endif
+ }
+ }  // namespace common

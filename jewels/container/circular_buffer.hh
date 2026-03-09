@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "clockwork/repr_iface.hh"
 #include "jewels/container/circular_buffer_state_clk_cc.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -150,6 +151,10 @@ public:
   /// @return The number of times to increment (or decrement if negative) to get to other.
   [[nodiscard]] std::ptrdiff_t distance_to(const CircularIterator& other) const;
 
+  /// Provide operator[] as the one provided by the iterator facade doesn't
+  /// satisfy std::ranges::random_access_range.
+  Reference operator[](std::ptrdiff_t n) const;
+
 private:
   /// A span over the storages.
   std::span<SpanValueType> span_;
@@ -250,7 +255,7 @@ public:
   /// @param state The state to resume from.
   /// @return A valid CircularBuffer if construction was successful.
   [[nodiscard]] static jewels::expected<CircularBuffer, CircularBufferConstructError>
-  try_make(Container&& storage, TappyCircularBufferState state);
+  try_make(Container&& storage, clockwork::Tappy<CircularBufferState> state);
 
   /// Try to emplace an element at the back of the container.  Will fail if full.
   /// @param args A pack of args used to construct the new element.
@@ -324,14 +329,14 @@ public:
 
   /// Get the state of the circular buffer positions.
   /// This can be used to save and resume when using an external storage.
-  [[nodiscard]] TappyCircularBufferState state() const;
+  [[nodiscard]] clockwork::Tappy<CircularBufferState> state() const;
 
   /// Destruct any elements in the container.
   ~CircularBuffer();
 
 private:
   /// Construct a buffer. Meant to be called only by the static try_make functions.
-  explicit CircularBuffer(Container&& storage, TappyCircularBufferState state);
+  explicit CircularBuffer(Container&& storage, clockwork::Tappy<CircularBufferState> state);
 
   /// Helper function to emplace an element in the back of the container.
   /// @pre Assumes the container is not full.

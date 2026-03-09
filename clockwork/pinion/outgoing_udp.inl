@@ -3,13 +3,14 @@
 
 #include "clockwork/pinion/outgoing_udp.hh"
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/filesystem/error_code.hh"
@@ -25,8 +26,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-#include <fmt10/format.h> // IWYU pragma: keep
+#include <fmt/format.h> // IWYU pragma: keep
 
 #include <cerrno>
 #include <iterator>
@@ -129,7 +129,7 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write_impl(int socket_fd)
   const auto newly_available = pinion::available_starting_from(subscriber_->available(), next_to_consume_);
   if (newly_available)
   {
-    write(*subscriber_, *newly_available, socket_fd);
+    write(*newly_available, socket_fd);
     return;
   }
   if (newly_available.error() == ProgressError::fell_behind)
@@ -138,7 +138,7 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write_impl(int socket_fd)
     // TODO(OI-2066): Convert to diagnostics
     jewels::log_cerr_error(
       "outgoing socket({}) has fallen behind.  Dropping {} messages.", socket_endpoint_, num_dropped);
-    write(*subscriber_, available, socket_fd);
+    write(available, socket_fd);
     return;
   }
   // This should only happen if the subscriber state is corrupted which likely means we have some UB.
@@ -149,8 +149,7 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write_impl(int socket_fd)
 }
 
 template <class Schema>
-void OutgoingUdpImpl<Tachyon<Schema>>::write(
-  pinion::SubscriberHandle& subscriber, std::ranges::subrange<BufferIterator> available, int socket_fd)
+void OutgoingUdpImpl<Tachyon<Schema>>::write(std::ranges::subrange<SlotRef> available, int socket_fd)
 {
   for (next_to_consume_ = std::begin(available); next_to_consume_ != std::end(available); ++next_to_consume_)
   {
@@ -160,7 +159,7 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write(
     // Intentionally copy here so we can guarantee a corrupted packet
     // is never sent to the destination.
     *holding_buffer_ = MessageCast<const Msg>{}(*next_to_consume_);
-    if (!subscriber.still_available(next_to_consume_))
+    if (!next_to_consume_.is_valid())
     {
       // TODO(OI-2066): Convert to diagnostics
       jewels::log_cerr_error("outgoing socket({}) has fallen behind.  Dropping message.", socket_endpoint_);

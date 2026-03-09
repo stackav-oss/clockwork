@@ -120,23 +120,12 @@ At the time of writing constants may only have primitive values.
 - `bar: Float32 = 1.234;`
 - `baz = "a string";`
 
-You can use the `constant` directive in `cpp_target` and `py_target` to export constants for use wherever generated code is imported.
-In the example below, the constant `foo` would be available as `clockwork::testing::foo` and `testing_py.FOO` respectively from the C++ and Python targets.
+The `generate` attribute is used to make constants available in generated code.
+In the example below, the constant `foo` would be available as `clockwork::testing::foo` and `testing_clk_py.FOO` respectively from the C++ and Python targets assuming the Clockwork source file was named `testing.clk`.
 
 ```clockwork
+#![(generate(cpp, py)]
+#![cpp(namespace=clockwork::testing)]
+
 foo: UInt64 = 9999;
-
-cpp_target testing_cpp
-{
-  options
-  {
-    namespace clockwork::testing;
-  }
-  constant foo;
-}
-
-py_target testing_py
-{
-  constant foo;
-}
 ```

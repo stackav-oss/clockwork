@@ -44,7 +44,10 @@ py_library(
 py_library(
     name = "nanobind_targets",
     srcs = ["nanobind_targets.py"],
-    visibility = ["//clockwork/dsl:__subpackages__"],
+    visibility = [
+        "//clockwork:__pkg__",
+        "//clockwork/dsl:__subpackages__",
+    ],
     deps = [
         ":targets",
         "@clockwork_pip//typing_extensions",
@@ -98,7 +101,6 @@ py_binary(
         ":cc_targets",
         ":extract_targets",
         ":targets",
-        "//clockwork/dsl:clk_exception",
         "//tools:sort_build_file",
         "@clockwork_pip//bazel_runfiles",
         "@clockwork_pip//click",

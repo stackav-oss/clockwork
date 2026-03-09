@@ -23,7 +23,9 @@ cc_library(
     hdrs = ["sock_opt.hh"],
     visibility = ["//visibility:public"],
     deps = [
+        ":ifaddrs",
         "//jewels/filesystem:error_code",
+        "//jewels/meta:overloaded",
         "//jewels/std:expected",
         "@wise_enum",
     ],
@@ -31,7 +33,10 @@ cc_library(
 
 cc_library(
     name = "socket_address",
-    srcs = ["socket_address.cc"],
+    srcs = [
+        "socket_address.cc",
+        "socket_address.inl",
+    ],
     hdrs = ["socket_address.hh"],
     visibility = ["//visibility:public"],
     deps = [
@@ -49,4 +54,16 @@ cc_library(
     hdrs = ["socket_endpoint.hh"],
     visibility = ["//visibility:public"],
     deps = ["@fmt"],
+)
+
+cc_library(
+    name = "sockets",
+    srcs = ["sockets.cc"],
+    hdrs = ["sockets.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
+        "//jewels/std:expected",
+    ],
 )

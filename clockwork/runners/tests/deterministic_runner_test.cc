@@ -4,7 +4,7 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/cog_execution_error.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/observer.hh"
@@ -13,6 +13,7 @@
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_runner.hh"
 #include "clockwork/runners/deterministic_timer.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/cli/exit_condition_signal.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -20,7 +21,6 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <boost/container/allocator_traits.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -184,8 +184,6 @@ private:
   jewels::memory::ObjectPtr<pinion::SubscriberHandle> subscriber_;
   std::deque<std::pair<int, int64_t>>& events_;
   int id_;
-
-  pinion::BufferIterator last_message_;
 };
 
 TEST_CASE("execute", "[DeterministicRunner]")
@@ -205,15 +203,15 @@ TEST_CASE("execute", "[DeterministicRunner]")
   auto queue = std::make_shared<DeterministicCogQueue>(resource);
   auto queue_ptr = jewels::memory::make_non_null_from_ref(*queue);
 
-  auto channel1 = std::make_unique<InMemoryChannel<TimerEvent, channel_size>>(resource);
+  auto channel1 = std::make_unique<InMemoryChannel<TimerEvent, channel_size, false>>(resource);
   auto publisher1 = channel1->make_publisher(1);
   auto subscriber1 = channel1->make_subscriber();
 
-  auto channel2 = std::make_unique<InMemoryChannel<TimerEvent, channel_size>>(resource);
+  auto channel2 = std::make_unique<InMemoryChannel<TimerEvent, channel_size, false>>(resource);
   auto publisher2 = channel2->make_publisher(1);
   auto subscriber2 = channel2->make_subscriber();
 
-  auto channel3 = std::make_unique<InMemoryChannel<TimerEvent, channel_size>>(resource);
+  auto channel3 = std::make_unique<InMemoryChannel<TimerEvent, channel_size, false>>(resource);
   auto publisher3 = channel3->make_publisher(1);
   auto test_publisher_observer = std::make_shared<CheckPublishObserver>();
   REQUIRE(publisher3.add_observer(jewels::memory::make_non_null_from_ref(*test_publisher_observer)));
@@ -265,7 +263,8 @@ TEST_CASE("execute", "[DeterministicRunner]")
       .start_time = start_time,
       .end_time = end_time,
       .channel_publisher = std::make_shared<TestChannelPublisher>(std::move(publisher3), publish_events),
-      .cog_to_gpu_id = cog_to_gpu_id});
+      .cog_to_gpu_id = cog_to_gpu_id,
+      .playback_speed = 0.0});
 
   CHECK(timer1->start(
     start_time + std::chrono::milliseconds(timer1_period_ms), std::chrono::milliseconds(timer1_period_ms)));
@@ -274,7 +273,7 @@ TEST_CASE("execute", "[DeterministicRunner]")
   jewels::cli::SignalExitCondition exit;
   SECTION("Regular Run")
   {
-    runner.start(start_time, end_time, exit);
+    REQUIRE(jewels::ok(runner.start(start_time, end_time, exit)));
 
     // Note the timers produce their first event at `start + period` so start the counter at `start + 1`
     for (int64_t time_ms = to_ms(start_time) + 1; time_ms <= to_ms(end_time); time_ms++)
@@ -299,7 +298,7 @@ TEST_CASE("execute", "[DeterministicRunner]")
   SECTION("Early termination")
   {
     exit.signal();
-    runner.start(start_time, end_time, exit);
+    REQUIRE(jewels::ok(runner.start(start_time, end_time, exit)));
     REQUIRE(events.empty());
   }
 }

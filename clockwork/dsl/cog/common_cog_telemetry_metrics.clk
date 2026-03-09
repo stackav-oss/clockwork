@@ -1,4 +1,7 @@
-use clockwork::dsl::cog::ten_nanosecond::TenNanoseconds;
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cog::metrics)]
+
+use clockwork::dsl::cog::ten_nanosecond::{TenNanoseconds};
 
 // Template schema for MinMaxMean
 schema MinMaxMean
@@ -64,37 +67,6 @@ schema CogTelemetryMetrics
     }
 }
 
-cpp_target min_max_mean_cpp
-{
-  options
-  {
-    namespace clockwork::cog::metrics;
-  }
-
-  schema MinMaxMean;
-  representation min_max_16: Tachyon<MinMaxMean<UInt16>>;
-  representation min_max_32: Tachyon<MinMaxMean<UInt32>>;
-  representation min_max_ten_nano: Tachyon<MinMaxMean<TenNanoseconds>>;
-
-  interface Tappy<MinMaxMean<UInt16>>;
-  interface Tappy<MinMaxMean<UInt32>>;
-  interface Tappy<MinMaxMean<TenNanoseconds>>;
-}
-
-// Cpp target for common cog telemetry metrics
-cpp_target cog_telemetry_metrics_cpp
-{
-  options
-  {
-    namespace clockwork::cog::metrics;
-  }
-
-  schema CogTelemetryMetrics;
-  schema InputChannelTelemetryMetrics;
-
-  representation cog_telemetry_metrics_tach: Tachyon<CogTelemetryMetrics>;
-  representation input_telemetry_metrics_rep: Tachyon<InputChannelTelemetryMetrics>;
-
-  interface cog_telemetry_metrics_tappy: Tappy<CogTelemetryMetrics>;
-  interface Tappy<InputChannelTelemetryMetrics>;
-}
+instantiate MinMaxMean16: MinMaxMean<UInt16>;
+instantiate MinMaxMean32: MinMaxMean<UInt32>;
+instantiate MinMaxMean10ns: MinMaxMean<TenNanoseconds>;

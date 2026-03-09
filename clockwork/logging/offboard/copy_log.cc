@@ -9,6 +9,7 @@
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
+#include "clockwork/logging/offboard/s3_otel_utils.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
@@ -77,10 +78,10 @@ namespace
 /// @param[in] dest_uri Destination log URI
 /// @param[in] write_config_str Write configuration protobuf string
 /// @return Writer pointer or LogError on faulure
-[[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<Writer>> open_writer(
+[[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<Writer<S3OtelUtils>>> open_writer(
   jewels::memory::MemoryResource memory_resource, std::string_view dest_uri, std::string_view writer_config_str)
 {
-  auto writer_ptr = jewels::memory::make_shared<Writer>(memory_resource);
+  auto writer_ptr = jewels::memory::make_shared<Writer<S3OtelUtils>>(memory_resource);
   if (const auto open_result = writer_ptr->open(dest_uri, writer_config_str); !open_result)
   {
     return jewels::unexpected(open_result.error());
@@ -92,7 +93,7 @@ namespace
 /// @param[in] reader Source log reader
 /// @param[in] writer Destination log writer
 /// @return LogError on failure
-[[nodiscard]] LogExpected<void> copy_log(AbstractLogReader& reader, Writer& writer)
+[[nodiscard]] LogExpected<void> copy_log(AbstractLogReader& reader, Writer<S3OtelUtils>& writer)
 {
   const auto log_metadata = reader.get_metadata();
   std::unordered_map<std::string_view, jewels::memory::ObjectPtr<const TopicMetadata>> topic_map;
@@ -154,7 +155,7 @@ namespace
 /// @param[in] dest_uri Destination log URI
 /// @return LogError on failure
 [[nodiscard]] LogExpected<void> shallow_copy_log_union(
-  ChunkReaderWriterFactory& reader_writer_factory, const LogUri& source_uri, const LogUri& dest_uri)
+  ChunkReaderWriterFactory<S3OtelUtils>& reader_writer_factory, const LogUri& source_uri, const LogUri& dest_uri)
 {
   const auto exists_result = reader_writer_factory.exists(dest_uri.string());
   if (!exists_result)
@@ -210,7 +211,7 @@ namespace
       jewels::log_cerr_error("Failed to open {}: Invalid log URI", source_uri);
       return jewels::unexpected(LogError::invalid_log_uri);
     }
-    ChunkReaderWriterFactory reader_writer_factory{memory_resource};
+    ChunkReaderWriterFactory<S3OtelUtils> reader_writer_factory{memory_resource};
     if (const auto exists_result =
           reader_writer_factory.exists(source_uri_result->apply_relative_path(log_union_filename).string());
         exists_result && exists_result.value())

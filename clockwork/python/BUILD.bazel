@@ -54,19 +54,10 @@ clk(
     name = "python_state_clk",
     srcs = ["python_state.clk"],
     outs = [
-        "python_state_extern.cc",
-        "python_state_extern.hh",
-        "python_state_extern.inl",
+        "python_state_clk_cc.cc",
+        "python_state_clk_cc.hh",
+        "python_state_clk_cc.inl",
     ],
-)
-
-cc_library(
-    name = "python_state_extern",
-    srcs = [
-        "python_state_extern.cc",
-        "python_state_extern.inl",
-    ],
-    hdrs = ["python_state_extern.hh"],
-    data = [":python_state_clk"],
-    deps = [":python_state"],
+    cpp_deps = [":python_state"],
+    generate = ["cpp"],
 )

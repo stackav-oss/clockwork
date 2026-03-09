@@ -102,10 +102,32 @@ TEST_CASE("ip_multicast_if")
 TEST_CASE("so_bind_to_device")
 {
   const jewels::filesystem::FileDescriptor file_desc{::socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0)};
-  REQUIRE_FALSE(handle_sock_options(
-    *file_desc, std::make_tuple(SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{"8.8.8.8"})));
-  REQUIRE(handle_sock_options(
-    *file_desc, std::make_tuple(SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{"127.0.0.1"})));
+  SECTION("Bind to interface by name")
+  {
+    REQUIRE_FALSE(handle_sock_options(
+      *file_desc,
+      std::make_tuple(
+        SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{
+          jewels::networking::InterfaceNameView{"unknown"}})));
+    REQUIRE(handle_sock_options(
+      *file_desc,
+      std::make_tuple(
+        SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{
+          jewels::networking::InterfaceNameView{"lo"}})));
+  }
+  SECTION("Bind to interface by address")
+  {
+    REQUIRE_FALSE(handle_sock_options(
+      *file_desc,
+      std::make_tuple(
+        SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{
+          jewels::networking::AddressView{"8.8.8.8"}})));
+    REQUIRE(handle_sock_options(
+      *file_desc,
+      std::make_tuple(
+        SockOptionValue<jewels::networking::SockOption::so_bind_to_device>{
+          jewels::networking::AddressView{"127.0.0.1"}})));
+  }
 }
 
 } // namespace clockwork::pinion

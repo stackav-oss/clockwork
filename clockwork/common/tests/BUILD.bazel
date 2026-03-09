@@ -24,6 +24,7 @@ cc_test(
         "//clockwork/common:exec_tools",
         "//clockwork/pinion:shm_channel_factory",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
         "//jewels/std:span",

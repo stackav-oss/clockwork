@@ -25,9 +25,11 @@ def get_cog_metrics_imports(module: node.Module) -> Iterable[node.Module.UseResu
                 "dsl",
                 "cog",
                 "common_cog_telemetry_metrics",
-                "cog_telemetry_metrics_tach",
+                "InputChannelTelemetryMetrics",
             ),
             alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
             cst_node=None,
         )
     )
@@ -39,9 +41,11 @@ def get_cog_metrics_imports(module: node.Module) -> Iterable[node.Module.UseResu
                 "dsl",
                 "cog",
                 "common_cog_telemetry_metrics",
-                "cog_telemetry_metrics_tappy",
+                "CogTelemetryMetrics",
             ),
             alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
             cst_node=None,
         )
     )
@@ -53,47 +57,31 @@ def get_cog_metrics_imports(module: node.Module) -> Iterable[node.Module.UseResu
                 "dsl",
                 "cog",
                 "common_cog_telemetry_metrics",
-                "input_telemetry_metrics_rep",
+                "MinMaxMean16",
             ),
             alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
             cst_node=None,
         )
     )
     imports.append(
         node.Module.UseResult(
             repo=repo,
-            path=(
-                "clockwork",
-                "dsl",
-                "cog",
-                "common_cog_telemetry_metrics",
-                "min_max_16",
-            ),
+            path=("clockwork", "dsl", "cog", "common_cog_event_metrics", "CogEventMetrics"),
             alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
             cst_node=None,
         )
     )
     imports.append(
         node.Module.UseResult(
             repo=repo,
-            path=("clockwork", "dsl", "cog", "common_cog_event_metrics", "cog_event_metrics_tach"),
+            path=("clockwork", "dsl", "cog", "common_cog_event_metrics", "InputChannelEventMetrics"),
             alias=None,
-            cst_node=None,
-        )
-    )
-    imports.append(
-        node.Module.UseResult(
-            repo=repo,
-            path=("clockwork", "dsl", "cog", "common_cog_event_metrics", "cog_event_metrics_tappy"),
-            alias=None,
-            cst_node=None,
-        )
-    )
-    imports.append(
-        node.Module.UseResult(
-            repo=repo,
-            path=("clockwork", "dsl", "cog", "common_cog_event_metrics", "input_event_metrics_rep"),
-            alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
             cst_node=None,
         )
     )

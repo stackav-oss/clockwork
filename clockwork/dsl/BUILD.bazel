@@ -9,23 +9,12 @@ package(
     default_visibility = ["//clockwork:__subpackages__"],
 )
 
-py_library(
-    name = "clk_exception",
-    srcs = ["clk_exception.py"],
-    visibility = [":__subpackages__"],
-    deps = [
-        "@clockwork_pip//rich",
-        "@clockwork_pip//typing_extensions",
-    ],
-)
-
 py_binary(
     name = "clkc",
     srcs = ["clkc.py"],
     imports = ["../.."],
     visibility = ["//visibility:public"],
     deps = [
-        ":clk_exception",
         "//clockwork/dsl/bazel:extract_targets",
         "//clockwork/dsl/composition:systemgen",
         "//clockwork/dsl/ir:compiler",
@@ -44,31 +33,30 @@ py_binary(
 )
 
 py_library(
+    name = "clockwork_cst",
+    srcs = [":generate_parser"],
+    deps = ["@fltk"],
+)
+
+py_library(
+    name = "clockwork_parser",
+    srcs = [":generate_parser"],
+    deps = [
+        ":clockwork_cst",
+        "@fltk",
+    ],
+)
+
+py_library(
     name = "compiler_context",
     srcs = ["compiler_context.py"],
     visibility = ["//visibility:public"],
     deps = ["@clockwork_pip//typing_extensions"],
 )
 
-py_library(
-    name = "cst",
-    srcs = ["cst.py"],
-    deps = ["@fltk"],
-)
-
 generate_parser(
     name = "generate_parser",
     src = "clockwork.fltkg",
-    cst_mod_path = "clockwork.dsl.cst",
-    out_cst_py = "cst.py",
-    out_parser_py = "parser.py",
-)
-
-py_library(
-    name = "parser",
-    srcs = ["parser.py"],
-    deps = [
-        ":cst",
-        "@fltk",
-    ],
+    base_name = "clockwork",
+    cst_mod_path = "clockwork.dsl.clockwork_cst",
 )

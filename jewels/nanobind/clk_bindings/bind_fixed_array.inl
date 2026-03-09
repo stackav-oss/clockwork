@@ -8,7 +8,7 @@
 #include "jewels/nanobind/clk_bindings/wrap_index.hh"
 
 #include <Python.h>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/make_iterator.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/detail/traits.h> // IWYU pragma: keep

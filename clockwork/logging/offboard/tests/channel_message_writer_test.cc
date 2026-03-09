@@ -1,7 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
@@ -17,6 +17,7 @@
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/testing/filesystem_wrapper.hh"
@@ -28,7 +29,6 @@
 
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <optional>

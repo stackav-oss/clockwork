@@ -1,9 +1,11 @@
-use clockwork::examples::demo_system::cpu_domain;
+#![generate(cpp_exe)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
 use clockwork::logging::log_writer_config;
-use clockwork::logging::writers::channel_message_rates_config;
+use[cpp, proto, proto_conv] clockwork::logging::writers::channel_message_rates_config;
 use clockwork::logging::writers::logger;
-use clockwork::logging::writers::logger_channels;
-use clockwork::logging::writers::logger_config;
+use[] clockwork::logging::writers::logger_channels;
+use[cpp, proto, proto_conv] clockwork::logging::writers::logger_config;
 use clockwork::logging::writers::logger_status;
 
 box LoggerBox
@@ -27,18 +29,10 @@ box LoggerBox
   connect status_publisher_cog.channel_rates to logger_channels::LoggerMessageRatesChannel;
 }
 
-cpp_executable logger_exe
-{
-  casing
-  {
-    box LoggerBox;
-  }
-}
-
 box LoggerExe
 {
   new logger_box: LoggerBox;
-  new logger_proc: Process(executable=logger_exe);
+  new logger_proc: Process(executable=logger_clk_exe);
   apply HostProcess(process=logger_proc) in logger_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to logger_proc;
 }

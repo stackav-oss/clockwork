@@ -1,6 +1,8 @@
-use clockwork::logging::writers::channel_message_rates::ChannelMessageRates;
-use clockwork::logging::writers::logger_config::LoggerConfig;
-use clockwork::logging::writers::logger_status::LoggerStatus;
+#![generate()]
+
+use clockwork::logging::writers::channel_message_rates::{ChannelMessageRates};
+use clockwork::logging::writers::logger_config::{LoggerConfig};
+use clockwork::logging::writers::logger_status::{LoggerStatus};
 
 // Logger config
 channel LoggerConfigChannel

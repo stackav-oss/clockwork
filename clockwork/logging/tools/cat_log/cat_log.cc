@@ -1,6 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
@@ -12,7 +13,7 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
 #include <tclap/UnlabeledValueArg.h>
@@ -54,7 +55,7 @@ namespace clockwork_logging::offboard
   { return !maybe_desired_channels || maybe_desired_channels->contains(std::pmr::string{topic, memory_resource}); };
   try
   {
-    auto reader_ptr = make_reader(log_uri, {}, maybe_log_interval);
+    auto reader_ptr = make_reader(log_uri, {}, maybe_log_interval, DecompressOption::dont_decompress);
     if (const auto open_result = reader_ptr->open(topic_filter); !open_result)
     {
       return jewels::unexpected(open_result.error());

@@ -36,6 +36,13 @@ public:
   add(int efd, uint32_t events, const std::shared_ptr<AbstractEPollCallback>& callback) override;
 
   ///
+  /// Modifies the given file descriptor. The callback reference is unchanged.
+  /// @param efd the file descriptor to watch for events on
+  /// @param events the the bitmask of event types, see epoll_ctl(2)
+  ///
+  [[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode> modify(int efd, uint32_t events) override;
+
+  ///
   /// Unregisters the given file descriptor with underlying epoll handle and releases the callback reference
   /// @param efd the file descriptor to watch for events on
   ///

@@ -17,7 +17,7 @@ namespace clockwork::serialization
 {
 
 template <typename SrcType, typename DestType>
-void validate_upgradability()
+void validate_upgradability(UpgradeValidationOption validation_option)
 {
   metadata::LoggedChannelMetadata src_metadata;
   metadata::TachyonMetadata src_proto;
@@ -31,7 +31,15 @@ void validate_upgradability()
   dest_proto.set_python_required(false);
   (*dest_metadata.mutable_channel_metadata())["TEST_CHANNEL"].CopyFrom(dest_proto);
   REQUIRE(validate_logged_channel_metadata(src_metadata, dest_metadata));
-  REQUIRE_FALSE(validate_logged_channel_metadata(dest_metadata, src_metadata));
+  switch (validation_option)
+  {
+  case UpgradeValidationOption::upgrade_only:
+    REQUIRE_FALSE(validate_logged_channel_metadata(dest_metadata, src_metadata));
+    break;
+  case UpgradeValidationOption::upgrade_and_downgrade:
+    REQUIRE(validate_logged_channel_metadata(dest_metadata, src_metadata));
+    break;
+  }
 }
 
 template <typename SrcType, typename DestType>

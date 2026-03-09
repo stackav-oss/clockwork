@@ -3,7 +3,7 @@
 
 #include "clockwork/cog/cog_timers.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/cond_time_since_last_exec.hh"
 #include "clockwork/pinion/observer.hh"
 #include "jewels/container/compare.hh"

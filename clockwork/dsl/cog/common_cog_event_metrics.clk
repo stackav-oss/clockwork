@@ -1,4 +1,7 @@
-use clockwork::dsl::cog::ten_nanosecond::TenNanoseconds;
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cog::metrics)]
+
+use clockwork::dsl::cog::ten_nanosecond::{TenNanoseconds};
 
 // Common event metrics schema for tracking cog execution performance
 schema CogEventMetrics
@@ -36,21 +39,4 @@ schema InputChannelEventMetrics
         // Count of messages that were dropped
         #3 dropped_messages: UInt16;
     }
-}
-
-// Cpp target for common cog event metrics
-cpp_target cog_event_metrics_cpp
-{
-  options
-  {
-    namespace clockwork::cog::metrics;
-  }
-  schema CogEventMetrics;
-  schema InputChannelEventMetrics;
-
-  representation cog_event_metrics_tach: Tachyon<CogEventMetrics>;
-  representation input_event_metrics_rep: Tachyon<InputChannelEventMetrics>;
-
-  interface cog_event_metrics_tappy: Tappy<CogEventMetrics>;
-  interface Tappy<InputChannelEventMetrics>;
 }

@@ -1,0 +1,760 @@
+namespace test
+{
+
+// AlignmentTest_FixedSoaElementRef implementations
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::AlignmentTest_FixedSoaElementRef(::clockwork::FixedSoa<::test::AlignmentTest, size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t size>
+const uint16_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_two_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t size>
+uint16_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_mutable_two_byte()
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t size>
+void AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::set_two_byte(uint16_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]) = new_value;
+}
+
+template <size_t size>
+const int64_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_eight_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t size>
+int64_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_mutable_eight_byte()
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t size>
+void AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::set_eight_byte(int64_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]) = new_value;
+}
+
+template <size_t size>
+const uint8_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_one_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t size>
+uint8_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_mutable_one_byte()
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t size>
+void AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::set_one_byte(uint8_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]) = new_value;
+}
+
+template <size_t size>
+const int32_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_four_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t size>
+int32_t& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::get_mutable_four_byte()
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t size>
+void AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::set_four_byte(int32_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]) = new_value;
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap)
+{
+  get_mutable_two_byte() = tap.get_two_byte();
+  get_mutable_eight_byte() = tap.get_eight_byte();
+  get_mutable_one_byte() = tap.get_one_byte();
+  get_mutable_four_byte() = tap.get_four_byte();
+  return *this;
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator=(const AlignmentTest_FixedSoaElementRef& other)
+{
+  if (this != &other)
+  {
+    get_mutable_two_byte() = other.get_two_byte();
+    get_mutable_eight_byte() = other.get_eight_byte();
+    get_mutable_one_byte() = other.get_one_byte();
+    get_mutable_four_byte() = other.get_four_byte();
+  }
+  return *this;
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator=(AlignmentTest_FixedSoaElementRef&& other)
+{
+  return *this = other;
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init)
+{
+  get_mutable_two_byte() = init.two_byte;
+  get_mutable_eight_byte() = init.eight_byte;
+  get_mutable_one_byte() = init.one_byte;
+  get_mutable_four_byte() = init.four_byte;
+  return *this;
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>{
+      .two_byte = get_two_byte(),
+      .eight_byte = get_eight_byte(),
+      .one_byte = get_one_byte(),
+      .four_byte = get_four_byte()}};
+}
+
+template <size_t size>
+bool AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>::operator==(const AlignmentTest_FixedSoaElementRef& other) const
+{
+  return get_two_byte() == other.get_two_byte() && get_eight_byte() == other.get_eight_byte() && get_one_byte() == other.get_one_byte() && get_four_byte() == other.get_four_byte();
+}
+
+} // namespace test
+
+// std::swap specialization to call our custom swap
+namespace std
+{
+template <size_t size>
+inline void swap(
+  ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& ref_a,
+  ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& ref_b) noexcept
+{
+  swap(ref_a, ref_b);  // Calls ADL swap in test namespace
+}
+} // namespace std
+
+namespace test
+{
+
+// AlignmentTest_FixedSoaElementConstRef implementations
+template <size_t size>
+AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::AlignmentTest_FixedSoaElementConstRef(const ::clockwork::FixedSoa<::test::AlignmentTest, size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::AlignmentTest_FixedSoaElementConstRef(const AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& ref)
+  : soa_{ref.soa_}, index_{ref.index_}
+{
+}
+
+template <size_t size>
+const uint16_t& AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::get_two_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t size>
+const int64_t& AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::get_eight_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t size>
+const uint8_t& AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::get_one_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t size>
+const int32_t& AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::get_four_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t size>
+AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>{
+      .two_byte = get_two_byte(),
+      .eight_byte = get_eight_byte(),
+      .one_byte = get_one_byte(),
+      .four_byte = get_four_byte()}};
+}
+
+template <size_t size>
+bool AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>::operator==(const AlignmentTest_FixedSoaElementConstRef& other) const
+{
+  return get_two_byte() == other.get_two_byte() && get_eight_byte() == other.get_eight_byte() && get_one_byte() == other.get_one_byte() && get_four_byte() == other.get_four_byte();
+}
+
+} // namespace test
+
+namespace test
+{
+
+// AlignmentTest_VarSoaElementRef implementations
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::AlignmentTest_VarSoaElementRef(::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t max_size>
+const uint16_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_two_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t max_size>
+uint16_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_mutable_two_byte()
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t max_size>
+void AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::set_two_byte(uint16_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const int64_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_eight_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t max_size>
+int64_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_mutable_eight_byte()
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t max_size>
+void AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::set_eight_byte(int64_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const uint8_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_one_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t max_size>
+uint8_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_mutable_one_byte()
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t max_size>
+void AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::set_one_byte(uint8_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const int32_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_four_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t max_size>
+int32_t& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::get_mutable_four_byte()
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t max_size>
+void AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::set_four_byte(int32_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]) = new_value;
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap)
+{
+  get_mutable_two_byte() = tap.get_two_byte();
+  get_mutable_eight_byte() = tap.get_eight_byte();
+  get_mutable_one_byte() = tap.get_one_byte();
+  get_mutable_four_byte() = tap.get_four_byte();
+  return *this;
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator=(const AlignmentTest_VarSoaElementRef& other)
+{
+  if (this != &other)
+  {
+    get_mutable_two_byte() = other.get_two_byte();
+    get_mutable_eight_byte() = other.get_eight_byte();
+    get_mutable_one_byte() = other.get_one_byte();
+    get_mutable_four_byte() = other.get_four_byte();
+  }
+  return *this;
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator=(AlignmentTest_VarSoaElementRef&& other)
+{
+  return *this = other;
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init)
+{
+  get_mutable_two_byte() = init.two_byte;
+  get_mutable_eight_byte() = init.eight_byte;
+  get_mutable_one_byte() = init.one_byte;
+  get_mutable_four_byte() = init.four_byte;
+  return *this;
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>{
+      .two_byte = get_two_byte(),
+      .eight_byte = get_eight_byte(),
+      .one_byte = get_one_byte(),
+      .four_byte = get_four_byte()}};
+}
+
+template <size_t max_size>
+bool AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>::operator==(const AlignmentTest_VarSoaElementRef& other) const
+{
+  return get_two_byte() == other.get_two_byte() && get_eight_byte() == other.get_eight_byte() && get_one_byte() == other.get_one_byte() && get_four_byte() == other.get_four_byte();
+}
+
+} // namespace test
+
+// std::swap specialization to call our custom swap
+namespace std
+{
+template <size_t max_size>
+inline void swap(
+  ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& ref_a,
+  ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& ref_b) noexcept
+{
+  swap(ref_a, ref_b);  // Calls ADL swap in test namespace
+}
+} // namespace std
+
+namespace test
+{
+
+// AlignmentTest_VarSoaElementConstRef implementations
+template <size_t max_size>
+AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::AlignmentTest_VarSoaElementConstRef(const ::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::AlignmentTest_VarSoaElementConstRef(const AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& ref)
+  : soa_{ref.soa_}, index_{ref.index_}
+{
+}
+
+template <size_t max_size>
+const uint16_t& AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::get_two_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint16_t>::get(soa_->two_byte_[index_]);
+}
+
+template <size_t max_size>
+const int64_t& AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::get_eight_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->eight_byte_[index_]);
+}
+
+template <size_t max_size>
+const uint8_t& AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::get_one_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<uint8_t>::get(soa_->one_byte_[index_]);
+}
+
+template <size_t max_size>
+const int32_t& AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::get_four_byte() const
+{
+  return ::jewels::memory::ObjectPolicy<int32_t>::get(soa_->four_byte_[index_]);
+}
+
+template <size_t max_size>
+AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>{
+      .two_byte = get_two_byte(),
+      .eight_byte = get_eight_byte(),
+      .one_byte = get_one_byte(),
+      .four_byte = get_four_byte()}};
+}
+
+template <size_t max_size>
+bool AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>::operator==(const AlignmentTest_VarSoaElementConstRef& other) const
+{
+  return get_two_byte() == other.get_two_byte() && get_eight_byte() == other.get_eight_byte() && get_one_byte() == other.get_one_byte() && get_four_byte() == other.get_four_byte();
+}
+
+} // namespace test
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_two_byte() -> ::std::span<uint16_t>
+{
+  return std::span<uint16_t>(::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_two_byte() const -> ::std::span<const uint16_t>
+{
+  return std::span<const uint16_t>(::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_eight_byte() -> ::std::span<int64_t>
+{
+  return std::span<int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_eight_byte() const -> ::std::span<const int64_t>
+{
+  return std::span<const int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_one_byte() -> ::std::span<uint8_t>
+{
+  return std::span<uint8_t>(::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_one_byte() const -> ::std::span<const uint8_t>
+{
+  return std::span<const uint8_t>(::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_four_byte() -> ::std::span<int32_t>
+{
+  return std::span<int32_t>(::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::view_four_byte() const -> ::std::span<const int32_t>
+{
+  return std::span<const int32_t>(::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), size);
+}
+
+// compare_fields implementation for FixedSoa
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::AlignmentTest, size>::compare_fields(
+  const ::clockwork::FixedSoa<::test::AlignmentTest, size>& other, size_t count) const -> bool
+{
+  if (count == 0)
+  {
+    return true;
+  }
+  auto two_byte_this = std::span{::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), count};
+  auto two_byte_other = std::span{::jewels::memory::ObjectPolicy<uint16_t>::ptr(other.two_byte_[0]), count};
+  auto eight_byte_this = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), count};
+  auto eight_byte_other = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(other.eight_byte_[0]), count};
+  auto one_byte_this = std::span{::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), count};
+  auto one_byte_other = std::span{::jewels::memory::ObjectPolicy<uint8_t>::ptr(other.one_byte_[0]), count};
+  auto four_byte_this = std::span{::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), count};
+  auto four_byte_other = std::span{::jewels::memory::ObjectPolicy<int32_t>::ptr(other.four_byte_[0]), count};
+
+  return std::equal(two_byte_this.begin(), two_byte_this.end(), two_byte_other.begin()) &&
+         std::equal(eight_byte_this.begin(), eight_byte_this.end(), eight_byte_other.begin()) &&
+         std::equal(one_byte_this.begin(), one_byte_this.end(), one_byte_other.begin()) &&
+         std::equal(four_byte_this.begin(), four_byte_this.end(), four_byte_other.begin());
+}
+
+// wipe_range implementation for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::wipe_range(size_t begin, size_t end)
+{
+  if (begin >= end)
+  {
+    return;
+  }
+  // Zero out the range
+  auto two_byte_bytes = std::as_writable_bytes(std::span{two_byte_});
+  auto eight_byte_bytes = std::as_writable_bytes(std::span{eight_byte_});
+  auto one_byte_bytes = std::as_writable_bytes(std::span{one_byte_});
+  auto four_byte_bytes = std::as_writable_bytes(std::span{four_byte_});
+
+  std::fill(
+    two_byte_bytes.subspan(begin * sizeof(uint16_t), (end - begin) * sizeof(uint16_t)).begin(),
+    two_byte_bytes.subspan(begin * sizeof(uint16_t), (end - begin) * sizeof(uint16_t)).end(),
+    std::byte{0});
+  std::fill(
+    eight_byte_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).begin(),
+    eight_byte_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).end(),
+    std::byte{0});
+  std::fill(
+    one_byte_bytes.subspan(begin * sizeof(uint8_t), (end - begin) * sizeof(uint8_t)).begin(),
+    one_byte_bytes.subspan(begin * sizeof(uint8_t), (end - begin) * sizeof(uint8_t)).end(),
+    std::byte{0});
+  std::fill(
+    four_byte_bytes.subspan(begin * sizeof(int32_t), (end - begin) * sizeof(int32_t)).begin(),
+    four_byte_bytes.subspan(begin * sizeof(int32_t), (end - begin) * sizeof(int32_t)).end(),
+    std::byte{0});
+}
+
+// construct_range implementation for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::construct_range(size_t begin, size_t end)
+{
+  for (size_t i = begin; i < end; ++i)
+  {
+    construct_element(i);
+  }
+}
+
+// construct_element implementations for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::construct_element(size_t index)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index]);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index]);
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index]);
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index]);
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], tap.get_two_byte());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], tap.get_eight_byte());
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], tap.get_one_byte());
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], tap.get_four_byte());
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::construct_element(size_t index, const ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& ref)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], ref.get_two_byte());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], ref.get_eight_byte());
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], ref.get_one_byte());
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], ref.get_four_byte());
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::AlignmentTest, size>::construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], init.two_byte);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], init.eight_byte);
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], init.one_byte);
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], init.four_byte);
+}
+
+// Layout verification for FixedSoa
+template <size_t size>
+constexpr void ::clockwork::FixedSoa<::test::AlignmentTest, size>::verify_layout() noexcept requires (size == 1)
+{
+  using SoaType = ::clockwork::FixedSoa<::test::AlignmentTest, size>;
+
+  static_assert(offsetof(SoaType, eight_byte_) == 0, "Field eight_byte offset mismatch");
+  static_assert(offsetof(SoaType, four_byte_) == 8, "Field four_byte offset mismatch");
+  static_assert(offsetof(SoaType, two_byte_) == 12, "Field two_byte offset mismatch");
+  static_assert(offsetof(SoaType, one_byte_) == 14, "Field one_byte offset mismatch");
+  static_assert(sizeof(SoaType) == 16);
+  static_assert(alignof(SoaType) == 8);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_two_byte() -> ::std::span<uint16_t>
+{
+  return std::span<uint16_t>(::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_two_byte() const -> ::std::span<const uint16_t>
+{
+  return std::span<const uint16_t>(::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_eight_byte() -> ::std::span<int64_t>
+{
+  return std::span<int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_eight_byte() const -> ::std::span<const int64_t>
+{
+  return std::span<const int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_one_byte() -> ::std::span<uint8_t>
+{
+  return std::span<uint8_t>(::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_one_byte() const -> ::std::span<const uint8_t>
+{
+  return std::span<const uint8_t>(::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_four_byte() -> ::std::span<int32_t>
+{
+  return std::span<int32_t>(::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::view_four_byte() const -> ::std::span<const int32_t>
+{
+  return std::span<const int32_t>(::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), size_);
+}
+
+// compare_fields implementation for VarSoa
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::AlignmentTest, max_size>::compare_fields(
+  const ::clockwork::VarSoa<::test::AlignmentTest, max_size>& other, size_t count) const -> bool
+{
+  if (count == 0)
+  {
+    return true;
+  }
+  auto two_byte_this = std::span{::jewels::memory::ObjectPolicy<uint16_t>::ptr(two_byte_[0]), count};
+  auto two_byte_other = std::span{::jewels::memory::ObjectPolicy<uint16_t>::ptr(other.two_byte_[0]), count};
+  auto eight_byte_this = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(eight_byte_[0]), count};
+  auto eight_byte_other = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(other.eight_byte_[0]), count};
+  auto one_byte_this = std::span{::jewels::memory::ObjectPolicy<uint8_t>::ptr(one_byte_[0]), count};
+  auto one_byte_other = std::span{::jewels::memory::ObjectPolicy<uint8_t>::ptr(other.one_byte_[0]), count};
+  auto four_byte_this = std::span{::jewels::memory::ObjectPolicy<int32_t>::ptr(four_byte_[0]), count};
+  auto four_byte_other = std::span{::jewels::memory::ObjectPolicy<int32_t>::ptr(other.four_byte_[0]), count};
+
+  return std::equal(two_byte_this.begin(), two_byte_this.end(), two_byte_other.begin()) &&
+         std::equal(eight_byte_this.begin(), eight_byte_this.end(), eight_byte_other.begin()) &&
+         std::equal(one_byte_this.begin(), one_byte_this.end(), one_byte_other.begin()) &&
+         std::equal(four_byte_this.begin(), four_byte_this.end(), four_byte_other.begin());
+}
+
+// wipe_range implementation for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::wipe_range(size_t begin, size_t end)
+{
+  if (begin >= end)
+  {
+    return;
+  }
+  // Zero out the range
+  auto two_byte_bytes = std::as_writable_bytes(std::span{two_byte_});
+  auto eight_byte_bytes = std::as_writable_bytes(std::span{eight_byte_});
+  auto one_byte_bytes = std::as_writable_bytes(std::span{one_byte_});
+  auto four_byte_bytes = std::as_writable_bytes(std::span{four_byte_});
+
+  std::fill(
+    two_byte_bytes.subspan(begin * sizeof(uint16_t), (end - begin) * sizeof(uint16_t)).begin(),
+    two_byte_bytes.subspan(begin * sizeof(uint16_t), (end - begin) * sizeof(uint16_t)).end(),
+    std::byte{0});
+  std::fill(
+    eight_byte_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).begin(),
+    eight_byte_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).end(),
+    std::byte{0});
+  std::fill(
+    one_byte_bytes.subspan(begin * sizeof(uint8_t), (end - begin) * sizeof(uint8_t)).begin(),
+    one_byte_bytes.subspan(begin * sizeof(uint8_t), (end - begin) * sizeof(uint8_t)).end(),
+    std::byte{0});
+  std::fill(
+    four_byte_bytes.subspan(begin * sizeof(int32_t), (end - begin) * sizeof(int32_t)).begin(),
+    four_byte_bytes.subspan(begin * sizeof(int32_t), (end - begin) * sizeof(int32_t)).end(),
+    std::byte{0});
+}
+
+// construct_range implementation for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::construct_range(size_t begin, size_t end)
+{
+  for (size_t i = begin; i < end; ++i)
+  {
+    construct_element(i);
+  }
+}
+
+// construct_element implementations for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::construct_element(size_t index)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index]);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index]);
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index]);
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index]);
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], tap.get_two_byte());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], tap.get_eight_byte());
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], tap.get_one_byte());
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], tap.get_four_byte());
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::construct_element(size_t index, const ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& ref)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], ref.get_two_byte());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], ref.get_eight_byte());
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], ref.get_one_byte());
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], ref.get_four_byte());
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init)
+{
+  ::jewels::memory::ObjectPolicy<uint16_t>::construct(two_byte_[index], init.two_byte);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(eight_byte_[index], init.eight_byte);
+  ::jewels::memory::ObjectPolicy<uint8_t>::construct(one_byte_[index], init.one_byte);
+  ::jewels::memory::ObjectPolicy<int32_t>::construct(four_byte_[index], init.four_byte);
+}
+
+// Layout verification for VarSoa
+template <size_t max_size>
+constexpr void ::clockwork::VarSoa<::test::AlignmentTest, max_size>::verify_layout() noexcept requires (max_size == 1)
+{
+  using SoaType = ::clockwork::VarSoa<::test::AlignmentTest, max_size>;
+
+  static_assert(offsetof(SoaType, eight_byte_) == 0, "Field eight_byte offset mismatch");
+  static_assert(offsetof(SoaType, four_byte_) == 8, "Field four_byte offset mismatch");
+  static_assert(offsetof(SoaType, two_byte_) == 12, "Field two_byte offset mismatch");
+  static_assert(offsetof(SoaType, one_byte_) == 14, "Field one_byte offset mismatch");
+  static_assert(offsetof(SoaType, size_) == 15, "size_ offset mismatch");
+  static_assert(sizeof(SoaType) == 16);
+  static_assert(alignof(SoaType) == 8);
+}

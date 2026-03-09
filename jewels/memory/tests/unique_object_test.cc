@@ -42,6 +42,12 @@ struct Thrower
   ~Thrower() noexcept(false);
 };
 
+TEST_CASE("Element/Deleter Type Attributes")
+{
+  STATIC_REQUIRE(std::is_same_v<UniqueObject<int, Deleter>::element_type, int>);
+  STATIC_REQUIRE(std::is_same_v<UniqueObject<int, Deleter>::deleter_type, Deleter>);
+}
+
 TEST_CASE("Test unique object storage")
 {
   STATIC_REQUIRE(sizeof(UniqueObject<int, Deleter>) == 12UL);

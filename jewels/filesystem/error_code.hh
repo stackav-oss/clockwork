@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <fmt10/base.h>
-#include <fmt10/format.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <cstddef>

@@ -13,6 +13,7 @@ cc_test(
         "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:tcp_socket",
         "//clockwork/pinion/detail:unix_socket",
+        "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
@@ -26,6 +27,7 @@ cc_test(
     srcs = ["tcp_socket_test.cc"],
     deps = [
         "//clockwork/pinion/detail:tcp_socket",
+        "//jewels/filesystem:error_code",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
         "@catch2//:catch2_main",

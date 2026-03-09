@@ -6,7 +6,7 @@
 #include "clockwork/cog/simple_cog.hh"
 #include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
 #include "clockwork/runners/thread_pool.hh"
@@ -82,7 +82,8 @@ struct SingleStateCogPolicy : testing::FakeCogPolicy<0, 0>
     typename PublishersType::PublishablesTuple /*publishables*/,
     typename TimersType::ConditionsTuple& /*timer_conditions*/,
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
-    typename DiagnosticsType::ReporterType& /*diagnostics*/)
+    typename DiagnosticsType::ReporterType& /*diagnostics*/,
+    SignalApiType& /*signals*/)
   {
     return SingleStateCogDial{
       .start_time = params.start_time,

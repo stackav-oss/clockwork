@@ -4,11 +4,11 @@
 #pragma once
 
 #include "clockwork/logging/log_error.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
 #include "clockwork/logging/writers/log_writer_base.hh"
-#include "clockwork/logging/writers/logger_config.hh"
+#include "clockwork/logging/writers/logger_config_clk_cc.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -42,8 +42,8 @@ public:
   /// @param[in] channel_rates_config Channel message rates configuration
   MessageWriter(
     jewels::memory::MemoryResource memory_resource,
-    const LogWriterConfigTap& log_writer_config,
-    const LoggerConfigTap& logger_config,
+    const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+    const clockwork::Tappy<LoggerConfig>& logger_config,
     const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config);
 
   ~MessageWriter() noexcept override = default;
@@ -64,7 +64,7 @@ public:
   /// Received message handler
   /// @param[in] channel_name Channel name
   /// @param[in] message_handle Clockwork message handle
-  void message_handler(std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle);
+  void message_handler(std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle);
 
   /// Calculate the size of the message buffer pool from the maximum write rate, and max write backlog
   /// @param[in] max_write_mib_per_sec Maximum write rate in MiB per second

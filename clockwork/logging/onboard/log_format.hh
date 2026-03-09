@@ -4,8 +4,8 @@
 #pragma once
 
 #include "clockwork/logging/compression_type.hh"
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/math/constants.hh"
 
 #include <wise_enum.h>

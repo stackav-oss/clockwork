@@ -5,15 +5,16 @@
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_reader_factory.hh"
 #include "clockwork/logging/readers/types.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
-#include <filesystem>
 #include <fstream>
 #include <memory>
+#include <memory_resource>
 #include <optional>
 #include <string>
 
@@ -36,7 +37,8 @@ TEST_CASE("Log reader factory")
   {
     const jewels::testing::TmpDirectoryGuard test_dir;
     const auto& log_path = test_dir.get_path();
-    (void)std::ofstream(log_path / "foo.olog");
+    const auto onboard_file_path = log_path / "foo.olog";
+    (void)std::ofstream{onboard_file_path.c_str()};
 
     auto reader = make_reader(log_path.string(), {}, {});
     REQUIRE(reader);
@@ -48,7 +50,8 @@ TEST_CASE("Log reader factory")
   {
     const jewels::testing::TmpDirectoryGuard test_dir;
     const auto& log_path = test_dir.get_path();
-    (void)std::ofstream(log_path / "stack_log_metadata.pbtxt");
+    const auto offboard_file_path = log_path / "stack_log_metadata.pbtxt";
+    (void)std::ofstream{offboard_file_path.c_str()};
 
     auto reader = make_reader(log_path.string(), {}, {});
     REQUIRE(reader);
@@ -60,7 +63,21 @@ TEST_CASE("Log reader factory")
   {
     const jewels::testing::TmpDirectoryGuard test_dir;
     const auto& log_path = test_dir.get_path();
-    (void)std::ofstream(log_path / "stack_log_union.pbtxt");
+    const auto log_union_path = log_path / "stack_log_union.pbtxt";
+    (void)std::ofstream{log_union_path.c_str()};
+
+    auto reader = make_reader(log_path.string(), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "offboard");
+  }
+
+  SECTION("offboard log missing metadata file")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    const auto slog_file_path = log_path / "log_file.slog";
+    (void)std::ofstream{slog_file_path.c_str()};
 
     auto reader = make_reader(log_path.string(), {}, {});
     REQUIRE(reader);

@@ -16,7 +16,7 @@ from clockwork.logging.readers.nb_types import (
     LogTimestamp,
     RelativeInterval,
 )
-from clockwork.logging.tests.support.py_test_message import TestMessage as PyTestMessage
+from clockwork.logging.tests.support.test_message_clk_py import TestMessage as PyTestMessage
 from google.protobuf import text_format
 
 

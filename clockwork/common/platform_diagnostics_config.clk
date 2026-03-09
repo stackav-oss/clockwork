@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 use clockwork::common::process_description;
 use clockwork::diagnostics::report;
 
@@ -17,16 +20,4 @@ schema PlatformDiagnosticsConfig {
     // Diagnostics publish endpoint
     #4 publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
   }
-}
-
-cpp_target platform_diagnostics_config
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  schema PlatformDiagnosticsConfig;
-  representation Tachyon<PlatformDiagnosticsConfig>;
-  interface Tap<Tachyon<PlatformDiagnosticsConfig>>;
 }

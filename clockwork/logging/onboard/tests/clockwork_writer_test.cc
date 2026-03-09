@@ -1,26 +1,27 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -39,7 +40,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <memory_resource>
@@ -454,6 +454,7 @@ TEST_CASE("Log clockwork messages")
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
     .message_size = message_data_size,
+    .is_published_once = false,
   };
 
   clockwork::pinion::support::BufferStorage<pinion_layout> pinion_buffer_storage{};
@@ -523,7 +524,7 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time1));
 
@@ -554,7 +555,7 @@ TEST_CASE("Log clockwork messages")
 
       REQUIRE(writer2.log_clockwork_message(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2),
         log_time2,
         time2));
 
@@ -655,7 +656,7 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time2));
 
@@ -676,7 +677,7 @@ TEST_CASE("Log clockwork messages")
     REQUIRE(
       writer.log_clockwork_message(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2),
         log_time2,
         time3) == jewels::unexpected(LogError::message_dropped));
     REQUIRE(writer.get_state() == WriterState::logging);
@@ -702,7 +703,7 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator3},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator3),
       log_time3,
       time4));
 
@@ -784,7 +785,7 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time1));
 
@@ -803,7 +804,7 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2),
       log_time2,
       time1));
     REQUIRE(writer.get_state() == WriterState::logging);
@@ -816,7 +817,7 @@ TEST_CASE("Log clockwork messages")
     REQUIRE(
       writer.log_clockwork_message(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2),
         log_time2,
         time1) == jewels::unexpected(LogError::message_dropped));
 
@@ -901,7 +902,7 @@ TEST_CASE("Log clockwork messages")
     {
       REQUIRE(writer.log_clockwork_message_wait(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
         log_time1,
         time1));
     }
@@ -909,7 +910,7 @@ TEST_CASE("Log clockwork messages")
     // Next write splits to a new log file
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time1));
 
@@ -1014,20 +1015,20 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time1));
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time2,
       time1));
 
     // Next write splits to a new log file
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time2,
       time1));
 
@@ -1149,20 +1150,20 @@ TEST_CASE("Log clockwork messages")
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time1,
       time1));
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time2,
       time1));
 
     // Next write splits to a new log file
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
-      ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+      ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
       log_time2,
       time1));
 
@@ -1264,7 +1265,7 @@ TEST_CASE("Log clockwork messages")
     {
       REQUIRE(writer.log_clockwork_message_wait(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
         log_time1,
         time1));
     }
@@ -1277,7 +1278,7 @@ TEST_CASE("Log clockwork messages")
     {
       REQUIRE(writer.log_clockwork_message_wait(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
         log_time1,
         time1));
     }
@@ -1386,7 +1387,7 @@ TEST_CASE("Log clockwork messages")
     REQUIRE(
       writer.log_clockwork_message(
         "INVALID CHANNEL NAME",
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
         log_time1,
         time1) == jewels::unexpected(LogError::missing_channel_metadata));
     REQUIRE(writer.get_state() == WriterState::degraded);
@@ -1402,6 +1403,7 @@ TEST_CASE("Error handlng")
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
     .message_size = message_data_size,
+    .is_published_once = false,
   };
 
   clockwork::pinion::support::BufferStorage<pinion_layout> pinion_buffer_storage{};
@@ -1446,7 +1448,7 @@ TEST_CASE("Error handlng")
     REQUIRE(
       writer.log_clockwork_message(
         channel_name1,
-        ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+        ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
         log_time1,
         time1) == jewels::unexpected(LogError::not_open));
     REQUIRE(writer.get_write_backlog(time1) == jewels::unexpected(LogError::not_open));

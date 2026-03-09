@@ -13,14 +13,15 @@
 #include "jewels/simplelaunch/cpu_affinity.hh"
 #include "jewels/simplelaunch/service_definition.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/utility/fix_clockwork_path.hh"
 
-#include <boost/asio/basic_deadline_timer.hpp>
-#include <boost/date_time/posix_time/posix_time_duration.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/system/errc.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <fcntl.h>
@@ -96,7 +97,8 @@ void ChildProcessInfo::send_signal(int signal_value) const noexcept
 void ChildProcessInfo::stop_process()
 {
   const auto pid = process_info_.pid();
-  maybe_timer_.emplace(boost::asio::deadline_timer(*io_ctx_ptr_, boost::posix_time::seconds(3)));
+  maybe_timer_.emplace(
+    boost::asio::basic_waitable_timer<jewels::time::SteadyClock>(*io_ctx_ptr_, std::chrono::seconds(3)));
   maybe_timer_->async_wait(
     [pid](boost::system::error_code error_code)
     {
@@ -173,7 +175,7 @@ bool ChildProcessInfo::has_exited() const noexcept
   return state == ProcessState::exited || state == ProcessState::crashed;
 }
 
-void ChildProcessInfo::start() noexcept
+void ChildProcessInfo::start(std::vector<std::string> process_args) noexcept
 {
   jewels::log_cerr_debug("Starting {}", config_.executable());
 
@@ -233,8 +235,12 @@ void ChildProcessInfo::start() noexcept
   // Populate argv
   std::pmr::vector<char*> argv{memory_resource_};
   // Reserve enough space for adding the executable name as the first argument and a nullptr at the end
-  argv.reserve(static_cast<size_t>(config_.args_size()) + 2UL);
+  argv.reserve(static_cast<size_t>(config_.args_size()) + process_args.size() + 2UL);
   argv.emplace_back(config_.mutable_executable()->data());
+  for (auto& process_arg : process_args)
+  {
+    argv.push_back(process_arg.data());
+  }
   for (int32_t index = 0; index < config_.args_size(); index++)
   {
     argv.emplace_back(config_.mutable_args(index)->data());

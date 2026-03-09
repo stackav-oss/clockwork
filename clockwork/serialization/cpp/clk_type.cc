@@ -5,13 +5,15 @@
 
 #include "jewels/memory/pointers.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 namespace clockwork::serialization
@@ -135,6 +137,16 @@ ClkType::get_upgrader_cache()
   return upgrader_cache_;
 }
 
+[[nodiscard]] ClkType& ClkType::get_lowest_underlying_type()
+{
+  return *this;
+}
+
+[[nodiscard]] bool ClkType::is_same_type(const ClkType& src_type) const
+{
+  return src_type.type_id_ == type_id_;
+}
+
 ClkTypeFactory::ClkTypeFactory(
   std::unique_ptr<const metadata::TachyonMetadata> metadata_proto,
   std::vector<std::unique_ptr<ClkTypeFactoryPlugin>> plugins)
@@ -180,6 +192,61 @@ ClkTypeFactory::ClkTypeFactory(
 [[nodiscard]] std::vector<std::unique_ptr<ClkType>>& ClkTypeFactory::get_types() noexcept
 {
   return types_;
+}
+
+void check_for_unexpected_history_changes(
+  const std::map<int32_t, int32_t>& src_became,
+  const std::set<int32_t>& src_removed,
+  const std::map<int32_t, int32_t>& dst_became,
+  const std::set<int32_t>& dst_removed,
+  bool allow_changes,
+  std::string_view name)
+{
+  for (const auto [old_number, new_number] : src_became)
+  {
+    if (!dst_became.contains(old_number))
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Unsupported deletion of legacy_became entry for field {} in {}", old_number, name));
+    }
+    if (dst_became.at(old_number) != new_number)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Unsupported modification of legacy_became entry in {}, {}->{} to {}->{}",
+          name,
+          old_number,
+          new_number,
+          old_number,
+          dst_became.at(old_number)));
+    }
+  }
+  const auto dst_became_values = std::ranges::views::values(dst_became);
+  std::unordered_set<int32_t> dst_became_targets(dst_became_values.begin(), dst_became_values.end());
+  for (const auto old_number : src_removed)
+  {
+    // Special case: allow deleting a removed entry field when that field is the source or target of a legacy_became
+    //
+    // This happens when someone deletes a field and then creates a new field when they meant to change the
+    // type and want to recover while remaining compatible with both new and old logs.
+    //
+    // This also happen with someone deletes a field and then wants to recover by putting the field back
+    // with a new number and adding a became from the old number to the new number.
+    if (
+      !dst_removed.contains(old_number) && !dst_became_targets.contains(old_number) && !dst_became.contains(old_number))
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Unsupported deletion of removed entry for field {} in {}", old_number, name));
+    }
+  }
+  if (!allow_changes && src_removed != dst_removed)
+  {
+    throw ClkTypeUpgradeError(fmt::format("Unexpected change to removed in history for {}", name));
+  }
+  if (!allow_changes && src_became != dst_became)
+  {
+    throw ClkTypeUpgradeError(fmt::format("Unexpected change to legacy_became in history for {}", name));
+  }
 }
 
 } // namespace clockwork::serialization

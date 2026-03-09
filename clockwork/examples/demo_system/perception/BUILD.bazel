@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//tools/rules:cc.bzl", "cc_library")
 
 package(
     default_testonly = True,
@@ -12,6 +12,7 @@ package(
 clk(
     name = "perception_channel_policies_clk",
     srcs = ["perception_channel_policies.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
         ":perception_channels_clk",
@@ -23,6 +24,7 @@ clk(
 clk(
     name = "perception_channels_clk",
     srcs = ["perception_channels.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
         ":perception_message_clk",
@@ -34,22 +36,35 @@ clk(
     name = "perception_clk",
     srcs = ["perception.clk"],
     outs = [
-        "perception_cog.cc",
-        "perception_cog.hh",
-        "perception_cog.inl",
-        "perception_cog_dial.cc",
-        "perception_cog_dial.hh",
-        "perception_cog_dial.inl",
-        "perception_exe.cc",
-        "perception_exe.hh",
-        "perception_exe.inl",
+        "perception_clk_cc.cc",
+        "perception_clk_cc.hh",
+        "perception_clk_cc.inl",
+        "perception_clk_cc_dial.cc",
+        "perception_clk_cc_dial.hh",
+        "perception_clk_cc_dial.inl",
+        "perception_clk_exe.cc",
+        "perception_clk_exe.hh",
+        "perception_clk_exe.inl",
     ],
+    cpp_deps = [
+        ":perception_message_clk_cc",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
+        "//clockwork/dial:approx_aligner_config_clk_proto_conv",
+        "//clockwork/examples/demo_system/camera:video_message_clk_cc",
+        "//clockwork/examples/demo_system/lidar:lidar_message_clk_cc",
+        "//clockwork/examples/demo_system/localization:pose_message_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
+    ],
+    proto_deps = ["//clockwork/dial:approx_aligner_config_clk_proto"],
     deps = [
         ":perception_channels_clk",
         ":perception_message_clk",
         "//clockwork/dial:approx_aligner_config_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/examples/demo_system:cpu_domain_clk",
         "//clockwork/examples/demo_system/camera:video_channels_clk",
         "//clockwork/examples/demo_system/camera:video_message_clk",
@@ -61,66 +76,19 @@ clk(
 )
 
 cc_library(
-    name = "perception_cog",
-    srcs = [
-        "perception_cog.cc",
-        "perception_cog.inl",
-    ],
-    hdrs = ["perception_cog.hh"],
-    data = [":perception_clk"],
-    deps = [
-        ":perception_cog_dial",
-        ":perception_cog_impl",
-        ":perception_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dial:approx_aligner_config",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//clockwork/examples/demo_system/camera:video_message",
-        "//clockwork/examples/demo_system/lidar:lidar_message",
-        "//clockwork/examples/demo_system/localization:pose_message",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
-cc_library(
-    name = "perception_cog_dial",
-    srcs = [
-        "perception_cog_dial.cc",
-        "perception_cog_dial.inl",
-    ],
-    hdrs = ["perception_cog_dial.hh"],
-    data = [":perception_clk"],
-    deps = [
-        ":perception_message",
-        "//clockwork/dial:approx_aligner_config",
-        "//clockwork/dial:include_common",
-        "//clockwork/examples/demo_system/camera:video_message",
-        "//clockwork/examples/demo_system/lidar:lidar_message",
-        "//clockwork/examples/demo_system/localization:pose_message",
-    ],
-)
-
-cc_library(
-    name = "perception_cog_impl",
-    srcs = ["perception_cog_impl.cc"],
+    name = "perception_clk_cc_impl",
+    srcs = ["perception_clk_cc_impl.cc"],
     data = ["//clockwork/examples/demo_system/perception/resources:approx_aligner_config.textproto"],
     deps = [
-        ":perception_cog_dial",
-        ":perception_message",
+        ":perception_clk_cc_dial",
+        ":perception_message_clk_cc",
         "//clockwork/dial:approx_aligner",
-        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:approx_aligner_policies",
-        "//clockwork/examples/demo_system/camera:video_message",
-        "//clockwork/examples/demo_system/lidar:lidar_message",
-        "//clockwork/examples/demo_system/localization:pose_message",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/examples/demo_system/camera:video_message_clk_cc",
+        "//clockwork/examples/demo_system/lidar:lidar_message_clk_cc",
+        "//clockwork/examples/demo_system/localization:pose_message_clk_cc",
+        "//clockwork/pinion:publishable",
         "//jewels/container:circular_buffer",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
@@ -128,57 +96,13 @@ cc_library(
     ],
 )
 
-cc_binary(
-    name = "perception_exe",
-    srcs = [
-        "perception_exe.cc",
-        "perception_exe.hh",
-        "perception_exe.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":perception_cog",
-        ":perception_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/dial:approx_aligner_config",
-        "//clockwork/dial:approx_aligner_config_proto_cc_library",
-        "//clockwork/dial:approx_aligner_config_proto_conv",
-        "//clockwork/examples/demo_system/camera:video_message",
-        "//clockwork/examples/demo_system/lidar:lidar_message",
-        "//clockwork/examples/demo_system/localization:pose_message",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/uuid",
-    ],
-)
-
-cc_library(
-    name = "perception_message",
-    srcs = [
-        "perception_message.cc",
-        "perception_message.inl",
-    ],
-    hdrs = ["perception_message.hh"],
-    data = [":perception_message_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "perception_message_clk",
     srcs = ["perception_message.clk"],
     outs = [
-        "perception_message.cc",
-        "perception_message.hh",
-        "perception_message.inl",
+        "perception_message_clk_cc.cc",
+        "perception_message_clk_cc.hh",
+        "perception_message_clk_cc.inl",
     ],
+    generate = ["cpp"],
 )

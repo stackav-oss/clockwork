@@ -11,7 +11,7 @@ import channel_spy_config_proto instead.
 from pathlib import Path
 from typing import Final
 
-from clockwork.dsl.composition import metrics_channel_metadata_config_proto
+from clockwork.dsl.composition import constants, metrics_channel_metadata_config_proto
 from clockwork.dsl.ir import compiler
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
@@ -30,7 +30,7 @@ MetricsChannelMetadata: Final[type[metrics_channel_metadata_config_proto.Metrics
         CSC_MODULE.context,
         CSC_MODULE,
         "MetricsChannelMetadata",
-        max_channel_name_size=300,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
     )[0]
 )
 
@@ -39,7 +39,7 @@ MetricsChannelMetadataReport: Final[type[metrics_channel_metadata_config_proto.M
         CSC_MODULE.context,
         CSC_MODULE,
         "MetricsChannelMetadataReport",
-        max_channel_name_size=300,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_num_channels=2046,
     )[0]
 )
@@ -49,9 +49,9 @@ MetricsChannelMetadataConfig: Final[type[metrics_channel_metadata_config_proto.M
         CSC_MODULE.context,
         CSC_MODULE,
         "MetricsChannelMetadataConfig",
-        max_channel_name_size=300,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_num_channels=2046,
         max_schema_name_size=511,
-        max_schema_definition_size=20000,
+        max_schema_definition_size=30000,
     )[0]
 )

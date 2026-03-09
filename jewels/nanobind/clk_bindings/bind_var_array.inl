@@ -57,6 +57,7 @@ void bind_pop(::nanobind::class_<Vector>& vec_binding)
 }
 
 template <typename Vector, typename Value>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity) TODO(OI-3787)
 void bind_var_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_binding)
 {
   namespace nb = ::nanobind;
@@ -173,7 +174,7 @@ void bind_var_array_copy_constructable_methods(::nanobind::class_<Vector>& vec_b
           return;
         }
 
-        stop = start + (static_cast<int64_t>(length) - 1) * step;
+        stop = start + ((static_cast<int64_t>(length) - 1) * step);
         if (start > stop)
         {
           std::swap(start, stop);

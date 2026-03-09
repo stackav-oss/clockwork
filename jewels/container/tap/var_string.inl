@@ -85,7 +85,7 @@ bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capa
 }
 
 /// Enables support for fmt.
-/// NOTE: `fmt10/format.h` needs to be included for this trait to be discoverable rather than just `fmt10/core.h`.
+/// NOTE: `fmt/format.h` needs to be included for this trait to be discoverable rather than just `fmt/core.h`.
 /// Neither are included here to avoid adding a spurious dependency
 template <size_t fixed_capacity>
 auto format_as(const VarString<fixed_capacity>& string)

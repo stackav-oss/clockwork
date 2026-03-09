@@ -1,7 +1,10 @@
 // Demo cogs
 
-use clockwork::examples::helloworld::helloworld_state
-use clockwork::examples::helloworld::schema
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::helloworld)]
+
+use clockwork::examples::helloworld::helloworld_state;
+use clockwork::examples::helloworld::schema;
 
 
 // Define the producer cog.
@@ -61,29 +64,6 @@ cog ConsumerCog
     }
 }
 
-// Generate the c++ files. The name of the target will be appended to file names. E.g. in this case cogs_dial.hh.
-cpp_target cogs
-{
-    options
-    {
-        namespace clockwork::helloworld;
-    }
-
-    cog ProducerCog;
-    cog ConsumerCog;
-}
-
-// Specify which cogs will be contained in the binary.
-cpp_executable cogs_exe
-{
-    casing
-    {
-        interface Tappy<schema::SimpleSchema>;
-        cog ProducerCog;
-        cog ConsumerCog;
-    }
-}
-
 box ProducerBox
 {
     // Instantiate the producer cog. Connect it to the channel.
@@ -111,22 +91,16 @@ box FullSystem
 {
     // Instantiate the box and a process for it, and run the box on the process.
     new producer_box: ProducerBox;
-    new producer_process: Process(executable=cogs_exe);
+    new producer_process: Process(executable=cogs_clk_exe);
     apply HostProcess(process=producer_process) in producer_box;
 
     // Instantiate the box and a process for it, and run the box on the process.
     new consumer_box: ConsumerBox;
-    new consumer_process: Process(executable=cogs_exe);
+    new consumer_process: Process(executable=cogs_clk_exe);
     apply HostProcess(process=consumer_process) in consumer_box;
 
     // Specify which machine our processes run on.
     apply HostCpuDomain(cpu_domain=DemoCpu) to producer_process;
     apply HostCpuDomain(cpu_domain=DemoCpu) to consumer_process;
 
-}
-
-
-system_target producer_consumer
-{
-    box: FullSystem;
 }

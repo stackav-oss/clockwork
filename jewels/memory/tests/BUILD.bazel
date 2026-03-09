@@ -25,6 +25,15 @@ cc_test(
 )
 
 cc_test(
+    name = "default_memory_resource_test",
+    srcs = ["default_memory_resource_test.cc"],
+    deps = [
+        "//jewels/memory:default_memory_resource",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "error_test",
     srcs = ["error_test.cc"],
     deps = [

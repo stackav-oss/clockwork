@@ -4,7 +4,7 @@
 #pragma once
 
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"

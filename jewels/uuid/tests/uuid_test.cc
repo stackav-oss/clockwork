@@ -1,22 +1,29 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
+#include "jewels/uuid/uuid_hasher.hh"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <gsl/util>
+#include <xxh3.h>
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <memory_resource>
+#include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
 
 namespace jewels::tests
 {
@@ -91,7 +98,7 @@ TEST_CASE("From string")
 {
   SECTION("Runtime")
   {
-    auto expected_uuid = Uuid<TestTag>::from_string("0123456789abcdeffedcba9876543210"); // pragma: allowlist secret
+    auto expected_uuid = Uuid<TestTag>::from_string("0123456789abcdeffedcba9876543210");
     REQUIRE(expected_uuid);
     CHECK(expected_uuid->to_string() == "01234567-89ab-cdef-fedc-ba9876543210");
     expected_uuid = Uuid<TestTag>::from_string("12345670-9ab8-defc-edcf-a9876543210b");
@@ -116,7 +123,7 @@ TEST_CASE("From string")
   SECTION("Constexpr")
   {
     constexpr auto uuid_str = std::string_view{"01234567-89ab-cdef-fedc-ba9876543210"};
-    constexpr auto expected_uuid = Uuid<TestTag>::from_string(uuid_str); // pragma: allowlist secret
+    constexpr auto expected_uuid = Uuid<TestTag>::from_string(uuid_str);
     STATIC_REQUIRE(expected_uuid);
     constexpr auto uuid = *expected_uuid;
     REQUIRE(uuid.to_string() == uuid_str);
@@ -131,13 +138,14 @@ TEST_CASE("From string")
 
 TEST_CASE("Random")
 {
-  const auto uuid1 = Uuid<TestTag>::random_uuid();
-  for (size_t i = 0U; i < 1000U; ++i)
+  std::unordered_set<Uuid<TestTag>, UuidHasher<TestTag>> uuid_set;
+  for (size_t i = 0U; i < 2'000'000U; ++i)
   {
-    CAPTURE(i);
-    const auto uuid2 = Uuid<TestTag>::random_uuid();
-    std::cerr << uuid2 << '\n';
-    CHECK(uuid2 != uuid1);
+    auto uuid = Uuid<TestTag>::random_uuid();
+    CAPTURE(i, uuid);
+    // Zero out the time field to check that the random part is unique
+    std::ranges::fill(std::as_writable_bytes(std::span(uuid.uuid).first(Uuid<TestTag>::time_size_bytes)), std::byte{});
+    CHECK(uuid_set.insert(uuid).second);
   }
 }
 

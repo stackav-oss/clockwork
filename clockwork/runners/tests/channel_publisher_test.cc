@@ -1,15 +1,17 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/runners/channel_publisher.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -24,7 +26,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -84,6 +85,12 @@ public:
   jewels::expected<void, jewels::MonoError> initialize() override
   {
     return {};
+  }
+
+  jewels::BinaryOutcome reset() noexcept override
+  {
+    message_index_ = 0;
+    return jewels::success;
   }
 
   void add_message(MultiMessageInfoData message_info)

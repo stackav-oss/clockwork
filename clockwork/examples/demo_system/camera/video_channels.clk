@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::examples::demo_system::camera::video_message;
 
 // Raw GPS packet channel

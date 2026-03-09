@@ -19,12 +19,13 @@
 #include "clockwork/cog/set_cog_metrics.hh"
 #include "clockwork/cog/simple_cog.hh"
 #include "clockwork/diagnostics/reporter.hh"
+#include "jewels/callsig/outcome.hh"
 
 #include <vector>
 // NOTE: IWYU wants this one because of cog/simple_cog.hh
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 // NOTE: IWYU wants this one because of cog/input_view.inl
 #include "jewels/container/compare.hh"

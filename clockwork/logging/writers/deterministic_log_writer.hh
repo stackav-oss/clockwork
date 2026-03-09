@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
-#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -46,8 +47,9 @@ public:
   /// @param[in] init_time The start time for execution
   LogMessageWriter(
     jewels::memory::MemoryResource memory_resource,
-    jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_writer_config,
-    std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap> metrics_channel_metadata_config,
+    jewels::memory::ObjectPtr<const clockwork::Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config,
+    std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
+      metrics_channel_metadata_config,
     ChannelMap channels,
     std::string_view log_uri,
     jewels::time::SyncTime init_time);
@@ -79,11 +81,12 @@ private:
   std::pmr::string log_uri_;
 
   /// Log Writer Config file that specifies which channels are to be written.
-  jewels::memory::ObjectPtr<const clockwork_logging::LogWriterConfigTap> log_writer_config_;
+  jewels::memory::ObjectPtr<const clockwork::Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config_;
 
-  std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap> metrics_channel_metadata_config_;
+  std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
+    metrics_channel_metadata_config_;
   /// Log writer
-  clockwork_logging::offboard::Writer writer_;
+  clockwork_logging::offboard::Writer<> writer_;
 
   /// Shmem channels.
   ChannelMap channels_;

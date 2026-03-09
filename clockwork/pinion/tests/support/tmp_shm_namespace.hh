@@ -4,9 +4,9 @@
 #pragma once
 
 #include "clockwork/pinion/shm_channel_factory.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
-#include <filesystem>
 #include <string>
 
 namespace clockwork::pinion::support
@@ -33,7 +33,7 @@ public:
   ///
   /// Return the tempdir path
   ///
-  [[nodiscard]] const std::filesystem::path& get_full_path() const noexcept;
+  [[nodiscard]] const jewels::filesystem::Path& get_full_path() const noexcept;
 
   ///
   /// Returns a channel factory created with this temp namespace's parameters

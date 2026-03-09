@@ -24,36 +24,26 @@ The compiler will fail as it does not know how to convert a `Float32` to the str
 If used as a schema field, the compiler will lower it to the underlying type when generating language bindings.
 In the case above, any c++ bindings will use `float` as the representation for `MyStrongType`.
 
-For cpp language bindings, the strong type can be preserved by coupling it with the `extern` block within a `cpp_target` block.
+For cpp language bindings, the strong type can be preserved by using a `cpp` attribute on the `extern` block.
 
 ## External strong types
 
-Types outside of the Clockwork DSL can be introduced into the language through use of the `extern` block in a `cpp_target` block.
+Types outside of the Clockwork DSL can be introduced into the language through use of `cpp` attribute on the `extern` block.
 
-Consider the following `cpp_target` to go along with the `strong_type` example above.
+Consider the following example to go with the example above.
 
 ```clockwork
-cpp_target cpp
+#![generate(cpp)]
+#![cpp(namespace=clockwork::testing)]
+
+#[cpp(type_namespace=clockwork::external, type_header="path/to/header.hh", type_factory=make_my_strong_type)]
+strong_type MyStrongType
 {
-  options
-  {
-    namespace clockwork::testing;
-  }
-  extern
-  {
-    header_file: "path/to/header.hh";
-    namespace: clockwork::external;
-    type
-    {
-      name: MyStrongType;
-      factory: make_my_strong_type;
-    }
-  }
+  underlying_type: Float32;
 }
 ```
 
-The `extern` block indicates that there is a header file where types are defined in a namespace that match the name of a `strong_type`.
-In the `type` sub-block, `name` must reference a `strong_type` defined both in the DSL and within the `namespace` in the header file.
+The `cpp` attribute on the `strong_type` statement indicates that there is a header file where types are defined in a namespace that match the name of a `strong_type`.
 The optional `factory` must refer to a function also defined in that header that takes a single argument matching the `underlying_type` and returning the `strong_type`.
 By providing the `factory`, this teaches the DSL how to construct a strong type from the underlying type which enables the use of initial values.
-The `type` sub-block can be repeated within an `extern` block and the `extern` block can be repeated within `cpp_target`.
+Multiple strong types can be defined in the same source file.

@@ -1,5 +1,8 @@
-use clockwork::io::var_packet
-use clockwork::io::udp_sample_system::just_a_uint32
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::cogs)]
+
+use clockwork::io::var_packet;
+use clockwork::io::udp_sample_system::just_a_uint32;
 
 // Ping cog
 cog PingCog
@@ -28,19 +31,8 @@ cog PongCog
 
     execution
     {
-        condition new_var_packet: new_message(pong_var_packet, min=1);
-        condition new_just_a_uint32: new_message(pong_just_a_uint32, min=1);
+        condition new_var_packet: new_message(pong_var_packet);
+        condition new_just_a_uint32: new_message(pong_just_a_uint32);
         execute when: new_var_packet or new_just_a_uint32;
     }
-}
-
-cpp_target ping_pong_cog
-{
-  options
-  {
-    namespace clockwork::cogs;
-  }
-
-  cog PingCog;
-  cog PongCog;
 }

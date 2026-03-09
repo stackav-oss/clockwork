@@ -27,6 +27,7 @@ cc_test(
     srcs = ["protobuf_to_tap_test.cc"],
     deps = [
         "//jewels/container:at",
+        "//jewels/container/tap:optional",
         "//jewels/container/tap:protobuf_to_tap",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
@@ -47,6 +48,19 @@ py_test(
         "//jewels/container/tap:py_var_array",
         "//jewels/container/tap:value_serdes",
         "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "soa_test",
+    srcs = ["soa_test.cc"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:soa",
+        "//jewels/container/tap/tests/support:test_point",
+        "//jewels/container/tap/tests/support:test_point_soa",
+        "@catch2//:catch2_main",
     ],
 )
 

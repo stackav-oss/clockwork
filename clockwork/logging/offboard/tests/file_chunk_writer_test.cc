@@ -4,6 +4,7 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/file_chunk_writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -18,7 +19,6 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <string>

@@ -4,21 +4,30 @@
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
+#include "clockwork/logging/log_interval.hh"
+#include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/repr_iface.hh"
+#include "clockwork/runners/channel_publisher.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_runner.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/channels.hh"
 #include "clockwork/scaffolding/cog.hh"
 #include "clockwork/scaffolding/config.hh"
+#include "clockwork/scaffolding/data_source_loader.hh"
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
 #include "clockwork/scaffolding/deterministic_runner_setup.hh"
+#include "clockwork/scaffolding/first_message_cache.hh"
 #include "clockwork/scaffolding/io_connection.hh"
 #include "clockwork/scaffolding/memory.hh"
+#include "clockwork/scaffolding/snapshots.hh"
 #include "clockwork/scaffolding/state.hh"
 #include "clockwork/scaffolding/timer.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/cli/exit_condition.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -35,7 +44,9 @@
 #include <functional>
 #include <memory>
 #include <memory_resource>
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -48,7 +59,7 @@ template <typename LogMessageFetcherType>
 // TODO(OI-2892): Refactor to reduce complexity
 // NOLINTNEXTLINE(readability-function-size, readability-function-cognitive-complexity)
 int run_deterministic_impl(
-  const common::ProcessDescriptionTap& desc,
+  const Tappy<common::ProcessDescription<>>& desc,
   AbstractCasing& casing,
   pinion::ShmChannelFactory& channel_factory,
   jewels::cli::ExitCondition& exit,
@@ -83,7 +94,7 @@ int run_deterministic_impl(
   auto logged_channels =
     (deterministic_logging_config->channel_publisher_config
        ? deterministic_logging_config->channel_publisher_config->get_channels()
-       : std::span<const clockwork_logging::PublishedChannelConfigTap>{});
+       : std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>>{});
   auto channels = setup_deterministic_channels(
     desc.get_pubsub_graph().get_publish_endpoints(), logged_channels, memres_scratch, channel_factory);
   if (!channels)
@@ -103,18 +114,80 @@ int run_deterministic_impl(
   {
     return EXIT_FAILURE;
   }
+  // Populate first message cache for data source restoration
+  scaffolding::FirstMessageCache first_message_cache(memres);
+
+  if (deterministic_logging_config->channel_publisher_config)
+  {
+    std::shared_ptr<MessageFetcher> message_fetcher{nullptr};
+    if (execution_params.message_injectors.message_fetcher_)
+    {
+      message_fetcher = execution_params.message_injectors.message_fetcher_.value().get();
+    }
+    else
+    {
+      if (!execution_params.input_log_uri)
+      {
+        jewels::log_cerr_error("Input log URI must be specified to restore from log");
+        return EXIT_FAILURE;
+      }
+      message_fetcher = std::make_shared<LogMessageFetcherType>(
+        *execution_params.input_log_uri,
+        jewels::memory::make_non_null_from_ref(*deterministic_logging_config->channel_publisher_config),
+        clockwork_logging::LogInterval{
+          clockwork_logging::LogTimestamp{time_range->start}, clockwork_logging::LogTimestamp{time_range->end}},
+        memres_runner);
+    }
+
+    auto& data_source_message_fetcher = *message_fetcher;
+
+    auto init_result = data_source_message_fetcher.initialize();
+    if (!init_result)
+    {
+      jewels::log_cerr_error("Failed to initialize temporary message fetcher");
+      return EXIT_FAILURE;
+    }
+
+    if (jewels::fails(populate_first_message_cache(
+          jewels::Out{first_message_cache}, desc.get_data_sources(), data_source_message_fetcher, memres)))
+    {
+      jewels::log_cerr_error("Failed to populate first message cache from log");
+      return EXIT_FAILURE;
+    }
+
+    if (jewels::fails(data_source_message_fetcher.reset()))
+    {
+      jewels::log_cerr_error("Failed to reset temporary message fetcher");
+      return EXIT_FAILURE;
+    }
+  }
 
   auto states = setup_states(
-    desc.get_state_graph().get_state_instances(), memres_scratch, *memory_resources, channel_factory, casing);
+    desc.get_state_graph().get_state_instances(),
+    memres_scratch,
+    *memory_resources,
+    channel_factory,
+    casing,
+    desc.get_data_sources(),
+    first_message_cache);
   if (!states)
   {
     return EXIT_FAILURE;
   }
 
-  if (!setup_configs(desc.get_config_graph().get_config_instances(), memres, memres_config, casing))
+  if (!setup_configs(
+        desc.get_config_graph().get_config_instances(),
+        desc.get_data_sources(),
+        memres,
+        memres_config,
+        first_message_cache,
+        casing))
   {
     return EXIT_FAILURE;
   }
+
+  // Clear cache after restoration to free memory before execution
+  first_message_cache.clear();
 
   auto timers = setup_deterministic_timers(execution_params, desc.get_timers(), memres);
   if (!timers)
@@ -172,6 +245,12 @@ int run_deterministic_impl(
 
   auto non_connected_channels =
     setup_non_connected_channels(desc.get_not_connected_endpoints(), casing, memres_scratch, channel_factory);
+
+  // Snapshots must be configured after configs and states are connected
+  if (fails(setup_snapshot_configs(desc.get_snapshot_configs(), casing)))
+  {
+    return EXIT_FAILURE;
+  }
 
   if (!casing.finalize())
   {
@@ -252,7 +331,11 @@ int run_deterministic_impl(
     }
   }
 
-  runner.start(time_range->start, time_range->end, exit);
+  if (jewels::fails(runner.start(time_range->start, time_range->end, exit)))
+  {
+    jewels::log_cerr_error("Failed to start runner.");
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
 } // namespace clockwork::scaffolding

@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/pinion/subscriber_handle.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/tools/channel_spy/channel_spy.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/types.hh"
 
 #include <Python.h>
@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <new>
 #include <span>
 #include <string>
@@ -50,16 +51,19 @@ NB_MODULE(nb_channel_spy, mod)
       { return nb::bytearray{obj.data_ptr, obj.data_size}; })
     .def(
       "overrun_check",
-      [](const clockwork::tools::PythonCallbackHandle& obj) -> bool
-      { return obj.subscriber_handle->still_available(obj.buffer_iter); });
+      [](const clockwork::tools::PythonCallbackHandle& obj) -> bool { return obj.slot_ref.is_valid(); });
 
   // Channel spy bindings
   nb::class_<clockwork::tools::ChannelSpy>(mod, "ChannelSpy")
     .def(
       "__init__",
-      [](clockwork::tools::ChannelSpy* ptr, std::string_view shm_root_dir = "/dev/shm", std::string_view socket_ns = "")
-      { new (ptr) clockwork::tools::ChannelSpy{shm_root_dir, socket_ns}; },
+      [](
+        clockwork::tools::ChannelSpy* ptr,
+        std::string_view shm_root_dir = "/dev/shm",
+        std::string_view tmp_dir = "/tmp",
+        std::string_view socket_ns = "") { new (ptr) clockwork::tools::ChannelSpy{shm_root_dir, tmp_dir, socket_ns}; },
       "shm_root_dir"_a = "/dev/shm",
+      "tmp_dir"_a = "/tmp",
       "socket_ns"_a = "",
       "Make a test helper.")
     .def_prop_ro(
@@ -80,8 +84,8 @@ NB_MODULE(nb_channel_spy, mod)
       "schema_definition",
       [](clockwork::tools::ChannelSpy& obj, std::string_view channel_name) -> nb::bytearray
       {
-        const auto& spy_config = obj.spy_config();
-        for (const auto& channel : spy_config.get_channels())
+        const auto config_ptr = obj.read_channel_spy_config();
+        for (const auto& channel : config_ptr->get_channels())
         {
           if (channel.get_channel_name() == channel_name)
           {
@@ -94,14 +98,14 @@ NB_MODULE(nb_channel_spy, mod)
       "Get the schema definition for a channel")
     .def(
       "schema_name",
-      [](clockwork::tools::ChannelSpy& obj, std::string_view channel_name) -> std::string_view
+      [](clockwork::tools::ChannelSpy& obj, std::string_view channel_name) -> std::string
       {
-        const auto& spy_config = obj.spy_config();
-        for (const auto& channel : spy_config.get_channels())
+        const auto config_ptr = obj.read_channel_spy_config();
+        for (const auto& channel : config_ptr->get_channels())
         {
           if (channel.get_channel_name() == channel_name)
           {
-            return channel.get_schema_name();
+            return std::string{channel.get_schema_name()};
           }
         }
         return {};

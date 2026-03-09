@@ -31,7 +31,7 @@ namespace jewels::filesystem
 
 template <typename FilterFunctionType>
 [[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directory(std::string_view path, FilterFunctionType&& filter_fn)
+Filesystem::read_directory(std::string_view path, FilterFunctionType&& filter_fn) const
 {
   const auto& filter_fn_ref = std::forward<FilterFunctionType>(filter_fn);
   return read_directory(path, filter_fn_ref);
@@ -39,7 +39,7 @@ Filesystem::read_directory(std::string_view path, FilterFunctionType&& filter_fn
 
 template <typename FilterFunctionType>
 [[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directory(std::string_view path, const FilterFunctionType& filter_fn)
+Filesystem::read_directory(std::string_view path, const FilterFunctionType& filter_fn) const
 {
   std::pmr::vector<filesystem::Path> entries(memory_resource_);
   if (const auto read_result = read_directory_impl(path, "", filter_fn, false, entries); !read_result)
@@ -52,15 +52,15 @@ Filesystem::read_directory(std::string_view path, const FilterFunctionType& filt
 
 template <typename FilterFunctionType>
 [[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directories(std::string_view path, FilterFunctionType&& filter_fn, bool ignore_permission_denied)
+Filesystem::read_directories(std::string_view path, FilterFunctionType&& filter_fn, bool ignore_permission_denied) const
 {
   const auto& filter_fn_ref = std::forward<FilterFunctionType>(filter_fn);
   return read_directories(path, filter_fn_ref, ignore_permission_denied);
 }
 
 template <typename FilterFunctionType>
-[[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode>
-Filesystem::read_directories(std::string_view path, const FilterFunctionType& filter_fn, bool ignore_permission_denied)
+[[nodiscard]] jewels::expected<std::pmr::vector<filesystem::Path>, ErrorCode> Filesystem::read_directories(
+  std::string_view path, const FilterFunctionType& filter_fn, bool ignore_permission_denied) const
 {
   std::pmr::list<DirectoryToRead> directories_to_read{memory_resource_};
   directories_to_read.emplace_back(filesystem::Path{path, memory_resource_}, filesystem::Path{memory_resource_});
@@ -106,7 +106,7 @@ template <typename FilterFunctionType>
   std::string_view parent_path,
   const FilterFunctionType& filter_fn,
   bool ignore_permission_denied,
-  std::pmr::vector<filesystem::Path>& entries)
+  std::pmr::vector<filesystem::Path>& entries) const
 {
   // Not using readdir(3) which uses malloc to allocate buffers
   const auto open_result = open(path);

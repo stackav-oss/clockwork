@@ -1,5 +1,7 @@
-use clockwork::python::tests::support::test_input_message::TestInputMessage;
-use clockwork::python::tests::support::test_output_message::TestOutputMessage;
+#![generate()]
+
+use clockwork::python::tests::support::test_input_message::{TestInputMessage};
+use clockwork::python::tests::support::test_output_message::{TestOutputMessage};
 
 // Example input1 channel
 channel Input1Channel

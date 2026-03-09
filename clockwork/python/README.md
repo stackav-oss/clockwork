@@ -55,7 +55,7 @@ cog ExampleCog
   }
   execution
   {
-    condition new_input_msg: new_message(input_msg, min=1, max=1);
+    condition new_input_msg: new_message(input_msg, max=1);
     condition periodic_100ms: time_since_last_exec(100ms);
     execute when: periodic_100ms or new_input_msg;
   }

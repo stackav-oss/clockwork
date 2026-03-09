@@ -12,19 +12,21 @@ from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.serialization.metadata import tachyon_model
 from clockwork.serialization.py import compatibility, protocol
 from clockwork.serialization.py.tests.support import (
-    py_simple_schema_v1,
-    py_simple_schema_v2,
+    simple_schema_v1_clk_py,
     simple_schema_v2_clk_nb,
+    simple_schema_v2_clk_py,
 )
 
 
-@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+@pytest.mark.parametrize(
+    "expected_class", [simple_schema_v2_clk_py.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2]
+)
 def test_create_deserializer_no_upgrade_needed(
-    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    expected_class: type[simple_schema_v2_clk_py.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Test creating a deserializer when no upgrade is needed."""
-    if expected_class == py_simple_schema_v2.SimpleSchemaV2:
-        compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
+    if expected_class == simple_schema_v2_clk_py.SimpleSchemaV2:
+        compiler_context = simple_schema_v2_clk_py.SimpleSchemaV2.get_tachyon_compiler_context()
     else:
         compiler_context = CompilerContext()
 
@@ -54,22 +56,24 @@ def test_create_deserializer_no_upgrade_needed(
     assert result1.string_field == result2.string_field
 
     # Additionally, verify the deserializer is callable with the same signature
-    if isinstance(test_instance, py_simple_schema_v2.SimpleSchemaV2):
+    if isinstance(test_instance, simple_schema_v2_clk_py.SimpleSchemaV2):
         assert callable(deserializer)
         assert deserializer.__code__.co_argcount == expected_class.deserialize_tachyon.__code__.co_argcount
 
 
-@pytest.mark.parametrize("expected_class", [py_simple_schema_v2.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2])
+@pytest.mark.parametrize(
+    "expected_class", [simple_schema_v2_clk_py.SimpleSchemaV2, simple_schema_v2_clk_nb.SimpleSchemaV2]
+)
 def test_create_deserializer_upgrade_needed(
-    expected_class: type[py_simple_schema_v2.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    expected_class: type[simple_schema_v2_clk_py.SimpleSchemaV2] | type[simple_schema_v2_clk_nb.SimpleSchemaV2],  # pyright: ignore[reportInvalidTypeForm, reportUnknownParameterType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
 ) -> None:
     """Test creating a deserializer when upgrade is needed."""
-    if expected_class == py_simple_schema_v2.SimpleSchemaV2:
-        compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
+    if expected_class == simple_schema_v2_clk_py.SimpleSchemaV2:
+        compiler_context = simple_schema_v2_clk_py.SimpleSchemaV2.get_tachyon_compiler_context()
     else:
         compiler_context = CompilerContext()
 
-    incoming_class = py_simple_schema_v1.SimpleSchemaV1
+    incoming_class = simple_schema_v1_clk_py.SimpleSchemaV1
 
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
@@ -98,10 +102,10 @@ def test_create_deserializer_upgrade_needed(
 
 def test_create_deserializer_missing_schema_ir() -> None:
     """Test creating a deserializer when schema IR is missing."""
-    compiler_context = py_simple_schema_v2.SimpleSchemaV2.get_tachyon_compiler_context()
+    compiler_context = simple_schema_v2_clk_py.SimpleSchemaV2.get_tachyon_compiler_context()
 
-    incoming_class = py_simple_schema_v1.SimpleSchemaV1
-    expected_class = py_simple_schema_v2.SimpleSchemaV2
+    incoming_class = simple_schema_v1_clk_py.SimpleSchemaV1
+    expected_class = simple_schema_v2_clk_py.SimpleSchemaV2
 
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
@@ -117,9 +121,9 @@ def test_create_deserializer_missing_schema_ir() -> None:
 
 def test_create_deserializer_missing_metadata() -> None:
     """Test creating a deserializer when metadata is missing."""
-    compiler_context = py_simple_schema_v1.SimpleSchemaV1.get_tachyon_compiler_context()
+    compiler_context = simple_schema_v1_clk_py.SimpleSchemaV1.get_tachyon_compiler_context()
 
-    incoming_class = py_simple_schema_v1.SimpleSchemaV1
+    incoming_class = simple_schema_v1_clk_py.SimpleSchemaV1
     incoming_metadata = incoming_class.get_tachyon_metadata()
 
     # Create a class that returns None for get_tachyon_metadata

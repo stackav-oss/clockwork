@@ -22,6 +22,8 @@ struct TovNanosecondsApproxAlignerInput
 {
   using MsgType = typename DialInputType::MsgType;
   static constexpr auto max_msgs = DialInputType::max_msgs;
+  static constexpr auto min_msgs = DialInputType::min_msgs;
+  static constexpr auto min_new_msgs = DialInputType::min_new_msgs;
   using ValueType = int64_t;
 
   static constexpr ValueType get_value(const MsgType& msg)
@@ -37,6 +39,8 @@ struct TovNanosecondsNsSuffixApproxAlignerInput
 {
   using MsgType = typename DialInputType::MsgType;
   static constexpr auto max_msgs = DialInputType::max_msgs;
+  static constexpr auto min_msgs = DialInputType::min_msgs;
+  static constexpr auto min_new_msgs = DialInputType::min_new_msgs;
   using ValueType = int64_t;
 
   static constexpr ValueType get_value(const MsgType& msg)
@@ -56,10 +60,15 @@ struct ApproxAlignerPolicies
   static_assert(all_same_v<typename InputPolicies::ValueType...>, "All input value types must be the same.");
 
   static constexpr auto input_count = sizeof...(InputPolicies);
+  static_assert(input_count > 1UL, "Stream alignment requires at least two input streams.");
   using ValueType = typename std::tuple_element_t<0, std::tuple<InputPolicies...>>::ValueType;
   using ValuePtrsArray = std::array<const ValueType*, input_count>;
   template <typename InputPolicy>
-  using InputType = MessageInputDialWithCursorControl<typename InputPolicy::MsgType, InputPolicy::max_msgs>;
+  using InputType = MessageInputDialWithCursorControl<
+    typename InputPolicy::MsgType,
+    InputPolicy::max_msgs,
+    InputPolicy::min_msgs,
+    InputPolicy::min_new_msgs>;
   using InputTuple = std::tuple<InputType<InputPolicies>&...>;
   using InputItTuple = std::tuple<typename InputType<InputPolicies>::IteratorType...>;
   using IndexArray = std::array<ssize_t, input_count>;
@@ -91,6 +100,17 @@ struct ApproxAlignerPolicies
   /// @param[in] values The input values array.
   /// @return Variance of input values.
   static constexpr ValueType variance_objective(const ValuePtrsArray& values);
+
+  /// Compute the approx alignment score based on the follower objective.
+  /// The lower the score (further left on the number line) the better the alignment.
+  /// Specifically, the objective is the first input minus the smallest of the remaining inputs.
+  /// In this way, if the first input is the smallest, the score will be negative, otherwise
+  /// the score will be positive.
+  /// @note if the first input is nullptr, or if all other inputs are nullptr, the maximum score is returned.
+  /// Otherwise, the subset of nullptr inputs are ignored for the purpose of finding the minimum.
+  /// @param[in] values The input values array.
+  /// @return Follower objective score.
+  static constexpr ValueType follower_objective(const ValuePtrsArray& values);
 };
 
 } // namespace clockwork

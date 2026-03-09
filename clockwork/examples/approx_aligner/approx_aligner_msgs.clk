@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 use clockwork::dial::approx_aligner_config;
 
 // Example message for aligner
@@ -46,23 +49,4 @@ schema AlignedDataMsg
     // Float Value
     #2 float_value: Float32;
   }
-}
-
-cpp_target approx_aligner_msgs
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  schema AlignerIntMsg;
-  schema AlignerFloatMsg;
-  schema AlignedDataMsg;
-
-  representation Tachyon<AlignerIntMsg>;
-  representation Tachyon<AlignerFloatMsg>;
-  representation Tachyon<AlignedDataMsg>;
-  interface Tap<Tachyon<AlignerIntMsg>>;
-  interface Tap<Tachyon<AlignerFloatMsg>>;
-  interface Tap<Tachyon<AlignedDataMsg>>;
 }

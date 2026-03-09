@@ -5,6 +5,7 @@
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/cog_envelope.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
@@ -48,13 +49,23 @@ auto OnlineCogQueue::pop(std::chrono::nanoseconds timeout) -> PopResult
   {
     first_iter = false;
 
-    for (auto it = queue_.begin(); it != queue_.end(); ++it)
+    for (auto it = queue_.begin(); it != queue_.end();)
     {
-      if (it->cog->prepare_for_execution(jewels::time::SyncClock::now()))
+      auto prepare_result = it->cog->prepare_for_execution(jewels::time::SyncClock::now());
+      if (prepare_result)
       {
         auto result = std::move(*it);
         queue_.erase(it);
         return result;
+      }
+
+      if (prepare_result.error() == CogExecutionError::not_ready)
+      {
+        it = queue_.erase(it);
+      }
+      else
+      {
+        ++it;
       }
     }
 

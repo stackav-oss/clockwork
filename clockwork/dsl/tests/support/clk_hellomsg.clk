@@ -1,0 +1,146 @@
+#![generate(cpp, nanobind, proto, proto_conv)]
+#![cpp(namespace=clockwork::demo)]
+
+// Hello, Msg!
+schema HelloMsg
+{
+  uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  fields
+  {
+    // Sequence number
+    #1 seqno: Int64;
+
+    // Some data
+    #2 data: FixedArray<Byte, 1'024>;
+
+    // An identifier
+    #3 greeting_id: Uuid<SampleTag>;
+
+    // A self-referential identifier
+    // Instead of using a separate tag type, this uses the schema as a tag
+    #4 msg_id: Uuid<HelloMsg>;
+  }
+}
+
+// Hello, composition!
+schema BetterThanInheritance
+{
+  uuid: 35ed1940-cb0d-4028-9b52-5864e43076a4;
+
+  fields
+  {
+    // Hi
+    #3 hello: HelloMsg;
+
+    // Instantiation from the future
+    #4 generic: GenericMsg<Float32, 32>;
+
+    // Named instantiation from the future
+    #5 named_generic: NamedGenericMsg;
+
+    // A string
+    #6 desc: VarString<max_size=64>;
+
+    // An enum value
+    #7 greeting: HelloEnum = HelloEnum::hola;
+
+    // Strong type value
+    #8 strong_type: MyStrongType;
+
+    // External strong type value
+    #9 external_strong_type: ExternalStrongType = 234;
+  }
+}
+
+// Hello, templates!
+schema GenericMsg
+{
+  uuid: 751af312-b2bd-4f6a-8c1b-c5e1d87e74bc;
+
+  parameters
+  {
+    // Type of array elements
+    #1 data_type: Type;
+
+    // Number of elements
+    #2 data_size = 3;
+  }
+
+  fields
+  {
+    // Some data
+    #3 data: VarArray<data_type, max_size=data_size>;
+  }
+}
+
+// Enum
+enum HelloEnum
+{
+  uuid: bea931ce-fba6-4abd-941c-16ab44088aec;
+  values
+  {
+    // Normal greeting
+    #1 hi default;
+
+    // A bit more formal
+    #2 hello;
+
+    // Spanish
+    #3 hola;
+
+    // Mandarin
+    #4 ni_hao;
+
+    // Hindi
+    #5 namaste;
+  }
+}
+
+// Enum that represents bit flags
+enum HelloFlags
+{
+  uuid: 4af95503-6257-4a78-8da1-efcc7f14d4d2;
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+  values
+  {
+    // No bits set
+    #0 none default { underlying_value: 0; }
+    // LSB
+    #1 flag1 { underlying_value: 1; }
+    // Bit1
+    #2 flag2 { underlying_value: 2; }
+    // Bit2
+    #3 flag3 { underlying_value: 4; }
+    // Bit0 + Bit1
+    #4 flag12 { underlying_value: 3; }
+  }
+}
+
+// An example tag.
+tag SampleTag;
+
+some_constant: Int32 = 42;
+
+// Some strong type.
+strong_type MyStrongType
+{
+  underlying_type: UInt64;
+}
+
+// Some strong type.
+#[cpp(type_namespace=clockwork::external, type_header="clockwork/dsl/tests/support/extern_type.hh", type_factory=make)]
+strong_type ExternalStrongType
+{
+  underlying_type: UInt32;
+}
+
+// External type
+#[cpp(type_namespace=clockwork::testing, type_header="clockwork/dsl/tests/support/cxx_state.hh")]
+extern_type CxxState;
+
+instantiate GenericMsg<Float32, 32>;
+instantiate NamedGenericMsg: GenericMsg<Float64, 64>;

@@ -1,6 +1,6 @@
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
 use clockwork::tests::support::test_system_message::{TestMessage, CogState};
-use clockwork::logging::channel_type::ChannelType;
+use clockwork::logging::channel_type::{ChannelType};
 
 
 // Cog to forward a message between channels

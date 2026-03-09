@@ -8,12 +8,13 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/cog_execution_error.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -41,6 +42,7 @@ public:
   using PublishersType = typename Policy::PublishersType;
   using DiagnosticsType = typename Policy::DiagnosticsType;
   using InfraDiagnosticsType = typename Policy::InfraDiagnosticsType;
+  using SignalApiType = typename Policy::SignalApiType;
 
   static constexpr auto cog_id = Policy::cog_id;
   static constexpr auto event_metrics_batch_size = Policy::event_metrics_batch_size;
@@ -81,7 +83,7 @@ public:
   /// @param[in] config The underlying config
   /// @return The observer to associate with the config on success
   [[nodiscard]] jewels::expected<void, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<const CogConfigData> config) override;
+  set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<CogConfigData> config) override;
 
   /// Set the state
   /// @param[in] uuid The id of the state endpoint
@@ -111,6 +113,13 @@ public:
   /// @return True on success
   [[nodiscard]] jewels::expected<void, jewels::MonoError>
   set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::PublisherHandle&& handle, bool connected) override;
+
+  /// Set a snapshot configuration for a state or config endpoint
+  /// @param[in] uuid The id of the endpoint (state or config) to snapshot
+  /// @param[in] snapshot_config The snapshot configuration (interval/cycles/etc)
+  /// @return Success or failure
+  jewels::BinaryOutcome set_snapshot_config(
+    jewels::Uuid<common::EndpointClassId> uuid, const Tappy<common::SnapshotConfig>& snapshot_config) override;
 
   /// Set up a subscriber endpoint without a handle for non-connected endpoints
   /// @param[in] uuid The id of the subscriber endpoint to set up
@@ -214,6 +223,9 @@ private:
 
   /// The cog infra diagnostics
   InfraDiagnosticsType infra_diagnostics_;
+
+  /// The cog signal API
+  SignalApiType signals_;
 
   /// The cog metrics
   CogMetrics metrics_;

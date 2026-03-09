@@ -1,0 +1,1526 @@
+namespace test
+{
+
+// ComprehensiveTest_FixedSoaElementRef implementations
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::ComprehensiveTest_FixedSoaElementRef(::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t size>
+const uint32_t& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_id() const
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t size>
+uint32_t& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_id()
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_id(uint32_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]) = new_value;
+}
+
+template <size_t size>
+const int64_t& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_timestamp() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t size>
+int64_t& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_timestamp()
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_timestamp(int64_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]) = new_value;
+}
+
+template <size_t size>
+const bool& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_flag() const
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t size>
+bool& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_flag()
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_flag(bool new_value)
+{
+  ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]) = new_value;
+}
+
+template <size_t size>
+const float& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_confidence() const
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t size>
+float& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_confidence()
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_confidence(float new_value)
+{
+  ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]) = new_value;
+}
+
+template <size_t size>
+::std::span<const float, 3U> ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_position() const &
+{
+  return ::std::span<const float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t size>
+::std::span<float, 3U> ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_position() &
+{
+  return ::std::span<float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_position(::std::span<const float, 3U> input_span) &
+{
+  std::ranges::copy(input_span, ::std::begin(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])));
+}
+
+template <size_t size>
+::std::span<const float> ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_measurements() const
+{
+  return ::std::span<const float>{get_underlying_measurements()};
+}
+
+template <size_t size>
+::std::span<float> ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_measurements()
+{
+  return ::std::span<float>{get_underlying_measurements()};
+}
+
+template <size_t size>
+const ::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_measurements() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t size>
+::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_measurements() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t size>
+::jewels::BinaryOutcome ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::try_set_measurements(::std::span<const float> input_span) &
+{
+  return get_underlying_measurements().try_set(input_span) ? jewels::success : jewels::failure;
+}
+
+template <size_t size>
+::std::string_view ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_label() const
+{
+  return ::std::string_view{get_underlying_label()};
+}
+
+template <size_t size>
+::std::span<char> ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_label()
+{
+  return ::std::span<char>{get_underlying_label()};
+}
+
+template <size_t size>
+const ::jewels::tap::VarString<32U>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_label() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t size>
+::jewels::tap::VarString<32U>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_label() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t size>
+::jewels::BinaryOutcome ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::try_set_label(::std::string_view input_span) &
+{
+  return get_underlying_label().try_set(input_span) ? jewels::success : jewels::failure;
+}
+
+template <size_t size>
+const ::jewels::tap::Optional<double>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_optional_score() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t size>
+::jewels::tap::Optional<double>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_underlying_optional_score() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t size>
+bool ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::has_optional_score() const &
+{
+  return get_underlying_optional_score().has_value();
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::reset_optional_score() &
+{
+  get_underlying_optional_score().reset();
+}
+
+template <size_t size>
+const double& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::value_optional_score() const &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t size>
+double& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::value_mutable_optional_score() &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_optional_score(double new_value) &
+{
+  get_underlying_optional_score().emplace(new_value);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::setopt_optional_score(::std::optional<double> new_value) &
+{
+  if (new_value.has_value())
+  {
+    get_underlying_optional_score().emplace(new_value.value());
+  }
+  else
+  {
+    get_underlying_optional_score().reset();
+  }
+}
+
+template <size_t size>
+const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_center() const
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t size>
+::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::get_mutable_center()
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::set_center(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>> new_value)
+{
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]) = new_value;
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap)
+{
+  get_mutable_id() = tap.get_id();
+  get_mutable_timestamp() = tap.get_timestamp();
+  get_mutable_flag() = tap.get_flag();
+  get_mutable_confidence() = tap.get_confidence();
+  get_mutable_position() = tap.get_position();
+  get_underlying_measurements() = tap.get_underlying_measurements();
+  get_mutable_label() = tap.get_label();
+  get_mutable_optional_score() = tap.get_optional_score();
+  get_mutable_center() = tap.get_center();
+  return *this;
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator=(const ComprehensiveTest_FixedSoaElementRef& other)
+{
+  if (this != &other)
+  {
+    get_mutable_id() = other.get_id();
+    get_mutable_timestamp() = other.get_timestamp();
+    get_mutable_flag() = other.get_flag();
+    get_mutable_confidence() = other.get_confidence();
+    get_mutable_position() = other.get_position();
+    get_underlying_measurements() = other.get_underlying_measurements();
+    get_mutable_label() = other.get_label();
+    get_mutable_optional_score() = other.get_optional_score();
+    get_mutable_center() = other.get_center();
+  }
+  return *this;
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator=(ComprehensiveTest_FixedSoaElementRef&& other)
+{
+  return *this = other;
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init)
+{
+  get_mutable_id() = init.id;
+  get_mutable_timestamp() = init.timestamp;
+  get_mutable_flag() = init.flag;
+  get_mutable_confidence() = init.confidence;
+  get_mutable_position() = init.position;
+  get_underlying_measurements() = init.measurements;
+  get_mutable_label() = init.label;
+  get_mutable_optional_score() = init.optional_score;
+  get_mutable_center() = init.center;
+  return *this;
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+      .id = get_id(),
+      .timestamp = get_timestamp(),
+      .flag = get_flag(),
+      .confidence = get_confidence(),
+      .position = get_position(),
+      .measurements = get_underlying_measurements(),
+      .label = get_label(),
+      .optional_score = get_optional_score(),
+      .center = get_center()}};
+}
+
+template <size_t size>
+bool ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>::operator==(const ComprehensiveTest_FixedSoaElementRef& other) const
+{
+  return get_id() == other.get_id() && get_timestamp() == other.get_timestamp() && get_flag() == other.get_flag() && get_confidence() == other.get_confidence() && get_position() == other.get_position() && get_underlying_measurements() == other.get_underlying_measurements() && get_label() == other.get_label() && get_optional_score() == other.get_optional_score() && get_center() == other.get_center();
+}
+
+} // namespace test
+
+// std::swap specialization to call our custom swap
+namespace std
+{
+template <size_t size>
+inline void swap(
+  ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ref_a,
+  ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ref_b) noexcept
+{
+  swap(ref_a, ref_b);  // Calls ADL swap in test namespace
+}
+} // namespace std
+
+namespace test
+{
+
+// ComprehensiveTest_FixedSoaElementConstRef implementations
+template <size_t size>
+ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::ComprehensiveTest_FixedSoaElementConstRef(const ::clockwork::FixedSoa<::test::ComprehensiveTest, size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::ComprehensiveTest_FixedSoaElementConstRef(const ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ref)
+  : soa_{ref.soa_}, index_{ref.index_}
+{
+}
+
+template <size_t size>
+const uint32_t& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_id() const
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t size>
+const int64_t& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_timestamp() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t size>
+const bool& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_flag() const
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t size>
+const float& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_confidence() const
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t size>
+::std::span<const float, 3U> ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_position() const &
+{
+  return ::std::span<const float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t size>
+::std::span<const float> ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_measurements() const
+{
+  return ::std::span<const float>{get_underlying_measurements()};
+}
+
+template <size_t size>
+const ::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_underlying_measurements() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t size>
+::std::string_view ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_label() const
+{
+  return ::std::string_view{get_underlying_label()};
+}
+
+template <size_t size>
+const ::jewels::tap::VarString<32U>& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_underlying_label() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t size>
+const ::jewels::tap::Optional<double>& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_underlying_optional_score() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t size>
+bool ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::has_optional_score() const &
+{
+  return get_underlying_optional_score().has_value();
+}
+
+template <size_t size>
+const double& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::value_optional_score() const &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t size>
+double& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::value_mutable_optional_score() &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t size>
+void ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::setopt_optional_score(::std::optional<double> new_value) &
+{
+  if (new_value.has_value())
+  {
+    get_underlying_optional_score().emplace(new_value.value());
+  }
+  else
+  {
+    get_underlying_optional_score().reset();
+  }
+}
+
+template <size_t size>
+const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::get_center() const
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t size>
+ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+      .id = get_id(),
+      .timestamp = get_timestamp(),
+      .flag = get_flag(),
+      .confidence = get_confidence(),
+      .position = get_position(),
+      .measurements = get_underlying_measurements(),
+      .label = get_label(),
+      .optional_score = get_optional_score(),
+      .center = get_center()}};
+}
+
+template <size_t size>
+bool ComprehensiveTest_FixedSoaElementConstRef<::test::ComprehensiveTest, size>::operator==(const ComprehensiveTest_FixedSoaElementConstRef& other) const
+{
+  return get_id() == other.get_id() && get_timestamp() == other.get_timestamp() && get_flag() == other.get_flag() && get_confidence() == other.get_confidence() && get_position() == other.get_position() && get_underlying_measurements() == other.get_underlying_measurements() && get_label() == other.get_label() && get_optional_score() == other.get_optional_score() && get_center() == other.get_center();
+}
+
+} // namespace test
+
+namespace test
+{
+
+// ComprehensiveTest_VarSoaElementRef implementations
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::ComprehensiveTest_VarSoaElementRef(::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t max_size>
+const uint32_t& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_id() const
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t max_size>
+uint32_t& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_id()
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_id(uint32_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const int64_t& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_timestamp() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t max_size>
+int64_t& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_timestamp()
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_timestamp(int64_t new_value)
+{
+  ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const bool& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_flag() const
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t max_size>
+bool& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_flag()
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_flag(bool new_value)
+{
+  ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]) = new_value;
+}
+
+template <size_t max_size>
+const float& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_confidence() const
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t max_size>
+float& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_confidence()
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_confidence(float new_value)
+{
+  ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]) = new_value;
+}
+
+template <size_t max_size>
+::std::span<const float, 3U> ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_position() const &
+{
+  return ::std::span<const float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t max_size>
+::std::span<float, 3U> ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_position() &
+{
+  return ::std::span<float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_position(::std::span<const float, 3U> input_span) &
+{
+  std::ranges::copy(input_span, ::std::begin(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])));
+}
+
+template <size_t max_size>
+::std::span<const float> ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_measurements() const
+{
+  return ::std::span<const float>{get_underlying_measurements()};
+}
+
+template <size_t max_size>
+::std::span<float> ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_measurements()
+{
+  return ::std::span<float>{get_underlying_measurements()};
+}
+
+template <size_t max_size>
+const ::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_measurements() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t max_size>
+::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_measurements() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t max_size>
+::jewels::BinaryOutcome ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::try_set_measurements(::std::span<const float> input_span) &
+{
+  return get_underlying_measurements().try_set(input_span) ? jewels::success : jewels::failure;
+}
+
+template <size_t max_size>
+::std::string_view ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_label() const
+{
+  return ::std::string_view{get_underlying_label()};
+}
+
+template <size_t max_size>
+::std::span<char> ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_label()
+{
+  return ::std::span<char>{get_underlying_label()};
+}
+
+template <size_t max_size>
+const ::jewels::tap::VarString<32U>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_label() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t max_size>
+::jewels::tap::VarString<32U>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_label() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t max_size>
+::jewels::BinaryOutcome ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::try_set_label(::std::string_view input_span) &
+{
+  return get_underlying_label().try_set(input_span) ? jewels::success : jewels::failure;
+}
+
+template <size_t max_size>
+const ::jewels::tap::Optional<double>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_optional_score() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t max_size>
+::jewels::tap::Optional<double>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_underlying_optional_score() &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t max_size>
+bool ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::has_optional_score() const &
+{
+  return get_underlying_optional_score().has_value();
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::reset_optional_score() &
+{
+  get_underlying_optional_score().reset();
+}
+
+template <size_t max_size>
+const double& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::value_optional_score() const &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t max_size>
+double& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::value_mutable_optional_score() &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_optional_score(double new_value) &
+{
+  get_underlying_optional_score().emplace(new_value);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::setopt_optional_score(::std::optional<double> new_value) &
+{
+  if (new_value.has_value())
+  {
+    get_underlying_optional_score().emplace(new_value.value());
+  }
+  else
+  {
+    get_underlying_optional_score().reset();
+  }
+}
+
+template <size_t max_size>
+const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_center() const
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t max_size>
+::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::get_mutable_center()
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::set_center(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>> new_value)
+{
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]) = new_value;
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap)
+{
+  get_mutable_id() = tap.get_id();
+  get_mutable_timestamp() = tap.get_timestamp();
+  get_mutable_flag() = tap.get_flag();
+  get_mutable_confidence() = tap.get_confidence();
+  get_mutable_position() = tap.get_position();
+  get_underlying_measurements() = tap.get_underlying_measurements();
+  get_mutable_label() = tap.get_label();
+  get_mutable_optional_score() = tap.get_optional_score();
+  get_mutable_center() = tap.get_center();
+  return *this;
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator=(const ComprehensiveTest_VarSoaElementRef& other)
+{
+  if (this != &other)
+  {
+    get_mutable_id() = other.get_id();
+    get_mutable_timestamp() = other.get_timestamp();
+    get_mutable_flag() = other.get_flag();
+    get_mutable_confidence() = other.get_confidence();
+    get_mutable_position() = other.get_position();
+    get_underlying_measurements() = other.get_underlying_measurements();
+    get_mutable_label() = other.get_label();
+    get_mutable_optional_score() = other.get_optional_score();
+    get_mutable_center() = other.get_center();
+  }
+  return *this;
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator=(ComprehensiveTest_VarSoaElementRef&& other)
+{
+  return *this = other;
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init)
+{
+  get_mutable_id() = init.id;
+  get_mutable_timestamp() = init.timestamp;
+  get_mutable_flag() = init.flag;
+  get_mutable_confidence() = init.confidence;
+  get_mutable_position() = init.position;
+  get_underlying_measurements() = init.measurements;
+  get_mutable_label() = init.label;
+  get_mutable_optional_score() = init.optional_score;
+  get_mutable_center() = init.center;
+  return *this;
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+      .id = get_id(),
+      .timestamp = get_timestamp(),
+      .flag = get_flag(),
+      .confidence = get_confidence(),
+      .position = get_position(),
+      .measurements = get_underlying_measurements(),
+      .label = get_label(),
+      .optional_score = get_optional_score(),
+      .center = get_center()}};
+}
+
+template <size_t max_size>
+bool ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>::operator==(const ComprehensiveTest_VarSoaElementRef& other) const
+{
+  return get_id() == other.get_id() && get_timestamp() == other.get_timestamp() && get_flag() == other.get_flag() && get_confidence() == other.get_confidence() && get_position() == other.get_position() && get_underlying_measurements() == other.get_underlying_measurements() && get_label() == other.get_label() && get_optional_score() == other.get_optional_score() && get_center() == other.get_center();
+}
+
+} // namespace test
+
+// std::swap specialization to call our custom swap
+namespace std
+{
+template <size_t max_size>
+inline void swap(
+  ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ref_a,
+  ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ref_b) noexcept
+{
+  swap(ref_a, ref_b);  // Calls ADL swap in test namespace
+}
+} // namespace std
+
+namespace test
+{
+
+// ComprehensiveTest_VarSoaElementConstRef implementations
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::ComprehensiveTest_VarSoaElementConstRef(const ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>* soa, size_t index)
+  : soa_{soa}, index_{index}
+{
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::ComprehensiveTest_VarSoaElementConstRef(const ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ref)
+  : soa_{ref.soa_}, index_{ref.index_}
+{
+}
+
+template <size_t max_size>
+const uint32_t& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_id() const
+{
+  return ::jewels::memory::ObjectPolicy<uint32_t>::get(soa_->id_[index_]);
+}
+
+template <size_t max_size>
+const int64_t& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_timestamp() const
+{
+  return ::jewels::memory::ObjectPolicy<int64_t>::get(soa_->timestamp_[index_]);
+}
+
+template <size_t max_size>
+const bool& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_flag() const
+{
+  return ::jewels::memory::ObjectPolicy<bool>::get(soa_->flag_[index_]);
+}
+
+template <size_t max_size>
+const float& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_confidence() const
+{
+  return ::jewels::memory::ObjectPolicy<float>::get(soa_->confidence_[index_]);
+}
+
+template <size_t max_size>
+::std::span<const float, 3U> ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_position() const &
+{
+  return ::std::span<const float, 3U>{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::get(soa_->position_[index_])};
+}
+
+template <size_t max_size>
+::std::span<const float> ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_measurements() const
+{
+  return ::std::span<const float>{get_underlying_measurements()};
+}
+
+template <size_t max_size>
+const ::jewels::tap::VarArray<float, 10U>& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_underlying_measurements() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::get(soa_->measurements_[index_]);
+}
+
+template <size_t max_size>
+::std::string_view ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_label() const
+{
+  return ::std::string_view{get_underlying_label()};
+}
+
+template <size_t max_size>
+const ::jewels::tap::VarString<32U>& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_underlying_label() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::get(soa_->label_[index_]);
+}
+
+template <size_t max_size>
+const ::jewels::tap::Optional<double>& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_underlying_optional_score() const &
+{
+  return ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::get(soa_->optional_score_[index_]);
+}
+
+template <size_t max_size>
+bool ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::has_optional_score() const &
+{
+  return get_underlying_optional_score().has_value();
+}
+
+template <size_t max_size>
+const double& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::value_optional_score() const &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t max_size>
+double& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::value_mutable_optional_score() &
+{
+  // Throws if no value exists.
+  return get_underlying_optional_score().value();
+}
+
+template <size_t max_size>
+void ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::setopt_optional_score(::std::optional<double> new_value) &
+{
+  if (new_value.has_value())
+  {
+    get_underlying_optional_score().emplace(new_value.value());
+  }
+  else
+  {
+    get_underlying_optional_score().reset();
+  }
+}
+
+template <size_t max_size>
+const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>& ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::get_center() const
+{
+  return ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::get(soa_->center_[index_]);
+}
+
+template <size_t max_size>
+ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::operator ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>() const
+{
+  return ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+    ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>{
+      .id = get_id(),
+      .timestamp = get_timestamp(),
+      .flag = get_flag(),
+      .confidence = get_confidence(),
+      .position = get_position(),
+      .measurements = get_underlying_measurements(),
+      .label = get_label(),
+      .optional_score = get_optional_score(),
+      .center = get_center()}};
+}
+
+template <size_t max_size>
+bool ComprehensiveTest_VarSoaElementConstRef<::test::ComprehensiveTest, max_size>::operator==(const ComprehensiveTest_VarSoaElementConstRef& other) const
+{
+  return get_id() == other.get_id() && get_timestamp() == other.get_timestamp() && get_flag() == other.get_flag() && get_confidence() == other.get_confidence() && get_position() == other.get_position() && get_underlying_measurements() == other.get_underlying_measurements() && get_label() == other.get_label() && get_optional_score() == other.get_optional_score() && get_center() == other.get_center();
+}
+
+} // namespace test
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_id() -> ::std::span<uint32_t>
+{
+  return std::span<uint32_t>(::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_id() const -> ::std::span<const uint32_t>
+{
+  return std::span<const uint32_t>(::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_timestamp() -> ::std::span<int64_t>
+{
+  return std::span<int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_timestamp() const -> ::std::span<const int64_t>
+{
+  return std::span<const int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_flag() -> ::std::span<bool>
+{
+  return std::span<bool>(::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_flag() const -> ::std::span<const bool>
+{
+  return std::span<const bool>(::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_confidence() -> ::std::span<float>
+{
+  return std::span<float>(::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_confidence() const -> ::std::span<const float>
+{
+  return std::span<const float>(::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_position() -> ::std::span<::std::array<float, 3U>>
+{
+  return std::span<::std::array<float, 3U>>(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_position() const -> ::std::span<const ::std::array<float, 3U>>
+{
+  return std::span<const ::std::array<float, 3U>>(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_measurements() -> ::std::span<::jewels::tap::VarArray<float, 10U>>
+{
+  return std::span<::jewels::tap::VarArray<float, 10U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_measurements() const -> ::std::span<const ::jewels::tap::VarArray<float, 10U>>
+{
+  return std::span<const ::jewels::tap::VarArray<float, 10U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_label() -> ::std::span<::jewels::tap::VarString<32U>>
+{
+  return std::span<::jewels::tap::VarString<32U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_label() const -> ::std::span<const ::jewels::tap::VarString<32U>>
+{
+  return std::span<const ::jewels::tap::VarString<32U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_optional_score() -> ::std::span<::jewels::tap::Optional<double>>
+{
+  return std::span<::jewels::tap::Optional<double>>(::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_optional_score() const -> ::std::span<const ::jewels::tap::Optional<double>>
+{
+  return std::span<const ::jewels::tap::Optional<double>>(::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), size);
+}
+
+// FixedSoa implementations
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_center() -> ::std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>
+{
+  return std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>(::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), size);
+}
+
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::view_center() const -> ::std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>
+{
+  return std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>(::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), size);
+}
+
+// compare_fields implementation for FixedSoa
+template <size_t size>
+inline auto ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::compare_fields(
+  const ::clockwork::FixedSoa<::test::ComprehensiveTest, size>& other, size_t count) const -> bool
+{
+  if (count == 0)
+  {
+    return true;
+  }
+  auto id_this = std::span{::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), count};
+  auto id_other = std::span{::jewels::memory::ObjectPolicy<uint32_t>::ptr(other.id_[0]), count};
+  auto timestamp_this = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), count};
+  auto timestamp_other = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(other.timestamp_[0]), count};
+  auto flag_this = std::span{::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), count};
+  auto flag_other = std::span{::jewels::memory::ObjectPolicy<bool>::ptr(other.flag_[0]), count};
+  auto confidence_this = std::span{::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), count};
+  auto confidence_other = std::span{::jewels::memory::ObjectPolicy<float>::ptr(other.confidence_[0]), count};
+  auto position_this = std::span{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), count};
+  auto position_other = std::span{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(other.position_[0]), count};
+  auto measurements_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), count};
+  auto measurements_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(other.measurements_[0]), count};
+  auto label_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), count};
+  auto label_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(other.label_[0]), count};
+  auto optional_score_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), count};
+  auto optional_score_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(other.optional_score_[0]), count};
+  auto center_this = std::span{::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), count};
+  auto center_other = std::span{::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(other.center_[0]), count};
+
+  return std::equal(id_this.begin(), id_this.end(), id_other.begin()) &&
+         std::equal(timestamp_this.begin(), timestamp_this.end(), timestamp_other.begin()) &&
+         std::equal(flag_this.begin(), flag_this.end(), flag_other.begin()) &&
+         std::equal(confidence_this.begin(), confidence_this.end(), confidence_other.begin()) &&
+         std::equal(position_this.begin(), position_this.end(), position_other.begin()) &&
+         std::equal(measurements_this.begin(), measurements_this.end(), measurements_other.begin()) &&
+         std::equal(label_this.begin(), label_this.end(), label_other.begin()) &&
+         std::equal(optional_score_this.begin(), optional_score_this.end(), optional_score_other.begin()) &&
+         std::equal(center_this.begin(), center_this.end(), center_other.begin());
+}
+
+// wipe_range implementation for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::wipe_range(size_t begin, size_t end)
+{
+  if (begin >= end)
+  {
+    return;
+  }
+  // Zero out the range
+  auto id_bytes = std::as_writable_bytes(std::span{id_});
+  auto timestamp_bytes = std::as_writable_bytes(std::span{timestamp_});
+  auto flag_bytes = std::as_writable_bytes(std::span{flag_});
+  auto confidence_bytes = std::as_writable_bytes(std::span{confidence_});
+  auto position_bytes = std::as_writable_bytes(std::span{position_});
+  auto measurements_bytes = std::as_writable_bytes(std::span{measurements_});
+  auto label_bytes = std::as_writable_bytes(std::span{label_});
+  auto optional_score_bytes = std::as_writable_bytes(std::span{optional_score_});
+  auto center_bytes = std::as_writable_bytes(std::span{center_});
+
+  std::fill(
+    id_bytes.subspan(begin * sizeof(uint32_t), (end - begin) * sizeof(uint32_t)).begin(),
+    id_bytes.subspan(begin * sizeof(uint32_t), (end - begin) * sizeof(uint32_t)).end(),
+    std::byte{0});
+  std::fill(
+    timestamp_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).begin(),
+    timestamp_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).end(),
+    std::byte{0});
+  std::fill(
+    flag_bytes.subspan(begin * sizeof(bool), (end - begin) * sizeof(bool)).begin(),
+    flag_bytes.subspan(begin * sizeof(bool), (end - begin) * sizeof(bool)).end(),
+    std::byte{0});
+  std::fill(
+    confidence_bytes.subspan(begin * sizeof(float), (end - begin) * sizeof(float)).begin(),
+    confidence_bytes.subspan(begin * sizeof(float), (end - begin) * sizeof(float)).end(),
+    std::byte{0});
+  std::fill(
+    position_bytes.subspan(begin * sizeof(::std::array<float, 3U>), (end - begin) * sizeof(::std::array<float, 3U>)).begin(),
+    position_bytes.subspan(begin * sizeof(::std::array<float, 3U>), (end - begin) * sizeof(::std::array<float, 3U>)).end(),
+    std::byte{0});
+  std::fill(
+    measurements_bytes.subspan(begin * sizeof(::jewels::tap::VarArray<float, 10U>), (end - begin) * sizeof(::jewels::tap::VarArray<float, 10U>)).begin(),
+    measurements_bytes.subspan(begin * sizeof(::jewels::tap::VarArray<float, 10U>), (end - begin) * sizeof(::jewels::tap::VarArray<float, 10U>)).end(),
+    std::byte{0});
+  std::fill(
+    label_bytes.subspan(begin * sizeof(::jewels::tap::VarString<32U>), (end - begin) * sizeof(::jewels::tap::VarString<32U>)).begin(),
+    label_bytes.subspan(begin * sizeof(::jewels::tap::VarString<32U>), (end - begin) * sizeof(::jewels::tap::VarString<32U>)).end(),
+    std::byte{0});
+  std::fill(
+    optional_score_bytes.subspan(begin * sizeof(::jewels::tap::Optional<double>), (end - begin) * sizeof(::jewels::tap::Optional<double>)).begin(),
+    optional_score_bytes.subspan(begin * sizeof(::jewels::tap::Optional<double>), (end - begin) * sizeof(::jewels::tap::Optional<double>)).end(),
+    std::byte{0});
+  std::fill(
+    center_bytes.subspan(begin * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>), (end - begin) * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>)).begin(),
+    center_bytes.subspan(begin * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>), (end - begin) * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>)).end(),
+    std::byte{0});
+}
+
+// construct_range implementation for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::construct_range(size_t begin, size_t end)
+{
+  for (size_t i = begin; i < end; ++i)
+  {
+    construct_element(i);
+  }
+}
+
+// construct_element implementations for FixedSoa
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::construct_element(size_t index)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index]);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index]);
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index]);
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index]);
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index]);
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index]);
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], tap.get_id());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], tap.get_timestamp());
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], tap.get_flag());
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], tap.get_confidence());
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], tap.get_position());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], tap.get_measurements());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], tap.get_label());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], tap.get_optional_score());
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], tap.get_center());
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::construct_element(size_t index, const ::test::ComprehensiveTest_FixedSoaElementRef<::test::ComprehensiveTest, size>& ref)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], ref.get_id());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], ref.get_timestamp());
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], ref.get_flag());
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], ref.get_confidence());
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], ref.get_position());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], ref.get_measurements());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], ref.get_label());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], ref.get_optional_score());
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], ref.get_center());
+}
+
+template <size_t size>
+void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], init.id);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], init.timestamp);
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], init.flag);
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], init.confidence);
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], init.position);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], init.measurements);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], init.label);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], init.optional_score);
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], init.center);
+}
+
+// Layout verification for FixedSoa
+template <size_t size>
+constexpr void ::clockwork::FixedSoa<::test::ComprehensiveTest, size>::verify_layout() noexcept requires (size == 1)
+{
+  using SoaType = ::clockwork::FixedSoa<::test::ComprehensiveTest, size>;
+
+  static_assert(offsetof(SoaType, measurements_) == 0, "Field measurements offset mismatch");
+  static_assert(offsetof(SoaType, label_) == 48, "Field label offset mismatch");
+  static_assert(offsetof(SoaType, optional_score_) == 88, "Field optional_score offset mismatch");
+  static_assert(offsetof(SoaType, timestamp_) == 104, "Field timestamp offset mismatch");
+  static_assert(offsetof(SoaType, position_) == 112, "Field position offset mismatch");
+  static_assert(offsetof(SoaType, center_) == 124, "Field center offset mismatch");
+  static_assert(offsetof(SoaType, id_) == 132, "Field id offset mismatch");
+  static_assert(offsetof(SoaType, confidence_) == 136, "Field confidence offset mismatch");
+  static_assert(offsetof(SoaType, flag_) == 140, "Field flag offset mismatch");
+  static_assert(sizeof(SoaType) == 144);
+  static_assert(alignof(SoaType) == 8);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_id() -> ::std::span<uint32_t>
+{
+  return std::span<uint32_t>(::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_id() const -> ::std::span<const uint32_t>
+{
+  return std::span<const uint32_t>(::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_timestamp() -> ::std::span<int64_t>
+{
+  return std::span<int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_timestamp() const -> ::std::span<const int64_t>
+{
+  return std::span<const int64_t>(::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_flag() -> ::std::span<bool>
+{
+  return std::span<bool>(::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_flag() const -> ::std::span<const bool>
+{
+  return std::span<const bool>(::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_confidence() -> ::std::span<float>
+{
+  return std::span<float>(::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_confidence() const -> ::std::span<const float>
+{
+  return std::span<const float>(::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_position() -> ::std::span<::std::array<float, 3U>>
+{
+  return std::span<::std::array<float, 3U>>(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_position() const -> ::std::span<const ::std::array<float, 3U>>
+{
+  return std::span<const ::std::array<float, 3U>>(::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_measurements() -> ::std::span<::jewels::tap::VarArray<float, 10U>>
+{
+  return std::span<::jewels::tap::VarArray<float, 10U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_measurements() const -> ::std::span<const ::jewels::tap::VarArray<float, 10U>>
+{
+  return std::span<const ::jewels::tap::VarArray<float, 10U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_label() -> ::std::span<::jewels::tap::VarString<32U>>
+{
+  return std::span<::jewels::tap::VarString<32U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_label() const -> ::std::span<const ::jewels::tap::VarString<32U>>
+{
+  return std::span<const ::jewels::tap::VarString<32U>>(::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_optional_score() -> ::std::span<::jewels::tap::Optional<double>>
+{
+  return std::span<::jewels::tap::Optional<double>>(::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_optional_score() const -> ::std::span<const ::jewels::tap::Optional<double>>
+{
+  return std::span<const ::jewels::tap::Optional<double>>(::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), size_);
+}
+
+// VarSoa implementations
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_center() -> ::std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>
+{
+  return std::span<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>(::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), size_);
+}
+
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::view_center() const -> ::std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>
+{
+  return std::span<const ::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>(::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), size_);
+}
+
+// compare_fields implementation for VarSoa
+template <size_t max_size>
+inline auto ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::compare_fields(
+  const ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>& other, size_t count) const -> bool
+{
+  if (count == 0)
+  {
+    return true;
+  }
+  auto id_this = std::span{::jewels::memory::ObjectPolicy<uint32_t>::ptr(id_[0]), count};
+  auto id_other = std::span{::jewels::memory::ObjectPolicy<uint32_t>::ptr(other.id_[0]), count};
+  auto timestamp_this = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(timestamp_[0]), count};
+  auto timestamp_other = std::span{::jewels::memory::ObjectPolicy<int64_t>::ptr(other.timestamp_[0]), count};
+  auto flag_this = std::span{::jewels::memory::ObjectPolicy<bool>::ptr(flag_[0]), count};
+  auto flag_other = std::span{::jewels::memory::ObjectPolicy<bool>::ptr(other.flag_[0]), count};
+  auto confidence_this = std::span{::jewels::memory::ObjectPolicy<float>::ptr(confidence_[0]), count};
+  auto confidence_other = std::span{::jewels::memory::ObjectPolicy<float>::ptr(other.confidence_[0]), count};
+  auto position_this = std::span{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(position_[0]), count};
+  auto position_other = std::span{::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::ptr(other.position_[0]), count};
+  auto measurements_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(measurements_[0]), count};
+  auto measurements_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::ptr(other.measurements_[0]), count};
+  auto label_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(label_[0]), count};
+  auto label_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::ptr(other.label_[0]), count};
+  auto optional_score_this = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(optional_score_[0]), count};
+  auto optional_score_other = std::span{::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::ptr(other.optional_score_[0]), count};
+  auto center_this = std::span{::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(center_[0]), count};
+  auto center_other = std::span{::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::ptr(other.center_[0]), count};
+
+  return std::equal(id_this.begin(), id_this.end(), id_other.begin()) &&
+         std::equal(timestamp_this.begin(), timestamp_this.end(), timestamp_other.begin()) &&
+         std::equal(flag_this.begin(), flag_this.end(), flag_other.begin()) &&
+         std::equal(confidence_this.begin(), confidence_this.end(), confidence_other.begin()) &&
+         std::equal(position_this.begin(), position_this.end(), position_other.begin()) &&
+         std::equal(measurements_this.begin(), measurements_this.end(), measurements_other.begin()) &&
+         std::equal(label_this.begin(), label_this.end(), label_other.begin()) &&
+         std::equal(optional_score_this.begin(), optional_score_this.end(), optional_score_other.begin()) &&
+         std::equal(center_this.begin(), center_this.end(), center_other.begin());
+}
+
+// wipe_range implementation for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::wipe_range(size_t begin, size_t end)
+{
+  if (begin >= end)
+  {
+    return;
+  }
+  // Zero out the range
+  auto id_bytes = std::as_writable_bytes(std::span{id_});
+  auto timestamp_bytes = std::as_writable_bytes(std::span{timestamp_});
+  auto flag_bytes = std::as_writable_bytes(std::span{flag_});
+  auto confidence_bytes = std::as_writable_bytes(std::span{confidence_});
+  auto position_bytes = std::as_writable_bytes(std::span{position_});
+  auto measurements_bytes = std::as_writable_bytes(std::span{measurements_});
+  auto label_bytes = std::as_writable_bytes(std::span{label_});
+  auto optional_score_bytes = std::as_writable_bytes(std::span{optional_score_});
+  auto center_bytes = std::as_writable_bytes(std::span{center_});
+
+  std::fill(
+    id_bytes.subspan(begin * sizeof(uint32_t), (end - begin) * sizeof(uint32_t)).begin(),
+    id_bytes.subspan(begin * sizeof(uint32_t), (end - begin) * sizeof(uint32_t)).end(),
+    std::byte{0});
+  std::fill(
+    timestamp_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).begin(),
+    timestamp_bytes.subspan(begin * sizeof(int64_t), (end - begin) * sizeof(int64_t)).end(),
+    std::byte{0});
+  std::fill(
+    flag_bytes.subspan(begin * sizeof(bool), (end - begin) * sizeof(bool)).begin(),
+    flag_bytes.subspan(begin * sizeof(bool), (end - begin) * sizeof(bool)).end(),
+    std::byte{0});
+  std::fill(
+    confidence_bytes.subspan(begin * sizeof(float), (end - begin) * sizeof(float)).begin(),
+    confidence_bytes.subspan(begin * sizeof(float), (end - begin) * sizeof(float)).end(),
+    std::byte{0});
+  std::fill(
+    position_bytes.subspan(begin * sizeof(::std::array<float, 3U>), (end - begin) * sizeof(::std::array<float, 3U>)).begin(),
+    position_bytes.subspan(begin * sizeof(::std::array<float, 3U>), (end - begin) * sizeof(::std::array<float, 3U>)).end(),
+    std::byte{0});
+  std::fill(
+    measurements_bytes.subspan(begin * sizeof(::jewels::tap::VarArray<float, 10U>), (end - begin) * sizeof(::jewels::tap::VarArray<float, 10U>)).begin(),
+    measurements_bytes.subspan(begin * sizeof(::jewels::tap::VarArray<float, 10U>), (end - begin) * sizeof(::jewels::tap::VarArray<float, 10U>)).end(),
+    std::byte{0});
+  std::fill(
+    label_bytes.subspan(begin * sizeof(::jewels::tap::VarString<32U>), (end - begin) * sizeof(::jewels::tap::VarString<32U>)).begin(),
+    label_bytes.subspan(begin * sizeof(::jewels::tap::VarString<32U>), (end - begin) * sizeof(::jewels::tap::VarString<32U>)).end(),
+    std::byte{0});
+  std::fill(
+    optional_score_bytes.subspan(begin * sizeof(::jewels::tap::Optional<double>), (end - begin) * sizeof(::jewels::tap::Optional<double>)).begin(),
+    optional_score_bytes.subspan(begin * sizeof(::jewels::tap::Optional<double>), (end - begin) * sizeof(::jewels::tap::Optional<double>)).end(),
+    std::byte{0});
+  std::fill(
+    center_bytes.subspan(begin * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>), (end - begin) * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>)).begin(),
+    center_bytes.subspan(begin * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>), (end - begin) * sizeof(::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>)).end(),
+    std::byte{0});
+}
+
+// construct_range implementation for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::construct_range(size_t begin, size_t end)
+{
+  for (size_t i = begin; i < end; ++i)
+  {
+    construct_element(i);
+  }
+}
+
+// construct_element implementations for VarSoa
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::construct_element(size_t index)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index]);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index]);
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index]);
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index]);
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index]);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index]);
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index]);
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::ComprehensiveTest>>& tap)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], tap.get_id());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], tap.get_timestamp());
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], tap.get_flag());
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], tap.get_confidence());
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], tap.get_position());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], tap.get_measurements());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], tap.get_label());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], tap.get_optional_score());
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], tap.get_center());
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::construct_element(size_t index, const ::test::ComprehensiveTest_VarSoaElementRef<::test::ComprehensiveTest, max_size>& ref)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], ref.get_id());
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], ref.get_timestamp());
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], ref.get_flag());
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], ref.get_confidence());
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], ref.get_position());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], ref.get_measurements());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], ref.get_label());
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], ref.get_optional_score());
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], ref.get_center());
+}
+
+template <size_t max_size>
+void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::ComprehensiveTest>>& init)
+{
+  ::jewels::memory::ObjectPolicy<uint32_t>::construct(id_[index], init.id);
+  ::jewels::memory::ObjectPolicy<int64_t>::construct(timestamp_[index], init.timestamp);
+  ::jewels::memory::ObjectPolicy<bool>::construct(flag_[index], init.flag);
+  ::jewels::memory::ObjectPolicy<float>::construct(confidence_[index], init.confidence);
+  ::jewels::memory::ObjectPolicy<::std::array<float, 3U>>::construct(position_[index], init.position);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarArray<float, 10U>>::construct(measurements_[index], init.measurements);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::VarString<32U>>::construct(label_[index], init.label);
+  ::jewels::memory::ObjectPolicy<::jewels::tap::Optional<double>>::construct(optional_score_[index], init.optional_score);
+  ::jewels::memory::ObjectPolicy<::clockwork::Tap<::clockwork::Tachyon<::test::Point2D>>>::construct(center_[index], init.center);
+}
+
+// Layout verification for VarSoa
+template <size_t max_size>
+constexpr void ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>::verify_layout() noexcept requires (max_size == 1)
+{
+  using SoaType = ::clockwork::VarSoa<::test::ComprehensiveTest, max_size>;
+
+  static_assert(offsetof(SoaType, measurements_) == 0, "Field measurements offset mismatch");
+  static_assert(offsetof(SoaType, label_) == 48, "Field label offset mismatch");
+  static_assert(offsetof(SoaType, optional_score_) == 88, "Field optional_score offset mismatch");
+  static_assert(offsetof(SoaType, timestamp_) == 104, "Field timestamp offset mismatch");
+  static_assert(offsetof(SoaType, position_) == 112, "Field position offset mismatch");
+  static_assert(offsetof(SoaType, center_) == 124, "Field center offset mismatch");
+  static_assert(offsetof(SoaType, id_) == 132, "Field id offset mismatch");
+  static_assert(offsetof(SoaType, confidence_) == 136, "Field confidence offset mismatch");
+  static_assert(offsetof(SoaType, flag_) == 140, "Field flag offset mismatch");
+  static_assert(offsetof(SoaType, size_) == 141, "size_ offset mismatch");
+  static_assert(sizeof(SoaType) == 144);
+  static_assert(alignof(SoaType) == 8);
+}

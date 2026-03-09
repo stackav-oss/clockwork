@@ -10,7 +10,6 @@ cc_test(
     srcs = ["md5_test.cc"],
     deps = [
         "//jewels/hash:md5",
-        "//jewels/memory:pointers",
         "@catch2//:catch2_main",
     ],
 )

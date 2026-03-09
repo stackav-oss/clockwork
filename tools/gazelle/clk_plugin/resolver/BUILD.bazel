@@ -1,0 +1,32 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "resolver",
+    srcs = ["resolver.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/clk_plugin/resolver",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/gazelle/clk_plugin/common",
+        "@@gazelle+//config",
+        "@@gazelle+//label",
+        "@@gazelle+//repo",
+        "@@gazelle+//resolve",
+        "@@gazelle+//rule",
+        "@org_skia_go_infra//go/util",
+    ],
+)
+
+go_test(
+    name = "resolver_test",
+    srcs = ["resolver_test.go"],
+    embed = [":resolver"],
+    deps = [
+        "//tools/gazelle/clk_plugin/common",
+        "@@gazelle+//label",
+        "@@gazelle+//rule",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

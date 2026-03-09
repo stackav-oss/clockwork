@@ -49,7 +49,12 @@ def test_hellomod(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
 
     assert len(pd.config_graph.config_instances) == 1
     (hello_config,) = pd.config_graph.config_instances
-    assert hello_config.config_file_path == "foo/bar.txtpb"
+    # Config now references a data source instead of directly having a file path
+    data_source_idx = hello_config.init_data_source
+    assert len(pd.data_sources) > data_source_idx
+    data_source = pd.data_sources[data_source_idx]
+    assert data_source.source_path_or_name == "foo/bar.txtpb"
+    assert data_source.data_source_type == pdf.DataSourceType.file
     assert len(pd.config_graph.connections) == 1
     (hello_config_conn,) = pd.config_graph.connections
     assert hello_config_conn.config_id == hello_config.config_instance_id

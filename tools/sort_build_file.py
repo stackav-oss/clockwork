@@ -2,7 +2,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-
 """Sort BUILD files given on the command line."""
 
 import functools
@@ -17,10 +16,10 @@ def workspace_root() -> Path:
     """Get the Bazel workspace root."""
     path = Path().absolute()
     while True:
-        if (path / "WORKSPACE").is_file():
+        if (path / "MODULE.bazel").is_file():
             return path
         if path == Path("/"):
-            msg = "No WORKSPACE file found"
+            msg = "No MODULE.bazel file found"
             raise FileNotFoundError(msg)
         path = path.parent
 

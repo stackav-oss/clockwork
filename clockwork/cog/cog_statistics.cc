@@ -15,6 +15,31 @@
 #include <limits>
 #include <string_view>
 #include <utility>
+// Collecting the cog latency measurements fulfulls the following requirements:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 namespace clockwork
 {

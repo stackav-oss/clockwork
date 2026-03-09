@@ -48,8 +48,7 @@ bzl_library(
     visibility = ["//visibility:public"],
     deps = [
         "//tools/rules:cc_bzl",
-        "@aspect_bazel_lib//lib:expand_make_vars",
-        "@aspect_bazel_lib//lib:tar",
+        "@bazel_lib//lib:expand_make_vars",
         "@rules_python//python:defs_bzl",
         "@rules_python//python:packaging_bzl",
         "@rules_python//python:pip_bzl",

@@ -14,7 +14,6 @@ from clockwork.dsl.ir import (
     clkenum,
     node,
     primitive,
-    representation,
     schema,
     typesys,
 )
@@ -79,6 +78,7 @@ def generate_conditions_mask_enum(
         has_explicit_underlying_type=True,
         linter_overrides=set(),
         history=None,
+        attributes=None,
         resolved=None,
     )
 
@@ -155,6 +155,7 @@ def generate_conditions_mask_enum(
         has_explicit_underlying_type=True,
         linter_overrides=set(),
         history=None,
+        attributes=None,
         resolved=None,
     )
 
@@ -174,7 +175,8 @@ def generate_conditions_mask_enum(
         has_explicit_underlying_type=True,
         linter_overrides=set(),
         has_explicit_values=True,
-        history=clkenum.ResolvedEnumHistory([], [], {}, None, None),
+        history=clkenum.EnumHistory(1, {}, set()),
+        attributes=None,
         source=final_enum,
     )
     # Update the enum reference in ValueDefs and define ValueRefs in the enum's inner scope
@@ -199,8 +201,8 @@ def generate_telemetry_metrics_schema(
     field_num_counter = 0
     fields: list[schema.FieldDef] = []
 
-    input_telemtry_metrics = get_instantiated_schema_from_rep_alias(module, "input_telemetry_metrics_rep")
-    min_max_uint16 = get_instantiated_schema_from_rep_alias(module, "min_max_16")
+    input_telemtry_metrics = get_instantiated_schema_from_schema(module, "InputChannelTelemetryMetrics")
+    min_max_uint16 = get_instantiated_schema_from_instantiation(module, "MinMaxMean16")
 
     for input_channel in inputs.values():
         fields.append(schema.make_field(module, field_num_counter, input_channel.name, input_telemtry_metrics))
@@ -217,7 +219,7 @@ def generate_telemetry_metrics_schema(
             schema.make_field(module, field_num_counter, f"{condition.name}_trigger_vals", clkbuiltins.UINT16)
         )
         field_num_counter += 1
-    common_telemetry_metrics = get_instantiated_schema_from_rep_alias(module, "cog_telemetry_metrics_tach")
+    common_telemetry_metrics = get_instantiated_schema_from_schema(module, "CogTelemetryMetrics")
     fields.append(schema.make_field(module, field_num_counter, "common_telemetry_metrics", common_telemetry_metrics))
     return schema.make_schema_class(
         name=cog_name + "TelemetryMetrics",
@@ -239,7 +241,7 @@ def generate_event_metrics_schema(  # noqa: PLR0913 All inputs needed to create 
     field_num_counter = 0
     fields: list[schema.FieldDef] = []
 
-    input_event_metrics = get_instantiated_schema_from_rep_alias(module, "input_event_metrics_rep")
+    input_event_metrics = get_instantiated_schema_from_schema(module, "InputChannelEventMetrics")
     for input_channel in inputs.values():
         fields.append(schema.make_field(module, field_num_counter, input_channel.name, input_event_metrics))
         field_num_counter += 1
@@ -260,7 +262,7 @@ def generate_event_metrics_schema(  # noqa: PLR0913 All inputs needed to create 
     )
     field_num_counter += 1
 
-    common_event_metrics = get_instantiated_schema_from_rep_alias(module, "cog_event_metrics_tach")
+    common_event_metrics = get_instantiated_schema_from_schema(module, "CogEventMetrics")
     fields.append(schema.make_field(module, field_num_counter, "common_event_metrics", common_event_metrics))
     event_metrics = schema.make_schema_class(
         name=cog_name + "EventMetrics",
@@ -296,13 +298,26 @@ def generate_event_metrics_schema(  # noqa: PLR0913 All inputs needed to create 
     )
 
 
-def get_instantiated_schema_from_rep_alias(module: node.Module, rep_alias: str) -> schema.InstantiatedSchema:
-    """Get the instantiated schema from a representation alias."""
+def get_instantiated_schema_from_schema(module: node.Module, name: str) -> schema.InstantiatedSchema:
+    """Get an instantiated schema from a schema."""
     if module.inner_scope.parent is None:
         msg = "Module's inner scope must have a parent to define metrics outputs. Has the module been resolved?"
         raise ValueError(msg)
-    rep = module.inner_scope.parent.lookup(rep_alias)
-    if not isinstance(rep, representation.ReprInstantiation):
-        msg = f"Expected {rep_alias} to be a representation got {rep}"
+    schema_ir = module.inner_scope.parent.lookup(name)
+    if not isinstance(schema_ir, schema.Schema):
+        msg = f"Expected {name} to be a schema got {schema_ir}"
         raise TypeError(msg)
-    return rep.get_resolved().schema_ir
+    return schema.InstantiatedSchema.from_typespec(schema_ir)
+
+
+def get_instantiated_schema_from_instantiation(module: node.Module, name: str) -> schema.InstantiatedSchema:
+    """Get an instantiated schema from an instantiate statement."""
+    if module.inner_scope.parent is None:
+        msg = "Module's inner scope must have a parent to define metrics outputs. Has the module been resolved?"
+        raise ValueError(msg)
+    instantiation = module.inner_scope.parent.lookup(name)
+    if not isinstance(instantiation, schema.InstantiateStmt):
+        msg = f"Expected {name} to be an instantiate statement got {instantiation}"
+        raise TypeError(msg)
+    assert isinstance(instantiation.typespec, typesys.Instantiation)
+    return schema.InstantiatedSchema.from_typespec(instantiation.typespec)

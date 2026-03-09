@@ -4,9 +4,9 @@
 #include "clockwork/pinion/incoming_udp.hh"
 
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh"
-#include "clockwork/io/network_var_packet.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/io/network_var_packet_clk_cc.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
@@ -27,7 +27,7 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h> // IWYU pragma: keep
+#include <fmt/format.h> // IWYU pragma: keep
 
 #include <cerrno>
 #include <cstdint>

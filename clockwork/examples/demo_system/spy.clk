@@ -1,4 +1,6 @@
-use clockwork::examples::demo_system::cpu_domain;
+#![generate(cpp_exe)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
 use clockwork::tools::channel_spy::channel_spy_config;
 use clockwork::tools::channel_spy::channel_spy_config_init;
 
@@ -13,18 +15,10 @@ box SpyBox
   connect config to init_cog.spy_config;
 }
 
-cpp_executable spy_exe
-{
-  casing
-  {
-    box SpyBox;
-  }
-}
-
 box SpyExe
 {
   new spy_box: SpyBox;
-  new spy_proc: Process(executable=spy_exe);
+  new spy_proc: Process(executable=spy_clk_exe);
   apply HostProcess(process=spy_proc) in spy_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to spy_proc;
 }

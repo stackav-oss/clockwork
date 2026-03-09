@@ -395,6 +395,3 @@ index 00000000000..4aaf2339ef3
 +bazel_dep(name = "platforms")
 +bazel_dep(name = "rules_cc")
 +bazel_dep(name = "zstd")
-diff --git WORKSPACE WORKSPACE
-new file mode 100644
-index 00000000000..e69de29bb2d

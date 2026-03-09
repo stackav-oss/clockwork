@@ -5,8 +5,10 @@
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
@@ -85,6 +87,7 @@ TEST_CASE("Publisher handle") // NOLINT(readability-function-size) This test is 
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = 8UL,
+    .is_published_once = false,
   };
   support::BufferStorage<layout> buffer_storage{};
   support::zero_buffer_storage(buffer_storage);
@@ -100,6 +103,8 @@ TEST_CASE("Publisher handle") // NOLINT(readability-function-size) This test is 
     jewels::memory::make_non_null_from_ref(buffer),
     num_observers,
     jewels::memory::MemoryResource{std::pmr::new_delete_resource()}};
+  REQUIRE(pub_handle.buffer().layout().num_slots == layout.num_slots);
+  REQUIRE(pub_handle.buffer().layout().message_size == layout.message_size);
 
   REQUIRE(std::ranges::empty(sub_handle.available()));
 
@@ -534,6 +539,7 @@ TEST_CASE("Batch reservations")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = 8UL,
+    .is_published_once = false,
   };
   support::BufferStorage<layout> buffer_storage{};
   support::zero_buffer_storage(buffer_storage);
@@ -708,6 +714,7 @@ TEST_CASE("Processing of multiple publisher reservations")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = 8UL,
+    .is_published_once = false,
   };
   support::BufferStorage<layout> buffer_storage0{};
   support::BufferStorage<layout> buffer_storage1{};
@@ -807,6 +814,7 @@ TEST_CASE("Resume after restart")
   constexpr BufferLayout layout{
     .num_slots = 2UL,
     .message_size = 8UL,
+    .is_published_once = false,
   };
   support::BufferStorage<layout> buffer_storage{};
   support::zero_buffer_storage(buffer_storage);

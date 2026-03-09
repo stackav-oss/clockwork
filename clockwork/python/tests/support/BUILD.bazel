@@ -1,13 +1,9 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
-load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
-load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
+load("//tools/rules:python.bzl", "py_library")
 
 package(
     default_testonly = True,
@@ -15,6 +11,7 @@ package(
 )
 
 exports_files([
+    "clk_python_cog.clk",
     "python_cog.clk",
     "test_config.clk",
     "test_input_message.clk",
@@ -22,16 +19,68 @@ exports_files([
     "test_output_message.clk",
 ])
 
+clk(
+    name = "clk_python_cog_clk",
+    srcs = ["clk_python_cog.clk"],
+    outs = [
+        "clk_python_cog_clk_cc.cc",
+        "clk_python_cog_clk_cc.hh",
+        "clk_python_cog_clk_cc.inl",
+        "clk_python_cog_clk_cc_dial.cc",
+        "clk_python_cog_clk_cc_dial.hh",
+        "clk_python_cog_clk_cc_dial.inl",
+        "clk_python_cog_clk_cc_impl.cc",
+        "clk_python_cog_clk_cc_impl.hh",
+        "clk_python_cog_clk_cc_impl.inl",
+        "clk_python_cog_clk_py_dial.py",
+    ],
+    cpp_deps = [
+        ":test_config_clk_cc",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
+        ":test_state_clk_cc",
+        "//clockwork/python:python_state_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "py_cog",
+    ],
+    py_deps = [
+        ":test_config_clk_nb",
+        ":test_input_message_clk_nb",
+        ":test_output_message_clk_nb",
+        ":test_state_clk_nb",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":test_config_clk",
+        ":test_input_message_clk",
+        ":test_output_message_clk",
+        ":test_state_clk",
+        "//clockwork/python:python_state_clk",
+    ],
+)
+
+py_library(
+    name = "clk_python_cog_clk_py_impl",
+    srcs = ["clk_python_cog_clk_py_impl.py"],
+    deps = [
+        ":clk_python_cog_clk_py_dial",
+        ":test_output_message_clk_nb",
+        "//jewels/nanobind:nb_sync_time",
+    ],
+)
+
 py_library(
     name = "py_python_cog_dial",
     srcs = ["py_python_cog_dial.py"],
     data = [":python_cog_clk"],
     deps = [
-        ":py_test_config",
-        ":py_test_input_message",
-        ":py_test_output_message",
+        ":test_config_clk_py",
         ":test_input_message_clk_nb",
+        ":test_input_message_clk_py",
         ":test_output_message_clk_nb",
+        ":test_output_message_clk_py",
         ":test_state_clk_nb",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
@@ -44,45 +93,9 @@ py_library(
     srcs = ["py_python_cog_impl.py"],
     deps = [
         ":py_python_cog_dial",
-        ":py_test_output_message",
         ":test_output_message_clk_nb",
+        ":test_output_message_clk_py",
         "//jewels/nanobind:nb_sync_time",
-    ],
-)
-
-py_library(
-    name = "py_test_config",
-    srcs = ["py_test_config.py"],
-    data = [":test_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_test_input_message",
-    srcs = ["py_test_input_message.py"],
-    data = [":test_input_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_test_output_message",
-    srcs = ["py_test_output_message.py"],
-    data = [":test_output_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
     ],
 )
 
@@ -97,19 +110,19 @@ cc_library(
     deps = [
         ":python_cog_dial",
         ":python_cog_impl",
-        ":test_input_message",
-        ":test_output_message",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -148,10 +161,10 @@ cc_library(
     hdrs = ["python_cog_dial.hh"],
     data = [":python_cog_clk"],
     deps = [
-        ":test_config",
-        ":test_input_message",
-        ":test_output_message",
-        ":test_state",
+        ":test_config_clk_cc",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
+        ":test_state_clk_cc",
         "//clockwork/dial:include_common",
         "//clockwork/python:python_state",
     ],
@@ -172,6 +185,7 @@ cc_library(
         "//clockwork/python:python_object",
         "//jewels/log_cerr",
     ],
+    alwayslink = True,
 )
 
 py_library(
@@ -179,235 +193,86 @@ py_library(
     srcs = ["python_object_test_helper.py"],
 )
 
-cc_library(
-    name = "test_config",
-    srcs = [
-        "test_config.cc",
-        "test_config.inl",
-    ],
-    hdrs = ["test_config.hh"],
-    data = [":test_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "test_config_clk",
     srcs = ["test_config.clk"],
     outs = [
-        "py_test_config.py",
-        "test_config.cc",
-        "test_config.hh",
-        "test_config.inl",
-        "test_config_proto.proto",
-        "test_config_proto_conv.cc",
-        "test_config_proto_conv.hh",
-        "test_config_proto_conv.inl",
+        "test_config_clk_cc.cc",
+        "test_config_clk_cc.hh",
+        "test_config_clk_cc.inl",
+        "test_config_clk_nb.cc",
+        "test_config_clk_nb.hh",
+        "test_config_clk_nb.inl",
+        "test_config_clk_proto.proto",
+        "test_config_clk_proto_conv.cc",
+        "test_config_clk_proto_conv.hh",
+        "test_config_clk_proto_conv.inl",
+        "test_config_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+        "nanobind",
+        "proto",
+        "proto_conv",
     ],
     visibility = ["//visibility:public"],
-)
-
-proto_library(
-    name = "test_config_proto",
-    srcs = ["test_config_proto.proto"],
-)
-
-proto_cc_library(
-    name = "test_config_proto_cc_library",
-    srcs = ["test_config_proto.pb.cc"],
-    hdrs = ["test_config_proto.pb.h"],
-    deps = ["@protobuf"],
-)
-
-proto_compile(
-    name = "test_config_proto_compile",
-    outputs = [
-        "test_config_proto.pb.h",
-        "test_config_proto.pb.cc",
-        "test_config_proto_pb2.py",
-        "test_config_proto_pb2.pyi",
-    ],
-    plugins = [
-        "@build_stack_rules_proto//plugin/builtin:cpp",
-        "@build_stack_rules_proto//plugin/builtin:pyi",
-        "@build_stack_rules_proto//plugin/builtin:python",
-        "@clockwork//tools/gazelle:protoc-gen-nolint",
-    ],
-    proto = "test_config_proto",
-)
-
-cc_library(
-    name = "test_config_proto_conv",
-    srcs = [
-        "test_config_proto_conv.cc",
-        "test_config_proto_conv.inl",
-    ],
-    hdrs = ["test_config_proto_conv.hh"],
-    data = [":test_config_clk"],
-    deps = [
-        ":test_config",
-        ":test_config_proto_cc_library",
-        "//clockwork:repr_iface",
-        "//jewels/container/tap:protobuf_to_tap",
-    ],
-)
-
-proto_py_library(
-    name = "test_config_proto_py_library",
-    srcs = ["test_config_proto_pb2.py"],
-    data = ["test_config_proto_pb2.pyi"],
-    deps = ["@protobuf//:protobuf_python"],
-)
-
-cc_library(
-    name = "test_input_message",
-    srcs = [
-        "test_input_message.cc",
-        "test_input_message.inl",
-    ],
-    hdrs = ["test_input_message.hh"],
-    data = [":test_input_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "test_input_message_clk",
     srcs = ["test_input_message.clk"],
     outs = [
-        "py_test_input_message.py",
-        "test_input_message.cc",
-        "test_input_message.hh",
-        "test_input_message.inl",
+        "test_input_message_clk_cc.cc",
+        "test_input_message_clk_cc.hh",
+        "test_input_message_clk_cc.inl",
         "test_input_message_clk_nb.cc",
         "test_input_message_clk_nb.hh",
         "test_input_message_clk_nb.inl",
+        "test_input_message_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+        "nanobind",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "test_input_message_clk_nb",
-    srcs = [
-        "test_input_message_clk_nb.cc",
-        "test_input_message_clk_nb.hh",
-        "test_input_message_clk_nb.inl",
-    ],
-    data = [":test_input_message_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    deps = [
-        ":test_input_message",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
-)
-
-cc_library(
-    name = "test_output_message",
-    srcs = [
-        "test_output_message.cc",
-        "test_output_message.inl",
-    ],
-    hdrs = ["test_output_message.hh"],
-    data = [":test_output_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "test_output_message_clk",
     srcs = ["test_output_message.clk"],
     outs = [
-        "py_test_output_message.py",
-        "test_output_message.cc",
-        "test_output_message.hh",
-        "test_output_message.inl",
+        "test_output_message_clk_cc.cc",
+        "test_output_message_clk_cc.hh",
+        "test_output_message_clk_cc.inl",
         "test_output_message_clk_nb.cc",
         "test_output_message_clk_nb.hh",
         "test_output_message_clk_nb.inl",
+        "test_output_message_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+        "nanobind",
     ],
     visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "test_output_message_clk_nb",
-    srcs = [
-        "test_output_message_clk_nb.cc",
-        "test_output_message_clk_nb.hh",
-        "test_output_message_clk_nb.inl",
-    ],
-    data = [":test_output_message_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":test_output_message",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
-)
-
-cc_library(
-    name = "test_state",
-    srcs = [
-        "test_state.cc",
-        "test_state.inl",
-    ],
-    hdrs = ["test_state.hh"],
-    data = [":test_state_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "test_state_clk",
     srcs = ["test_state.clk"],
     outs = [
-        "test_state.cc",
-        "test_state.hh",
-        "test_state.inl",
+        "test_state_clk_cc.cc",
+        "test_state_clk_cc.hh",
+        "test_state_clk_cc.inl",
         "test_state_clk_nb.cc",
         "test_state_clk_nb.hh",
         "test_state_clk_nb.inl",
     ],
-    visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "test_state_clk_nb",
-    srcs = [
-        "test_state_clk_nb.cc",
-        "test_state_clk_nb.hh",
-        "test_state_clk_nb.inl",
+    generate = [
+        "cpp",
+        "nanobind",
     ],
-    data = [":test_state_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
     visibility = ["//visibility:public"],
-    deps = [
-        ":test_state",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
-    ],
 )

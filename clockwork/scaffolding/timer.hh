@@ -5,8 +5,9 @@
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -32,8 +33,8 @@ using TimerMap = std::pmr::unordered_map<
 /// @param memres_sys the memory resource used to allocate the return vector
 /// @return the list of timer instances if successful
 ///
-[[nodiscard]] jewels::expected<TimerMap, jewels::MonoError>
-setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels::memory::MemoryResource memres_sys);
+[[nodiscard]] jewels::expected<TimerMap, jewels::MonoError> setup_timers(
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs, jewels::memory::MemoryResource memres_sys);
 
 /// Instantiate the requested timers
 /// @param execution_params Execution parameters we are running under
@@ -42,7 +43,7 @@ setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels:
 /// @return the list of timer instances if successful
 [[nodiscard]] jewels::expected<TimerMap, jewels::MonoError> setup_deterministic_timers(
   const ExecutionParams& execution_params,
-  std::span<const common::TimerInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys);
 
 ///
@@ -52,7 +53,7 @@ setup_timers(std::span<const common::TimerInstanceDescriptionTap> descs, jewels:
 /// @param casing the casing to connect into
 ///
 [[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::MonoError> connect_timers(
-  std::span<const common::TimerInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::TimerInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres,
   const TimerMap& timers,
   AbstractCasing& casing);

@@ -4,7 +4,8 @@
 #include "clockwork/scaffolding/main_impl.hh"
 
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/end_process_exception.hh"
 #include "clockwork/scaffolding/scaffolding.hh"
@@ -44,7 +45,7 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
     return EXIT_FAILURE;
   }
 
-  auto desc = read_tachyon_config_to_heap<common::ProcessDescriptionTap>(arg_desc_file.getValue());
+  auto desc = read_tachyon_config_to_heap<Tappy<common::ProcessDescription<>>>(arg_desc_file.getValue());
   if (!desc)
   {
     return EXIT_FAILURE;

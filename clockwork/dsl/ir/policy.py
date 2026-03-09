@@ -10,7 +10,7 @@ from copy import copy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.compiler_context import CompilerContext, ContextKey
 from clockwork.dsl.ir import clkbuiltins, expr, node, schema, statement, typesys
 from clockwork.dsl.ir.cst_util import get_span
@@ -205,11 +205,14 @@ class PolicyInstance(node.CstNode[cst.Policy], node.DocableEntity, typesys.Value
         if not isinstance(self.policy_class, expr.Expr) or not isinstance(self.target, expr.Expr):
             msg = self.append_error_line("Attempt to resolve policy twice")
             raise RuntimeError(msg)  # noqa: TRY004 (Resolving twice is a runtime error)
-        policy_def = self.policy_class.evaluate()
-        if not isinstance(policy_def, PolicyDef):
-            msg = self.policy_class.append_error_line(f"Expected a policy class, but got {policy_def}")
+        policy = self.policy_class.evaluate()
+        if isinstance(policy, PolicyDef):
+            policy_class = policy.get_resolved()
+        elif isinstance(policy, PolicyClass):
+            policy_class = policy
+        else:
+            msg = self.policy_class.append_error_line(f"Expected a policy class, but got {policy}")
             raise TypeError(msg)
-        policy_class = policy_def.get_resolved()
         target = self.target.evaluate()
         if target.type_info not in policy_class.target_bound:
             expected_type = (
@@ -343,3 +346,14 @@ def lookup_all_policies(module: node.Module, policy_class: PolicyClass) -> Itera
     """Look up all policies for a specific policy class."""
     context = module.context[_POLICY_KEY]
     return context.registry[policy_class.value_key()].values()
+
+
+def iterate_all_policy_data(module: node.Module) -> Iterable[PolicyData]:
+    """Iterate over all registered policy data in the module.
+
+    Yields:
+        All PolicyData instances registered in the module.
+    """
+    context = module.context[_POLICY_KEY]
+    for policy_reg in context.registry.values():
+        yield from policy_reg.values()

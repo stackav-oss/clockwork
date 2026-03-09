@@ -3,12 +3,14 @@
 
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_uuid.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
-#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
@@ -32,9 +34,9 @@ constexpr auto num_slots = 10U;
 
 } // namespace
 
-[[nodiscard]] std::unique_ptr<LogWriterConfigTap> get_test_log_writer_config()
+[[nodiscard]] std::shared_ptr<clockwork::Tappy<LogWriterConfig<>>> get_test_log_writer_config()
 {
-  auto config_ptr = std::make_unique<LogWriterConfigTap>();
+  auto config_ptr = std::make_shared<clockwork::Tappy<LogWriterConfig<>>>();
   auto& config = *config_ptr;
 
   using MessageType1 = clockwork::Tappy<clockwork::tests::SimpleSchemaV1>;
@@ -43,9 +45,9 @@ constexpr auto num_slots = 10U;
   channel1.set_num_slots(num_slots);
   channel1.set_message_size(sizeof(MessageType1));
   channel1.get_underlying_channel_name().set_truncate("channel1");
-  channel1.set_message_encoding(clockwork::LoggingTraits<MessageType1>::message_encoding);
+  channel1.set_message_encoding(static_cast<MessageEncoding>(clockwork::LoggingTraits<MessageType1>::message_encoding));
   channel1.get_underlying_schema_name().set_truncate(clockwork::LoggingTraits<MessageType1>::schema_name);
-  channel1.set_schema_encoding(clockwork::LoggingTraits<MessageType1>::schema_encoding);
+  channel1.set_schema_encoding(static_cast<SchemaEncoding>(clockwork::LoggingTraits<MessageType1>::schema_encoding));
   const auto schema_definition1 = std::as_bytes(std::span{clockwork::LoggingTraits<MessageType1>::schema_definition});
   channel1.get_underlying_schema_definition().insert(
     channel1.get_underlying_schema_definition().begin(), schema_definition1.begin(), schema_definition1.end());
@@ -57,9 +59,9 @@ constexpr auto num_slots = 10U;
   channel2.set_num_slots(num_slots);
   channel2.set_message_size(sizeof(MessageType2));
   channel2.get_underlying_channel_name().set_truncate("channel2");
-  channel2.set_message_encoding(clockwork::LoggingTraits<MessageType2>::message_encoding);
+  channel2.set_message_encoding(static_cast<MessageEncoding>(clockwork::LoggingTraits<MessageType2>::message_encoding));
   channel2.get_underlying_schema_name().set_truncate(clockwork::LoggingTraits<MessageType2>::schema_name);
-  channel2.set_schema_encoding(clockwork::LoggingTraits<MessageType2>::schema_encoding);
+  channel2.set_schema_encoding(static_cast<SchemaEncoding>(clockwork::LoggingTraits<MessageType2>::schema_encoding));
   const auto schema_definition2 = std::as_bytes(std::span{clockwork::LoggingTraits<MessageType2>::schema_definition});
   channel2.get_underlying_schema_definition().insert(
     channel2.get_underlying_schema_definition().begin(), schema_definition2.begin(), schema_definition2.end());
@@ -70,9 +72,9 @@ constexpr auto num_slots = 10U;
   channel3.set_num_slots(num_slots);
   channel3.set_message_size(sizeof(MessageType2));
   channel3.get_underlying_channel_name().set_truncate("channel2");
-  channel3.set_message_encoding(clockwork::LoggingTraits<MessageType2>::message_encoding);
+  channel3.set_message_encoding(static_cast<MessageEncoding>(clockwork::LoggingTraits<MessageType2>::message_encoding));
   channel3.get_underlying_schema_name().set_truncate(clockwork::LoggingTraits<MessageType2>::schema_name);
-  channel3.set_schema_encoding(clockwork::LoggingTraits<MessageType2>::schema_encoding);
+  channel3.set_schema_encoding(static_cast<SchemaEncoding>(clockwork::LoggingTraits<MessageType2>::schema_encoding));
   channel3.get_underlying_schema_definition().insert(
     channel3.get_underlying_schema_definition().begin(), schema_definition2.begin(), schema_definition2.end());
   channel3.set_channel_type(ChannelType::persistent);
@@ -80,10 +82,10 @@ constexpr auto num_slots = 10U;
   return config_ptr;
 }
 
-[[nodiscard]] std::unique_ptr<LoggerConfigTap>
+[[nodiscard]] std::shared_ptr<clockwork::Tappy<LoggerConfig>>
 get_test_logger_config(std::string_view log_root_dir, std::string_view pinion_shm_root)
 {
-  auto config_ptr = std::make_unique<LoggerConfigTap>();
+  auto config_ptr = std::make_shared<clockwork::Tappy<LoggerConfig>>();
   auto& config = *config_ptr;
   config.get_underlying_log_root_dir().set_truncate(log_root_dir);
   config.get_underlying_pinion_shm_root().set_truncate(pinion_shm_root);
@@ -93,9 +95,9 @@ get_test_logger_config(std::string_view log_root_dir, std::string_view pinion_sh
   return config_ptr;
 }
 
-[[nodiscard]] std::unique_ptr<clockwork::Tappy<ChannelMessageRatesConfig>> get_test_channel_message_rates_config()
+[[nodiscard]] std::shared_ptr<clockwork::Tappy<ChannelMessageRatesConfig>> get_test_channel_message_rates_config()
 {
-  auto config_ptr = std::make_unique<clockwork::Tappy<ChannelMessageRatesConfig>>();
+  auto config_ptr = std::make_shared<clockwork::Tappy<ChannelMessageRatesConfig>>();
   auto& config = *config_ptr;
   config.set_window_size_sec(5U);
   auto& channel1_rate = config.get_underlying_channel_message_rates().emplace_back();
@@ -107,9 +109,9 @@ get_test_logger_config(std::string_view log_root_dir, std::string_view pinion_sh
   return config_ptr;
 }
 
-[[nodiscard]] std::unique_ptr<ChannelPublisherConfigTap> get_test_channel_publisher_config()
+[[nodiscard]] std::shared_ptr<clockwork::Tappy<ChannelPublisherConfig<>>> get_test_channel_publisher_config()
 {
-  auto config_ptr = std::make_unique<ChannelPublisherConfigTap>();
+  auto config_ptr = std::make_shared<clockwork::Tappy<ChannelPublisherConfig<>>>();
   auto& config = *config_ptr;
 
   using MessageType1 = clockwork::Tappy<clockwork::tests::SimpleSchemaV1>;
@@ -141,10 +143,10 @@ get_test_logger_config(std::string_view log_root_dir, std::string_view pinion_sh
   return config_ptr;
 }
 
-[[nodiscard]] std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap>
+[[nodiscard]] std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
 get_test_metrics_channel_metadata_config()
 {
-  auto config_ptr = std::make_shared<clockwork::tools::MetricsChannelMetadataConfigTap>();
+  auto config_ptr = std::make_shared<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>();
   auto& config = *config_ptr;
   auto& channel1 = config.get_underlying_metrics_channels().emplace_back();
   channel1.get_underlying_metrics_channel_name().set_truncate("metrics_channel1");

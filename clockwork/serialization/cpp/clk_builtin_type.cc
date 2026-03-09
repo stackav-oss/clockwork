@@ -3,13 +3,17 @@
 
 #include "clockwork/serialization/cpp/clk_builtin_type.hh"
 
+#include "clockwork/serialization/cpp/clk_schema_type_lib.hh"
 #include "clockwork/serialization/cpp/clk_type.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/bits.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
+#include <google/protobuf/repeated_ptr_field.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -17,15 +21,17 @@
 #include <exception>
 #include <functional>
 #include <initializer_list>
-#include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -46,7 +52,8 @@ constexpr std::initializer_list<std::pair<const std::string_view, ClkTypeId>> bu
   {".Duration", ClkTypeId::duration},  {".Byte", ClkTypeId::byte},
   {".Uuid", ClkTypeId::uuid},          {".FixedArray", ClkTypeId::fixed_array},
   {".VarArray", ClkTypeId::var_array}, {".VarString", ClkTypeId::var_string},
-  {".Optional", ClkTypeId::optional},
+  {".Optional", ClkTypeId::optional},  {".FixedSoa", ClkTypeId::fixed_soa},
+  {".VarSoa", ClkTypeId::var_soa},
 };
 
 /// Convert the fully qualified name of a built in type to a type ID
@@ -134,28 +141,13 @@ constexpr std::initializer_list<std::pair<const std::string_view, ClkTypeId>> bu
   return value;
 }
 
-/// Upgrade an integer value from SrcValueType to DestValueType
+/// Upgrade a numeric value from SrcValueType to DestValueType
 /// @tparam SrcValueType Source value type
 /// @tparam DestValueType Destination value type
 /// @param[in] src_span Source value span
 /// @param[in] dest_span Destination value span
 template <typename SrcValueType, typename DestValueType>
-void upgrade_integer(std::span<const std::byte> src_span, std::span<std::byte> dest_span)
-{
-  const auto src_value = jewels::memory::bit_cast_to<SrcValueType>(
-    std::span<const std::byte, sizeof(SrcValueType)>{src_span.first(sizeof(SrcValueType))});
-  jewels::memory::write_as_bytes(
-    static_cast<DestValueType>(src_value),
-    std::span<std::byte, sizeof(DestValueType)>{dest_span.first(sizeof(DestValueType))});
-}
-
-/// Upgrade a floating point value from SrcValueType to DestValueType
-/// @tparam SrcValueType Source value type
-/// @tparam DestValueType Destination value type
-/// @param[in] src_span Source value span
-/// @param[in] dest_span Destination value span
-template <typename SrcValueType, typename DestValueType>
-void upgrade_floating_point(std::span<const std::byte> src_span, std::span<std::byte> dest_span)
+void upgrade_numeric(std::span<const std::byte> src_span, std::span<std::byte> dest_span)
 {
   const auto src_value = jewels::memory::bit_cast_to<SrcValueType>(
     std::span<const std::byte, sizeof(SrcValueType)>{src_span.first(sizeof(SrcValueType))});
@@ -195,56 +187,30 @@ void ClkPrimitiveUpgrader<ValueType>::upgrade(std::span<const std::byte> src_spa
   }
 }
 
-/// Clockwork upgrader for integer types
+/// Clockwork upgrader for numeric types
 /// @tparam SrcValueType Source value type
 /// @tparam DestValueType Destination value type
 template <typename SrcValueType, typename DestValueType>
-class ClkIntegerUpgrader : public ClkTypeUpgrader
+class ClkNumericUpgrader : public ClkTypeUpgrader
 {
 public:
-  ClkIntegerUpgrader() noexcept = default;
+  ClkNumericUpgrader() noexcept = default;
 
-  ~ClkIntegerUpgrader() noexcept override = default;
+  ~ClkNumericUpgrader() noexcept override = default;
 
-  ClkIntegerUpgrader(const ClkIntegerUpgrader&) = delete;
-  ClkIntegerUpgrader& operator=(const ClkIntegerUpgrader&) = delete;
-  ClkIntegerUpgrader(ClkIntegerUpgrader&&) = delete;
-  ClkIntegerUpgrader& operator=(ClkIntegerUpgrader&&) = delete;
+  ClkNumericUpgrader(const ClkNumericUpgrader&) = delete;
+  ClkNumericUpgrader& operator=(const ClkNumericUpgrader&) = delete;
+  ClkNumericUpgrader(ClkNumericUpgrader&&) = delete;
+  ClkNumericUpgrader& operator=(ClkNumericUpgrader&&) = delete;
 
   void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
 };
 
 template <typename SrcValueType, typename DestValueType>
-void ClkIntegerUpgrader<SrcValueType, DestValueType>::upgrade(
+void ClkNumericUpgrader<SrcValueType, DestValueType>::upgrade(
   std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
 {
-  upgrade_integer<SrcValueType, DestValueType>(src_span, dest_span);
-}
-
-/// Clockwork upgrader for floating point types
-/// @tparam SrcValueType Source value type
-/// @tparam DestValueType Destination value type
-template <typename SrcValueType, typename DestValueType>
-class ClkFloatingPointUpgrader : public ClkTypeUpgrader
-{
-public:
-  ClkFloatingPointUpgrader() noexcept = default;
-
-  ~ClkFloatingPointUpgrader() noexcept override = default;
-
-  ClkFloatingPointUpgrader(const ClkFloatingPointUpgrader&) = delete;
-  ClkFloatingPointUpgrader& operator=(const ClkFloatingPointUpgrader&) = delete;
-  ClkFloatingPointUpgrader(ClkFloatingPointUpgrader&&) = delete;
-  ClkFloatingPointUpgrader& operator=(ClkFloatingPointUpgrader&&) = delete;
-
-  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
-};
-
-template <typename SrcValueType, typename DestValueType>
-void ClkFloatingPointUpgrader<SrcValueType, DestValueType>::upgrade(
-  std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
-{
-  upgrade_floating_point<SrcValueType, DestValueType>(src_span, dest_span);
+  upgrade_numeric<SrcValueType, DestValueType>(src_span, dest_span);
 }
 
 /// Clockwork upgrader for fixed array types
@@ -1040,6 +1006,656 @@ void ClkOptionalFromVarStringUpgrader::upgrade(
   }
 }
 
+/// Field mapping information for SoA-to-SoA upgrade
+struct SoaFieldMapping
+{
+  /// Source field layout
+  FieldLayoutInfo src_field;
+
+  /// Destination field layout
+  FieldLayoutInfo dest_field;
+
+  /// Type upgrader for converting field values
+  jewels::memory::ObjectPtr<const ClkTypeUpgrader> field_upgrader;
+};
+
+/// Parameters for ClkSoaToSoaUpgrader constructor
+struct ClkSoaToSoaUpgraderParams
+{
+  std::string_view src_type_fqn;
+  std::string_view dest_type_fqn;
+  size_t src_size_field_offset;
+  size_t dest_size_field_offset;
+  size_t array_size;
+  std::vector<SoaFieldMapping> field_mappings;
+  std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>> new_field_initializers;
+};
+
+/// Clockwork SoA-to-SoA upgrader
+/// Handles conversion between different SoA schemas with field-level transformations
+class ClkSoaToSoaUpgrader : public ClkTypeUpgrader
+{
+public:
+  /// Constructor for SoA-to-SoA upgrader
+  explicit ClkSoaToSoaUpgrader(ClkSoaToSoaUpgraderParams params);
+
+  ~ClkSoaToSoaUpgrader() override = default;
+
+  ClkSoaToSoaUpgrader(const ClkSoaToSoaUpgrader&) = delete;
+  ClkSoaToSoaUpgrader& operator=(const ClkSoaToSoaUpgrader&) = delete;
+  ClkSoaToSoaUpgrader(ClkSoaToSoaUpgrader&&) = delete;
+  ClkSoaToSoaUpgrader& operator=(ClkSoaToSoaUpgrader&&) = delete;
+
+  /// @see ClkTypeUpgrader::upgrade
+  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
+
+private:
+  /// Source type FQN for error messages
+  std::string src_type_fqn_;
+
+  /// Destination type FQN for error messages
+  std::string dest_type_fqn_;
+
+  /// Source size field offset (for VarSoa)
+  size_t src_size_field_offset_;
+
+  /// Destination size field offset (for VarSoa)
+  size_t dest_size_field_offset_;
+
+  /// Array size for FixedSoa (ignored for VarSoa)
+  size_t array_size_;
+
+  /// Field mapping information
+  std::vector<SoaFieldMapping> field_mappings_;
+
+  /// Initializers for newly added fields
+  std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>> new_field_initializers_;
+};
+
+ClkSoaToSoaUpgrader::ClkSoaToSoaUpgrader(ClkSoaToSoaUpgraderParams params)
+  : src_type_fqn_(params.src_type_fqn),
+    dest_type_fqn_(params.dest_type_fqn),
+    src_size_field_offset_(params.src_size_field_offset),
+    dest_size_field_offset_(params.dest_size_field_offset),
+    array_size_(params.array_size),
+    field_mappings_(std::move(params.field_mappings)),
+    new_field_initializers_(std::move(params.new_field_initializers))
+{
+}
+
+void ClkSoaToSoaUpgrader::upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
+{
+  const bool src_is_var_soa = (src_size_field_offset_ != 0U);
+  const bool dest_is_var_soa = (dest_size_field_offset_ != 0U);
+
+  size_t array_length = array_size_;
+  auto size_value = static_cast<uint32_t>(array_length);
+
+  if (src_is_var_soa)
+  {
+    std::memcpy(&size_value, src_span.subspan(src_size_field_offset_).data(), sizeof(uint32_t));
+    array_length = static_cast<size_t>(size_value);
+  }
+
+  if (dest_is_var_soa)
+  {
+    std::memcpy(dest_span.subspan(dest_size_field_offset_).data(), &size_value, sizeof(uint32_t));
+  }
+
+  for (const auto& mapping : field_mappings_)
+  {
+    const auto& src_field = mapping.src_field;
+    const auto& dest_field = mapping.dest_field;
+    const auto& field_upgrader = mapping.field_upgrader;
+
+    auto src_field_array = get_soa_field_array(src_span, src_field, array_length);
+    auto dest_field_array = get_soa_field_array(dest_span, dest_field, array_length);
+
+    try
+    {
+      for (size_t i = 0U; i < array_length; ++i)
+      {
+        auto src_element = src_field_array.subspan(i * src_field.size, src_field.size);
+        auto dest_element = dest_field_array.subspan(i * dest_field.size, dest_field.size);
+
+        field_upgrader->upgrade(src_element, dest_element);
+      }
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Failed to upgrade field {} from {} to {}: {}",
+          src_field.field_num,
+          src_type_fqn_,
+          dest_type_fqn_,
+          exc.what()));
+    }
+  }
+
+  for (const auto& [new_field, initializer] : new_field_initializers_)
+  {
+    auto dest_field_array = get_soa_field_array(dest_span, new_field, array_length);
+
+    try
+    {
+      for (size_t i = 0U; i < array_length; ++i)
+      {
+        initializer->initialize(dest_field_array.subspan(i * new_field.size, new_field.size));
+      }
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Failed to initialize new field {} in {}: {}", new_field.field_num, dest_type_fqn_, exc.what()));
+    }
+  }
+}
+
+/// Field mapping for AoS-to-SoA upgrade (maps schema field offset to SoA field array layout)
+struct AosToSoaFieldMapping
+{
+  /// Field number
+  int32_t field_num;
+
+  /// Source field offset within a single AoS element
+  size_t src_field_offset;
+
+  /// Source field size
+  size_t src_field_size;
+
+  /// Destination field layout in SoA
+  FieldLayoutInfo dest_field;
+
+  /// Type upgrader for converting field values
+  jewels::memory::ObjectPtr<const ClkTypeUpgrader> field_upgrader;
+};
+
+/// Parameters for ClkArrayToSoaUpgrader constructor
+struct ClkArrayToSoaUpgraderParams
+{
+  std::string_view src_type_fqn;
+  std::string_view dest_type_fqn;
+  size_t src_element_size;
+  size_t src_size_field_offset;
+  size_t src_fixed_array_size;
+  bool src_is_optional;
+  size_t dest_size_field_offset;
+  size_t dest_array_size;
+  std::vector<AosToSoaFieldMapping> field_mappings;
+  std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>> new_field_initializers;
+};
+
+/// Clockwork AoS-to-SoA upgrader (transpose from Array-of-Structures to Struct-of-Arrays)
+/// Handles conversion from VarArray/FixedArray/Optional of schema to VarSoa/FixedSoa
+class ClkArrayToSoaUpgrader : public ClkTypeUpgrader
+{
+public:
+  /// Constructor for AoS-to-SoA upgrader
+  explicit ClkArrayToSoaUpgrader(ClkArrayToSoaUpgraderParams params);
+
+  ~ClkArrayToSoaUpgrader() override = default;
+
+  ClkArrayToSoaUpgrader(const ClkArrayToSoaUpgrader&) = delete;
+  ClkArrayToSoaUpgrader& operator=(const ClkArrayToSoaUpgrader&) = delete;
+  ClkArrayToSoaUpgrader(ClkArrayToSoaUpgrader&&) = delete;
+  ClkArrayToSoaUpgrader& operator=(ClkArrayToSoaUpgrader&&) = delete;
+
+  /// @see ClkTypeUpgrader::upgrade
+  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
+
+private:
+  /// Source type FQN for error messages
+  std::string src_type_fqn_;
+
+  /// Destination type FQN for error messages
+  std::string dest_type_fqn_;
+
+  /// Source element size (for AoS)
+  size_t src_element_size_;
+
+  /// Source size field offset (for VarArray, has_value offset for Optional, 0 for FixedArray)
+  size_t src_size_field_offset_;
+
+  /// Source fixed array size (for FixedArray, 0 for VarArray/Optional)
+  size_t src_fixed_array_size_;
+
+  /// True if source type is Optional
+  bool src_is_optional_;
+
+  /// Destination size field offset (for VarSoa, 0 for FixedSoa)
+  size_t dest_size_field_offset_;
+
+  /// Destination array size (capacity for VarSoa, size for FixedSoa)
+  size_t dest_array_size_;
+
+  /// Field mappings from AoS element to SoA field arrays
+  std::vector<AosToSoaFieldMapping> field_mappings_;
+
+  /// Initializers for newly added fields
+  std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>> new_field_initializers_;
+};
+
+ClkArrayToSoaUpgrader::ClkArrayToSoaUpgrader(ClkArrayToSoaUpgraderParams params)
+  : src_type_fqn_(params.src_type_fqn),
+    dest_type_fqn_(params.dest_type_fqn),
+    src_element_size_(params.src_element_size),
+    src_size_field_offset_(params.src_size_field_offset),
+    src_fixed_array_size_(params.src_fixed_array_size),
+    src_is_optional_(params.src_is_optional),
+    dest_size_field_offset_(params.dest_size_field_offset),
+    dest_array_size_(params.dest_array_size),
+    field_mappings_(std::move(params.field_mappings)),
+    new_field_initializers_(std::move(params.new_field_initializers))
+{
+}
+
+void ClkArrayToSoaUpgrader::upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
+{
+  // Determine source array length
+  size_t src_array_length = src_fixed_array_size_;
+  if (src_is_optional_)
+  {
+    // Optional: read has_value flag (1 byte)
+    const bool has_value = (src_span[src_size_field_offset_] != std::byte{0});
+    src_array_length = has_value ? 1U : 0U;
+  }
+  else if (src_size_field_offset_ != 0U)
+  {
+    // VarArray: read size from size field (uint64_t)
+    uint64_t size_value{};
+    std::memcpy(&size_value, src_span.subspan(src_size_field_offset_).data(), sizeof(uint64_t));
+    src_array_length = static_cast<size_t>(size_value);
+  }
+
+  // For FixedSoa destination, the array_length is always dest_array_size_
+  // For VarSoa destination, write the size and use actual element count
+  const size_t dest_array_length = (dest_size_field_offset_ != 0U) ? src_array_length : dest_array_size_;
+
+  if (dest_size_field_offset_ != 0U)
+  {
+    const auto size_value = static_cast<uint32_t>(src_array_length);
+    std::memcpy(dest_span.subspan(dest_size_field_offset_).data(), &size_value, sizeof(uint32_t));
+  }
+
+  // Transpose: iterate over each element in the source array and extract fields into SoA field arrays
+  for (size_t elem_idx = 0U; elem_idx < src_array_length; ++elem_idx)
+  {
+    const size_t src_elem_offset = elem_idx * src_element_size_;
+
+    for (const auto& mapping : field_mappings_)
+    {
+      auto src_field = src_span.subspan(src_elem_offset + mapping.src_field_offset, mapping.src_field_size);
+      auto dest_field_array = get_soa_field_array(dest_span, mapping.dest_field, dest_array_length);
+      auto dest_field = dest_field_array.subspan(elem_idx * mapping.dest_field.size, mapping.dest_field.size);
+
+      try
+      {
+        mapping.field_upgrader->upgrade(src_field, dest_field);
+      }
+      catch (const ClkTypeUpgradeError& exc)
+      {
+        throw ClkTypeUpgradeError(
+          fmt::format(
+            "Failed to upgrade field {} at element {} from {} to {}: {}",
+            mapping.field_num,
+            elem_idx,
+            src_type_fqn_,
+            dest_type_fqn_,
+            exc.what()));
+      }
+    }
+  }
+
+  // Initialize newly added fields for all elements
+  for (const auto& [new_field, initializer] : new_field_initializers_)
+  {
+    auto dest_field_array = get_soa_field_array(dest_span, new_field, dest_array_length);
+
+    try
+    {
+      for (size_t elem_idx = 0U; elem_idx < dest_array_length; ++elem_idx)
+      {
+        initializer->initialize(dest_field_array.subspan(elem_idx * new_field.size, new_field.size));
+      }
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Failed to initialize new field {} in {}: {}", new_field.field_num, dest_type_fqn_, exc.what()));
+    }
+  }
+}
+
+/// Field mapping for SoA-to-AoS upgrade (maps SoA field array layout to schema field offset)
+struct SoaToAosFieldMapping
+{
+  /// Field number
+  int32_t field_num;
+
+  /// Source field layout in SoA
+  FieldLayoutInfo src_field;
+
+  /// Destination field offset within a single AoS element
+  size_t dest_field_offset;
+
+  /// Destination field size
+  size_t dest_field_size;
+
+  /// Type upgrader for converting field values
+  jewels::memory::ObjectPtr<const ClkTypeUpgrader> field_upgrader;
+};
+
+/// Parameters for ClkSoaToArrayUpgrader constructor
+struct ClkSoaToArrayUpgraderParams
+{
+  std::string_view src_type_fqn;
+  std::string_view dest_type_fqn;
+  size_t src_size_field_offset;
+  size_t src_fixed_array_size;
+  size_t dest_element_size;
+  size_t dest_size_field_offset;
+  size_t dest_array_size;
+  std::vector<SoaToAosFieldMapping> field_mappings;
+  std::vector<ClkFieldInitializer> new_field_initializers;
+};
+
+/// Clockwork SoA-to-AoS upgrader (un-transpose from Struct-of-Arrays to Array-of-Structures)
+/// Handles conversion from VarSoa/FixedSoa to VarArray/FixedArray/Optional of schema
+class ClkSoaToArrayUpgrader : public ClkTypeUpgrader
+{
+public:
+  /// Constructor for SoA-to-AoS upgrader
+  explicit ClkSoaToArrayUpgrader(ClkSoaToArrayUpgraderParams params);
+
+  ~ClkSoaToArrayUpgrader() override = default;
+
+  ClkSoaToArrayUpgrader(const ClkSoaToArrayUpgrader&) = delete;
+  ClkSoaToArrayUpgrader& operator=(const ClkSoaToArrayUpgrader&) = delete;
+  ClkSoaToArrayUpgrader(ClkSoaToArrayUpgrader&&) = delete;
+  ClkSoaToArrayUpgrader& operator=(ClkSoaToArrayUpgrader&&) = delete;
+
+  /// @see ClkTypeUpgrader::upgrade
+  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
+
+private:
+  /// Source type FQN for error messages
+  std::string src_type_fqn_;
+
+  /// Destination type FQN for error messages
+  std::string dest_type_fqn_;
+
+  /// Source size field offset (for VarSoa, 0 for FixedSoa)
+  size_t src_size_field_offset_;
+
+  /// Source fixed array size (for FixedSoa, 0 for VarSoa)
+  size_t src_fixed_array_size_;
+
+  /// Destination element size (for AoS)
+  size_t dest_element_size_;
+
+  /// Destination size field offset (for VarArray, 0 for FixedArray/Optional)
+  size_t dest_size_field_offset_;
+
+  /// Destination array size (capacity for VarArray, size for FixedArray)
+  size_t dest_array_size_;
+
+  /// Field mappings from SoA field arrays to AoS element
+  std::vector<SoaToAosFieldMapping> field_mappings_;
+
+  /// Initializers for newly added fields in destination schema
+  std::vector<ClkFieldInitializer> new_field_initializers_;
+};
+
+ClkSoaToArrayUpgrader::ClkSoaToArrayUpgrader(ClkSoaToArrayUpgraderParams params)
+  : src_type_fqn_(params.src_type_fqn),
+    dest_type_fqn_(params.dest_type_fqn),
+    src_size_field_offset_(params.src_size_field_offset),
+    src_fixed_array_size_(params.src_fixed_array_size),
+    dest_element_size_(params.dest_element_size),
+    dest_size_field_offset_(params.dest_size_field_offset),
+    dest_array_size_(params.dest_array_size),
+    field_mappings_(std::move(params.field_mappings)),
+    new_field_initializers_(std::move(params.new_field_initializers))
+{
+}
+
+void ClkSoaToArrayUpgrader::upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
+{
+  size_t src_array_length = src_fixed_array_size_;
+  if (src_size_field_offset_ != 0U)
+  {
+    // VarSoa: read size field
+    uint32_t size_value{};
+    std::memcpy(&size_value, src_span.subspan(src_size_field_offset_).data(), sizeof(uint32_t));
+    src_array_length = static_cast<size_t>(size_value);
+  }
+
+  if (dest_size_field_offset_ != 0U)
+  {
+    // VarArray: write size field
+    const auto size_value = static_cast<uint64_t>(src_array_length);
+    std::memcpy(dest_span.subspan(dest_size_field_offset_).data(), &size_value, sizeof(uint64_t));
+  }
+
+  // Un-transpose: iterate over each element index and reconstruct AoS elements from SoA field arrays
+  for (size_t elem_idx = 0U; elem_idx < src_array_length; ++elem_idx)
+  {
+    const size_t dest_elem_offset = elem_idx * dest_element_size_;
+
+    for (const auto& initializer : new_field_initializers_)
+    {
+      initializer.initialize(dest_span.subspan(dest_elem_offset, dest_element_size_));
+    }
+
+    for (const auto& mapping : field_mappings_)
+    {
+      auto src_field_array = get_soa_field_array(src_span, mapping.src_field, src_array_length);
+      auto src_field = src_field_array.subspan(elem_idx * mapping.src_field.size, mapping.src_field.size);
+      auto dest_field = dest_span.subspan(dest_elem_offset + mapping.dest_field_offset, mapping.dest_field_size);
+
+      try
+      {
+        mapping.field_upgrader->upgrade(src_field, dest_field);
+      }
+      catch (const ClkTypeUpgradeError& exc)
+      {
+        throw ClkTypeUpgradeError(
+          fmt::format(
+            "Failed to upgrade field {} at element {} from {} to {}: {}",
+            mapping.field_num,
+            elem_idx,
+            src_type_fqn_,
+            dest_type_fqn_,
+            exc.what()));
+      }
+    }
+  }
+
+  // For FixedArray destinations with fewer source elements, initialize remaining elements with defaults
+  if (dest_size_field_offset_ == 0U && src_array_length < dest_array_size_)
+  {
+    for (size_t elem_idx = src_array_length; elem_idx < dest_array_size_; ++elem_idx)
+    {
+      const size_t dest_elem_offset = elem_idx * dest_element_size_;
+      for (const auto& initializer : new_field_initializers_)
+      {
+        initializer.initialize(dest_span.subspan(dest_elem_offset, dest_element_size_));
+      }
+    }
+  }
+}
+
+/// Parameters for ClkSoaToOptionalUpgrader constructor
+struct ClkSoaToOptionalUpgraderParams
+{
+  std::string_view src_type_fqn;
+  std::string_view dest_type_fqn;
+  size_t src_size_field_offset;
+  size_t src_fixed_array_size;
+  size_t dest_element_size;
+  size_t dest_has_value_offset;
+  std::vector<SoaToAosFieldMapping> field_mappings;
+  std::vector<ClkFieldInitializer> new_field_initializers;
+};
+
+/// Clockwork SoA-to-Optional upgrader (un-transpose from SoA to Optional<Schema>)
+/// Handles conversion from VarSoa/FixedSoa to Optional<Schema>
+/// Requires that the SoA has at most 1 element
+class ClkSoaToOptionalUpgrader : public ClkTypeUpgrader
+{
+public:
+  /// Constructor for SoA-to-Optional upgrader
+  explicit ClkSoaToOptionalUpgrader(ClkSoaToOptionalUpgraderParams params);
+
+  ~ClkSoaToOptionalUpgrader() override = default;
+
+  ClkSoaToOptionalUpgrader(const ClkSoaToOptionalUpgrader&) = delete;
+  ClkSoaToOptionalUpgrader& operator=(const ClkSoaToOptionalUpgrader&) = delete;
+  ClkSoaToOptionalUpgrader(ClkSoaToOptionalUpgrader&&) = delete;
+  ClkSoaToOptionalUpgrader& operator=(ClkSoaToOptionalUpgrader&&) = delete;
+
+  /// @see ClkTypeUpgrader::upgrade
+  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
+
+private:
+  /// Source type FQN for error messages
+  std::string src_type_fqn_;
+
+  /// Destination type FQN for error messages
+  std::string dest_type_fqn_;
+
+  /// Source size field offset (for VarSoa, 0 for FixedSoa)
+  size_t src_size_field_offset_;
+
+  /// Source fixed array size (for FixedSoa, 0 for VarSoa)
+  size_t src_fixed_array_size_;
+
+  /// Destination element size
+  size_t dest_element_size_;
+
+  /// Destination has_value field offset
+  size_t dest_has_value_offset_;
+
+  /// Field mappings from SoA field arrays to Optional element
+  std::vector<SoaToAosFieldMapping> field_mappings_;
+
+  /// Initializers for newly added fields in destination schema
+  std::vector<ClkFieldInitializer> new_field_initializers_;
+};
+
+ClkSoaToOptionalUpgrader::ClkSoaToOptionalUpgrader(ClkSoaToOptionalUpgraderParams params)
+  : src_type_fqn_(params.src_type_fqn),
+    dest_type_fqn_(params.dest_type_fqn),
+    src_size_field_offset_(params.src_size_field_offset),
+    src_fixed_array_size_(params.src_fixed_array_size),
+    dest_element_size_(params.dest_element_size),
+    dest_has_value_offset_(params.dest_has_value_offset),
+    field_mappings_(std::move(params.field_mappings)),
+    new_field_initializers_(std::move(params.new_field_initializers))
+{
+}
+
+void ClkSoaToOptionalUpgrader::upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const
+{
+  size_t src_array_length = src_fixed_array_size_;
+  if (src_size_field_offset_ != 0U)
+  {
+    // VarSoa: read size field
+    uint32_t size_value{};
+    std::memcpy(&size_value, src_span.subspan(src_size_field_offset_).data(), sizeof(uint32_t));
+    src_array_length = static_cast<size_t>(size_value);
+  }
+
+  // Optional can only hold 0 or 1 elements
+  if (src_array_length > 1U)
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format("Cannot convert SoA with {} elements to Optional (max 1 element)", src_array_length));
+  }
+
+  const bool has_value = (src_array_length == 1U);
+  dest_span[dest_has_value_offset_] = static_cast<std::byte>(has_value ? 1 : 0);
+
+  if (!has_value)
+  {
+    return;
+  }
+
+  for (const auto& initializer : new_field_initializers_)
+  {
+    initializer.initialize(dest_span.subspan(0U, dest_element_size_));
+  }
+
+  // Un-transpose the single element
+  for (const auto& mapping : field_mappings_)
+  {
+    auto src_field_array = get_soa_field_array(src_span, mapping.src_field, 1U);
+    auto src_field = src_field_array.subspan(0U, mapping.src_field.size);
+    auto dest_field = dest_span.subspan(mapping.dest_field_offset, mapping.dest_field_size);
+
+    try
+    {
+      mapping.field_upgrader->upgrade(src_field, dest_field);
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Failed to upgrade field {} from {} to {}: {}",
+          mapping.field_num,
+          src_type_fqn_,
+          dest_type_fqn_,
+          exc.what()));
+    }
+  }
+}
+
+// Forward declarations for helper functions used by make_upgrader methods
+void build_soa_to_aos_upgrader_components(
+  jewels::Out<std::vector<SoaToAosFieldMapping>> field_mappings_out,
+  jewels::Out<std::vector<ClkFieldInitializer>> new_field_initializers_out,
+  const ClkSchemaType& src_schema,
+  const ClkSchemaType& dest_schema,
+  const std::vector<FieldLayoutInfo>& src_field_layouts);
+
+/// Parameters for make_soa_to_array_upgrader helper function
+struct MakeSoaToArrayUpgraderParams
+{
+  std::reference_wrapper<std::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>>
+    upgrader_cache;
+  std::reference_wrapper<const ClkType> src_type;
+  std::reference_wrapper<const ClkSchemaType> src_schema;
+  std::reference_wrapper<const ClkSchemaType> dest_schema;
+  std::reference_wrapper<const std::vector<FieldLayoutInfo>> src_field_layouts;
+  size_t src_size_field_offset;
+  size_t src_fixed_array_size;
+  size_t dest_element_size;
+  size_t dest_size_field_offset;
+  size_t dest_array_size;
+};
+
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+make_soa_to_array_upgrader(const MakeSoaToArrayUpgraderParams& params);
+
+/// Parameters for make_soa_to_optional_upgrader helper function
+struct MakeSoaToOptionalUpgraderParams
+{
+  std::reference_wrapper<std::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>>
+    upgrader_cache;
+  std::reference_wrapper<const ClkType> src_type;
+  std::reference_wrapper<const ClkSchemaType> src_schema;
+  std::reference_wrapper<const ClkSchemaType> dest_schema;
+  std::reference_wrapper<const std::vector<FieldLayoutInfo>> src_field_layouts;
+  size_t src_size_field_offset;
+  size_t src_fixed_array_size;
+  size_t dest_element_size;
+  size_t dest_has_value_offset;
+};
+
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+make_soa_to_optional_upgrader(const MakeSoaToOptionalUpgraderParams& params);
+
 /// Clockwork tag type (tag types are never upgraded)
 class ClkTagType : public ClkType
 {
@@ -1060,7 +1676,7 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
 };
 
 [[nodiscard]] size_t ClkTagType::get_size() const noexcept
@@ -1083,7 +1699,7 @@ public:
   return src_type.get_type_id() == ClkTypeId::tag;
 }
 
-void ClkTagType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkTagType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*allow_changes*/, std::string_view name)
 {
   if (src_type.get_type_id() != get_type_id())
   {
@@ -1121,7 +1737,13 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// Check for unexpected underlying schema changes
+  /// @param[in] src_type Source clockwor type
+  /// @param[in] name Name to use in error messages
+  /// @throws runtime_error if an unexpected schema change is found
+  void check_for_unexpected_underlying_schema_changes(ClkType& src_type, std::string_view name);
 
 private:
   /// Type size in bytes
@@ -1153,12 +1775,24 @@ ClkBuiltInType::ClkBuiltInType(
          src_type.get_alignment() == get_alignment();
 }
 
-void ClkBuiltInType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkBuiltInType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
 {
-  if (src_type.get_type_id() != get_type_id())
+  if (!allow_changes && src_type.get_type_id() != get_type_id())
   {
     throw ClkTypeUpgradeError(
       fmt::format("Unexpected type change from {} to {} for {}", src_type.get_type_id(), get_type_id(), name));
+  }
+}
+
+void ClkBuiltInType::check_for_unexpected_underlying_schema_changes(ClkType& src_type, std::string_view name)
+{
+  auto& this_underlying_type = get_lowest_underlying_type();
+  if (
+    this_underlying_type.get_type_id() == ClkTypeId::schema ||
+    this_underlying_type.get_type_id() == ClkTypeId::clk_enum)
+  {
+    auto& src_underlying_type = src_type.get_lowest_underlying_type();
+    this_underlying_type.check_for_unexpected_schema_changes(src_underlying_type, true, name);
   }
 }
 
@@ -1352,42 +1986,52 @@ ClkIntegerType<ValueType>::make_upgrader(const ClkType& src_type)
   case ClkTypeId::uint8:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<uint8_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint8_t, ValueType>>())
          .first->second);
   case ClkTypeId::uint16:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<uint16_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint16_t, ValueType>>())
          .first->second);
   case ClkTypeId::uint32:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<uint32_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint32_t, ValueType>>())
          .first->second);
   case ClkTypeId::uint64:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<uint64_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint64_t, ValueType>>())
          .first->second);
   case ClkTypeId::int8:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<int8_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int8_t, ValueType>>())
          .first->second);
   case ClkTypeId::int16:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<int16_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int16_t, ValueType>>())
          .first->second);
   case ClkTypeId::int32:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<int32_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int32_t, ValueType>>())
          .first->second);
   case ClkTypeId::int64:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<int64_t, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int64_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::float32:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<float, ValueType>>())
+         .first->second);
+  case ClkTypeId::float64:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<double, ValueType>>())
          .first->second);
   default:
     throw ClkTypeUpgradeError(
@@ -1443,7 +2087,7 @@ ClkTimeType::ClkTimeType(std::string_view fqn, ClkTypeId type_id, size_t type_in
   {
     return jewels::memory::make_non_null_from_ref(
       *get_upgrader_cache()
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkIntegerUpgrader<int64_t, int64_t>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int64_t, int64_t>>())
          .first->second);
   }
   return ClkIntegerType<int64_t>::make_upgrader(src_type);
@@ -1524,15 +2168,55 @@ ClkFloatingPointType<ValueType>::make_upgrader(const ClkType& src_type)
   }
   switch (src_type.get_type_id())
   {
+  case ClkTypeId::uint8:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint8_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::uint16:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint16_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::uint32:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint32_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::uint64:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<uint64_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::int8:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int8_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::int16:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int16_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::int32:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int32_t, ValueType>>())
+         .first->second);
+  case ClkTypeId::int64:
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<int64_t, ValueType>>())
+         .first->second);
   case ClkTypeId::float32:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkFloatingPointUpgrader<float, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<float, ValueType>>())
          .first->second);
   case ClkTypeId::float64:
     return jewels::memory::make_non_null_from_ref(
       *upgrader_cache
-         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkFloatingPointUpgrader<double, ValueType>>())
+         .emplace(src_type.get_type_index(), jewels::memory::make_shared<ClkNumericUpgrader<double, ValueType>>())
          .first->second);
   default:
     throw ClkTypeUpgradeError(
@@ -1663,7 +2347,13 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::get_lowest_underlying_type
+  [[nodiscard]] ClkType& get_lowest_underlying_type() override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
 
 private:
   /// Element type index
@@ -1749,7 +2439,13 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::get_lowest_underlying_type
+  [[nodiscard]] ClkType& get_lowest_underlying_type() override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
 
 private:
   /// Element type index
@@ -1812,7 +2508,10 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
 
 private:
   /// String size
@@ -1881,13 +2580,208 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::get_lowest_underlying_type
+  [[nodiscard]] ClkType& get_lowest_underlying_type() override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
 
 private:
   /// Element type index
   size_t element_type_index_;
 
   /// Representations for the types in the protobuf schema
+  jewels::memory::ObjectPtr<ClkTypeFactory> factory_;
+};
+
+/// Clockwork fixed SoA (Struct-of-Arrays) type
+class ClkFixedSoaType : public ClkBuiltInType
+{
+public:
+  /// Parameters for ClkFixedSoaType constructor
+  struct ConstructorParams
+  {
+    std::string_view fqn;
+    ClkTypeId type_id;
+    size_t type_index;
+    size_t size;
+    size_t alignment;
+    size_t element_type_index;
+    size_t array_size;
+    std::vector<FieldLayoutInfo> field_layouts;
+    jewels::memory::ObjectPtr<ClkTypeFactory> factory;
+  };
+
+  /// Constructor, use from_proto to create an instance
+  explicit ClkFixedSoaType(ConstructorParams params);
+
+  ~ClkFixedSoaType() override = default;
+
+  ClkFixedSoaType(const ClkFixedSoaType&) = delete;
+  ClkFixedSoaType& operator=(const ClkFixedSoaType&) = delete;
+  ClkFixedSoaType(ClkFixedSoaType&&) = delete;
+  ClkFixedSoaType& operator=(const ClkFixedSoaType&&) = delete;
+
+  /// Create an instance from a tachyon SoA type protobuf
+  /// @param[in] factory Clockwork type factory
+  /// @param[in] soa_proto Tachyon SoA type protobuf
+  /// @param[in] type_index Type index
+  /// @param[in] maybe_strong_type_fqn Optional fully qualified name of a strong type wrapping this schema
+  /// @returns Clockwork type instance
+  /// @throws runtime_error on failure.
+  [[nodiscard]] static std::unique_ptr<ClkFixedSoaType> from_proto(
+    jewels::memory::ObjectPtr<ClkTypeFactory> factory,
+    const metadata::SoaType& soa_proto,
+    size_t type_index,
+    std::optional<std::string_view> maybe_strong_type_fqn);
+
+  /// @return Element schema type
+  [[nodiscard]] const ClkType& get_element_type() const;
+
+  /// @return Element schema type
+  [[nodiscard]] ClkType& get_element_type();
+
+  /// @return Number of elements in the SoA
+  [[nodiscard]] size_t get_array_size() const noexcept;
+
+  /// @return Field layout information
+  [[nodiscard]] const std::vector<FieldLayoutInfo>& get_field_layouts() const noexcept;
+
+  /// @see ClkType::make_upgrader
+  [[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader> make_upgrader(const ClkType& src_type) override;
+
+  /// @see ClkType::use_memcpy_for_array_upgrade
+  [[nodiscard]] bool use_memcpy_for_array_upgrade(const ClkType& src_type) override;
+
+  /// @see ClkType::is_legacy_wire_compatible
+  [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
+
+  /// @see ClkType::check_for_unexpected_schema_changes
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::get_lowest_underlying_type
+  [[nodiscard]] ClkType& get_lowest_underlying_type() override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
+
+private:
+  /// Element schema type index
+  size_t element_type_index_;
+
+  /// SoA size (number of elements)
+  size_t array_size_;
+
+  /// Field layout information
+  std::vector<FieldLayoutInfo> field_layouts_;
+
+  /// Clockwork type factory
+  jewels::memory::ObjectPtr<ClkTypeFactory> factory_;
+};
+
+/// Clockwork variable SoA (Struct-of-Arrays) type
+class ClkVarSoaType : public ClkBuiltInType
+{
+public:
+  /// Maximum total SoA size that can be upgraded with memcpy
+  /// This is a heuristic to allow upgrading with memcpy when the
+  /// size of the entire type is reasonably small.
+  static constexpr size_t max_memcpy_size = 128U;
+
+  /// Parameters for ClkVarSoaType constructor
+  struct ConstructorParams
+  {
+    std::string_view fqn;
+    ClkTypeId type_id;
+    size_t type_index;
+    size_t size;
+    size_t alignment;
+    size_t element_type_index;
+    size_t array_size;
+    std::vector<FieldLayoutInfo> field_layouts;
+    size_t size_field_offset;
+    size_t size_field_type_index;
+    jewels::memory::ObjectPtr<ClkTypeFactory> factory;
+  };
+
+  /// Constructor, use from_proto to create an instance
+  explicit ClkVarSoaType(ConstructorParams params);
+
+  ~ClkVarSoaType() override = default;
+
+  ClkVarSoaType(const ClkVarSoaType&) = delete;
+  ClkVarSoaType& operator=(const ClkVarSoaType&) = delete;
+  ClkVarSoaType(ClkVarSoaType&&) = delete;
+  ClkVarSoaType& operator=(const ClkVarSoaType&&) = delete;
+
+  /// Create an instance from a tachyon SoA type protobuf
+  /// @param[in] factory Clockwork type factory
+  /// @param[in] soa_proto Tachyon SoA type protobuf
+  /// @param[in] type_index Type index
+  /// @param[in] maybe_strong_type_fqn Optional fully qualified name of a strong type wrapping this schema
+  /// @returns Clockwork type instance
+  /// @throws runtime_error on failure.
+  [[nodiscard]] static std::unique_ptr<ClkVarSoaType> from_proto(
+    jewels::memory::ObjectPtr<ClkTypeFactory> factory,
+    const metadata::SoaType& soa_proto,
+    size_t type_index,
+    std::optional<std::string_view> maybe_strong_type_fqn);
+
+  /// @return Element schema type
+  [[nodiscard]] const ClkType& get_element_type() const;
+
+  /// @return Element schema type
+  [[nodiscard]] ClkType& get_element_type();
+
+  /// @return Maximum number of elements in the SoA
+  [[nodiscard]] size_t get_array_size() const noexcept;
+
+  /// @return Field layout information
+  [[nodiscard]] const std::vector<FieldLayoutInfo>& get_field_layouts() const noexcept;
+
+  /// @return Byte offset of the size field
+  [[nodiscard]] size_t get_size_field_offset() const noexcept;
+
+  /// @return Type of the size field
+  [[nodiscard]] const ClkType& get_size_field_type() const;
+
+  /// @see ClkType::make_upgrader
+  [[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader> make_upgrader(const ClkType& src_type) override;
+
+  /// @see ClkType::use_memcpy_for_array_upgrade
+  [[nodiscard]] bool use_memcpy_for_array_upgrade(const ClkType& src_type) override;
+
+  /// @see ClkType::is_legacy_wire_compatible
+  [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
+
+  /// @see ClkType::check_for_unexpected_schema_changes
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::get_lowest_underlying_type
+  [[nodiscard]] ClkType& get_lowest_underlying_type() override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
+
+private:
+  /// Element schema type index
+  size_t element_type_index_;
+
+  /// SoA maximum size
+  size_t array_size_;
+
+  /// Field layout information
+  std::vector<FieldLayoutInfo> field_layouts_;
+
+  /// Byte offset of the size field
+  size_t size_field_offset_;
+
+  /// Type index of the size field
+  size_t size_field_type_index_;
+
+  /// Clockwork type factory
   jewels::memory::ObjectPtr<ClkTypeFactory> factory_;
 };
 
@@ -2046,6 +2940,46 @@ ClkFixedArrayType::ClkFixedArrayType(
                optional_has_value_offset(src_optional_type.get_element_type().get_size()), std::move(array_upgrader)))
            .first->second);
     }
+    if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+      if (src_soa_type.get_array_size() != array_size_)
+      {
+        throw ClkTypeUpgradeError(
+          fmt::format(
+            "Cannot convert FixedSoa with size {} to FixedArray with size {}",
+            src_soa_type.get_array_size(),
+            array_size_));
+      }
+      return make_soa_to_array_upgrader(
+        MakeSoaToArrayUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = 0U,
+          .src_fixed_array_size = src_soa_type.get_array_size(),
+          .dest_element_size = get_element_type().get_size(),
+          .dest_size_field_offset = 0U,
+          .dest_array_size = array_size_});
+    }
+    if (src_type.get_type_id() == ClkTypeId::var_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+      return make_soa_to_array_upgrader(
+        MakeSoaToArrayUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = src_soa_type.get_size_field_offset(),
+          .src_fixed_array_size = 0U,
+          .dest_element_size = get_element_type().get_size(),
+          .dest_size_field_offset = 0U,
+          .dest_array_size = array_size_});
+    }
     throw;
   }
 }
@@ -2070,16 +3004,50 @@ ClkFixedArrayType::ClkFixedArrayType(
   return src_array_type.array_size_ == array_size_ && src_array_type.element_type_index_ == element_type_index_;
 }
 
-void ClkFixedArrayType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkFixedArrayType::check_for_unexpected_schema_changes(
+  ClkType& src_type, bool allow_changes, std::string_view name)
 {
-  ClkBuiltInType::check_for_unexpected_schema_changes(src_type, name);
-  const auto& src_array_type = dynamic_cast<const ClkFixedArrayType&>(src_type);
-  if (src_array_type.array_size_ != array_size_)
+  if (allow_changes)
   {
-    throw ClkTypeUpgradeError(
-      fmt::format("Unexpected array size change from {} to {} for {}", src_array_type.array_size_, array_size_, name));
+    // Allow transitions from SoA types to FixedArray (un-transposition)
+    if (src_type.get_type_id() == ClkTypeId::fixed_soa || src_type.get_type_id() == ClkTypeId::var_soa)
+    {
+      check_for_unexpected_underlying_schema_changes(src_type, name);
+      return;
+    }
+    check_for_unexpected_underlying_schema_changes(src_type, name);
   }
-  get_element_type().check_for_unexpected_schema_changes(src_array_type.get_element_type(), name);
+  else
+  {
+    ClkBuiltInType::check_for_unexpected_schema_changes(src_type, false, name);
+    auto& src_array_type = dynamic_cast<ClkFixedArrayType&>(src_type);
+    if (src_array_type.array_size_ != array_size_)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Unexpected array size change from {} to {} for {}", src_array_type.array_size_, array_size_, name));
+    }
+    get_element_type().check_for_unexpected_schema_changes(src_array_type.get_element_type(), false, name);
+  }
+}
+
+[[nodiscard]] ClkType& ClkFixedArrayType::get_lowest_underlying_type()
+{
+  return get_element_type().get_lowest_underlying_type();
+}
+
+[[nodiscard]] bool ClkFixedArrayType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::fixed_array)
+  {
+    return false;
+  }
+  const auto& src_array_type = dynamic_cast<const ClkFixedArrayType&>(src_type);
+  if (src_array_type.get_array_size() != get_array_size())
+  {
+    return false;
+  }
+  return get_element_type().is_same_type(src_array_type.get_element_type());
 }
 
 // NOLINTNEXTLINE(readability-function-size) TODO(OI-3646)
@@ -2222,6 +3190,38 @@ ClkVarArrayType::ClkVarArrayType(
                std::move(array_upgrader)))
            .first->second);
     }
+    if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+      return make_soa_to_array_upgrader(
+        MakeSoaToArrayUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = 0U,
+          .src_fixed_array_size = src_soa_type.get_array_size(),
+          .dest_element_size = get_element_type().get_size(),
+          .dest_size_field_offset = var_array_size_offset(array_size_, get_element_type().get_size()),
+          .dest_array_size = array_size_});
+    }
+    if (src_type.get_type_id() == ClkTypeId::var_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+      return make_soa_to_array_upgrader(
+        MakeSoaToArrayUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = src_soa_type.get_size_field_offset(),
+          .src_fixed_array_size = 0U,
+          .dest_element_size = get_element_type().get_size(),
+          .dest_size_field_offset = var_array_size_offset(array_size_, get_element_type().get_size()),
+          .dest_array_size = array_size_});
+    }
     throw;
   }
 }
@@ -2247,16 +3247,49 @@ ClkVarArrayType::ClkVarArrayType(
   return src_array_type.array_size_ == array_size_ && src_array_type.element_type_index_ == element_type_index_;
 }
 
-void ClkVarArrayType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkVarArrayType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
 {
-  ClkBuiltInType::check_for_unexpected_schema_changes(src_type, name);
-  const auto& src_array_type = dynamic_cast<const ClkVarArrayType&>(src_type);
-  if (src_array_type.array_size_ != array_size_)
+  if (allow_changes)
   {
-    throw ClkTypeUpgradeError(
-      fmt::format("Unexpected array size change from {} to {} for {}", src_array_type.array_size_, array_size_, name));
+    // Allow transitions from SoA types to VarArray (un-transposition)
+    if (src_type.get_type_id() == ClkTypeId::fixed_soa || src_type.get_type_id() == ClkTypeId::var_soa)
+    {
+      check_for_unexpected_underlying_schema_changes(src_type, name);
+      return;
+    }
+    check_for_unexpected_underlying_schema_changes(src_type, name);
   }
-  get_element_type().check_for_unexpected_schema_changes(src_array_type.get_element_type(), name);
+  else
+  {
+    ClkBuiltInType::check_for_unexpected_schema_changes(src_type, false, name);
+    auto& src_array_type = dynamic_cast<ClkVarArrayType&>(src_type);
+    if (src_array_type.array_size_ != array_size_)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Unexpected array size change from {} to {} for {}", src_array_type.array_size_, array_size_, name));
+    }
+    get_element_type().check_for_unexpected_schema_changes(src_array_type.get_element_type(), false, name);
+  }
+}
+
+[[nodiscard]] ClkType& ClkVarArrayType::get_lowest_underlying_type()
+{
+  return get_element_type().get_lowest_underlying_type();
+}
+
+[[nodiscard]] bool ClkVarArrayType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::var_array)
+  {
+    return false;
+  }
+  const auto& src_array_type = dynamic_cast<const ClkVarArrayType&>(src_type);
+  if (src_array_type.get_array_size() != get_array_size())
+  {
+    return false;
+  }
+  return get_element_type().is_same_type(src_array_type.get_element_type());
 }
 
 ClkVarStringType::ClkVarStringType(
@@ -2398,16 +3431,29 @@ ClkVarStringType::ClkVarStringType(
   return src_string_type.string_size_ == string_size_;
 }
 
-void ClkVarStringType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkVarStringType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
 {
-  ClkBuiltInType::check_for_unexpected_schema_changes(src_type, name);
-  const auto& src_string_type = dynamic_cast<const ClkVarStringType&>(src_type);
-  if (src_string_type.string_size_ != string_size_)
+  if (!allow_changes)
   {
-    throw ClkTypeUpgradeError(
-      fmt::format(
-        "Unexpected string size change from {} to {} for {}", src_string_type.string_size_, string_size_, name));
+    ClkBuiltInType::check_for_unexpected_schema_changes(src_type, false, name);
+    const auto& src_string_type = dynamic_cast<const ClkVarStringType&>(src_type);
+    if (src_string_type.string_size_ != string_size_)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Unexpected string size change from {} to {} for {}", src_string_type.string_size_, string_size_, name));
+    }
   }
+}
+
+[[nodiscard]] bool ClkVarStringType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::var_string)
+  {
+    return false;
+  }
+  const auto& src_string_type = dynamic_cast<const ClkVarStringType&>(src_type);
+  return src_string_type.get_string_size() == get_string_size();
 }
 
 ClkOptionalType::ClkOptionalType(
@@ -2537,6 +3583,36 @@ ClkOptionalType::ClkOptionalType(
                element_upgrader))
            .first->second);
     }
+    if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+      return make_soa_to_optional_upgrader(
+        MakeSoaToOptionalUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = 0U,
+          .src_fixed_array_size = src_soa_type.get_array_size(),
+          .dest_element_size = get_element_type().get_size(),
+          .dest_has_value_offset = optional_has_value_offset(get_element_type().get_size())});
+    }
+    if (src_type.get_type_id() == ClkTypeId::var_soa)
+    {
+      const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+      return make_soa_to_optional_upgrader(
+        MakeSoaToOptionalUpgraderParams{
+          .upgrader_cache = upgrader_cache,
+          .src_type = src_type,
+          .src_schema = dynamic_cast<const ClkSchemaType&>(src_soa_type.get_element_type()),
+          .dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type()),
+          .src_field_layouts = src_soa_type.get_field_layouts(),
+          .src_size_field_offset = src_soa_type.get_size_field_offset(),
+          .src_fixed_array_size = 0U,
+          .dest_element_size = get_element_type().get_size(),
+          .dest_has_value_offset = optional_has_value_offset(get_element_type().get_size())});
+    }
     throw;
   }
 }
@@ -2561,11 +3637,993 @@ ClkOptionalType::ClkOptionalType(
   return src_optional_type.element_type_index_ == element_type_index_;
 }
 
-void ClkOptionalType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkOptionalType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
 {
-  ClkBuiltInType::check_for_unexpected_schema_changes(src_type, name);
+  if (allow_changes)
+  {
+    check_for_unexpected_underlying_schema_changes(src_type, name);
+  }
+  else
+  {
+    ClkBuiltInType::check_for_unexpected_schema_changes(src_type, false, name);
+    auto& src_optional_type = dynamic_cast<ClkOptionalType&>(src_type);
+    get_element_type().check_for_unexpected_schema_changes(src_optional_type.get_element_type(), false, name);
+  }
+}
+
+[[nodiscard]] ClkType& ClkOptionalType::get_lowest_underlying_type()
+{
+  return get_element_type().get_lowest_underlying_type();
+}
+
+[[nodiscard]] bool ClkOptionalType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::optional)
+  {
+    return false;
+  }
   const auto& src_optional_type = dynamic_cast<const ClkOptionalType&>(src_type);
-  get_element_type().check_for_unexpected_schema_changes(src_optional_type.get_element_type(), name);
+  return get_element_type().is_same_type(src_optional_type.get_element_type());
+}
+
+ClkFixedSoaType::ClkFixedSoaType(ConstructorParams params)
+  : ClkBuiltInType(params.fqn, params.type_id, params.type_index, params.size, params.alignment),
+    element_type_index_(params.element_type_index),
+    array_size_(params.array_size),
+    field_layouts_(std::move(params.field_layouts)),
+    factory_(params.factory)
+{
+}
+
+// NOLINTNEXTLINE(misc-no-recursion) Types are defined recursively
+[[nodiscard]] std::unique_ptr<ClkFixedSoaType> ClkFixedSoaType::from_proto(
+  jewels::memory::ObjectPtr<ClkTypeFactory> factory,
+  const metadata::SoaType& soa_proto,
+  size_t type_index,
+  std::optional<std::string_view> maybe_strong_type_fqn)
+{
+  // Ensure that the element schema type is populated in the factory cache
+  const auto element_type_index = static_cast<size_t>(soa_proto.schema_type_id());
+  // std::ignore: We only need to trigger type loading; the pointer will be fetched later
+  std::ignore = factory->get_clk_type(element_type_index);
+
+  // Convert field_layouts from protobuf to FieldLayoutInfo
+  std::vector<FieldLayoutInfo> field_layouts;
+  field_layouts.reserve(static_cast<size_t>(soa_proto.field_layouts_size()));
+  for (const auto& field_proto : soa_proto.field_layouts())
+  {
+    // Get the field type to extract size and alignment
+    const auto& field_type = *factory->get_clk_type(static_cast<size_t>(field_proto.type_id()));
+    field_layouts.push_back(
+      FieldLayoutInfo{
+        .field_num = field_proto.num(),
+        .size = field_type.get_size(),
+        .alignment = field_type.get_alignment(),
+        .offset = static_cast<size_t>(field_proto.offset()),
+      });
+  }
+
+  return std::make_unique<ClkFixedSoaType>(ClkFixedSoaType::ConstructorParams{
+    .fqn = maybe_strong_type_fqn.value_or(soa_proto.fqn()),
+    .type_id = ClkTypeId::fixed_soa,
+    .type_index = type_index,
+    .size = static_cast<size_t>(soa_proto.size()),
+    .alignment = static_cast<size_t>(soa_proto.alignment()),
+    .element_type_index = element_type_index,
+    .array_size = static_cast<size_t>(soa_proto.container_size()),
+    .field_layouts = std::move(field_layouts),
+    .factory = factory,
+  });
+}
+
+[[nodiscard]] const ClkType& ClkFixedSoaType::get_element_type() const
+{
+  return *factory_->get_types().at(element_type_index_);
+}
+
+[[nodiscard]] ClkType& ClkFixedSoaType::get_element_type()
+{
+  return *factory_->get_types().at(element_type_index_);
+}
+
+[[nodiscard]] size_t ClkFixedSoaType::get_array_size() const noexcept
+{
+  return array_size_;
+}
+
+[[nodiscard]] const std::vector<FieldLayoutInfo>& ClkFixedSoaType::get_field_layouts() const noexcept
+{
+  return field_layouts_;
+}
+
+/// Trace a field number forward through schema history
+int32_t trace_field_forward(int32_t src_field_num, const ClkSchemaType& dest_schema)
+{
+  int32_t dest_field_num = src_field_num;
+  while (dest_schema.get_became().contains(dest_field_num))
+  {
+    dest_field_num = dest_schema.get_became().at(dest_field_num);
+  }
+  return dest_field_num;
+}
+
+enum class FieldProcessingResult : std::uint8_t
+{
+  mapped,
+  removed
+};
+
+/// Process a source field and create mapping or handle removal
+jewels::Outcome<FieldProcessingResult> process_source_field(
+  jewels::Out<std::vector<SoaFieldMapping>> field_mappings_out,
+  int32_t src_field_num,
+  const std::unique_ptr<ClkField>& src_field,
+  const ClkSchemaType& dest_schema,
+  const std::unordered_map<int32_t, FieldLayoutInfo>& src_layout_map,
+  const std::unordered_map<int32_t, FieldLayoutInfo>& dest_layout_map)
+{
+  int32_t dest_field_num = trace_field_forward(src_field_num, dest_schema);
+
+  if (dest_schema.get_removed().contains(dest_field_num))
+  {
+    return FieldProcessingResult::removed;
+  }
+
+  const auto dest_field_iter = dest_schema.get_fields().find(dest_field_num);
+  if (dest_field_iter == dest_schema.get_fields().end())
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format(
+        "Field {} ({}) removed from {} without updating history",
+        src_field_num,
+        src_field->get_name(),
+        dest_schema.get_fqn()));
+  }
+
+  const auto& dest_field = dest_field_iter->second;
+
+  const auto src_layout_iter = src_layout_map.find(src_field_num);
+  const auto dest_layout_iter = dest_layout_map.find(dest_field_num);
+
+  if (src_layout_iter == src_layout_map.end() || dest_layout_iter == dest_layout_map.end())
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format("Missing layout information for field {} in schema {}", src_field_num, dest_schema.get_fqn()));
+  }
+
+  try
+  {
+    auto field_upgrader = dest_field->get_field_type().make_upgrader(src_field->get_field_type());
+
+    field_mappings_out->emplace_back(
+      SoaFieldMapping{
+        .src_field = src_layout_iter->second,
+        .dest_field = dest_layout_iter->second,
+        .field_upgrader = field_upgrader});
+  }
+  catch (const ClkTypeUpgradeError& exc)
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format(
+        "Failed to create upgrader for field {} ({}) in {}: {}",
+        dest_field_num,
+        dest_field->get_name(),
+        dest_schema.get_fqn(),
+        exc.what()));
+  }
+
+  return FieldProcessingResult::mapped;
+}
+
+/// Initialize a newly added field with default or explicit value
+void initialize_new_field(
+  jewels::Out<std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>>
+    new_field_initializers_out,
+  int32_t dest_field_num,
+  const std::unique_ptr<ClkField>& dest_field,
+  const ClkSchemaType& dest_schema,
+  const std::unordered_map<int32_t, FieldLayoutInfo>& dest_layout_map)
+{
+  const auto dest_layout_iter = dest_layout_map.find(dest_field_num);
+  if (dest_layout_iter == dest_layout_map.end())
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format("Missing layout information for new field {} in schema {}", dest_field_num, dest_schema.get_fqn()));
+  }
+
+  jewels::FactoryResult<jewels::memory::ObjectPtr<const ClkValueInitializer>> value_initializer;
+  if (jewels::ok(dest_field->get_value_initializer(jewels::Out{value_initializer})))
+  {
+    new_field_initializers_out->emplace_back(dest_layout_iter->second, *value_initializer);
+  }
+  else
+  {
+    // No explicit initial value - use the field type's default initializer
+    auto maybe_type_initializer = dest_field->get_field_type().make_initializer();
+    if (!maybe_type_initializer.has_value())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "New field {} ({}) in {} requires an initial value but none was provided",
+          dest_field_num,
+          dest_field->get_name(),
+          dest_schema.get_fqn()));
+    }
+    new_field_initializers_out->emplace_back(dest_layout_iter->second, *maybe_type_initializer);
+  }
+}
+
+/// Helper function to build AoS-to-SoA upgrader components
+/// @param[in] src_schema Source element schema type (from the AoS array)
+/// @param[in] dest_schema Destination element schema type (for the SoA)
+/// @param[in] dest_field_layouts Destination field layout information (from SoA)
+/// @param[out] field_mappings_out Output vector of field mappings
+/// @param[out] new_field_initializers_out Output vector of initializers for new fields
+/// @throws ClkTypeUpgradeError on failure
+void build_aos_to_soa_upgrader_components(
+  jewels::Out<std::vector<AosToSoaFieldMapping>> field_mappings_out,
+  jewels::Out<std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>>
+    new_field_initializers_out,
+  const ClkSchemaType& src_schema,
+  const ClkSchemaType& dest_schema,
+  const std::vector<FieldLayoutInfo>& dest_field_layouts)
+{
+  // Build a map from field number to layout info for quick lookup
+  std::unordered_map<int32_t, FieldLayoutInfo> dest_layout_map;
+  for (const auto& layout : dest_field_layouts)
+  {
+    dest_layout_map[layout.field_num] = layout;
+  }
+
+  std::unordered_set<int32_t> upgraded_fields;
+
+  for (const auto& [src_field_num, src_field] : src_schema.get_fields())
+  {
+    auto dest_field_num = trace_field_forward(src_field_num, dest_schema);
+
+    if (dest_schema.get_removed().contains(dest_field_num))
+    {
+      continue;
+    }
+
+    const auto dest_field_iter = dest_schema.get_fields().find(dest_field_num);
+    if (dest_field_iter == dest_schema.get_fields().end())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Field {} (src: {}) not found in destination schema {}",
+          dest_field_num,
+          src_field_num,
+          dest_schema.get_fqn()));
+    }
+    const auto& dest_field = dest_field_iter->second;
+
+    const auto dest_layout_iter = dest_layout_map.find(dest_field_num);
+    if (dest_layout_iter == dest_layout_map.end())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Missing layout information for field {} in schema {}", dest_field_num, dest_schema.get_fqn()));
+    }
+
+    try
+    {
+      auto field_upgrader = dest_field->get_field_type().make_upgrader(src_field->get_field_type());
+
+      field_mappings_out->emplace_back(
+        AosToSoaFieldMapping{
+          .field_num = src_field_num,
+          .src_field_offset = src_field->get_offset(),
+          .src_field_size = src_field->get_field_type().get_size(),
+          .dest_field = dest_layout_iter->second,
+          .field_upgrader = field_upgrader});
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Failed to create upgrader for field {} ({}) in {}: {}",
+          dest_field_num,
+          dest_field->get_name(),
+          dest_schema.get_fqn(),
+          exc.what()));
+    }
+
+    upgraded_fields.insert(dest_field_num);
+  }
+
+  for (const auto& [dest_field_num, dest_field] : dest_schema.get_fields())
+  {
+    if (!upgraded_fields.contains(dest_field_num))
+    {
+      initialize_new_field(
+        jewels::Out{*new_field_initializers_out}, dest_field_num, dest_field, dest_schema, dest_layout_map);
+    }
+  }
+}
+
+/// Helper function to build SoA-to-AoS upgrader components
+/// @param[in] src_schema Source element schema type (from the SoA)
+/// @param[in] dest_schema Destination element schema type (for the AoS array)
+/// @param[in] src_field_layouts Source field layout information (from SoA)
+/// @param[out] field_mappings_out Output vector of field mappings
+/// @param[out] new_field_initializers_out Output vector of field initializers for new fields
+/// @throws ClkTypeUpgradeError on failure
+void build_soa_to_aos_upgrader_components(
+  jewels::Out<std::vector<SoaToAosFieldMapping>> field_mappings_out,
+  jewels::Out<std::vector<ClkFieldInitializer>> new_field_initializers_out,
+  const ClkSchemaType& src_schema,
+  const ClkSchemaType& dest_schema,
+  const std::vector<FieldLayoutInfo>& src_field_layouts)
+{
+  // Build a map from field number to layout info for quick lookup
+  std::unordered_map<int32_t, FieldLayoutInfo> src_layout_map;
+  for (const auto& layout : src_field_layouts)
+  {
+    src_layout_map[layout.field_num] = layout;
+  }
+
+  std::unordered_set<int32_t> upgraded_fields;
+
+  for (const auto& [src_field_num, src_field] : src_schema.get_fields())
+  {
+    auto dest_field_num = trace_field_forward(src_field_num, dest_schema);
+
+    if (dest_schema.get_removed().contains(dest_field_num))
+    {
+      continue;
+    }
+
+    const auto dest_field_iter = dest_schema.get_fields().find(dest_field_num);
+    if (dest_field_iter == dest_schema.get_fields().end())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Field {} (src: {}) not found in destination schema {}",
+          dest_field_num,
+          src_field_num,
+          dest_schema.get_fqn()));
+    }
+    const auto& dest_field = dest_field_iter->second;
+
+    const auto src_layout_iter = src_layout_map.find(src_field_num);
+    if (src_layout_iter == src_layout_map.end())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format("Missing layout information for field {} in schema {}", src_field_num, src_schema.get_fqn()));
+    }
+
+    try
+    {
+      auto field_upgrader = dest_field->get_field_type().make_upgrader(src_field->get_field_type());
+
+      field_mappings_out->emplace_back(
+        SoaToAosFieldMapping{
+          .field_num = src_field_num,
+          .src_field = src_layout_iter->second,
+          .dest_field_offset = dest_field->get_offset(),
+          .dest_field_size = dest_field->get_field_type().get_size(),
+          .field_upgrader = field_upgrader});
+    }
+    catch (const ClkTypeUpgradeError& exc)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Failed to create upgrader for field {} ({}) in {}: {}",
+          dest_field_num,
+          dest_field->get_name(),
+          dest_schema.get_fqn(),
+          exc.what()));
+    }
+
+    upgraded_fields.insert(dest_field_num);
+  }
+
+  for (const auto& [dest_field_num, dest_field] : dest_schema.get_fields())
+  {
+    if (!upgraded_fields.contains(dest_field_num))
+    {
+      auto maybe_initializer = dest_field->make_initializer();
+      if (maybe_initializer.has_value())
+      {
+        new_field_initializers_out->emplace_back(*std::move(maybe_initializer));
+      }
+    }
+  }
+}
+
+/// Helper function to create a SoA-to-Array upgrader
+/// @param[in] params Parameters for creating the upgrader
+/// @return Upgrader instance
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+make_soa_to_array_upgrader(const MakeSoaToArrayUpgraderParams& params)
+{
+  std::vector<SoaToAosFieldMapping> field_mappings;
+  std::vector<ClkFieldInitializer> new_field_initializers;
+
+  build_soa_to_aos_upgrader_components(
+    jewels::Out{field_mappings},
+    jewels::Out{new_field_initializers},
+    params.src_schema,
+    params.dest_schema,
+    params.src_field_layouts);
+
+  return jewels::memory::make_non_null_from_ref(
+    *params.upgrader_cache.get()
+       .emplace(
+         params.src_type.get().get_type_index(),
+         jewels::memory::make_shared<ClkSoaToArrayUpgrader>(ClkSoaToArrayUpgraderParams{
+           .src_type_fqn = params.src_type.get().get_fqn(),
+           .dest_type_fqn = params.dest_schema.get().get_fqn(),
+           .src_size_field_offset = params.src_size_field_offset,
+           .src_fixed_array_size = params.src_fixed_array_size,
+           .dest_element_size = params.dest_element_size,
+           .dest_size_field_offset = params.dest_size_field_offset,
+           .dest_array_size = params.dest_array_size,
+           .field_mappings = std::move(field_mappings),
+           .new_field_initializers = std::move(new_field_initializers)}))
+       .first->second);
+}
+
+/// Helper function to create a SoA-to-Optional upgrader
+/// @param[in] params Parameters for creating the upgrader
+/// @return Upgrader instance
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+make_soa_to_optional_upgrader(const MakeSoaToOptionalUpgraderParams& params)
+{
+  std::vector<SoaToAosFieldMapping> field_mappings;
+  std::vector<ClkFieldInitializer> new_field_initializers;
+
+  build_soa_to_aos_upgrader_components(
+    jewels::Out{field_mappings},
+    jewels::Out{new_field_initializers},
+    params.src_schema,
+    params.dest_schema,
+    params.src_field_layouts);
+
+  return jewels::memory::make_non_null_from_ref(
+    *params.upgrader_cache.get()
+       .emplace(
+         params.src_type.get().get_type_index(),
+         jewels::memory::make_shared<ClkSoaToOptionalUpgrader>(ClkSoaToOptionalUpgraderParams{
+           .src_type_fqn = params.src_type.get().get_fqn(),
+           .dest_type_fqn = params.dest_schema.get().get_fqn(),
+           .src_size_field_offset = params.src_size_field_offset,
+           .src_fixed_array_size = params.src_fixed_array_size,
+           .dest_element_size = params.dest_element_size,
+           .dest_has_value_offset = params.dest_has_value_offset,
+           .field_mappings = std::move(field_mappings),
+           .new_field_initializers = std::move(new_field_initializers)}))
+       .first->second);
+}
+
+/// Helper function to build SoA-to-SoA upgrader components
+/// @param[in] src_schema Source element schema type
+/// @param[in] dest_schema Destination element schema type
+/// @param[in] src_field_layouts Source field layout information
+/// @param[in] dest_field_layouts Destination field layout information
+/// @param[out] field_mappings_out Output vector of field mappings
+/// @param[out] new_field_initializers_out Output vector of initializers for new fields
+/// @throws ClkTypeUpgradeError on failure
+void build_soa_to_soa_upgrader_components(
+  jewels::Out<std::vector<SoaFieldMapping>> field_mappings_out,
+  jewels::Out<std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>>
+    new_field_initializers_out,
+  const ClkSchemaType& src_schema,
+  const ClkSchemaType& dest_schema,
+  const std::vector<FieldLayoutInfo>& src_field_layouts,
+  const std::vector<FieldLayoutInfo>& dest_field_layouts)
+{
+  // Build a map from field number to layout info for quick lookup
+  std::unordered_map<int32_t, FieldLayoutInfo> src_layout_map;
+  for (const auto& layout : src_field_layouts)
+  {
+    src_layout_map[layout.field_num] = layout;
+  }
+
+  std::unordered_map<int32_t, FieldLayoutInfo> dest_layout_map;
+  for (const auto& layout : dest_field_layouts)
+  {
+    dest_layout_map[layout.field_num] = layout;
+  }
+
+  std::unordered_set<int32_t> upgraded_fields;
+
+  for (const auto& [src_field_num, src_field] : src_schema.get_fields())
+  {
+    switch (process_source_field(
+              jewels::Out{*field_mappings_out}, src_field_num, src_field, dest_schema, src_layout_map, dest_layout_map)
+              .get())
+    {
+    case FieldProcessingResult::mapped:
+      upgraded_fields.insert(trace_field_forward(src_field_num, dest_schema));
+      break;
+    case FieldProcessingResult::removed:
+      // Field was removed, nothing to do
+      break;
+    }
+  }
+
+  for (const auto& [dest_field_num, dest_field] : dest_schema.get_fields())
+  {
+    if (!upgraded_fields.contains(dest_field_num))
+    {
+      initialize_new_field(
+        jewels::Out{*new_field_initializers_out}, dest_field_num, dest_field, dest_schema, dest_layout_map);
+    }
+  }
+}
+
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader> ClkFixedSoaType::make_upgrader(const ClkType& src_type)
+{
+  // Helper lambda to create SoA upgrader from source element type and field layouts
+  auto make_soa_upgrader = [this, &src_type](
+                             const ClkType& src_element_type,
+                             const std::vector<FieldLayoutInfo>& src_field_layouts,
+                             size_t src_size_field_offset) -> jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+  {
+    const auto& src_schema = dynamic_cast<const ClkSchemaType&>(src_element_type);
+    const auto& dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type());
+
+    std::vector<SoaFieldMapping> field_mappings;
+    std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>
+      new_field_initializers;
+
+    build_soa_to_soa_upgrader_components(
+      jewels::Out{field_mappings},
+      jewels::Out{new_field_initializers},
+      src_schema,
+      dest_schema,
+      src_field_layouts,
+      field_layouts_);
+
+    auto& upgrader_cache = get_upgrader_cache();
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_shared<ClkSoaToSoaUpgrader>(ClkSoaToSoaUpgraderParams{
+             .src_type_fqn = src_type.get_fqn(),
+             .dest_type_fqn = get_fqn(),
+             .src_size_field_offset = src_size_field_offset,
+             .dest_size_field_offset = 0U,
+             .array_size = get_array_size(),
+             .field_mappings = std::move(field_mappings),
+             .new_field_initializers = std::move(new_field_initializers)}))
+         .first->second);
+  };
+
+  if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+  {
+    const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+    return make_soa_upgrader(src_soa_type.get_element_type(), src_soa_type.get_field_layouts(), 0U);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::var_soa)
+  {
+    const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+    return make_soa_upgrader(
+      src_soa_type.get_element_type(), src_soa_type.get_field_layouts(), src_soa_type.get_size_field_offset());
+  }
+
+  // Helper lambda to create AoS-to-SoA upgrader
+  auto make_aos_to_soa_upgrader = [this, &src_type](
+                                    const ClkType& src_element_type,
+                                    size_t src_size_field_offset,
+                                    size_t src_fixed_array_size,
+                                    bool is_optional) -> jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+  {
+    const auto& src_schema = dynamic_cast<const ClkSchemaType&>(src_element_type);
+    const auto& dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type());
+
+    std::vector<AosToSoaFieldMapping> field_mappings;
+    std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>
+      new_field_initializers;
+
+    build_aos_to_soa_upgrader_components(
+      jewels::Out{field_mappings}, jewels::Out{new_field_initializers}, src_schema, dest_schema, field_layouts_);
+
+    auto& upgrader_cache = get_upgrader_cache();
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_shared<ClkArrayToSoaUpgrader>(ClkArrayToSoaUpgraderParams{
+             .src_type_fqn = src_type.get_fqn(),
+             .dest_type_fqn = get_fqn(),
+             .src_element_size = src_element_type.get_size(),
+             .src_size_field_offset = src_size_field_offset,
+             .src_fixed_array_size = src_fixed_array_size,
+             .src_is_optional = is_optional,
+             .dest_size_field_offset = 0U,
+             .dest_array_size = get_array_size(),
+             .field_mappings = std::move(field_mappings),
+             .new_field_initializers = std::move(new_field_initializers)}))
+         .first->second);
+  };
+
+  if (src_type.get_type_id() == ClkTypeId::fixed_array)
+  {
+    const auto& src_array_type = dynamic_cast<const ClkFixedArrayType&>(src_type);
+    if (src_array_type.get_array_size() != get_array_size())
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Cannot convert FixedArray with size {} to FixedSoa with size {}",
+          src_array_type.get_array_size(),
+          get_array_size()));
+    }
+    return make_aos_to_soa_upgrader(src_array_type.get_element_type(), 0U, src_array_type.get_array_size(), false);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::var_array)
+  {
+    const auto& src_array_type = dynamic_cast<const ClkVarArrayType&>(src_type);
+    return make_aos_to_soa_upgrader(
+      src_array_type.get_element_type(),
+      var_array_size_offset(src_array_type.get_array_size(), src_array_type.get_element_type().get_size()),
+      0U,
+      false);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::optional)
+  {
+    const auto& src_optional_type = dynamic_cast<const ClkOptionalType&>(src_type);
+    // Optional to FixedSoa: treat as 0 or 1 element array
+    // src_size_field_offset stores the has_value offset, src_fixed_array_size is 0 to indicate optional
+    return make_aos_to_soa_upgrader(
+      src_optional_type.get_element_type(),
+      optional_has_value_offset(src_optional_type.get_element_type().get_size()),
+      0U,
+      true);
+  }
+
+  throw ClkTypeUpgradeError(fmt::format("Conversion from {} to FixedSoa not yet implemented", src_type.get_type_id()));
+}
+
+[[nodiscard]] bool ClkFixedSoaType::use_memcpy_for_array_upgrade(const ClkType& src_type)
+{
+  if (src_type.get_type_id() != ClkTypeId::fixed_soa)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+  return get_element_type().use_memcpy_for_array_upgrade(src_soa_type.get_element_type());
+}
+
+[[nodiscard]] bool ClkFixedSoaType::is_legacy_wire_compatible(const ClkType& src_type) const
+{
+  if (!ClkBuiltInType::is_legacy_wire_compatible(src_type))
+  {
+    return false;
+  }
+  if (src_type.get_type_id() != ClkTypeId::fixed_soa)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+  return get_element_type().is_legacy_wire_compatible(src_soa_type.get_element_type()) &&
+         get_array_size() == src_soa_type.get_array_size();
+}
+
+void ClkFixedSoaType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
+{
+  if (src_type.get_type_id() == ClkTypeId::var_soa)
+  {
+    auto& src_soa_type = dynamic_cast<ClkVarSoaType&>(src_type);
+    get_element_type().check_for_unexpected_schema_changes(src_soa_type.get_element_type(), allow_changes, name);
+    return;
+  }
+
+  // Allow transitions from AoS types to FixedSoa (transposition)
+  if (src_type.get_type_id() == ClkTypeId::fixed_array || src_type.get_type_id() == ClkTypeId::var_array)
+  {
+    check_for_unexpected_underlying_schema_changes(src_type, name);
+    return;
+  }
+
+  if (src_type.get_type_id() != ClkTypeId::fixed_soa)
+  {
+    throw ClkTypeUpgradeError(fmt::format("{} changed from {} to FixedSoa", name, src_type.get_type_id()));
+  }
+  auto& src_soa_type = dynamic_cast<ClkFixedSoaType&>(src_type);
+  if (get_array_size() != src_soa_type.get_array_size())
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format("{} FixedSoa size changed from {} to {}", name, src_soa_type.get_array_size(), get_array_size()));
+  }
+  get_element_type().check_for_unexpected_schema_changes(src_soa_type.get_element_type(), allow_changes, name);
+}
+
+[[nodiscard]] ClkType& ClkFixedSoaType::get_lowest_underlying_type()
+{
+  return get_element_type().get_lowest_underlying_type();
+}
+
+[[nodiscard]] bool ClkFixedSoaType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::fixed_soa)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+  return get_element_type().is_same_type(src_soa_type.get_element_type()) &&
+         get_array_size() == src_soa_type.get_array_size();
+}
+
+ClkVarSoaType::ClkVarSoaType(ConstructorParams params)
+  : ClkBuiltInType(params.fqn, params.type_id, params.type_index, params.size, params.alignment),
+    element_type_index_(params.element_type_index),
+    array_size_(params.array_size),
+    field_layouts_(std::move(params.field_layouts)),
+    size_field_offset_(params.size_field_offset),
+    size_field_type_index_(params.size_field_type_index),
+    factory_(params.factory)
+{
+}
+
+// NOLINTNEXTLINE(misc-no-recursion) Types are defined recursively
+[[nodiscard]] std::unique_ptr<ClkVarSoaType> ClkVarSoaType::from_proto(
+  jewels::memory::ObjectPtr<ClkTypeFactory> factory,
+  const metadata::SoaType& soa_proto,
+  size_t type_index,
+  std::optional<std::string_view> maybe_strong_type_fqn)
+{
+  const auto element_type_index = static_cast<size_t>(soa_proto.schema_type_id());
+  // std::ignore: We only need to trigger type loading; the pointer will be fetched later
+  std::ignore = factory->get_clk_type(element_type_index);
+
+  if (!soa_proto.has_size_field_offset() || !soa_proto.has_size_field_type_id())
+  {
+    throw ClkTypeUpgradeError(fmt::format("VarSoa type {} missing size field information", soa_proto.fqn()));
+  }
+
+  std::vector<FieldLayoutInfo> field_layouts;
+  field_layouts.reserve(static_cast<size_t>(soa_proto.field_layouts_size()));
+  for (const auto& field_proto : soa_proto.field_layouts())
+  {
+    const auto& field_type = *factory->get_clk_type(static_cast<size_t>(field_proto.type_id()));
+    field_layouts.push_back(
+      FieldLayoutInfo{
+        .field_num = field_proto.num(),
+        .size = field_type.get_size(),
+        .alignment = field_type.get_alignment(),
+        .offset = static_cast<size_t>(field_proto.offset()),
+      });
+  }
+
+  return std::make_unique<ClkVarSoaType>(ClkVarSoaType::ConstructorParams{
+    .fqn = maybe_strong_type_fqn.value_or(soa_proto.fqn()),
+    .type_id = ClkTypeId::var_soa,
+    .type_index = type_index,
+    .size = static_cast<size_t>(soa_proto.size()),
+    .alignment = static_cast<size_t>(soa_proto.alignment()),
+    .element_type_index = element_type_index,
+    .array_size = static_cast<size_t>(soa_proto.container_size()),
+    .field_layouts = std::move(field_layouts),
+    .size_field_offset = static_cast<size_t>(soa_proto.size_field_offset()),
+    .size_field_type_index = static_cast<size_t>(soa_proto.size_field_type_id()),
+    .factory = factory,
+  });
+}
+
+[[nodiscard]] const ClkType& ClkVarSoaType::get_element_type() const
+{
+  return *factory_->get_types().at(element_type_index_);
+}
+
+[[nodiscard]] ClkType& ClkVarSoaType::get_element_type()
+{
+  return *factory_->get_types().at(element_type_index_);
+}
+
+[[nodiscard]] size_t ClkVarSoaType::get_array_size() const noexcept
+{
+  return array_size_;
+}
+
+[[nodiscard]] const std::vector<FieldLayoutInfo>& ClkVarSoaType::get_field_layouts() const noexcept
+{
+  return field_layouts_;
+}
+
+[[nodiscard]] size_t ClkVarSoaType::get_size_field_offset() const noexcept
+{
+  return size_field_offset_;
+}
+
+[[nodiscard]] const ClkType& ClkVarSoaType::get_size_field_type() const
+{
+  return *factory_->get_types().at(size_field_type_index_);
+}
+
+[[nodiscard]] jewels::memory::ObjectPtr<const ClkTypeUpgrader> ClkVarSoaType::make_upgrader(const ClkType& src_type)
+{
+  // Helper lambda to create SoA upgrader from source element type and field layouts
+  auto make_soa_upgrader = [this, &src_type](
+                             const ClkType& src_element_type,
+                             const std::vector<FieldLayoutInfo>& src_field_layouts,
+                             size_t src_size_field_offset,
+                             size_t array_size) -> jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+  {
+    const auto& src_schema = dynamic_cast<const ClkSchemaType&>(src_element_type);
+    const auto& dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type());
+
+    std::vector<SoaFieldMapping> field_mappings;
+    std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>
+      new_field_initializers;
+
+    build_soa_to_soa_upgrader_components(
+      jewels::Out{field_mappings},
+      jewels::Out{new_field_initializers},
+      src_schema,
+      dest_schema,
+      src_field_layouts,
+      field_layouts_);
+
+    auto& upgrader_cache = get_upgrader_cache();
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_shared<ClkSoaToSoaUpgrader>(ClkSoaToSoaUpgraderParams{
+             .src_type_fqn = src_type.get_fqn(),
+             .dest_type_fqn = get_fqn(),
+             .src_size_field_offset = src_size_field_offset,
+             .dest_size_field_offset = size_field_offset_,
+             .array_size = array_size,
+             .field_mappings = std::move(field_mappings),
+             .new_field_initializers = std::move(new_field_initializers)}))
+         .first->second);
+  };
+
+  if (src_type.get_type_id() == ClkTypeId::var_soa)
+  {
+    const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+    return make_soa_upgrader(
+      src_soa_type.get_element_type(), src_soa_type.get_field_layouts(), src_soa_type.get_size_field_offset(), 0U);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+  {
+    const auto& src_soa_type = dynamic_cast<const ClkFixedSoaType&>(src_type);
+    return make_soa_upgrader(
+      src_soa_type.get_element_type(), src_soa_type.get_field_layouts(), 0U, src_soa_type.get_array_size());
+  }
+
+  // Helper lambda to create AoS-to-SoA upgrader
+  auto make_aos_to_soa_upgrader = [this, &src_type](
+                                    const ClkType& src_element_type,
+                                    size_t src_size_field_offset,
+                                    size_t src_fixed_array_size,
+                                    bool is_optional) -> jewels::memory::ObjectPtr<const ClkTypeUpgrader>
+  {
+    const auto& src_schema = dynamic_cast<const ClkSchemaType&>(src_element_type);
+    const auto& dest_schema = dynamic_cast<const ClkSchemaType&>(get_element_type());
+
+    std::vector<AosToSoaFieldMapping> field_mappings;
+    std::vector<std::pair<FieldLayoutInfo, jewels::memory::ObjectPtr<const ClkValueInitializer>>>
+      new_field_initializers;
+
+    build_aos_to_soa_upgrader_components(
+      jewels::Out{field_mappings}, jewels::Out{new_field_initializers}, src_schema, dest_schema, field_layouts_);
+
+    auto& upgrader_cache = get_upgrader_cache();
+    return jewels::memory::make_non_null_from_ref(
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_shared<ClkArrayToSoaUpgrader>(ClkArrayToSoaUpgraderParams{
+             .src_type_fqn = src_type.get_fqn(),
+             .dest_type_fqn = get_fqn(),
+             .src_element_size = src_element_type.get_size(),
+             .src_size_field_offset = src_size_field_offset,
+             .src_fixed_array_size = src_fixed_array_size,
+             .src_is_optional = is_optional,
+             .dest_size_field_offset = size_field_offset_,
+             .dest_array_size = get_array_size(),
+             .field_mappings = std::move(field_mappings),
+             .new_field_initializers = std::move(new_field_initializers)}))
+         .first->second);
+  };
+
+  if (src_type.get_type_id() == ClkTypeId::fixed_array)
+  {
+    const auto& src_array_type = dynamic_cast<const ClkFixedArrayType&>(src_type);
+    return make_aos_to_soa_upgrader(src_array_type.get_element_type(), 0U, src_array_type.get_array_size(), false);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::var_array)
+  {
+    const auto& src_array_type = dynamic_cast<const ClkVarArrayType&>(src_type);
+    return make_aos_to_soa_upgrader(
+      src_array_type.get_element_type(),
+      var_array_size_offset(src_array_type.get_array_size(), src_array_type.get_element_type().get_size()),
+      0U,
+      false);
+  }
+
+  if (src_type.get_type_id() == ClkTypeId::optional)
+  {
+    const auto& src_optional_type = dynamic_cast<const ClkOptionalType&>(src_type);
+    // Optional to VarSoa: treat as 0 or 1 element array
+    return make_aos_to_soa_upgrader(
+      src_optional_type.get_element_type(),
+      optional_has_value_offset(src_optional_type.get_element_type().get_size()),
+      0U,
+      true);
+  }
+
+  throw ClkTypeUpgradeError(fmt::format("Conversion from {} to VarSoa not yet implemented", src_type.get_type_id()));
+}
+
+[[nodiscard]] bool ClkVarSoaType::use_memcpy_for_array_upgrade(const ClkType& src_type)
+{
+  if (src_type.get_type_id() != ClkTypeId::var_soa || get_size() > max_memcpy_size)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+  return get_element_type().use_memcpy_for_array_upgrade(src_soa_type.get_element_type());
+}
+
+[[nodiscard]] bool ClkVarSoaType::is_legacy_wire_compatible(const ClkType& src_type) const
+{
+  if (!ClkBuiltInType::is_legacy_wire_compatible(src_type))
+  {
+    return false;
+  }
+  if (src_type.get_type_id() != ClkTypeId::var_soa)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+  return get_element_type().is_legacy_wire_compatible(src_soa_type.get_element_type()) &&
+         get_array_size() == src_soa_type.get_array_size();
+}
+
+void ClkVarSoaType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
+{
+  if (src_type.get_type_id() == ClkTypeId::fixed_soa)
+  {
+    auto& src_soa_type = dynamic_cast<ClkFixedSoaType&>(src_type);
+    get_element_type().check_for_unexpected_schema_changes(src_soa_type.get_element_type(), allow_changes, name);
+    return;
+  }
+
+  // Allow transitions from AoS types to VarSoa (transposition)
+  if (src_type.get_type_id() == ClkTypeId::fixed_array || src_type.get_type_id() == ClkTypeId::var_array)
+  {
+    check_for_unexpected_underlying_schema_changes(src_type, name);
+    return;
+  }
+
+  if (src_type.get_type_id() != ClkTypeId::var_soa)
+  {
+    throw ClkTypeUpgradeError(fmt::format("{} changed from {} to VarSoa", name, src_type.get_type_id()));
+  }
+  auto& src_soa_type = dynamic_cast<ClkVarSoaType&>(src_type);
+  if (get_array_size() != src_soa_type.get_array_size())
+  {
+    throw ClkTypeUpgradeError(
+      fmt::format("{} VarSoa max size changed from {} to {}", name, src_soa_type.get_array_size(), get_array_size()));
+  }
+  get_element_type().check_for_unexpected_schema_changes(src_soa_type.get_element_type(), allow_changes, name);
+}
+
+[[nodiscard]] ClkType& ClkVarSoaType::get_lowest_underlying_type()
+{
+  return get_element_type().get_lowest_underlying_type();
+}
+
+[[nodiscard]] bool ClkVarSoaType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::var_soa)
+  {
+    return false;
+  }
+  const auto& src_soa_type = dynamic_cast<const ClkVarSoaType&>(src_type);
+  return get_element_type().is_same_type(src_soa_type.get_element_type()) &&
+         get_array_size() == src_soa_type.get_array_size();
 }
 
 } // namespace
@@ -2583,6 +4641,20 @@ void ClkOptionalType::check_for_unexpected_schema_changes(const ClkType& src_typ
   return value_size;
 }
 
+[[nodiscard]] std::span<std::byte>
+get_soa_field_array(std::span<std::byte> soa_buffer, const FieldLayoutInfo& field_layout, size_t array_length) noexcept
+{
+  const size_t field_array_size = array_length * field_layout.size;
+  return soa_buffer.subspan(field_layout.offset, field_array_size);
+}
+
+[[nodiscard]] std::span<const std::byte> get_soa_field_array(
+  std::span<const std::byte> soa_buffer, const FieldLayoutInfo& field_layout, size_t array_length) noexcept
+{
+  const size_t field_array_size = array_length * field_layout.size;
+  return soa_buffer.subspan(field_layout.offset, field_array_size);
+}
+
 // NOLINTNEXTLINE(misc-no-recursion) Types are defined recursively
 [[nodiscard]] std::unique_ptr<ClkType> ClkBuiltInTypeFactoryPlugin::make_clk_type(
   jewels::memory::ObjectPtr<ClkTypeFactory> factory,
@@ -2595,6 +4667,19 @@ void ClkOptionalType::check_for_unexpected_schema_changes(const ClkType& src_typ
     return std::make_unique<ClkTagType>(
       maybe_strong_type_fqn.value_or(type_proto.tag().fqn()), ClkTypeId::tag, type_index);
   }
+
+  if (type_proto.has_soa_type())
+  {
+    const auto& soa_proto = type_proto.soa_type();
+    const bool is_var_soa = soa_proto.has_size_field_offset();
+
+    if (is_var_soa)
+    {
+      return ClkVarSoaType::from_proto(factory, soa_proto, type_index, maybe_strong_type_fqn);
+    }
+    return ClkFixedSoaType::from_proto(factory, soa_proto, type_index, maybe_strong_type_fqn);
+  }
+
   if (!type_proto.has_built_in())
   {
     return nullptr;
@@ -2716,6 +4801,12 @@ void ClkOptionalType::check_for_unexpected_schema_changes(const ClkType& src_typ
     return ClkVarStringType::from_proto(built_in_proto, type_index, maybe_strong_type_fqn);
   case ClkTypeId::optional:
     return ClkOptionalType::from_proto(factory, built_in_proto, type_index, maybe_strong_type_fqn);
+  case ClkTypeId::fixed_soa:
+  case ClkTypeId::var_soa:
+    // SoA types are handled via type_proto.has_soa_type() above
+    // These cases should not be reached, but are kept for safety
+    throw ClkTypeUpgradeError(
+      fmt::format("SoA types should be handled via SoaType protobuf, not BuiltInType: {}", built_in_proto.fqn()));
   default:
     throw ClkTypeUpgradeError(fmt::format("Unhandled built in type id: {}", type_id));
   }

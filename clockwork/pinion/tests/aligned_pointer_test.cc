@@ -26,19 +26,39 @@ TEST_CASE("Aligned pointer")
   {
     constexpr auto alignment{8UL};
     alignas(alignment) std::array<std::byte, 2UL> bytes{};
-    REQUIRE(AlignedPtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(bytes.front())));
-    REQUIRE_FALSE(AlignedPtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(bytes.back())));
+    REQUIRE(ConstAlignedBytePtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(bytes.front())));
+    REQUIRE_FALSE(ConstAlignedBytePtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(bytes.back())));
     struct alignas(alignment)
     {
     } some_aligned_value;
     REQUIRE(
-      static_cast<const void*>(AlignedPtr<alignment>::from_ref(some_aligned_value).get()) ==
+      static_cast<const void*>(AlignedBytePtr<alignment>::from_ref(some_aligned_value).get()) ==
       static_cast<const void*>(&some_aligned_value));
+  }
+  SECTION("const Construction")
+  {
+    constexpr auto alignment{8UL};
+    alignas(alignment) const std::array<std::byte, 2UL> cbytes{};
+    REQUIRE(ConstAlignedBytePtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(cbytes.front())));
+  }
+  SECTION("const Coversion")
+  {
+    constexpr auto alignment{8UL};
+    alignas(alignment) std::array<std::byte, 2UL> cbytes{};
+    auto c_ptr = ConstAlignedBytePtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(cbytes.front()));
+    auto m_ptr = AlignedBytePtr<alignment>::try_make(jewels::memory::make_non_null_from_ref(cbytes.front()));
+    REQUIRE(c_ptr);
+    REQUIRE(m_ptr);
+    CHECK(c_ptr->get() == m_ptr->get());
+    ConstAlignedBytePtr<alignment> conv1 = *c_ptr;
+    ConstAlignedBytePtr<alignment> conv2 = *m_ptr;
+    CHECK(conv1.get() == c_ptr->get());
+    CHECK(conv2.get() == m_ptr->get());
   }
   SECTION("Access")
   {
     uint64_t value{8UL};
-    auto maybe_aligned = AlignedPtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value));
+    auto maybe_aligned = AlignedBytePtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value));
     REQUIRE(maybe_aligned);
     auto aligned = *maybe_aligned;
     REQUIRE(static_cast<void*>(aligned.operator->()) == static_cast<void*>(&value));
@@ -47,7 +67,7 @@ TEST_CASE("Aligned pointer")
   SECTION("Arithmetic")
   {
     std::array<uint64_t, 2UL> values{};
-    auto maybe_aligned = AlignedPtr<alignof(uint64_t)>::try_make(to_byte_pointer(values.data()));
+    auto maybe_aligned = AlignedBytePtr<alignof(uint64_t)>::try_make(to_byte_pointer(values.data()));
     REQUIRE(maybe_aligned);
     auto aligned = *maybe_aligned;
     SECTION("Increment / Decrement")
@@ -82,10 +102,10 @@ TEST_CASE("Aligned pointer")
   {
     uint64_t value_a{};
     uint64_t value_b{};
-    auto maybe_aligned_a = AlignedPtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value_a));
+    auto maybe_aligned_a = AlignedBytePtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value_a));
     REQUIRE(maybe_aligned_a);
     auto aligned_a = *maybe_aligned_a;
-    auto maybe_bligned_b = AlignedPtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value_b));
+    auto maybe_bligned_b = AlignedBytePtr<alignof(uint64_t)>::try_make(to_byte_pointer(&value_b));
     REQUIRE(maybe_bligned_b);
     auto aligned_b = *maybe_bligned_b;
     REQUIRE(aligned_a != aligned_b);

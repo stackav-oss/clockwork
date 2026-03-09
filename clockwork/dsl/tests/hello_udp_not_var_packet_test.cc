@@ -1,7 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dsl/tests/support/hello_udp_not_var_packet.hh"
 #include "clockwork/pinion/incoming_udp.hh"
 #include "clockwork/pinion/outgoing_udp.hh"

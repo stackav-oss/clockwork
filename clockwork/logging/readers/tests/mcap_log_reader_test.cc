@@ -1,21 +1,23 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/readers/mcap_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <mcap/errors.hpp>
 #include <mcap/types.hpp>
 #include <mcap/writer.hpp>
@@ -25,10 +27,10 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <memory_resource>
 #include <optional>
 #include <span>
 #include <string>
@@ -96,9 +98,9 @@ TEST_CASE("Mcap Log Reader")
       {{
          .name = "channel1",
          .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-         .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+         .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
          .channel_type = ChannelType::regular,
-         .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+         .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
          .schema_definition =
            std::string{
              clockwork::LoggingTraits<MsgType>::schema_definition.data(),
@@ -107,9 +109,9 @@ TEST_CASE("Mcap Log Reader")
        {
          .name = "channel2",
          .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-         .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+         .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
          .channel_type = ChannelType::regular,
-         .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+         .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
          .schema_definition =
            std::string{
              clockwork::LoggingTraits<MsgType>::schema_definition.data(),

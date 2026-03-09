@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::examples::demo_system::lidar::lidar_message;
 
 // Raw lidar channel

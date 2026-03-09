@@ -32,6 +32,12 @@ namespace jewels::time
   return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(time_diff.in(au::seconds)));
 }
 
+/// Convert @p time_diff from aurora units au::SecondsF to chrono::nanoseconds.
+[[nodiscard]] static constexpr std::chrono::nanoseconds au_s_to_duration_ns(const au::SecondsF time_diff)
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<float>(time_diff.in(au::seconds)));
+}
+
 /// Convert @p time_diff from integer nanoseconds to floating point seconds
 /// @tparam NumType Numeric type of the result (typically float or double)
 /// This should only be used in instances where you can't use the stronger types.

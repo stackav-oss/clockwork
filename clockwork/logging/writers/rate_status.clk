@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
 // Channel rate status
 enum RateStatus
 {
@@ -23,13 +26,4 @@ enum RateStatus
       underlying_value: 2;
     }
   }
-}
-
-cpp_target rate_status
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  enum RateStatus;
 }

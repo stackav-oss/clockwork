@@ -9,6 +9,7 @@
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/reader_types.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -18,7 +19,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cerrno>
-#include <filesystem>
 #include <memory>
 #include <memory_resource>
 #include <string>

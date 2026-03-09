@@ -2,112 +2,53 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
-load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
+load("//tools/rules:cc.bzl", "cc_library")
 
-cc_library(
-    name = "cogs",
-    srcs = [
-        "cogs.cc",
-        "cogs.inl",
-    ],
-    hdrs = ["cogs.hh"],
-    data = [":cogs_clk"],
-    deps = [
-        ":cogs_dial",
-        ":cogs_impl",
-        ":schema",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
+simplelaunch_runner(
+    name = "helloworld",
+    config = ":democpu.textproto",
 )
 
 clk(
     name = "cogs_clk",
     srcs = ["cogs.clk"],
     outs = [
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
-        "cogs.cc",
-        "cogs.hh",
-        "cogs.inl",
-        "cogs.producer_consumer.DemoCpu_channel_allocations.csv",
-        "cogs.producer_consumer.DemoCpu_channel_spy_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_event_logger_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_simplelaunch_config.textproto",
-        "cogs.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
-        "cogs.producer_consumer.logged_channel_metadata.pbbin",
-        "cogs_dial.cc",
-        "cogs_dial.hh",
-        "cogs_dial.inl",
-        "cogs_exe.cc",
-        "cogs_exe.hh",
-        "cogs_exe.inl",
+        "cogs_clk_cc.cc",
+        "cogs_clk_cc.hh",
+        "cogs_clk_cc.inl",
+        "cogs_clk_cc_dial.cc",
+        "cogs_clk_cc_dial.hh",
+        "cogs_clk_cc_dial.inl",
+        "cogs_clk_exe.cc",
+        "cogs_clk_exe.hh",
+        "cogs_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":helloworld_state_clk_cc",
+        ":schema_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
     ],
     deps = [
         ":helloworld_state_clk",
         ":schema_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
     ],
 )
 
 cc_library(
-    name = "cogs_dial",
-    srcs = [
-        "cogs_dial.cc",
-        "cogs_dial.inl",
-    ],
-    hdrs = ["cogs_dial.hh"],
-    data = [":cogs_clk"],
+    name = "cogs_clk_cc_impl",
+    srcs = ["cogs_clk_cc_impl.cc"],
     deps = [
-        ":schema",
-        ":state",
-        "//clockwork/dial:include_common",
-    ],
-)
-
-cc_binary(
-    name = "cogs_exe",
-    srcs = [
-        "cogs_exe.cc",
-        "cogs_exe.hh",
-        "cogs_exe.inl",
-    ],
-    data = [
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
-    ],
-    deps = [
-        ":cogs",
-        ":schema",
-        "//clockwork:repr_iface",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-    ],
-)
-
-cc_library(
-    name = "cogs_impl",
-    srcs = ["cogs_impl.cc"],
-    deps = [
-        ":cogs_dial",
-        ":schema",
-        ":state",
+        ":cogs_clk_cc_dial",
+        ":helloworld_state_clk_cc",
+        ":schema_clk_cc",
         "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "//jewels/container:circular_buffer",
         "//jewels/log_cerr",
     ],
@@ -116,18 +57,20 @@ cc_library(
 merge_simplelaunch_config(
     name = "democpu.textproto",
     srcs = [
-        "cogs.producer_consumer.DemoCpu_simplelaunch_config.textproto",
+        "system.producer_consumer.DemoCpu_simplelaunch_config.textproto",
         "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
     ],
     data = [
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon",
-        "clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon",
-        "cogs.producer_consumer.DemoCpu_channel_allocations.csv",
-        "cogs.producer_consumer.DemoCpu_channel_spy_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_event_logger_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
-        "cogs.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
-        ":cogs_exe",
+        "clockwork.clockwork.examples.helloworld.system.producer_consumer.consumer_process.tachyon",
+        "clockwork.clockwork.examples.helloworld.system.producer_consumer.producer_process.tachyon",
+        "system.producer_consumer.DemoCpu_channel_allocations.csv",
+        "system.producer_consumer.DemoCpu_channel_spy_config.tachyon",
+        "system.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "system.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
+        "system.producer_consumer.DemoCpu_signal_metadata_config.tachyon",
+        "system.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
+        "system.producer_consumer.diagnostics_database_config.tachyon",
+        ":cogs_clk_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
@@ -136,50 +79,39 @@ clk(
     name = "helloworld_state_clk",
     srcs = ["helloworld_state.clk"],
     outs = [
-        "state.cc",
-        "state.hh",
-        "state.inl",
+        "helloworld_state_clk_cc.cc",
+        "helloworld_state_clk_cc.hh",
+        "helloworld_state_clk_cc.inl",
     ],
-)
-
-cc_library(
-    name = "schema",
-    srcs = [
-        "schema.cc",
-        "schema.inl",
-    ],
-    hdrs = ["schema.hh"],
-    data = [":schema_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+    generate = ["cpp"],
 )
 
 clk(
     name = "schema_clk",
     srcs = ["schema.clk"],
     outs = [
-        "schema.cc",
-        "schema.hh",
-        "schema.inl",
+        "schema_clk_cc.cc",
+        "schema_clk_cc.hh",
+        "schema_clk_cc.inl",
     ],
+    generate = ["cpp"],
 )
 
-cc_library(
-    name = "state",
-    srcs = [
-        "state.cc",
-        "state.inl",
+clk(
+    name = "system_clk",
+    srcs = ["system.clk"],
+    outs = [
+        "clockwork.clockwork.examples.helloworld.system.producer_consumer.consumer_process.tachyon",
+        "clockwork.clockwork.examples.helloworld.system.producer_consumer.producer_process.tachyon",
+        "system.producer_consumer.DemoCpu_channel_allocations.csv",
+        "system.producer_consumer.DemoCpu_channel_spy_config.tachyon",
+        "system.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "system.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
+        "system.producer_consumer.DemoCpu_signal_metadata_config.tachyon",
+        "system.producer_consumer.DemoCpu_simplelaunch_config.textproto",
+        "system.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
+        "system.producer_consumer.diagnostics_database_config.tachyon",
+        "system.producer_consumer.logged_channel_metadata.pbbin",
     ],
-    hdrs = ["state.hh"],
-    data = [":helloworld_state_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+    deps = [":cogs_clk"],
 )

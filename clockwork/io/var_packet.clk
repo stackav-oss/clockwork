@@ -1,3 +1,6 @@
+#![generate(cpp, nanobind)]
+#![cpp(namespace=clockwork::io)]
+
 // Variable sized packet of unstructured bytes.
 schema VarPacket
 {
@@ -5,8 +8,9 @@ schema VarPacket
   parameters
   {
     // Max size of the packet.
-    #0 max_size_bytes: UInt64;
+    #0 max_size_bytes: UInt64 = 1412;
   }
+
   fields
   {
     // Payload
@@ -14,41 +18,13 @@ schema VarPacket
   }
 }
 
-cpp_target var_packet
-{
-  options
-  {
-    namespace clockwork::io;
-  }
-
-  schema VarPacket;
-
-  representation Tachyon<VarPacket<max_size_bytes=4>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=4>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=64>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=64>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=288>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=288>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=861>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=861>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=1400>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=1400>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=1412>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=1412>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=512>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=512>>>;
-
-  representation Tachyon<VarPacket<max_size_bytes=35336>>;
-  interface Tap<Tachyon<VarPacket<max_size_bytes=35336>>>;
-}
-
-nanobind_target var_packet_clk_nb
-{
-  binding SomeIPPacket: Tap<Tachyon<VarPacket<max_size_bytes=1412>>>;
-}
+instantiate VarPacket4: VarPacket<max_size_bytes=4>;
+instantiate VarPacket64: VarPacket<max_size_bytes=64>;
+instantiate VarPacket128: VarPacket<max_size_bytes=128>;
+instantiate VarPacket288: VarPacket<max_size_bytes=288>;
+instantiate VarPacket512: VarPacket<max_size_bytes=512>;
+instantiate VarPacket861: VarPacket<max_size_bytes=861>;
+instantiate VarPacket1400: VarPacket<max_size_bytes=1400>;
+instantiate SomeIPPacket: VarPacket<max_size_bytes=1412>;
+instantiate VarPacket1472: VarPacket<max_size_bytes=1472>;
+instantiate VarPacket35336: VarPacket<max_size_bytes=35336>;

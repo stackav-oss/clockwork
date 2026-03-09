@@ -109,7 +109,7 @@ class LogReader(_NBLogReader):
         """
         super().__init__(log_uri, maybe_log_interval, maybe_relative_interval)
         self.topic_cb_map: dict[str, Callable[[memoryview], Any]] = {}
-        self.compiler_context = compiler_context if compiler_context else CompilerContext()
+        self.compiler_context = compiler_context or CompilerContext()
 
     def add_topic(self, topic: str, message_type: type[protocol.Tachyon[Any]] | None = None) -> None:
         """Add a topic to be read.

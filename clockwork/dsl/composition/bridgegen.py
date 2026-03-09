@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from uuid import UUID
-
 from clockwork.dsl.composition import (
     graphir,
     pdf,
@@ -19,7 +18,9 @@ from clockwork.dsl.composition.str_manip import snake_from_camel
 from clockwork.dsl.ir import uuid_reg
 
 
-def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_bridge_config_proto.TcpBridgeConfig]:
+def gen_tcp_bridge_config(
+    physical_system: system.PhysicalSystem,
+) -> dict[UUID, tcp_bridge_config_proto.TcpBridgeConfig]:
     """Generate per-domain bridge configuration files for a system."""
     result = {}
     for domain_uuid, domain in physical_system.cpu_domains.items():
@@ -33,23 +34,28 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                 publish_endpoint=pdf.PublishEndpoint(
                     process_id=UUID(int=0),
                     publisher_id=UUID(int=0),
-                    buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0),
+                    buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0, is_published_once=False),
                     num_subscribers=0,
                     channel_name="",
+                    is_bulk_data=False,
                 ),
             ),
             host_name=snake_from_camel(domain.logical.name),
             status_publish_endpoint=pdf.PublishEndpoint(
                 process_id=UUID(int=0),
                 publisher_id=UUID(int=0),
-                buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0),
+                buffer_layout=pdf.PinionBufferLayout(num_slots=0, message_size=0, is_published_once=False),
                 num_subscribers=0,
                 channel_name="",
+                is_bulk_data=False,
             ),
         )
         bridge_process_uuid = uuid_reg.uuid_from_name(f"{domain.logical.value_key()}.__CLOCKWORK_BRIDGE__")
         port_to_channel: dict[int, graphir.Channel] = {}
         for observer in domain.bridge_observers.values():
+            if not isinstance(observer, system.TcpBridgeObserver):
+                continue
+
             source_buffer = domain.buffers[observer.source_pinion_buffer]
             assert source_buffer.uuid == observer.source_pinion_buffer
 
@@ -63,12 +69,15 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                 tcp_bridge_config.TcpBridgeServerConfig(
                     publisher_id=observer.source_pinion_buffer,
                     buffer_layout=pdf.PinionBufferLayout(
-                        num_slots=source_buffer.layout.num_slots, message_size=source_buffer.layout.message_size
+                        num_slots=source_buffer.layout.num_slots,
+                        message_size=source_buffer.layout.message_size,
+                        is_published_once=source_buffer.layout.is_published_once,
                     ),
                     listen_address=domain.lan_connection.address,
                     listen_port=observer.lan_port,
                     num_clients=len(observer.remote_producers),
                     channel_name=source_buffer.channel.channel.channel_name,
+                    is_bulk_data=source_buffer.channel.is_bulk_data(),
                 )
             )
             if port_to_channel.get(observer.lan_port) not in (None, source_buffer.channel.channel):
@@ -78,21 +87,28 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
             port_to_channel[observer.lan_port] = source_buffer.channel.channel
 
         for producer in domain.bridge_producers.values():
+            if not isinstance(producer, system.TcpBridgeProducer):
+                continue
+
             dest_buffer = domain.buffers[producer.dest_pinion_buffer]
             assert domain.lan_connection is not None
             assert remote_domain.lan_connection is not None  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             remote_domain = physical_system.cpu_domains[producer.source_domain]
             remote_observer = remote_domain.bridge_observers[producer.remote_source]
+            assert isinstance(remote_observer, system.TcpBridgeObserver)
             config.bridge_clients.append(
                 tcp_bridge_config.TcpBridgeClientConfig(
                     publisher_endpoint=pdf.PublishEndpoint(
                         process_id=bridge_process_uuid,
                         publisher_id=dest_buffer.uuid,
                         buffer_layout=pdf.PinionBufferLayout(
-                            num_slots=dest_buffer.layout.num_slots, message_size=dest_buffer.layout.message_size
+                            num_slots=dest_buffer.layout.num_slots,
+                            message_size=dest_buffer.layout.message_size,
+                            is_published_once=dest_buffer.layout.is_published_once,
                         ),
                         num_subscribers=dest_buffer.num_subscribers,
                         channel_name=dest_buffer.channel.channel.channel_name,
+                        is_bulk_data=dest_buffer.channel.is_bulk_data(),
                     ),
                     server_address=remote_domain.lan_connection.address,  # pyright: ignore[reportOptionalMemberAccess] # Linter doesn't know lan_connection is not None
                     server_port=remote_observer.lan_port,
@@ -109,10 +125,13 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                 process_id=bridge_process_uuid,
                 publisher_id=diagnostics_buffer.uuid,
                 buffer_layout=pdf.PinionBufferLayout(
-                    num_slots=diagnostics_buffer.layout.num_slots, message_size=diagnostics_buffer.layout.message_size
+                    num_slots=diagnostics_buffer.layout.num_slots,
+                    message_size=diagnostics_buffer.layout.message_size,
+                    is_published_once=diagnostics_buffer.layout.is_published_once,
                 ),
                 num_subscribers=diagnostics_buffer.num_subscribers,
                 channel_name=diagnostics_buffer.channel.channel.channel_name,
+                is_bulk_data=diagnostics_buffer.channel.is_bulk_data(),
             )
 
         if domain.bridge_status_producer:
@@ -124,9 +143,11 @@ def gen_bridge_config(physical_system: system.PhysicalSystem) -> dict[UUID, tcp_
                 buffer_layout=pdf.PinionBufferLayout(
                     num_slots=bridge_status_buffer.layout.num_slots,
                     message_size=bridge_status_buffer.layout.message_size,
+                    is_published_once=bridge_status_buffer.layout.is_published_once,
                 ),
                 num_subscribers=bridge_status_buffer.num_subscribers,
                 channel_name=bridge_status_buffer.channel.channel.channel_name,
+                is_bulk_data=bridge_status_buffer.channel.is_bulk_data(),
             )
 
         if config.bridge_clients or config.bridge_servers:

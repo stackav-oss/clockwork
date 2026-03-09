@@ -31,6 +31,11 @@ public:
     return {};
   }
 
+  [[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode> modify(int /*efd*/, uint32_t /*events*/) override
+  {
+    return {};
+  }
+
   void remove(int /*efd*/) override {}
 
   [[nodiscard]] jewels::expected<void, jewels::filesystem::ErrorCode>

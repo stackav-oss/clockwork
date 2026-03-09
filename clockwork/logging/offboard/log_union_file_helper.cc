@@ -60,7 +60,7 @@ LogUnionFileHelper::LogUnionFileHelper(jewels::memory::MemoryResource memory_res
 }
 
 [[nodiscard]] LogExpected<void>
-LogUnionFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory& chunk_reader_factory)
+LogUnionFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory<>& chunk_reader_factory)
 {
   const auto read_union_result =
     chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(metadata_file_uri.string());
@@ -152,7 +152,7 @@ LogUnionFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWrite
 [[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_union_file_helper(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& log_union_uri,
-  ChunkReaderWriterFactory& chunk_reader_factory)
+  ChunkReaderWriterFactory<>& chunk_reader_factory)
 {
   if (const auto exists_result = chunk_reader_factory.exists(log_union_uri.string());
       exists_result && exists_result.value())

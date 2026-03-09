@@ -5,7 +5,7 @@
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/operators.h>
 #include <nanobind/stl/optional.h> // IWYU pragma: keep

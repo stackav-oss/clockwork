@@ -17,9 +17,6 @@ index 0000000..8098695
 +++ MODULE.bazel
 @@ -0,0 +1 @@
 +module(name = "trompeloeil")
-diff --git WORKSPACE WORKSPACE
-new file mode 100644
-index 0000000..e69de29
 diff --git include/trompeloeil.hpp include/trompeloeil.hpp
 index 1e7b07b..64af077 100644
 --- include/trompeloeil.hpp

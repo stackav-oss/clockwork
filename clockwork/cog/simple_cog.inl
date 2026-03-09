@@ -6,10 +6,13 @@
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
-#include "clockwork/common/cog_execution_error.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -18,7 +21,7 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <chrono>
@@ -37,6 +40,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+
 namespace clockwork
 {
 
@@ -85,7 +89,7 @@ jewels::expected<void, jewels::MonoError> SimpleCog<Policy>::set_handle(
 
 template <typename Policy>
 jewels::expected<void, jewels::MonoError>
-SimpleCog<Policy>::set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<const CogConfigData> config)
+SimpleCog<Policy>::set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<CogConfigData> config)
 {
   return configs_.set_handle(uuid, std::move(config));
 }
@@ -135,7 +139,41 @@ jewels::expected<void, jewels::MonoError> SimpleCog<Policy>::set_handle(
     return {};
   }
   // NOLINTNEXTLINE(bugprone-use-after-move) It wasn't moved here if the call didn't succeed.
-  return publishers_.set_handle(uuid, std::move(handle), connected);
+  if (publishers_.set_handle(uuid, std::move(handle), connected))
+  {
+    return {};
+  }
+  // NOLINTNEXTLINE(bugprone-use-after-move) It wasn't moved here if the call didn't succeed.
+  if (jewels::ok(states_.set_publisher_handle(uuid, std::move(handle))))
+  {
+    return {};
+  }
+  // NOLINTNEXTLINE(bugprone-use-after-move) It wasn't moved here if the call didn't succeed.
+  if (jewels::ok(configs_.set_publisher_handle(uuid, std::move(handle))))
+  {
+    return {};
+  }
+  jewels::log_cerr_error("Unknown publisher endpoint '{}'", uuid);
+  return jewels::unexpected(jewels::MonoError{});
+}
+
+template <typename Policy>
+jewels::BinaryOutcome SimpleCog<Policy>::set_snapshot_config(
+  jewels::Uuid<common::EndpointClassId> uuid, const Tappy<common::SnapshotConfig>& snapshot_config)
+{
+  // Determine if this is for a state (TakeSnapshots) or config (SnapshotOnce) endpoint
+  // TakeSnapshots has at least one of interval or cycles set
+  // SnapshotOnce has both optional fields empty
+  const bool is_state_snapshot = snapshot_config.has_interval() || snapshot_config.has_cycles();
+
+  if (is_state_snapshot)
+  {
+    // TakeSnapshots - route to states
+    return states_.set_snapshot_config(uuid, snapshot_config);
+  }
+
+  // SnapshotOnce - route to configs and publish immediately
+  return configs_.publish_snapshot(uuid);
 }
 
 template <typename Policy>
@@ -235,12 +273,11 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::prepare_for_executi
     return jewels::unexpected(CogExecutionError::reentry_lock_contention);
   }
 
-  // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
-  std::ignore = metrics_.execution_attempted(jewels::time::SyncClock::now());
-
   // Attempt to acquire the state locks.
   if (!states_.try_lock())
   {
+    // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
+    std::ignore = metrics_.execution_attempted(jewels::time::SyncClock::now());
     reentry_mutex_.unlock();
     return jewels::unexpected(CogExecutionError::states_lock_contention);
   }
@@ -257,6 +294,8 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::prepare_for_executi
     reentry_mutex_.unlock();
     return jewels::unexpected(CogExecutionError::not_ready);
   }
+  // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
+  std::ignore = metrics_.execution_attempted(jewels::time::SyncClock::now());
 
   // Store the conditions and release the inputs lock
 
@@ -281,6 +320,14 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
       std::unique_lock notify_guard(notify_mutex_);
       process_pending_notifies(notify_guard);
     });
+
+  // Make sure that all published once inputs have only been published once
+  if (inputs_.is_published_once_channel_invalid())
+  {
+    jewels::log_cerr_error(
+      "Published once channel has been published more than once in cog '{}'. Terminating.", get_name());
+    std::terminate();
+  }
 
   // Create resources
 
@@ -310,6 +357,13 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
 
   // Create outputs
 
+  // Make sure any channels that are only published once have never been published
+  if (!publishers_.validate_published_once_outputs())
+  {
+    jewels::log_cerr_error("Published once outputs for cog '{}' have already been published. Terminating.", get_name());
+    std::terminate();
+  }
+
   auto slots = publishers_.reserve_slots();
   if (!slots)
   {
@@ -335,7 +389,8 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     *publishables,
     *prepared_timer_conditions_,
     *prepared_input_conditions_,
-    diagnostics);
+    diagnostics,
+    signals_);
 
   if (!timers_.update_last_exec_time(params.start_time, *prepared_timer_conditions_))
   {
@@ -354,7 +409,27 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
   // Ignore the error. If this fails, the metrics api logs the error to the console. No need to log it again here.
   std::ignore = metrics_.execution_started(jewels::time::SyncClock::now(), conditions_mask);
 
+  if constexpr (requires { Policy::start_of_execution_signals(signals_, params.start_time); })
+  {
+    Policy::start_of_execution_signals(signals_, params.start_time);
+  }
   Policy::execute(dial);
+  if constexpr (requires { Policy::end_of_execution_signals(signals_, params.start_time); })
+  {
+    Policy::end_of_execution_signals(signals_, params.start_time);
+  }
+
+  // For the online runner we need the actual time that this completed so this can't simply be passed in.
+  auto exec_complete_time =
+    (params.execution_mode == CogExecutionMode::deterministic ? params.start_time + Policy::simulated_execution_duration
+                                                              : jewels::time::SyncClock::now());
+
+  // Take state snapshots if configured (must happen before states_.unlock())
+  if (jewels::fails(states_.publish_snapshots(exec_complete_time)))
+  {
+    // Snapshots are best-effort, log and continue
+    jewels::log_cerr_error("State snapshot failures occurred in cog '{}'", get_name());
+  }
 
   publishers_.update_throttle_status(*slots);
 
@@ -367,10 +442,6 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     update_output_metrics(*publishables);
   }
 
-  // For the online runner we need the actual time that this completed so this can't simply be passed in.
-  auto exec_complete_time =
-    (params.execution_mode == CogExecutionMode::deterministic ? params.start_time + Policy::simulated_execution_duration
-                                                              : jewels::time::SyncClock::now());
   // Update stats
   auto is_overrun = inputs_.is_overrun();
   statistics_.on_execute_complete(is_overrun);
@@ -389,6 +460,10 @@ jewels::expected<void, CogExecutionError> SimpleCog<Policy>::execute(CogExecuteP
     diagnostics_.commit(diagnostics, exec_complete_time);
 
     publish_metrics(publishables, params.start_time);
+    if (const auto result = Policy::publish_report_groups(signals_, *publishables); jewels::fails(result))
+    {
+      jewels::log_cerr_error("Failed to publish report groups in cog '{}'", get_name());
+    }
 
     if (const auto result = pinion::process_slots(std::span{*slots}, exec_complete_time); !result)
     {

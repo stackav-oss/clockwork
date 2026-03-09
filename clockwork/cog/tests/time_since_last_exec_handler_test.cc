@@ -3,7 +3,7 @@
 
 #include "clockwork/cog/time_since_last_exec_handler.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"

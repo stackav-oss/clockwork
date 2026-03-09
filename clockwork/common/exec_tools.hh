@@ -64,6 +64,9 @@ struct ExecutionParams
   std::optional<std::string> cog_gpu_assignment_config_path{};
   std::optional<bool> suppress_schema_mismatch_errors{};
   std::optional<std::string> metrics_channel_metadata_config_path{};
+  /// Playback speed multiplier for deterministic runner. 1.0 = real-time, 0.5 = half speed, 2.0 = double speed.
+  /// If not set (or set to 0.0), runs as fast as possible. Experimental flag controlled via --playback-speed.
+  std::optional<double> playback_speed{};
   MessageInjectors message_injectors{};
 };
 
@@ -76,6 +79,7 @@ public:
 
 private:
   TCLAP::SwitchArg deterministic_runner_;
+  TCLAP::ValueArg<double> playback_speed_;
   TCLAP::ValueArg<std::string> input_log_uri_;
   TCLAP::ValueArg<std::string> output_log_uri_;
   TCLAP::ValueArg<std::string> channel_publisher_config_path_;

@@ -21,9 +21,9 @@ load(
 # TODO(OI-3126): De-duplicate rule definitions.
 
 def cc_binary(name, deps = None, **kwargs):
-    """Wrapper for cc_binary.
+    """Repo-wide wrapper for cc_binary.
 
-    Adds functionality to print a stacktrace to stderr during segfault or abort.
+    Used when we need to provide things on a per-binary basis rather than globally.
 
     Listed args are modified for our use. Others are passed through as-is.
 
@@ -32,8 +32,107 @@ def cc_binary(name, deps = None, **kwargs):
         deps: as cc_binary.
         **kwargs: passthrough to underlying cc_binary.
     """
-    deps = (deps or []) + [_stacktrace_label]
-    _cc_binary(name = name, deps = deps, **kwargs)
+
+    # Create a base version of the binary and then use the split output rule to generate the final binary. This
+    # ensures proper handling of debug symbols.
+    _cc_binary(
+        name = name + "_base",
+        deps = (deps or []) + [_stacktrace_label],
+        **kwargs
+    )
+    _cc_binary_split_output(
+        name = name,
+        binary = name + "_base",
+        visibility = kwargs.get("visibility", None),
+        linkshared = kwargs.get("linkshared", None),
+        testonly = kwargs.get("testonly", None),
+    )
+
+def _cc_binary_split_output_impl(ctx):
+    binary = ctx.attr.binary
+    default_info = binary[DefaultInfo]
+    input_executable = default_info.files_to_run.executable
+    target_name = ctx.label.name
+    output_executable = ctx.actions.declare_file(target_name)
+    llvm_objcopy = ctx.executable._llvm_objcopy
+    llvm_strip = ctx.executable._llvm_strip
+
+    outputs = [output_executable]
+    command = """
+        {objcopy} {original} {target} && \
+        {strip} --strip-debug --strip-unneeded {target}""".format(
+        objcopy = llvm_objcopy.path,
+        strip = llvm_strip.path,
+        original = input_executable.path,
+        target = output_executable.path,
+    )
+    mnemonic = "StripDebugInfo"
+
+    ctx.actions.run_shell(
+        inputs = depset(
+            [input_executable, llvm_objcopy, llvm_strip],
+            transitive = [
+                ctx.attr._llvm_objcopy[DefaultInfo].default_runfiles.files,
+                ctx.attr._llvm_strip[DefaultInfo].default_runfiles.files,
+            ],
+        ),
+        outputs = outputs,
+        command = command,
+        mnemonic = mnemonic,
+    )
+
+    # Filter out the base file from runfiles to ensure it is not included in the final output
+    base_runfiles = default_info.data_runfiles.files.to_list()
+    label_name = binary.label.name
+    if ctx.attr.linkshared:
+        label_name = "lib" + label_name + ".so"
+    filtered_runfiles = [
+        f
+        for f in base_runfiles
+        if not f.basename == label_name
+    ]
+    runfiles = ctx.runfiles(files = filtered_runfiles)
+
+    run_env_info = RunEnvironmentInfo()
+    if RunEnvironmentInfo in binary:
+        run_env_info = binary[RunEnvironmentInfo]
+
+    ret_val = [DefaultInfo(
+        files = depset([output_executable]),
+        runfiles = runfiles,
+        executable = output_executable,
+    ), run_env_info]
+
+    ccinfo = binary[CcInfo]
+    if ccinfo:
+        ret_val.append(cc_common.merge_cc_infos(cc_infos = [ccinfo]))
+
+    return ret_val
+
+_cc_binary_split_output = rule(
+    implementation = _cc_binary_split_output_impl,
+    attrs = {
+        "binary": attr.label(allow_single_file = True),
+        "deps": attr.label_list(),
+        "linkshared": attr.bool(default = False),
+        "_llvm_objcopy": attr.label(
+            default = Label("@clang//:llvm_objcopy"),
+            executable = True,
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_llvm_strip": attr.label(
+            default = Label("@clang//:llvm_strip"),
+            executable = True,
+            cfg = "exec",
+            allow_files = True,
+        ),
+    },
+    executable = True,
+    doc = """This rule processes a precompiled C++ binary by separating its debug information from the executable. It \
+          outputs a debug-only binary for troubleshooting and a stripped binary for production use, ensuring a lean \
+          runtime artifact while preserving full debugging capabilities when needed.""",
+)
 
 def cc_test(name, deps = None, **kwargs):
     deps = (deps or [])

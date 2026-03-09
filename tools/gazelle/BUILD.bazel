@@ -18,7 +18,9 @@ gazelle(
         "--proto_configs=tools/gazelle/build_stack_rules_proto.yaml",
         "--proto_plugin=tools/gazelle/plugins.star%protoc-gen-nolint",
         "--third_party_file_map=tools/gazelle/cc_plugin/resources/third_party_mapping.json",
+        "--clockwork_is_root_repo",
     ],
+    data = ["//tools/gazelle/cc_plugin:third_party_mapping"],
     gazelle = ":gazelle-binary",
 )
 
@@ -31,6 +33,7 @@ gazelle_binary(
         "@bazel_skylib_gazelle_plugin//bzl",
         "@rules_python_gazelle_plugin//python",
         "//tools/gazelle/cc_plugin",
+        "//tools/gazelle/clk_plugin",
     ],
 )
 

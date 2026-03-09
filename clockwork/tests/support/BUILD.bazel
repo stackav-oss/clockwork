@@ -1,6 +1,10 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
@@ -36,7 +40,63 @@ clk(
         "exec_time.cc",
         "exec_time.hh",
         "exec_time.inl",
+        "exec_time_proto.proto",
+        "exec_time_proto_conv.cc",
+        "exec_time_proto_conv.hh",
+        "exec_time_proto_conv.inl",
     ],
+)
+
+proto_library(
+    name = "exec_time_proto",
+    srcs = ["exec_time_proto.proto"],
+)
+
+proto_cc_library(
+    name = "exec_time_proto_cc_library",
+    srcs = ["exec_time_proto.pb.cc"],
+    hdrs = ["exec_time_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "exec_time_proto_compile",
+    outputs = [
+        "exec_time_proto.pb.h",
+        "exec_time_proto.pb.cc",
+        "exec_time_proto_pb2.py",
+        "exec_time_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "exec_time_proto",
+)
+
+cc_library(
+    name = "exec_time_proto_conv",
+    srcs = [
+        "exec_time_proto_conv.cc",
+        "exec_time_proto_conv.inl",
+    ],
+    hdrs = ["exec_time_proto_conv.hh"],
+    data = [":exec_time_clk"],
+    deps = [
+        ":exec_time",
+        ":exec_time_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+    ],
+)
+
+proto_py_library(
+    name = "exec_time_proto_py_library",
+    srcs = ["exec_time_proto_pb2.py"],
+    data = ["exec_time_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
 )
 
 merge_simplelaunch_config(
@@ -51,8 +111,145 @@ merge_simplelaunch_config(
         "stress.stress_sys.LocalCpu_channel_spy_config.tachyon",
         "stress.stress_sys.LocalCpu_event_logger_config.tachyon",
         "stress.stress_sys.LocalCpu_metrics_channel_metadata_config.tachyon",
+        "stress.stress_sys.LocalCpu_signal_metadata_config.tachyon",
         "stress.stress_sys.LocalCpu_telemetry_logger_config.tachyon",
+        "stress.stress_sys.diagnostics_database_config.tachyon",
         ":stress_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+cc_binary(
+    name = "logical_system_interface_test_exe",
+    srcs = [
+        "logical_system_interface_test_exe.cc",
+        "logical_system_interface_test_exe.hh",
+        "logical_system_interface_test_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "logical_system_interface_test_system_clk",
+    srcs = ["logical_system_interface_test_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.logical_system_interface_test_system.logical_system_interface_test_system.proc.tachyon",
+        "logical_system_interface_test_exe.cc",
+        "logical_system_interface_test_exe.hh",
+        "logical_system_interface_test_exe.inl",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_allocations.csv",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_publisher_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_spy_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_event_logger_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_metrics_channel_metadata_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_signal_metadata_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_simplelaunch_config.textproto",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_telemetry_logger_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.diagnostics_database_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":restore_test_cog_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "logicalsysteminterfacetestcpu.textproto",
+    srcs = [
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.logical_system_interface_test_system.logical_system_interface_test_system.proc.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_allocations.csv",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_publisher_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_channel_spy_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_event_logger_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_metrics_channel_metadata_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_signal_metadata_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.LogicalSystemInterfaceTestCpu_telemetry_logger_config.tachyon",
+        "logical_system_interface_test_system.logical_system_interface_test_system.diagnostics_database_config.tachyon",
+        ":logical_system_interface_test_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "multiroutecpu1.textproto",
+    srcs = [
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.source_process.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.diagnostics_database_config.tachyon",
+        ":test_system_multi_route_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "multiroutecpu2.textproto",
+    srcs = [
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.sink_process_1.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.diagnostics_database_config.tachyon",
+        ":test_system_multi_route_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "multiroutecpu3.textproto",
+    srcs = [
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.sink_process_2.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.diagnostics_database_config.tachyon",
+        ":test_system_multi_route_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
@@ -72,14 +269,14 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -139,7 +336,9 @@ merge_simplelaunch_config(
         "test_periodic_system.test_periodic_system.PeriodicCpu_channel_spy_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_event_logger_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_metrics_channel_metadata_config.tachyon",
+        "test_periodic_system.test_periodic_system.PeriodicCpu_signal_metadata_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_telemetry_logger_config.tachyon",
+        "test_periodic_system.test_periodic_system.diagnostics_database_config.tachyon",
         ":test_periodic_system_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
@@ -149,6 +348,461 @@ py_library(
     name = "py_test_utils",
     srcs = ["py_test_utils.py"],
     visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "restore_log_config_exe",
+    srcs = [
+        "restore_log_config_exe.cc",
+        "restore_log_config_exe.hh",
+        "restore_log_config_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "restore_log_config_system_clk",
+    srcs = ["restore_log_config_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.restore_log_config_system.restore_log_config_system.proc.tachyon",
+        "restore_log_config_exe.cc",
+        "restore_log_config_exe.hh",
+        "restore_log_config_exe.inl",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_allocations.csv",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_publisher_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_spy_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_event_logger_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_signal_metadata_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_simplelaunch_config.textproto",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_telemetry_logger_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.diagnostics_database_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":restore_test_cog_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+cc_library(
+    name = "restore_log_config_system_lib",
+    srcs = [
+        "restore_log_config_exe.cc",
+        "restore_log_config_exe.inl",
+    ],
+    hdrs = ["restore_log_config_exe.hh"],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_binary(
+    name = "restore_log_state_default_exe",
+    srcs = [
+        "restore_log_state_default_exe.cc",
+        "restore_log_state_default_exe.hh",
+        "restore_log_state_default_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "restore_log_state_default_system_clk",
+    srcs = ["restore_log_state_default_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.restore_log_state_default_system.restore_log_state_default_system.proc.tachyon",
+        "restore_log_state_default_exe.cc",
+        "restore_log_state_default_exe.hh",
+        "restore_log_state_default_exe.inl",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_allocations.csv",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_publisher_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_spy_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_event_logger_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_signal_metadata_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_simplelaunch_config.textproto",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_telemetry_logger_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.diagnostics_database_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":restore_test_cog_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+cc_library(
+    name = "restore_log_state_default_system_lib",
+    srcs = [
+        "restore_log_state_default_exe.cc",
+        "restore_log_state_default_exe.inl",
+    ],
+    hdrs = ["restore_log_state_default_exe.hh"],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+cc_binary(
+    name = "restore_log_state_exe",
+    srcs = [
+        "restore_log_state_exe.cc",
+        "restore_log_state_exe.hh",
+        "restore_log_state_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "restore_log_state_system_clk",
+    srcs = ["restore_log_state_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.restore_log_state_system.restore_log_state_system.proc.tachyon",
+        "restore_log_state_exe.cc",
+        "restore_log_state_exe.hh",
+        "restore_log_state_exe.inl",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_allocations.csv",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_publisher_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_spy_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_event_logger_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_signal_metadata_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_simplelaunch_config.textproto",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_telemetry_logger_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.diagnostics_database_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":restore_test_cog_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+cc_library(
+    name = "restore_log_state_system_lib",
+    srcs = [
+        "restore_log_state_exe.cc",
+        "restore_log_state_exe.hh",
+        "restore_log_state_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+cc_binary(
+    name = "restore_protobuf_state_exe",
+    srcs = [
+        "restore_protobuf_state_exe.cc",
+        "restore_protobuf_state_exe.hh",
+        "restore_protobuf_state_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":exec_time_proto_cc_library",
+        ":exec_time_proto_conv",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "restore_protobuf_state_system_clk",
+    srcs = ["restore_protobuf_state_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.restore_protobuf_state_system.restore_protobuf_state_system.proc.tachyon",
+        "restore_protobuf_state_exe.cc",
+        "restore_protobuf_state_exe.hh",
+        "restore_protobuf_state_exe.inl",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_allocations.csv",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_publisher_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_spy_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_event_logger_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_metrics_channel_metadata_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_signal_metadata_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_simplelaunch_config.textproto",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_telemetry_logger_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.diagnostics_database_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":restore_test_cog_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+cc_library(
+    name = "restore_protobuf_state_system_lib",
+    srcs = [
+        "restore_protobuf_state_exe.cc",
+        "restore_protobuf_state_exe.hh",
+        "restore_protobuf_state_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":exec_time_proto_cc_library",
+        ":exec_time_proto_conv",
+        ":restore_test_cog",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "restore_test_cog",
+    srcs = [
+        "restore_test_cog.cc",
+        "restore_test_cog.inl",
+    ],
+    hdrs = ["restore_test_cog.hh"],
+    data = [":restore_test_cog_clk"],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog_dial",
+        ":restore_test_cog_impl",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "restore_test_cog_clk",
+    srcs = ["restore_test_cog.clk"],
+    outs = [
+        "restore_test_cog.cc",
+        "restore_test_cog.hh",
+        "restore_test_cog.inl",
+        "restore_test_cog_dial.cc",
+        "restore_test_cog_dial.hh",
+        "restore_test_cog_dial.inl",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    ],
+)
+
+cc_library(
+    name = "restore_test_cog_dial",
+    srcs = [
+        "restore_test_cog_dial.cc",
+        "restore_test_cog_dial.inl",
+    ],
+    hdrs = ["restore_test_cog_dial.hh"],
+    data = [":restore_test_cog_clk"],
+    deps = [
+        ":exec_time",
+        ":snapshot_test_messages",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "restore_test_cog_impl",
+    srcs = ["restore_test_cog_impl.cc"],
+    deps = [
+        ":exec_time",
+        ":restore_test_cog_dial",
+        ":snapshot_test_messages",
+        "//clockwork/pinion:publishable",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "restorelogconfigcpu.textproto",
+    srcs = [
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.restore_log_config_system.restore_log_config_system.proc.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_allocations.csv",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_publisher_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_spy_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_event_logger_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_signal_metadata_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_telemetry_logger_config.tachyon",
+        "restore_log_config_system.restore_log_config_system.diagnostics_database_config.tachyon",
+        ":restore_log_config_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "restorelogstatecpu.textproto",
+    srcs = [
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.restore_log_state_system.restore_log_state_system.proc.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_allocations.csv",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_publisher_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_spy_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_event_logger_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_signal_metadata_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_telemetry_logger_config.tachyon",
+        "restore_log_state_system.restore_log_state_system.diagnostics_database_config.tachyon",
+        ":restore_log_state_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "restorelogstatedefaultcpu.textproto",
+    srcs = [
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.restore_log_state_default_system.restore_log_state_default_system.proc.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_allocations.csv",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_publisher_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_spy_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_event_logger_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_metrics_channel_metadata_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_signal_metadata_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_telemetry_logger_config.tachyon",
+        "restore_log_state_default_system.restore_log_state_default_system.diagnostics_database_config.tachyon",
+        ":restore_log_state_default_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "restoreprotobufstatecpu.textproto",
+    srcs = [
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.restore_protobuf_state_system.restore_protobuf_state_system.proc.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_allocations.csv",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_publisher_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_spy_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_event_logger_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_metrics_channel_metadata_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_signal_metadata_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_telemetry_logger_config.tachyon",
+        "restore_protobuf_state_system.restore_protobuf_state_system.diagnostics_database_config.tachyon",
+        ":restore_protobuf_state_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
 )
 
 cc_library(
@@ -166,14 +820,14 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -233,8 +887,423 @@ merge_simplelaunch_config(
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_channel_spy_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_event_logger_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_metrics_channel_metadata_config.tachyon",
+        "test_shared_state_system.test_shared_state_system.SharedStateCpu_signal_metadata_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_telemetry_logger_config.tachyon",
+        "test_shared_state_system.test_shared_state_system.diagnostics_database_config.tachyon",
         ":test_shared_state_system_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "signal_cog_clk",
+    srcs = ["signal_cog.clk"],
+    outs = [
+        "signal_cog_clk_cc.cc",
+        "signal_cog_clk_cc.hh",
+        "signal_cog_clk_cc.inl",
+        "signal_cog_clk_cc_dial.cc",
+        "signal_cog_clk_cc_dial.hh",
+        "signal_cog_clk_cc_dial.inl",
+    ],
+    cpp_deps = [
+        ":signal_messages_clk_cc",
+        "//std:signals_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    deps = [
+        ":signal_messages_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "signal_cog_clk_cc_impl",
+    srcs = ["signal_cog_clk_cc_impl.cc"],
+    deps = [
+        ":signal_cog_clk_cc_dial",
+        ":signal_messages_clk_cc",
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publishable",
+        "//jewels/container:circular_buffer",
+    ],
+)
+
+clk(
+    name = "signal_messages_clk",
+    srcs = ["signal_messages.clk"],
+    outs = [
+        "signal_messages_clk_cc.cc",
+        "signal_messages_clk_cc.hh",
+        "signal_messages_clk_cc.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "signal_test_box_clk",
+    srcs = ["signal_test_box.clk"],
+    outs = [
+        "signal_test_box_clk_exe.cc",
+        "signal_test_box_clk_exe.hh",
+        "signal_test_box_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":signal_cog_clk_cc",
+        ":signal_messages_clk_cc",
+        ":signal_tester_cog_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = ["cpp_exe"],
+    deps = [
+        ":signal_cog_clk",
+        ":signal_messages_clk",
+        ":signal_tester_cog_clk",
+    ],
+)
+
+cc_library(
+    name = "signal_test_box_clk_exe_lib",
+    srcs = [
+        "signal_test_box_clk_exe.cc",
+        "signal_test_box_clk_exe.inl",
+    ],
+    hdrs = ["signal_test_box_clk_exe.hh"],
+    deps = [
+        ":signal_cog_clk_cc",
+        ":signal_cog_clk_cc_impl",
+        ":signal_messages_clk_cc",
+        ":signal_tester_cog_clk_cc",
+        ":signal_tester_cog_clk_cc_impl",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+clk(
+    name = "signal_test_system_clk",
+    srcs = ["signal_test_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.signal_test_system.signal_test_system.proc.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_channel_allocations.csv",
+        "signal_test_system.signal_test_system.SignalTestCpu_channel_spy_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_event_logger_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_metrics_channel_metadata_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_signal_metadata_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_simplelaunch_config.textproto",
+        "signal_test_system.signal_test_system.SignalTestCpu_telemetry_logger_config.tachyon",
+        "signal_test_system.signal_test_system.diagnostics_database_config.tachyon",
+        "signal_test_system.signal_test_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [":signal_test_box_clk"],
+)
+
+clk(
+    name = "signal_tester_cog_clk",
+    srcs = ["signal_tester_cog.clk"],
+    outs = [
+        "signal_tester_cog_clk_cc.cc",
+        "signal_tester_cog_clk_cc.hh",
+        "signal_tester_cog_clk_cc.inl",
+        "signal_tester_cog_clk_cc_dial.cc",
+        "signal_tester_cog_clk_cc_dial.hh",
+        "signal_tester_cog_clk_cc_dial.inl",
+    ],
+    cpp_deps = [":signal_messages_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    deps = [":signal_messages_clk"],
+)
+
+cc_library(
+    name = "signal_tester_cog_clk_cc_impl",
+    srcs = ["signal_tester_cog_clk_cc_impl.cc"],
+    deps = [
+        ":signal_messages_clk_cc",
+        ":signal_tester_cog_clk_cc_dial",
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/dial:cond_time_since_last_exec",
+        "//clockwork/dial:msg_input",
+        "//clockwork/pinion:publishable",
+        "//jewels/container:circular_buffer",
+        "@catch2//:catch2_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "signaltestcpu.textproto",
+    srcs = [
+        "signal_test_system.signal_test_system.SignalTestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.signal_test_system.signal_test_system.proc.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_channel_allocations.csv",
+        "signal_test_system.signal_test_system.SignalTestCpu_channel_spy_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_event_logger_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_metrics_channel_metadata_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_signal_metadata_config.tachyon",
+        "signal_test_system.signal_test_system.SignalTestCpu_telemetry_logger_config.tachyon",
+        "signal_test_system.signal_test_system.diagnostics_database_config.tachyon",
+        ":signal_test_box_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+cc_library(
+    name = "snapshot_test_cogs",
+    srcs = [
+        "snapshot_test_cogs.cc",
+        "snapshot_test_cogs.inl",
+    ],
+    hdrs = ["snapshot_test_cogs.hh"],
+    data = [":snapshot_test_cogs_clk"],
+    deps = [
+        ":snapshot_test_cogs_dial",
+        ":snapshot_test_cogs_impl",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "snapshot_test_cogs_clk",
+    srcs = ["snapshot_test_cogs.clk"],
+    outs = [
+        "snapshot_test_cogs.cc",
+        "snapshot_test_cogs.hh",
+        "snapshot_test_cogs.inl",
+        "snapshot_test_cogs_dial.cc",
+        "snapshot_test_cogs_dial.hh",
+        "snapshot_test_cogs_dial.inl",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    ],
+)
+
+cc_library(
+    name = "snapshot_test_cogs_dial",
+    srcs = [
+        "snapshot_test_cogs_dial.cc",
+        "snapshot_test_cogs_dial.inl",
+    ],
+    hdrs = ["snapshot_test_cogs_dial.hh"],
+    data = [":snapshot_test_cogs_clk"],
+    deps = [
+        ":exec_time",
+        ":snapshot_test_messages",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "snapshot_test_cogs_impl",
+    srcs = ["snapshot_test_cogs_impl.cc"],
+    deps = [
+        ":exec_time",
+        ":snapshot_test_cogs_dial",
+        ":snapshot_test_messages",
+        "//clockwork/dial:cond_messages_present",
+        "//clockwork/dial:msg_input",
+        "//jewels/container:circular_buffer",
+    ],
+)
+
+proto_library(
+    name = "snapshot_test_config_proto",
+    srcs = ["snapshot_test_config_proto.proto"],
+)
+
+proto_cc_library(
+    name = "snapshot_test_config_proto_cc_library",
+    srcs = ["snapshot_test_config_proto.pb.cc"],
+    hdrs = ["snapshot_test_config_proto.pb.h"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "snapshot_test_config_proto_compile",
+    outputs = [
+        "snapshot_test_config_proto.pb.h",
+        "snapshot_test_config_proto.pb.cc",
+        "snapshot_test_config_proto_pb2.py",
+        "snapshot_test_config_proto_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "snapshot_test_config_proto",
+)
+
+cc_library(
+    name = "snapshot_test_config_proto_conv",
+    srcs = [
+        "snapshot_test_config_proto_conv.cc",
+        "snapshot_test_config_proto_conv.inl",
+    ],
+    hdrs = ["snapshot_test_config_proto_conv.hh"],
+    data = [":snapshot_test_messages_clk"],
+    deps = [
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//jewels/container/tap:protobuf_to_tap",
+    ],
+)
+
+proto_py_library(
+    name = "snapshot_test_config_proto_py_library",
+    srcs = ["snapshot_test_config_proto_pb2.py"],
+    data = ["snapshot_test_config_proto_pb2.pyi"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+cc_library(
+    name = "snapshot_test_messages",
+    srcs = [
+        "snapshot_test_messages.cc",
+        "snapshot_test_messages.inl",
+    ],
+    hdrs = ["snapshot_test_messages.hh"],
+    data = [":snapshot_test_messages_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "snapshot_test_messages_clk",
+    srcs = ["snapshot_test_messages.clk"],
+    outs = [
+        "snapshot_test_config_proto.proto",
+        "snapshot_test_config_proto_conv.cc",
+        "snapshot_test_config_proto_conv.hh",
+        "snapshot_test_config_proto_conv.inl",
+        "snapshot_test_messages.cc",
+        "snapshot_test_messages.hh",
+        "snapshot_test_messages.inl",
+    ],
+)
+
+clk(
+    name = "snapshot_test_system_clk",
+    srcs = ["snapshot_test_system.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.snapshot_test_system.snapshot_test_system.proc.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_allocations.csv",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_publisher_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_spy_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_event_logger_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_metrics_channel_metadata_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_signal_metadata_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_simplelaunch_config.textproto",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_telemetry_logger_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.diagnostics_database_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.logged_channel_metadata.pbbin",
+        "snapshot_test_system_exe.cc",
+        "snapshot_test_system_exe.hh",
+        "snapshot_test_system_exe.inl",
+    ],
+    deps = [
+        ":exec_time_clk",
+        ":snapshot_test_cogs_clk",
+        ":snapshot_test_messages_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+        "//std:snapshot_clk",
+    ],
+)
+
+cc_binary(
+    name = "snapshot_test_system_exe",
+    srcs = [
+        "snapshot_test_system_exe.cc",
+        "snapshot_test_system_exe.hh",
+        "snapshot_test_system_exe.inl",
+    ],
+    deps = [
+        ":exec_time",
+        ":snapshot_test_cogs",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "snapshot_test_system_lib",
+    srcs = [
+        "snapshot_test_system_exe.cc",
+        "snapshot_test_system_exe.inl",
+    ],
+    hdrs = ["snapshot_test_system_exe.hh"],
+    deps = [
+        ":exec_time",
+        ":snapshot_test_cogs",
+        ":snapshot_test_config_proto_cc_library",
+        ":snapshot_test_config_proto_conv",
+        ":snapshot_test_messages",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "snapshottestcpu.textproto",
+    srcs = [
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.tests.support.snapshot_test_system.snapshot_test_system.proc.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_allocations.csv",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_publisher_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_spy_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_event_logger_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_metrics_channel_metadata_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_signal_metadata_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.SnapshotTestCpu_telemetry_logger_config.tachyon",
+        "snapshot_test_system.snapshot_test_system.diagnostics_database_config.tachyon",
+        ":snapshot_test_system_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
@@ -254,8 +1323,10 @@ clk(
         "stress.stress_sys.LocalCpu_channel_spy_config.tachyon",
         "stress.stress_sys.LocalCpu_event_logger_config.tachyon",
         "stress.stress_sys.LocalCpu_metrics_channel_metadata_config.tachyon",
+        "stress.stress_sys.LocalCpu_signal_metadata_config.tachyon",
         "stress.stress_sys.LocalCpu_simplelaunch_config.textproto",
         "stress.stress_sys.LocalCpu_telemetry_logger_config.tachyon",
+        "stress.stress_sys.diagnostics_database_config.tachyon",
         "stress.stress_sys.logged_channel_metadata.pbbin",
         "stress_cog.cc",
         "stress_cog.hh",
@@ -291,14 +1362,14 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -407,8 +1478,10 @@ clk(
         "test_periodic_system.test_periodic_system.PeriodicCpu_channel_spy_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_event_logger_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_metrics_channel_metadata_config.tachyon",
+        "test_periodic_system.test_periodic_system.PeriodicCpu_signal_metadata_config.tachyon",
         "test_periodic_system.test_periodic_system.PeriodicCpu_simplelaunch_config.textproto",
         "test_periodic_system.test_periodic_system.PeriodicCpu_telemetry_logger_config.tachyon",
+        "test_periodic_system.test_periodic_system.diagnostics_database_config.tachyon",
         "test_periodic_system.test_periodic_system.logged_channel_metadata.pbbin",
         "test_periodic_system_exe.cc",
         "test_periodic_system_exe.hh",
@@ -466,8 +1539,10 @@ clk(
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_channel_spy_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_event_logger_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_metrics_channel_metadata_config.tachyon",
+        "test_shared_state_system.test_shared_state_system.SharedStateCpu_signal_metadata_config.tachyon",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_simplelaunch_config.textproto",
         "test_shared_state_system.test_shared_state_system.SharedStateCpu_telemetry_logger_config.tachyon",
+        "test_shared_state_system.test_shared_state_system.diagnostics_database_config.tachyon",
         "test_shared_state_system.test_shared_state_system.logged_channel_metadata.pbbin",
         "test_shared_state_system_exe.cc",
         "test_shared_state_system_exe.hh",
@@ -543,6 +1618,7 @@ clk(
         "test_system.test_system.TestCpu_channel_spy_config.tachyon",
         "test_system.test_system.TestCpu_event_logger_config.tachyon",
         "test_system.test_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_system.test_system.TestCpu_signal_metadata_config.tachyon",
         "test_system.test_system.TestCpu_simplelaunch_config.textproto",
         "test_system.test_system.TestCpu_telemetry_logger_config.tachyon",
         "test_system.test_system.diagnostics_database_config.tachyon",
@@ -574,14 +1650,14 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -611,6 +1687,7 @@ clk(
         "test_system_2_exe.cc",
         "test_system_2_exe.hh",
         "test_system_2_exe.inl",
+        "test_system_description_2.test_system_2.diagnostics_database_config.tachyon",
         "test_system_description_2.test_system_2.logged_channel_metadata.pbbin",
     ],
 )
@@ -631,8 +1708,10 @@ clk(
         "test_system_description.test_system.TestSystemCpu_channel_spy_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_event_logger_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_metrics_channel_metadata_config.tachyon",
+        "test_system_description.test_system.TestSystemCpu_signal_metadata_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_simplelaunch_config.textproto",
         "test_system_description.test_system.TestSystemCpu_telemetry_logger_config.tachyon",
+        "test_system_description.test_system.diagnostics_database_config.tachyon",
         "test_system_description.test_system.logged_channel_metadata.pbbin",
         "test_system_description_exe.cc",
         "test_system_description_exe.hh",
@@ -685,9 +1764,9 @@ cc_binary(
         "//clockwork/scaffolding:online_main",
         "//clockwork/scaffolding/tests/support:cxx_state",
         "//clockwork/scaffolding/tests/support:test_cogs",
-        "//clockwork/scaffolding/tests/support:test_msgs",
-        "//clockwork/scaffolding/tests/support:test_msgs_proto_cc_library",
-        "//clockwork/scaffolding/tests/support:test_msgs_proto_conv",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_cc",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_proto_cc_library",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_proto_conv",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/uuid",
@@ -713,9 +1792,9 @@ cc_library(
         "//clockwork/scaffolding:casing",
         "//clockwork/scaffolding/tests/support:cxx_state",
         "//clockwork/scaffolding/tests/support:test_cogs",
-        "//clockwork/scaffolding/tests/support:test_msgs",
-        "//clockwork/scaffolding/tests/support:test_msgs_proto_cc_library",
-        "//clockwork/scaffolding/tests/support:test_msgs_proto_conv",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_cc",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_proto_cc_library",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_proto_conv",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/uuid",
@@ -743,6 +1822,7 @@ clk(
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_channel_spy_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_event_logger_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.TestSystemCpu1_signal_metadata_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_simplelaunch_config.textproto",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_telemetry_logger_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_bridge_config.tachyon",
@@ -750,8 +1830,10 @@ clk(
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_channel_spy_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_event_logger_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.TestSystemCpu2_signal_metadata_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_simplelaunch_config.textproto",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_telemetry_logger_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.diagnostics_database_config.tachyon",
         "test_system_multi_node.test_system_multi_node.logged_channel_metadata.pbbin",
         "test_system_multi_node_cogs.cc",
         "test_system_multi_node_cogs.hh",
@@ -786,10 +1868,9 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/common:process_description",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
         "//jewels/container/tap:var_array",
@@ -801,6 +1882,7 @@ cc_library(
         "//jewels/uuid",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -842,6 +1924,121 @@ cc_binary(
     ],
 )
 
+clk(
+    name = "test_system_multi_route_clk",
+    srcs = ["test_system_multi_route.clk"],
+    outs = [
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.sink_process_1.tachyon",
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.sink_process_2.tachyon",
+        "clockwork.clockwork.tests.support.test_system_multi_route.test_system_multi_route.source_process.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_simplelaunch_config.textproto",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu1_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_simplelaunch_config.textproto",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu2_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_bridge_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_channel_allocations.csv",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_channel_spy_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_event_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_signal_metadata_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_simplelaunch_config.textproto",
+        "test_system_multi_route.test_system_multi_route.MultiRouteCpu3_telemetry_logger_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.diagnostics_database_config.tachyon",
+        "test_system_multi_route.test_system_multi_route.logged_channel_metadata.pbbin",
+        "test_system_multi_route_cogs.cc",
+        "test_system_multi_route_cogs.hh",
+        "test_system_multi_route_cogs.inl",
+        "test_system_multi_route_cogs_dial.cc",
+        "test_system_multi_route_cogs_dial.hh",
+        "test_system_multi_route_cogs_dial.inl",
+        "test_system_multi_route_exe.cc",
+        "test_system_multi_route_exe.hh",
+        "test_system_multi_route_exe.inl",
+    ],
+    visibility = ["//clockwork:__subpackages__"],
+    deps = [
+        ":test_messages_multi_node_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    ],
+)
+
+cc_library(
+    name = "test_system_multi_route_cogs",
+    srcs = [
+        "test_system_multi_route_cogs.cc",
+        "test_system_multi_route_cogs.inl",
+    ],
+    hdrs = ["test_system_multi_route_cogs.hh"],
+    data = [":test_system_multi_route_clk"],
+    deps = [
+        ":test_messages_multi_node",
+        ":test_system_multi_route_cogs_dial",
+        ":test_system_multi_route_cogs_impl",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "test_system_multi_route_cogs_dial",
+    srcs = [
+        "test_system_multi_route_cogs_dial.cc",
+        "test_system_multi_route_cogs_dial.inl",
+    ],
+    hdrs = ["test_system_multi_route_cogs_dial.hh"],
+    data = [":test_system_multi_route_clk"],
+    deps = [
+        ":test_messages_multi_node",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "test_system_multi_route_cogs_impl",
+    srcs = ["test_system_multi_route_cogs_impl.cc"],
+    deps = [":test_system_multi_route_cogs_dial"],
+)
+
+cc_binary(
+    name = "test_system_multi_route_exe",
+    srcs = [
+        "test_system_multi_route_exe.cc",
+        "test_system_multi_route_exe.hh",
+        "test_system_multi_route_exe.inl",
+    ],
+    deps = [
+        ":test_messages_multi_node",
+        ":test_system_multi_route_cogs",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
 merge_simplelaunch_config(
     name = "testcpu.textproto",
     srcs = [
@@ -854,6 +2051,7 @@ merge_simplelaunch_config(
         "test_system.test_system.TestCpu_channel_spy_config.tachyon",
         "test_system.test_system.TestCpu_event_logger_config.tachyon",
         "test_system.test_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_system.test_system.TestCpu_signal_metadata_config.tachyon",
         "test_system.test_system.TestCpu_telemetry_logger_config.tachyon",
         "test_system.test_system.diagnostics_database_config.tachyon",
         ":test_system_exe",
@@ -874,7 +2072,9 @@ merge_simplelaunch_config(
         "test_system_description.test_system.TestSystemCpu_channel_spy_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_event_logger_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_metrics_channel_metadata_config.tachyon",
+        "test_system_description.test_system.TestSystemCpu_signal_metadata_config.tachyon",
         "test_system_description.test_system.TestSystemCpu_telemetry_logger_config.tachyon",
+        "test_system_description.test_system.diagnostics_database_config.tachyon",
         ":test_system_description_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
@@ -893,7 +2093,9 @@ merge_simplelaunch_config(
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_channel_spy_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_event_logger_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.TestSystemCpu1_signal_metadata_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu1_telemetry_logger_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.diagnostics_database_config.tachyon",
         ":test_system_multi_node_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
@@ -912,7 +2114,9 @@ merge_simplelaunch_config(
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_channel_spy_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_event_logger_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_metrics_channel_metadata_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.TestSystemCpu2_signal_metadata_config.tachyon",
         "test_system_multi_node.test_system_multi_node.TestSystemCpu2_telemetry_logger_config.tachyon",
+        "test_system_multi_node.test_system_multi_node.diagnostics_database_config.tachyon",
         ":test_system_multi_node_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],

@@ -1,0 +1,6 @@
+use clockwork::dsl::composition::tests::support::signals_test_system;
+
+system_target SignalTestSystem
+{
+    box: signals_test_system::SignalTestSystemBox;
+}

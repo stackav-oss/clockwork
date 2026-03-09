@@ -1,5 +1,8 @@
-use clockwork::common::process_description
-use clockwork::common::platform_diagnostics_config
+#![generate(cpp)]
+#![cpp(namespace=clockwork::pinion)]
+
+use clockwork::common::process_description;
+use clockwork::common::platform_diagnostics_config;
 
 // Describes the configuration of a TCP bridge client.
 schema TcpBridgeClientConfig
@@ -8,7 +11,7 @@ schema TcpBridgeClientConfig
   {
     // The ShmChannel that will serve as the source of messages for
     // the bridge server.
-    #1 publisher_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
+    #1 publisher_endpoint: process_description::PublishEndpoint<max_channel_name_len=process_description::MAX_CHANNEL_NAME_SIZE>;
 
     // The IPv4 address of the bridge server to connect to.
     #2 server_address: VarString<max_size=15>;
@@ -40,7 +43,10 @@ schema TcpBridgeServerConfig
     #5 num_clients: UInt64;
 
     // Channel name
-    #6 channel_name: VarString<max_size=300>;
+    #6 channel_name: VarString<max_size=process_description::MAX_CHANNEL_NAME_SIZE>;
+
+    // True if the channel holds bulk data
+    #7 is_bulk_data: Bool;
   }
 }
 
@@ -50,10 +56,10 @@ schema TcpBridgeConfig
   parameters
   {
     // The maximum number of bridge clients.
-    #1 max_bridge_clients: UInt64;
+    #1 max_bridge_clients: UInt64 = 1024;
 
     // The maximum number of bridge servers.
-    #2 max_bridge_servers: UInt64;
+    #2 max_bridge_servers: UInt64 = 512;
   }
 
   fields
@@ -71,26 +77,8 @@ schema TcpBridgeConfig
     #6 host_name: VarString<max_size=31>;
 
     // Bridge status publisher endpoint
-    #7 status_publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
+    #7 status_publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=process_description::MAX_CHANNEL_NAME_SIZE>;
   }
 }
 
-cpp_target tcp_bridge_config
-{
-  options
-  {
-    namespace clockwork::pinion;
-  }
-
-  schema TcpBridgeClientConfig;
-  schema TcpBridgeServerConfig;
-  schema TcpBridgeConfig;
-
-  representation Tachyon<TcpBridgeClientConfig>;
-  representation Tachyon<TcpBridgeServerConfig>;
-  representation Tachyon<TcpBridgeConfig<max_bridge_clients=256, max_bridge_servers=256>>;
-
-  interface TcpBridgeClientConfigTap : Tap<Tachyon<TcpBridgeClientConfig>>;
-  interface TcpBridgeServerConfigTap : Tap<Tachyon<TcpBridgeServerConfig>>;
-  interface TcpBridgeConfigTap : Tap<Tachyon<TcpBridgeConfig<max_bridge_clients=256, max_bridge_servers=256>>>;
-}
+instantiate TcpBridgeConfig<>;

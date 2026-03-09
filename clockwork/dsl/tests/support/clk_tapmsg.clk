@@ -1,0 +1,354 @@
+#![generate(py, cpp, nanobind)]
+#![cpp(namespace=clockwork::testing)]
+
+use[cpp] clockwork::dsl::tests::support::taptags::{AnotherTag as AnotherTagAlias};
+
+// Some constant
+constant_four: UInt64 = 4;
+
+// Message with padding.
+schema  PaddedMsg
+{
+  uuid: 100e3fb0-f573-4b58-9dec-ea9354ee8a37;
+  fields
+  {
+    // Integer type
+    #1 large: Int64;
+
+    // Bool type
+    #2 small: Bool;
+  }
+}
+
+// Enum
+enum SomeEnum
+{
+  uuid: 02d1a601-5c69-46dd-9922-06fee33b581e;
+  values
+  {
+
+    // First value
+    #3 first_value default;
+
+    // Second value
+    #4 second_value;
+  }
+  history
+  {
+    version: 4;
+    legacy_became: [1->3];
+    removed: [2];
+  }
+}
+
+
+// Flags enum
+enum SomeFlags
+{
+  uuid: 9d66eef8-1019-48a2-971e-f9bb8b2df06c;
+  options
+  {
+    bit_flags;
+    underlying_type: UInt8;
+  }
+  values
+  {
+    // No bits set
+    #0 none default { underlying_value: 0; }
+    // LSB
+    #3 flag1 { underlying_value: 1; }
+    // Bit1
+    #4 flag2 { underlying_value: 2; }
+    // Bit1
+    #5 flag3 { underlying_value: 4; }
+    // Bit0 + Bit1
+    #6 flag12 { underlying_value: 3; }
+  }
+  history
+  {
+    version: 6;
+    legacy_became: [1->3];
+    removed: [2];
+  }
+}
+
+// A small msg.
+schema SubMsg
+{
+  uuid: 335dd4d4-7753-4aa6-a5a9-f39f60556aae;
+  fields
+  {
+    // Docs
+    #1 field: Int64;
+  }
+}
+
+// FromConstant
+schema FromConstant
+{
+  uuid: 246fb697-b84b-40a0-9ede-b85ea8270d54;
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64;
+  }
+  fields
+  {
+    // Docs
+    #2 as_init: UInt64 = value_par;
+
+    // Docs
+    #3 as_type: VarArray<UInt64, value_par>;
+  }
+}
+
+
+// GenericSubMsg
+schema GenericSubMsg
+{
+  uuid: 832c0305-8afd-45dc-8a93-c62ae0159c60;
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64 = 3;
+
+    // Some type parameter
+    #2 type_par: Type = Bool;
+  }
+  fields
+  {
+    // Docs
+    #3 field: VarArray<type_par, value_par>;
+  }
+}
+
+// GenericMsg
+schema GenericMsg
+{
+  uuid: 63da9c32-81cc-4762-8f2e-4e88b53e5f00;
+  parameters
+  {
+    // Some value parameter
+    #1 value_par: UInt64 = 123;
+
+    // Some type parameter
+    #2 TypePar: Type = Int32;
+  }
+
+  fields
+  {
+    // Some field.
+    #3 field: UInt64 = value_par;
+
+    // Array of parameterized types.
+    #4 array_of_parameterized_type: VarArray<TypePar, value_par>;
+  }
+}
+
+// Param as field
+schema ParamAsField
+{
+  uuid: 2ee461f1-09ca-4958-9550-33efb65df737;
+  parameters
+  {
+    // A type param.
+    #0 TypePar: Type = PaddedMsg;
+  }
+  fields
+  {
+    // A field as the type param.
+    #1 value: TypePar;
+  }
+}
+
+// Message to test Tap.
+schema TapMsg
+{
+  uuid: cae6ee0b-ec41-40cf-8b87-fb1583e5985d;
+  parameters
+  {
+    // Int64 initial value
+    #0 signed_value: Int32 = 234;
+  }
+  fields
+  {
+    // Integer type
+    #1 integer: Int64;
+
+    // Floating point type and primitive with default
+    #2 floating_point: Float32 = 1.25;
+
+    // Bool
+    #3 boolean: Bool;
+
+    // Array of primitives
+    #4 array_of_primitives: VarArray<Int32, max_size=9>;
+
+    // Array of array of primitives
+    #5 array_of_array: VarArray<VarString<max_size=3>, max_size=2>;
+
+    // UUID of schema tag in same namespace
+    #6 uuid: Uuid<SubMsg>;
+
+    // UUID of tag in different namespace
+    #7 uuid_different_namespace: Uuid<AnotherTagAlias>;
+
+    // Default enum.
+    #8 default_enum: SomeEnum;
+
+    // Enum with init.
+    #9 enum_with_init: SomeEnum = SomeEnum::second_value;
+
+    // Default enum.
+    #20 default_flags: SomeFlags;
+
+    // Enum with init.
+    #21 flags_with_init: SomeFlags = SomeFlags::flag2;
+
+    // Nested schemas.
+    #10 nested_schema: SubMsg;
+
+    // Array of schemas.
+    #11 array_of_schema: VarArray<type=SubMsg, max_size=2>;
+
+    // Duration type
+    #12 duration: Duration;
+
+    // Sync time
+    #13 sync_time: SyncTime;
+
+    // Optional
+    #14 optional: Optional<type=UInt32>;
+
+    // Bool init
+    #15 bool_with_init: Bool = true;
+
+    // Strong type
+    #16 strong_type: MyStrongType;
+
+    // External strong type
+    #17 external_strong_type: UInt32 = 123;
+
+    // Fixed array
+    #18 fixed_array: FixedArray<type=Int32, size=2>;
+
+    // VarString
+    #23 var_string: VarString<max_size=2>;
+
+    // Integer type with init
+    #24 integer_with_init: Int32 = signed_value;
+  }
+  history
+  {
+    version: 24;
+    legacy_became: [19->23];
+    removed: [22];
+  }
+}
+
+// Second Message to test Tap without having to rework the unit tests that check offsets and sizes
+schema TapMsg2
+{
+  uuid: c372f501-ace8-458c-ab70-e531f78aeddc;
+  fields
+  {
+    // Optional VarArray
+    #1 optional_var_array: Optional<VarArray<type=UInt32, max_size=4>>;
+
+    // Optional VarString
+    #2 optional_var_string: Optional<VarString<max_size=4>>;
+
+    // Optional FixedArray
+    #3 optional_fixed_array: Optional<FixedArray<type=UInt32, size=4>>;
+
+    // Optional UUID
+    #4 optional_uuid: Optional<Uuid<SubMsg>>;
+
+    // Optional Bool
+    #5 optional_bool: Optional<Bool>;
+
+    // Optional Strong type
+    #6 optional_strong_type: Optional<MyStrongType>;
+  }
+}
+
+// No constructor
+schema NoConstructor
+{
+  uuid: bd2eb531-fd0b-4f6b-9dca-4398a08691b9;
+  fields
+  {
+    // Bool
+    #1 boolean: Bool;
+  }
+}
+
+// Test field ordering
+schema OutOfOrderFields
+{
+  uuid: f77ea5d7-8511-427a-a641-7044244d26fc;
+  options
+  {
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // Bool
+    #1 boolean: Bool;
+    // Integer
+    #3 integer: Int64;
+    // Float
+    #0 floating_point: Float32;
+  }
+}
+
+// Test field ordering
+schema ConstructorContainer
+{
+  uuid: 5532927c-9c4e-4e3c-964a-7c1e4300eedf;
+  fields
+  {
+    // The thing
+    #1 thing: OutOfOrderFields;
+  }
+}
+
+// Schema for testing py generics.
+schema GenericValuesOnly
+{
+  uuid: 869bf3b6-9e35-43f3-894b-7d509d8dc443;
+  parameters
+  {
+    // Docs
+    #0 param: UInt64;
+  }
+
+  fields
+  {
+    // Docs
+    #1 field: FixedArray<type=Int32, size=param>;
+  }
+}
+
+// Some strong type.
+strong_type MyStrongType
+{
+  underlying_type: UInt64;
+}
+
+// Some strong type.
+#[cpp(type_header="clockwork/dsl/tests/support/extern_type.hh", type_namespace=clockwork::external, type_factory=make)]
+strong_type ExternalStrongType
+{
+  underlying_type: UInt32;
+}
+
+instantiate TapMsg<>;
+instantiate TapMsg345: TapMsg<345>;
+instantiate GenericMsgUInt64: GenericMsg<123, UInt64>;
+instantiate GenericSubMsg<>;
+instantiate GenericSubTapMsg: GenericSubMsg<4, TapMsg<>>;
+instantiate GenericSubTapMsg345: GenericSubMsg<4, TapMsg345>;
+instantiate GenericSubSubMsg: GenericSubMsg<4, GenericSubMsg<>>;
+instantiate GenericValuesOnly3: GenericValuesOnly<3>;
+instantiate ParamAsField<>;

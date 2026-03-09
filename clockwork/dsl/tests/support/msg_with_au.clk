@@ -1,4 +1,4 @@
-use jewels::units::clk::au as au
+use jewels::units::clk::au as au;
 
 // Message to test Tap.
 schema MsgWithAu

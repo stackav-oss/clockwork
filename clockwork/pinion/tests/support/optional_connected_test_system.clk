@@ -1,4 +1,4 @@
-use clockwork::pinion::tests::support::test_message::TestMessage;
+use clockwork::pinion::tests::support::test_message::{TestMessage};
 
 // Channel 1
 channel Channel1

@@ -1,0 +1,92 @@
+use clockwork::tests::support::exec_time::{ExecState};
+use clockwork::tests::support::snapshot_test_cogs::{StatefulCog};
+use clockwork::tests::support::snapshot_test_messages::{StateUpdateMessage, SnapshotTestConfig};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogReaderPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
+use std::snapshot::{TakeSnapshots, SnapshotOnce};
+
+// Channel for state update messages (input)
+channel StateUpdateChannel
+{
+  message_type: Tachyon<StateUpdateMessage>;
+  max_num_messages: 10;
+}
+
+// We will inject messages here
+policy LogReaderPolicy for StateUpdateChannel
+{
+}
+
+// Channel for state snapshots (output)
+channel StateSnapshotChannel
+{
+  message_type: Tachyon<ExecState>;
+  max_num_messages: 10;
+}
+
+// Channel for config snapshots (output)
+channel ConfigSnapshotChannel
+{
+  message_type: Tachyon<SnapshotTestConfig>;
+  max_num_messages: 1;
+}
+
+// We listen to state snapshots
+policy ChannelLoggingPolicy for StateSnapshotChannel
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+// We listen to config snapshots
+policy ChannelLoggingPolicy for ConfigSnapshotChannel
+{
+  log_type = LogType::telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+box SnapshotTestBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+  new state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+  new config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/snapshot_test_config.textproto");
+
+  new stateful_cog: StatefulCog;
+
+  connect state to stateful_cog.state;
+  connect config to stateful_cog.config;
+
+  connect StateUpdateChannel to stateful_cog.update_message;
+
+  apply TakeSnapshots(
+    channel=StateSnapshotChannel,
+    interval=100ms
+  ) to stateful_cog.state;
+
+  apply SnapshotOnce(
+    channel=ConfigSnapshotChannel
+  ) to stateful_cog.config;
+}
+
+cpp_executable snapshot_test_system_exe
+{
+  casing
+  {
+    box SnapshotTestBox;
+  }
+}
+
+cpu_domain SnapshotTestCpu;
+
+box SnapshotTestSystem
+{
+  new box: SnapshotTestBox;
+  new proc: Process(executable=snapshot_test_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=SnapshotTestCpu) to proc;
+}
+
+system_target snapshot_test_system
+{
+  box: SnapshotTestSystem;
+}

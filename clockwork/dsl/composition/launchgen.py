@@ -45,6 +45,7 @@ def gen_process_config(  # noqa: PLR0913 (mitigated by kwonly args)
     config: Config,
     proc_name: str,
     cpus: list[int],
+    env: dict[str, str] | None = None,
 ) -> None:
     """Add a simplelaunch configuration for an executable to a config instance.
 
@@ -55,6 +56,7 @@ def gen_process_config(  # noqa: PLR0913 (mitigated by kwonly args)
         config: Configuration
         proc_name: Fully-qualified name of the proc.
         cpus: CPU IDs the process runs on
+        env: Environment variables to set for the process.
     """
     launch_name = str(proc_name).split(".")[-1]
     exe_path = _make_path_from_fqn(exe_fqn)
@@ -68,11 +70,12 @@ def gen_process_config(  # noqa: PLR0913 (mitigated by kwonly args)
                 os.fspath(sys_path.parent / config_file),
             ],
             cpus=cpus,
+            env=env or {},
         )
     )
 
 
-def gen_bridge_config(
+def gen_tcp_bridge_config(
     *,
     sys_fqn: str,
     config_file: str,

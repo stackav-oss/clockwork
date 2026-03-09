@@ -1,3 +1,6 @@
+#![generate(cpp, py, nanobind)]
+#![cpp(namespace=clockwork::python::tests)]
+
 // Test Output Message
 schema TestOutputMessage {
   uuid: 5853543d-f5c5-433d-9c87-e85b6cc5550f;
@@ -10,26 +13,4 @@ schema TestOutputMessage {
     // Test output strings
     #1 message_strings: VarArray<VarString<255>, 10>;
   }
-}
-
-cpp_target test_output_message
-{
-  options
-  {
-    namespace clockwork::python::tests;
-  }
-
-  schema TestOutputMessage;
-  representation Tachyon<TestOutputMessage>;
-  interface Tap<Tachyon<TestOutputMessage>>;
-}
-
-py_target py_test_output_message
-{
-    interface Tappy<TestOutputMessage>;
-}
-
-nanobind_target test_output_message_clk_nb
-{
-    binding Tappy<TestOutputMessage>;
 }

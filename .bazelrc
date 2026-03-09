@@ -3,8 +3,7 @@
 # a more canonical hash.
 common --ui_event_filters=-DEBUG
 
-# TODO(DX-231): Disable module lock for now
-common --lockfile_mode=off
+common --lockfile_mode=update
 
 # Compile curl with openssl
 build --@curl//:ssl_lib="openssl"
@@ -53,10 +52,14 @@ build --sandbox_default_allow_network=false
 build --noremote_upload_local_results
 
 # Prevent Python packages installed in user site-packages outside of Bazel from being used under Bazel
-common --host_action_env=PYTHONNOUSERSITE=1 --action_env=PYTHONNOUSERSITE=1 --test_env=PYTHONNOUSERSITE=1
+common --host_action_env=PYTHONNOUSERSITE=1 --test_env=PYTHONNOUSERSITE=1
 
 # Make sure rules_proto keep working with Bazel 8
 common --noincompatible_disallow_ctx_resolve_tools
 
 # Don't load native rules
 common --incompatible_disable_autoloads_in_main_repo
+
+# Load any settings & overrides specific to the current user.
+# This should be last statement in this config so the user configuration is able to overwrite flags from this file.
+try-import %workspace%/user.bazelrc

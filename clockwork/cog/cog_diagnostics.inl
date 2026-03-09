@@ -3,8 +3,8 @@
 
 #include "clockwork/cog/cog_diagnostics.hh"
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/diagnostics/report.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
@@ -12,6 +12,7 @@
 #include "jewels/uuid/uuid.hh"
 #include "jewels/uuid/uuid5.hh"
 
+#include <cstddef>
 #include <tuple>
 #include <utility>
 
@@ -67,6 +68,12 @@ template <typename Policy>
   return manager_.create_report(now);
 }
 
+template <typename Policy>
+void CogDiagnosticsImpl<Policy>::set_unit_test_diagnostics_impl(pinion::PublisherHandle&& handle)
+{
+  manager_.publisher().set_handle(std::move(handle));
+}
+
 template <typename... Policies>
 CogDiagnostics<Policies...>::CogDiagnostics(const jewels::Uuid<common::CogInstanceId>& instance_id) noexcept
   : impls_((std::ignore = Policies{}, instance_id)...)
@@ -83,6 +90,7 @@ template <typename... Policies>
 [[nodiscard]] jewels::expected<void, jewels::MonoError> CogDiagnostics<Policies...>::set_handle(
   jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle&& handle)
 {
+  // NOLINTNEXTLINE(bugprone-use-after-move) False positive
   return (std::get<CogDiagnosticsImpl<Policies>>(impls_).set_handle(endpoint_id, std::move(handle)) || ...)
            ? jewels::expected<void, jewels::MonoError>{}
            : jewels::unexpected(jewels::MonoError{});
@@ -112,6 +120,13 @@ void CogDiagnostics<Policies...>::commit(ReporterType& reports, jewels::time::Sy
   {
     std::apply([&now](auto&... report) { (report.publish(now), ...); }, reports);
   }
+}
+
+template <typename... Policies>
+template <size_t index>
+void CogDiagnostics<Policies...>::set_unit_test_diagnostics(pinion::PublisherHandle&& handle)
+{
+  std::get<index>(impls_).set_unit_test_diagnostics_impl(std::move(handle));
 }
 
 } // namespace clockwork

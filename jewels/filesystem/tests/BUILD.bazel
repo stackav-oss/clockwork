@@ -11,6 +11,7 @@ cc_test(
     deps = [
         "//jewels/filesystem",
         "//jewels/filesystem:file_descriptor",
+        "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
         "//jewels/testing:tmp_directory_guard",
@@ -24,6 +25,7 @@ cc_test(
     deps = [
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
         "//jewels/testing:tmp_directory_guard",

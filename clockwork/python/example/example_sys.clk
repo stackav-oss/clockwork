@@ -1,0 +1,6 @@
+use clockwork::python::example::example;
+
+system_target example_sys
+{
+  box: example::ExampleSystem;
+}

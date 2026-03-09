@@ -23,6 +23,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace clockwork_logging::offboard
 {
@@ -74,6 +75,30 @@ TemporaryLogDirectory::~TemporaryLogDirectory()
   return path_;
 }
 
+/// Test whether a log exists at the specified URI
+/// @param[in] source_uri Source log URI
+/// @param[in] chunk_reader_writer_factory Chunk reader writer factory
+/// @return Success if a log exists, LogError on faulure
+[[nodiscard]] LogExpected<void>
+source_log_exists(const LogUri& source_uri, ChunkReaderWriterFactory<>& chunk_reader_writer_factory)
+{
+  const auto metadata_uri = source_uri / log_metadata_filename;
+  const auto exists_result = chunk_reader_writer_factory.exists(metadata_uri.string());
+  if (!exists_result)
+  {
+    return jewels::unexpected(LogError::not_a_log);
+  }
+  if (!exists_result.value())
+  {
+    if (const auto list_result = chunk_reader_writer_factory.list_log_files(source_uri.string());
+        !list_result || list_result->empty())
+    {
+      return jewels::unexpected(list_result ? LogError::not_a_log : list_result.error());
+    }
+  }
+  return {};
+}
+
 /// Process a source log URI
 /// @param[in] memory_resource Memory resource
 /// @param[in] source_uri Source log URI
@@ -83,7 +108,7 @@ TemporaryLogDirectory::~TemporaryLogDirectory()
 [[nodiscard]] LogExpected<void> process_source_uri(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& source_uri,
-  ChunkReaderWriterFactory& chunk_reader_writer_factory,
+  ChunkReaderWriterFactory<>& chunk_reader_writer_factory,
   std::pmr::set<LogUri>& uri_set,
   std::pmr::list<LogUri>& source_uri_list)
 {
@@ -96,12 +121,10 @@ TemporaryLogDirectory::~TemporaryLogDirectory()
   }
   if (!union_exists_result.value())
   {
-    const auto metadata_uri = source_uri / log_metadata_filename;
-    if (const auto exists_result = chunk_reader_writer_factory.exists(metadata_uri.string());
-        !exists_result || !exists_result.value())
+    if (const auto log_exists_result = source_log_exists(source_uri, chunk_reader_writer_factory); !log_exists_result)
     {
-      jewels::log_cerr_error("Cannot merge source URI '{}': Not a log", source_uri.string());
-      return jewels::unexpected(LogError::not_a_log);
+      jewels::log_cerr_error("Cannot merge source URI '{}': {}", source_uri.string(), log_exists_result.error());
+      return log_exists_result;
     }
     if (!uri_set.contains(source_uri))
     {
@@ -150,7 +173,7 @@ TemporaryLogDirectory::~TemporaryLogDirectory()
 [[nodiscard]] LogExpected<::clockwork::logging::offboard::v1::LogUnion> make_merge_union(
   jewels::memory::MemoryResource memory_resource,
   std::span<std::string_view> source_uris,
-  ChunkReaderWriterFactory& chunk_reader_writer_factory)
+  ChunkReaderWriterFactory<>& chunk_reader_writer_factory)
 {
   std::pmr::set<LogUri> uri_set{memory_resource};
   std::pmr::list<LogUri> source_uri_list{memory_resource};

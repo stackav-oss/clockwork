@@ -36,14 +36,14 @@ public:
   /// Explicit conversion to the standard library memory_resource type.
   constexpr explicit operator const std::pmr::memory_resource*() const noexcept;
 
-  /// For convenience we provide an implicit conversion to `std::pmr::polymorphic_allocator` so that `MemoryResouce`
+  /// For convenience we provide an implicit conversion to `std::pmr::polymorphic_allocator` so that `MemoryResource`
   /// can be passed directly to constructors like `std::pmr::string`.
   /// @tparam T The type the new `polymorphic_allocator` allocates.
   template <typename T>
   // NOLINTNEXTLINE(google-explicit-constructor) - See docblock for why this is implicit.
   constexpr operator std::pmr::polymorphic_allocator<T>() noexcept;
 
-  /// For convenience we provide an implicit conversion to `std::pmr::polymorphic_allocator` so that `MemoryResouce`
+  /// For convenience we provide an implicit conversion to `std::pmr::polymorphic_allocator` so that `MemoryResource`
   /// can be passed directly to constructors like `std::pmr::string`.
   /// @tparam T The type the new `polymorphic_allocator` allocates.
   template <typename T>

@@ -1,7 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/examples/log_runner/test_message.hh"
+#include "clockwork/examples/log_runner/test_message_clk_cc.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
@@ -10,11 +10,12 @@
 #include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/std/span.hh"
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <chrono>
 #include <cstdlib>

@@ -4,9 +4,9 @@
 #include "clockwork/logging/writers/message_writer.hh"
 
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/filesystem.hh"
@@ -17,7 +17,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 #include <chrono>
 #include <iterator>
@@ -30,8 +30,8 @@ namespace clockwork_logging
 
 MessageWriter::MessageWriter(
   jewels::memory::MemoryResource memory_resource,
-  const LogWriterConfigTap& log_writer_config,
-  const LoggerConfigTap& logger_config,
+  const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+  const clockwork::Tappy<LoggerConfig>& logger_config,
   const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
   : LogWriterBase<MessageWriter>(
       memory_resource,
@@ -103,8 +103,7 @@ MessageWriter::MessageWriter(
   }
 }
 
-void MessageWriter::message_handler(
-  std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle)
+void MessageWriter::message_handler(std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle)
 {
   const auto state = get_state();
   if (state != LogWriterState::failed)

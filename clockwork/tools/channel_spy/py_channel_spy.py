@@ -20,9 +20,9 @@ _logger: Final = logging.getLogger(__name__)
 class ChannelSpy(_nb_channel_spy.ChannelSpy):
     """Implements deserializing callbacks for the clockwork channel spy."""
 
-    def __init__(self, shm_root_dir: str = "/dev/shm", socket_ns: str = "") -> None:  # noqa: S108
+    def __init__(self, shm_root_dir: str = "/dev/shm", tmp_dir: str = "/tmp", socket_ns: str = "") -> None:  # noqa: S108
         """Construct a new channel spy instance."""
-        super().__init__(shm_root_dir, socket_ns)
+        super().__init__(shm_root_dir, tmp_dir, socket_ns)
         self.compiler_context = CompilerContext()
 
     @override

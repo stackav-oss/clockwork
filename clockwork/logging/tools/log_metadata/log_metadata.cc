@@ -1,22 +1,22 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_reader_factory.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/zstd_helper.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 #include <google/protobuf/text_format.h>
 #include <tclap/CmdLine.h>
 #include <tclap/SwitchArg.h>

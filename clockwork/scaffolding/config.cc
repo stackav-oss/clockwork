@@ -3,51 +3,54 @@
 
 #include "clockwork/scaffolding/config.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
-#include "jewels/filesystem/error_code.hh"
-#include "jewels/filesystem/file.hh"
+#include "clockwork/scaffolding/data_source_loader.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
-#include "jewels/utility/fix_clockwork_path.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <memory_resource>
-#include <string>
 #include <string_view>
-#include <vector>
 
 namespace clockwork::scaffolding
 {
 
 jewels::expected<void, jewels::MonoError> setup_configs(
-  std::span<const common::ConfigInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::ConfigInstanceDescription<>>> descs,
+  std::span<const Tappy<common::DataSource<>>> data_sources,
   jewels::memory::MemoryResource memres_sys,
   jewels::memory::MemoryResource memres_cfg,
+  const FirstMessageCache& first_message_cache,
   AbstractCasing& casing)
 {
   for (const auto& desc : descs)
   {
-    auto file = jewels::filesystem::File::open(jewels::fix_clockwork_path(desc.get_config_file_path()));
-    if (!file)
+    const auto data_source_idx = desc.get_init_data_source();
+
+    DataSourceLoadResult load_result{memres_sys};
+    if (jewels::fails(load_data_from_source(
+          jewels::Out{load_result},
+          data_source_idx,
+          data_sources,
+          memres_sys,
+          first_message_cache,
+          desc.get_instance_path_name())))
     {
-      jewels::log_cerr_error(
-        "error opening config '{}': {}\nMake sure the file path is correct and it is in the deps list of the bazel exe "
-        "target.",
-        desc.get_instance_path_name(),
-        file.error());
+      jewels::log_cerr_error("error loading data for config '{}'", desc.get_instance_path_name());
       return jewels::unexpected(jewels::MonoError());
     }
-    auto data = file->read_all(memres_sys);
-    if (!data)
+
+    if (load_result.should_default_construct)
     {
-      jewels::log_cerr_error(
-        "error reading config '{}': reading file gave {}", desc.get_instance_path_name(), data.error());
+      jewels::log_cerr_error("config '{}': default construction is not yet implemented", desc.get_instance_path_name());
       return jewels::unexpected(jewels::MonoError());
     }
-    if (auto result =
-          casing.try_instantiate_config(desc.get_config_instance_id(), desc.get_representation_id(), *data, memres_cfg);
+
+    if (auto result = casing.try_instantiate_config(
+          desc.get_config_instance_id(), load_result.representation_id, load_result.data, memres_cfg);
         !result)
     {
       jewels::log_cerr_error(
@@ -63,7 +66,7 @@ jewels::expected<void, jewels::MonoError> setup_configs(
 }
 
 [[nodiscard]] jewels::expected<void, jewels::MonoError>
-connect_configs(std::span<const common::ConfigConnectionTap> connections, AbstractCasing& casing)
+connect_configs(std::span<const Tappy<common::ConfigConnection>> connections, AbstractCasing& casing)
 {
   for (const auto& connection : connections)
   {

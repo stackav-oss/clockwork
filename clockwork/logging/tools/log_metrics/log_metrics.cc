@@ -10,8 +10,8 @@
 #include "jewels/math/constants.hh"
 #include "jewels/std/expected.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/format.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
 #include <tclap/CmdLine.h>
 #include <tclap/ValueArg.h>
 

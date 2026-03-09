@@ -21,7 +21,6 @@
 #include <cstdlib>
 #include <dirent.h>
 #include <fcntl.h>
-#include <filesystem>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -90,14 +89,15 @@ template <typename FilesystemType>
 
 TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
 {
-  const jewels::testing::TmpDirectoryGuard test_dir;
   const memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const jewels::testing::TmpDirectoryGuard test_dir(memory_resource);
   TestType filesys{memory_resource};
   filesys.set_verbosity(Filesystem::ErrorVerbosity::verbose);
 
+  using namespace std::literals;
   SECTION("Open")
   {
-    const auto test_file_path = test_dir.get_path() / "TEST_FILE";
+    const auto test_file_path = test_dir.get_path() / "TEST_FILE"sv;
     const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     REQUIRE(filesys.open(test_file_path.string()) == jewels::unexpected(make_error_code(ENOENT)));
@@ -118,7 +118,7 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
 
   SECTION("Read")
   {
-    const auto test_file_path = test_dir.get_path() / "TEST_FILE";
+    const auto test_file_path = test_dir.get_path() / "TEST_FILE"sv;
     const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     REQUIRE(create_test_file(
@@ -308,8 +308,8 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
     const auto test_file_path2 = test_dir.get_path() / "TEST_FILE2";
     REQUIRE(filesys.unlink(test_file_path2.string()) == jewels::unexpected(make_error_code(ENOENT)));
     REQUIRE(create_test_file(test_file_path1.string(), {}, filesys));
-    REQUIRE(filesys.create_symlink(test_file_path1.string(), test_file_path2.string()));
-    REQUIRE(filesys.read_symlink(test_file_path2.string()) == test_file_path1);
+    REQUIRE(filesys.create_symlink(test_file_path1.string_view(), test_file_path2.string_view()));
+    REQUIRE(filesys.read_symlink(test_file_path2) == test_file_path1.string_view());
     REQUIRE(filesys.unlink(test_file_path2.string()));
 
     if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
@@ -324,9 +324,9 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
         jewels::unexpected(make_error_code(EEXIST)));
 
       filesys.inject_readlink_error(EBADMSG, 1U);
-      REQUIRE(filesys.read_symlink(test_file_path2.string()) == test_file_path1);
-      REQUIRE(filesys.read_symlink(test_file_path2.string()) == jewels::unexpected(make_error_code(EBADMSG)));
-      REQUIRE(filesys.read_symlink(test_file_path2.string()) == test_file_path1);
+      REQUIRE(filesys.read_symlink(test_file_path2) == test_file_path1.string_view());
+      REQUIRE(filesys.read_symlink(test_file_path2) == jewels::unexpected(make_error_code(EBADMSG)));
+      REQUIRE(filesys.read_symlink(test_file_path2) == test_file_path1.string_view());
 
       filesys.inject_unlink_error(EBADMSG, 1U);
       REQUIRE(filesys.unlink(test_file_path2.string()));

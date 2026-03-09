@@ -1,13 +1,14 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
@@ -16,9 +17,11 @@
 #include "clockwork/logging/readers/onboard_log_reader.hh"
 #include "clockwork/logging/readers/serialization.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -30,13 +33,12 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory_resource>
@@ -87,10 +89,10 @@ TEST_CASE("Onboard Log Reader")
       onboard::LoggedChannelMetadata{
         .channel_name = topics.at(0U),
         .compression_type = CompressionType::none,
-        .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
         .channel_type = ChannelType::regular,
         .schema_name = clockwork::LoggingTraits<MsgType>::schema_name,
-        .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
         .schema_definition =
           std::string_view{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
@@ -102,10 +104,10 @@ TEST_CASE("Onboard Log Reader")
       onboard::LoggedChannelMetadata{
         .channel_name = topics.at(1U),
         .compression_type = CompressionType::none,
-        .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
         .channel_type = ChannelType::persistent,
         .schema_name = clockwork::LoggingTraits<MsgType>::schema_name,
-        .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
         .schema_definition =
           std::string_view{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
@@ -155,9 +157,9 @@ TEST_CASE("Onboard Log Reader")
       {
         .name = "/topic1",
         .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-        .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
         .channel_type = ChannelType::regular,
-        .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
         .schema_definition =
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
@@ -166,9 +168,9 @@ TEST_CASE("Onboard Log Reader")
       {
         .name = "/topic2",
         .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-        .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
         .channel_type = ChannelType::persistent,
-        .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
         .schema_definition =
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
@@ -208,7 +210,8 @@ TEST_CASE("Onboard Log Reader")
         msg.data = decompress_result.value();
         msg.is_lite_compressed = false;
       }
-      REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
+      REQUIRE(
+        msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }
@@ -240,7 +243,8 @@ TEST_CASE("Onboard Log Reader")
         msg.data = decompress_result.value();
         msg.is_lite_compressed = false;
       }
-      REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
+      REQUIRE(
+        msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }
@@ -267,7 +271,8 @@ TEST_CASE("Onboard Log Reader")
         const auto decompress_result = lite_compressor.decompress(msg.data);
         REQUIRE(decompress_result);
       }
-      REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
+      REQUIRE(
+        msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       actual_timestamps[std::string(msg.topic)].emplace_back(msg.publish_time);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }
@@ -310,7 +315,8 @@ TEST_CASE("Onboard Log Reader")
         const auto decompress_result = lite_compressor.decompress(msg.data);
         REQUIRE(decompress_result);
       }
-      REQUIRE(msg.message_encoding == clockwork::LoggingTraits<MsgType>::message_encoding);
+      REQUIRE(
+        msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       actual_timestamps[std::string(msg.topic)].emplace_back(msg.publish_time);
       actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
     }

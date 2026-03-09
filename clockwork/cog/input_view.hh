@@ -4,10 +4,10 @@
 #pragma once
 
 #include "clockwork/cog/cog_statistics.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -38,6 +38,10 @@ namespace clockwork
 ///     static constexpr EndpointClassId endpoint_id;
 ///     // The maximum view size for the dial input.
 ///     static constexpr size_t max_view_size;
+///     // The minimum number of messages guaranteed to be in the view.
+///     static constexpr size_t min_msgs;
+///     // The minimum number of new messages guaranteed to be in the view.
+///     static constexpr size_t min_new_msgs;
 ///     // The safety margin required by the input.
 ///     static constexpr size_t safety_margin;
 ///     // The threshold for preemptively skipping ahead.
@@ -53,9 +57,11 @@ class InputView
 public:
   using Policy = PolicyT;
   using MsgType = typename Policy::MsgType;
-  using PinionDifferenceType = typename std::iterator_traits<pinion::BufferIterator>::difference_type;
+  using PinionDifferenceType = typename std::iterator_traits<pinion::SlotRef>::difference_type;
   static constexpr auto endpoint_id = Policy::endpoint_id;
   static constexpr auto max_view_size = Policy::max_view_size;
+  static constexpr auto min_msgs = Policy::min_msgs;
+  static constexpr auto min_new_msgs = Policy::min_new_msgs;
   static constexpr auto safety_margin = Policy::safety_margin;
   static constexpr auto skip_threshold = Policy::skip_threshold;
   static constexpr auto copy_inputs = Policy::copy_inputs;
@@ -63,12 +69,12 @@ public:
 
   using InputDialType = std::conditional_t<
     manual_cursor,
-    MessageInputDialWithCursorControl<MsgType, max_view_size>,
-    MessageInputDial<MsgType, max_view_size>>;
+    MessageInputDialWithCursorControl<MsgType, max_view_size, min_msgs, min_new_msgs>,
+    MessageInputDial<MsgType, max_view_size, min_msgs, min_new_msgs>>;
 
-  using ViewType = typename MessageInputDial<MsgType, max_view_size>::ViewType;
-  using ViewIteratorType = typename MessageInputDial<MsgType, max_view_size>::IteratorType;
-  using LastViewedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::BufferIterator>;
+  using ViewType = typename MessageInputDial<MsgType, max_view_size, min_msgs, min_new_msgs>::ViewType;
+  using ViewIteratorType = typename MessageInputDial<MsgType, max_view_size, min_msgs, min_new_msgs>::IteratorType;
+  using LastViewedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::SlotRef>;
 
   /// Construct from a pinion subscriber handle.
   /// @param subscriber The subscriber handle
@@ -126,6 +132,10 @@ public:
   /// @return true if any of the saved dial inputs are close to be overrun by the producer.
   [[nodiscard]] bool almost_overrun() const;
 
+  /// Check for published once channels that have been published more than once
+  /// @return true if any of published once channels have been published more than once
+  [[nodiscard]] bool is_published_once_channel_invalid() const;
+
   /// Get the input metrics
   /// @return The aggregated input metrics.
   /// @note This is only virtual so that we can effectively mock it in tests.
@@ -153,20 +163,19 @@ private:
     jewels::container::CircularBuffer<detail::MsgPolicy<MsgType>, std::span<const MsgType*, max_view_size>>;
   using CopyStorageType = std::conditional_t<copy_inputs, std::array<MsgType, max_view_size>, std::array<MsgType, 0>>;
 
-  bool apply_safety_margin(const auto& available, pinion::BufferIterator& begin, pinion::BufferIterator& end) const;
-  std::optional<size_t>
-  apply_skip_threshold(const auto& available, pinion::BufferIterator& begin, pinion::BufferIterator& end) const;
+  bool apply_safety_margin(const auto& available, pinion::SlotRef& begin, pinion::SlotRef& end) const;
+  std::optional<size_t> apply_skip_threshold(const auto& available, pinion::SlotRef& begin, pinion::SlotRef& end) const;
 
   /// The underlying subscriber handle.
   std::optional<pinion::SubscriberHandle> subscriber_;
   /// Iterator tracking the input cursor.
-  pinion::BufferIterator input_cursor_;
+  pinion::SlotRef input_cursor_;
   /// Iterator for the last viewed message.
-  pinion::BufferIterator last_viewed_;
+  pinion::SlotRef last_viewed_;
   /// Iterator for the last begin iterator (used for overrun checks)
-  pinion::BufferIterator saved_begin_;
+  pinion::SlotRef saved_begin_;
   /// Iterator for the last end iterator (used for keeping track of new messages)
-  pinion::BufferIterator saved_end_;
+  pinion::SlotRef saved_end_;
   /// Storage for the message view buffer, used to construct the dial inputs.
   std::array<const MsgType*, max_view_size> msg_view_storage_;
   /// The circular message view buffer, used to construct the dial inputs.
@@ -188,7 +197,7 @@ private:
   size_t metrics_batch_size_;
   /// Construct the MessageInputDial for the given range.
   [[nodiscard]] jewels::expected<InputDialType, pinion::ProgressError>
-  make_dial_input_from_range(pinion::BufferIterator begin, pinion::BufferIterator end);
+  make_dial_input_from_range(pinion::SlotRef begin, pinion::SlotRef end);
 
   /// Update the input metrics;
   void update_input_metrics(int new_msg_count, PinionDifferenceType num_dropped_messages, int64_t message_staleness);

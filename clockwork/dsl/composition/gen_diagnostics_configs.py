@@ -31,6 +31,15 @@ def gen_diagnostics_configs(
                         instance=member.member.instance_id or "",
                     )
                 )
+            elif isinstance(member.member, diagnostics.InfraDiagnosticsDef):
+                assert isinstance(member.member.signals, list)
+                database.reporters.append(
+                    diagnostics_config.ReporterInfo(
+                        id=uuid5(inst_id, member.member.name),
+                        name=member.member.name,
+                        instance=".".join(cog.fqn.rsplit("::", 1)[-1].split(".")[::-1]),
+                    )
+                )
 
     for domain in sys.cpu_domains.values():
         for diagnostics_producer_uuid, diagnostics_producer in domain.platform_diagnostics_producers.items():

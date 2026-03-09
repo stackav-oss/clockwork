@@ -3,6 +3,7 @@
 
 #include "clockwork/test_tools/synthetic_message_fetcher.hh"
 
+#include "jewels/callsig/outcome.hh"
 #include "jewels/std/expected.hh"
 
 namespace clockwork::testing
@@ -41,17 +42,25 @@ SyntheticMessageFetcher::SyntheticMessageFetcher(jewels::memory::MemoryResource 
 
 std::optional<::clockwork::MultiMessageInfoData> SyntheticMessageFetcher::try_fetch_message()
 {
-  if (messages_.empty())
+  if (current_it_ == messages_.end())
   {
     return std::nullopt;
   }
-  auto retval = *messages_.begin();
-  messages_.erase(messages_.begin());
+  const auto& retval = *current_it_;
+  ++current_it_;
   return retval;
 }
 
 jewels::expected<void, jewels::MonoError> SyntheticMessageFetcher::initialize()
 {
+  current_it_ = messages_.begin();
   return {};
 }
+
+jewels::BinaryOutcome SyntheticMessageFetcher::reset() noexcept
+{
+  current_it_ = messages_.begin();
+  return jewels::success;
+}
+
 } // namespace clockwork::testing

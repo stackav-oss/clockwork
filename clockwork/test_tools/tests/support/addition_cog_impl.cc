@@ -3,7 +3,7 @@
 
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/test_tools/tests/support/addition_cog_dial.hh"
 #include "clockwork/test_tools/tests/support/addition_message.hh"
 #include "clockwork/test_tools/tests/support/sum_message.hh"

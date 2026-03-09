@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "clockwork/dial/alignment_type.hh"
-#include "clockwork/dial/approx_aligner_config.hh"
+#include "clockwork/dial/alignment_type_clk_cc.hh"
+#include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"

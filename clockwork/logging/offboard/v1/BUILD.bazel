@@ -124,6 +124,7 @@ proto_py_library(
     name = "log_union_py_library",
     srcs = ["log_union_pb2.py"],
     data = ["log_union_pb2.pyi"],
+    imports = ["../../../.."],
     visibility = ["//visibility:public"],
     deps = ["@protobuf//:protobuf_python"],
 )

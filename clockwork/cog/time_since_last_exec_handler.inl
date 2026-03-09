@@ -9,6 +9,7 @@
 #include "jewels/time/sync_time.hh"
 
 #include <chrono>
+#include <compare>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -66,6 +67,15 @@ auto TimeSinceLastExecHandler<Policy>::update_last_exec_time(jewels::time::SyncT
   expected_next_trigger_ = trigger_at;
 
   return Status{.last_exec_time = last_exec_time_, .expected_next_trigger = expected_next_trigger_};
+}
+
+template <typename Policy>
+void TimeSinceLastExecHandler<Policy>::notify_if_triggered(jewels::time::SyncTime now)
+{
+  if (now >= expected_next_trigger_)
+  {
+    notify(Event{.current_time = now});
+  }
 }
 
 } // namespace clockwork

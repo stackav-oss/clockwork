@@ -4,16 +4,15 @@
 #pragma once
 
 #include "clockwork/logging/log_error.hh"
-#include "clockwork/logging/offboard/log_uri.hh"
+#include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "jewels/memory/memory_resource.hh"
 
+#include <aws/core/client/CoreErrors.h>
 #include <aws/s3/S3Client.h>
-#include <aws/s3/model/CompletedPart.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <memory_resource>
-#include <span>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,88 +20,68 @@
 namespace clockwork_logging::offboard
 {
 
-/// Return value from s3_list_objects
-struct S3ListObjectsResult
+/// Utility class that handles the interface to S3
+class S3Utils : public S3UtilsInterface
 {
-  /// List of objects under the URI
-  std::pmr::vector<std::pmr::string> objects;
-  /// List of prefixes under the URI
-  std::pmr::vector<std::pmr::string> prefixes;
+public:
+  /// Number of retries between retry debug messages
+  static constexpr int64_t num_retries_between_debug_messages = 10;
+
+  /// Constructor
+  /// @param[in] memory_interface Memory interface
+  /// s3_client_ptr S3 client pointer
+  S3Utils(jewels::memory::MemoryResource memory_resource, std::shared_ptr<Aws::S3::S3Client> s3_client_ptr);
+
+  ~S3Utils() override = default;
+
+  S3Utils(const S3Utils& other) = delete;
+  S3Utils& operator=(const S3Utils& other) = delete;
+  S3Utils(S3Utils&&) noexcept = delete;
+  S3Utils& operator=(S3Utils&&) noexcept = delete;
+
+  /// @see S3UtilsInterface:list_objects
+  [[nodiscard]] LogExpected<S3ListObjectsResult> list_objects_v2(const LogUri& s3_uri) const override;
+
+  /// @see S3UtilsInterface:create_multipart_upload
+  [[nodiscard]] LogExpected<std::pmr::string> create_multipart_upload(const LogUri& s3_uri) const override;
+
+  /// @see S3UtilsInterface:upload_part
+  [[nodiscard]] LogExpected<Aws::S3::Model::CompletedPart> upload_part(
+    const LogUri& s3_uri,
+    std::string_view upload_id,
+    int32_t part_number,
+    std::pmr::vector<std::pmr::vector<std::byte>> buffers) const override;
+
+  /// @see S3UtilsInterface:complete_multipart_upload
+  [[nodiscard]] LogExpected<void> complete_multipart_upload(
+    const LogUri& s3_uri,
+    std::string_view upload_id,
+    std::span<Aws::S3::Model::CompletedPart> completed_parts) const override;
+
+  /// @see S3UtilsInterface:put_object
+  [[nodiscard]] LogExpected<void>
+  put_object(const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<std::byte>> buffers) const override;
+
+  /// @see S3UtilsInterface:get_object_size
+  [[nodiscard]] LogExpected<size_t> get_object_size(const LogUri& s3_uri) const override;
+
+  /// @see S3UtilsInterface:get_object
+  [[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
+  get_object(const LogUri& s3_uri, size_t offset, size_t length) const override;
+
+  /// @see S3UtilsInterface:delete_object
+  [[nodiscard]] LogExpected<void> delete_object(const LogUri& s3_uri) const override;
+
+  /// Callback for retries from S3RetryStrategy
+  static void retry_callback(
+    const Aws::Client::AWSError<Aws::Client::CoreErrors>& error, int64_t attempted_retries, bool should_retry);
+
+private:
+  /// Memory resource
+  jewels::memory::MemoryResource memory_resource_;
+
+  /// S3 client pointer
+  std::shared_ptr<Aws::S3::S3Client> s3_client_ptr_;
 };
-
-/// Send an S3 ListObjectsV2 request
-/// @param[in] memory_resource Memory resource
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @return Objects under the prefix or LogError on failure
-[[nodiscard]] LogExpected<S3ListObjectsResult> s3_list_objects_v2(
-  jewels::memory::MemoryResource memory_resource, const Aws::S3::S3Client& s3_client, const LogUri& s3_uri);
-
-/// Send an S3 CreateMultipartUpload request
-/// @param[in] memory_resource Memory resource
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @return Multipart upload ID or LogError on failure
-[[nodiscard]] LogExpected<std::pmr::string> s3_create_multipart_upload(
-  jewels::memory::MemoryResource memory_resource, const Aws::S3::S3Client& s3_client, const LogUri& s3_uri);
-
-/// Send an S3 UploadPart request
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @param[in] upload_id Multipart upload ID
-/// @param[in] part_number Part number
-/// @param[in] buffers Data buffers to upload
-/// @return Completed part or LogError on failure
-[[nodiscard]] LogExpected<Aws::S3::Model::CompletedPart> s3_upload_part(
-  const Aws::S3::S3Client& s3_client,
-  const LogUri& s3_uri,
-  std::string_view upload_id,
-  int32_t part_number,
-  std::pmr::vector<std::pmr::vector<std::byte>> buffers);
-
-/// Send an S3 CreateMultipartUpload request
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @param[in] upload_id Multipart upload ID
-/// @param[in] completed_parts Completed upload parts
-/// @return LogError on failure
-[[nodiscard]] LogExpected<void> s3_complete_multipart_upload(
-  const Aws::S3::S3Client& s3_client,
-  const LogUri& s3_uri,
-  std::string_view upload_id,
-  std::span<Aws::S3::Model::CompletedPart> completed_parts);
-
-/// Send an S3 PutObject request
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @param[in] buffers Data buffers to upload
-/// @return LogError on failure
-[[nodiscard]] LogExpected<void> s3_put_object(
-  const Aws::S3::S3Client& s3_client, const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<std::byte>> buffers);
-
-/// Get the size of an S3 object
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @return Object size or LogError on failure
-[[nodiscard]] LogExpected<size_t> s3_get_object_size(const Aws::S3::S3Client& s3_client, const LogUri& s3_uri);
-
-/// Read an object from S3
-/// @param[in] memory_resource Memory resource
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @param[in] offset File offset bytes
-/// @param[in] length Number of bytes to read
-[[nodiscard]] LogExpected<std::pmr::vector<std::byte>> s3_get_object(
-  jewels::memory::MemoryResource memory_resource,
-  const Aws::S3::S3Client& s3_client,
-  const LogUri& s3_uri,
-  size_t offset,
-  size_t length);
-
-/// Delete an S3 object
-/// @param[in] s3_client S3 client
-/// @param[in] s3_uri S3 URI
-/// @return LogError on failure
-[[nodiscard]] LogExpected<void> s3_delete_object(const Aws::S3::S3Client& s3_client, const LogUri& s3_uri);
 
 } // namespace clockwork_logging::offboard

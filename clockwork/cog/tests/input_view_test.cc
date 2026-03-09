@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/input_view.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -32,6 +33,7 @@
 #include <ranges>
 #include <sys/types.h>
 #include <tuple>
+
 namespace clockwork
 {
 namespace
@@ -64,7 +66,7 @@ struct InputViewFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, Policy::channel_size> channel;
+  InMemoryChannel<MsgType, Policy::channel_size, false> channel;
   pinion::PublisherHandle publisher_handle;
   pinion::SubscriberHandle subscriber_handle;
   InputView<Policy> subscriber;
@@ -97,6 +99,8 @@ struct NoCopyPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("27e38987-2e30-497f-9349-bf8d98931470").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -117,11 +121,11 @@ TEST_CASE_METHOD(NoCopyFixture, "no messages", "[max_view_size=3, channel_size=3
   REQUIRE(input);
   REQUIRE(input->get_cursor() == input->end());
 
-  // Updating the last consumed shoudl be a no-op.
+  // Updating the last consumed should be a no-op.
 
   auto last_consumed = subscriber.commit(*input);
   REQUIRE(NoCopyFixture::Policy::endpoint_id == std::get<0>(last_consumed));
-  REQUIRE(pinion::BufferIterator{} == std::get<1>(last_consumed));
+  REQUIRE(subscriber_handle.available().begin() == std::get<1>(last_consumed));
 
   // The view should be empty since no messages are published.
 
@@ -370,6 +374,8 @@ struct CopyPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("27e38987-2e30-497f-9349-bf8d98931470").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = true;
@@ -498,6 +504,8 @@ struct ManualCursorPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("26da678b-5b37-442a-b78e-9fc91784e9d4").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -518,11 +526,11 @@ TEST_CASE_METHOD(ManualCursorFixture, "no messages", "[max_view_size=3, channel_
   REQUIRE(input);
   REQUIRE(input->get_cursor() == input->end());
 
-  // Updating the last consumed shoudl be a no-op.
+  // Updating the last consumed should be a no-op.
 
   auto last_consumed = subscriber.commit(*input);
   REQUIRE(ManualCursorFixture::Policy::endpoint_id == std::get<0>(last_consumed));
-  REQUIRE(pinion::BufferIterator{} == std::get<1>(last_consumed));
+  REQUIRE(subscriber_handle.available().begin() == std::get<1>(last_consumed));
 
   // The view should be empty since no messages are published.
 
@@ -610,6 +618,8 @@ struct View1Channel3Policy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("27e38987-2e30-497f-9349-bf8d98931470").value();
   static constexpr auto max_view_size = 1U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -678,6 +688,8 @@ struct InvalidChannelSizePolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("cf199401-65d4-4ddd-8b1c-4c1d2ea9c38c").value();
   static constexpr auto max_view_size = 10U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -704,6 +716,8 @@ struct SafetyMarginPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("19712716-7b7a-4ff1-ab64-26ce1b43ad09").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{3U};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -975,6 +989,8 @@ struct SkipThresholdPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("19712716-7b7a-4ff1-ab64-26ce1b43ad09").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<size_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{10U};
   static constexpr auto copy_inputs = false;
@@ -1098,6 +1114,8 @@ struct OverrunWarningPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("346c2d3f-2c51-425c-a241-d1433d3d2a62").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -1162,6 +1180,8 @@ struct LargeOverrunWarningPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("a1cd4c06-d916-4344-b759-b2e2b7202e25").value();
   static constexpr auto max_view_size = 3U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
@@ -1230,6 +1250,8 @@ struct MetricsTestingPolicy
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("1188a67a-7acd-48c5-9bff-72300745f355").value();
   static constexpr auto max_view_size = 2U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
   static constexpr std::optional<::ssize_t> safety_margin{};
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;

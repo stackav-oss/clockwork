@@ -6,10 +6,10 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
+#include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
-#include <aws/s3/S3Client.h>
 #include <aws/s3/model/CompletedPart.h>
 
 #include <cstddef>
@@ -30,11 +30,11 @@ public:
   /// Do not call constructor directly, use make_shared to create an instance
   /// @param[in] memory_resource Memory resource
   /// @param[in] file_uri Log file URI
-  /// @param[in] s3_client_ptr S3 client pointer
+  /// @param[in] s3_utils_ptr S3 utils pointer
   S3ChunkWriter(
     jewels::memory::MemoryResource memory_resource,
     LogUri file_uri,
-    jewels::memory::NonNullSharedPtr<Aws::S3::S3Client> s3_client_ptr);
+    jewels::memory::NonNullSharedPtr<S3UtilsInterface> s3_utils_ptr);
 
   /// Destructor warns if not closed cleanly
   ~S3ChunkWriter() override;
@@ -47,12 +47,12 @@ public:
   /// Create a shared pointer to a S3 chunk writer
   /// @param[in] memory_resource Memory resource
   /// @param[in] file_uri Log file URI
-  /// @param[in] s3_client_ptr S3 client pointer
+  /// @param[in] s3_utils_ptr S3 utils pointer
   /// Pointer to the S3 chunk writer or LogError on failure
   [[nodiscard]] static LogExpected<jewels::memory::NonNullSharedPtr<S3ChunkWriter>> make_shared(
     const jewels::memory::MemoryResource& memory_resource,
     std::string_view file_uri,
-    const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr);
+    const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr);
 
   /// @see ChunkWriter::file_uri
   [[nodiscard]] const LogUri& file_uri() const noexcept override;
@@ -82,7 +82,7 @@ private:
   LogUri file_uri_;
 
   /// S3 client pointer
-  jewels::memory::NonNullSharedPtr<Aws::S3::S3Client> s3_client_ptr_;
+  jewels::memory::NonNullSharedPtr<S3UtilsInterface> s3_utils_ptr_;
 
   /// Upload ID for multipart upload
   std::pmr::string upload_id_;

@@ -1,14 +1,18 @@
-use clockwork::dsl::tests::support::hellomsg;
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::testing)]
+
+use clockwork::dsl::tests::support::clk_hellomsg;
+
 // Doc.
 cog CopyCog
 {
     inputs
     {
-        input_a: Tappy<hellomsg::HelloMsg>
+        input_a: Tappy<clk_hellomsg::HelloMsg>
         {
             copy_inputs: false;
         }
-        input_b: Tappy<hellomsg::HelloMsg>
+        input_b: Tappy<clk_hellomsg::HelloMsg>
         {
             copy_inputs: true;
         }
@@ -18,14 +22,4 @@ cog CopyCog
         condition periodic: time_since_last_exec(10ms);
         execute when: periodic;
     }
-}
-
-cpp_target copy_cog
-{
-  options
-  {
-    namespace clockwork::testing;
-  }
-
-  cog CopyCog;
 }

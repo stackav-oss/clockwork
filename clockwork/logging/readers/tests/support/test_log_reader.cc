@@ -3,7 +3,9 @@
 
 #include "clockwork/logging/readers/tests/support/test_log_reader.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/std/expected.hh"
 
 #include <catch2/catch_test_macros.hpp>
@@ -99,9 +101,11 @@ std::vector<TopicMetadata> TestLogReader::get_metadata()
       TopicMetadata{
         .name = name,
         .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
-        .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(
+          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
         .channel_type = ChannelType::regular,
-        .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+        .schema_encoding =
+          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
         .schema_definition =
           std::string{
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),
@@ -120,9 +124,11 @@ LogExpected<TopicMetadata> TestLogReader::get_channel_metadata(std::string_view 
       return TopicMetadata{
         .name = name,
         .type = std::string{clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_name},
-        .message_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(
+          clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::message_encoding),
         .channel_type = ChannelType::regular,
-        .schema_encoding = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding,
+        .schema_encoding =
+          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
         .schema_definition =
           std::string{
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),

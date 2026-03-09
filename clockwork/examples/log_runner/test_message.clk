@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::logging::test)]
+
 // Test message
 schema TestMessage
 {
@@ -7,16 +10,4 @@ schema TestMessage
         // A test string
         #1 message_string: VarString<240>;
     }
-}
-
-cpp_target test_message
-{
-    options
-    {
-        namespace clockwork::logging::test;
-    }
-    schema TestMessage;
-
-    representation Tachyon<TestMessage>;
-    interface Tappy<TestMessage>;
 }

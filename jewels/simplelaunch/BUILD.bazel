@@ -44,9 +44,9 @@ cc_library(
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "//jewels/utility:fix_clockwork_path",
         "@boost//:asio",
-        "@boost//:date_time",
         "@boost//:system",
         "@fmt",
     ],
@@ -69,7 +69,6 @@ py_library(
     srcs = ["client.py"],
     visibility = ["//visibility:public"],
     deps = [
-        "//:clockwork",  # keep
         "//jewels/simplelaunch/v1:service_py_library",
         "@clockwork_pip//requests",
     ],

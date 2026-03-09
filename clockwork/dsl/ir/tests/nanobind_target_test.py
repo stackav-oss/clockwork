@@ -14,6 +14,7 @@ from clockwork.dsl.bazel.targets import Label
 from clockwork.dsl.ir import (
     clkenum,
     compiler,
+    nanobind_binding,
     nanobind_target,
     primitive,
     typesys,
@@ -51,12 +52,14 @@ def test_nanobind_target(fs_importer: FilesystemImporter) -> None:
 
     # check the registry
     for binding in nanobind_target_ir.nanobind_bindings:
+        assert isinstance(binding, nanobind_binding.NanobindBinding)
         assert binding.resolved is not None
         target_info = lookup_binding(binding.resolved.original_type, nanobind_target_ir.module.context)
         assert target_info is not None
         assert target_info.target_id.name == "hello_msg_clk_nb"
 
     # enum sanity check
+    assert isinstance(nanobind_target_ir.nanobind_bindings[0], nanobind_binding.NanobindBinding)
     assert nanobind_target_ir.nanobind_bindings[0].resolved is not None
     assert isinstance(nanobind_target_ir.nanobind_bindings[0].resolved.original_type, clkenum.ResolvedEnum)
     assert (
@@ -68,12 +71,15 @@ def test_nanobind_target(fs_importer: FilesystemImporter) -> None:
     nanobind_target_ir.nanobind_bindings[0].resolved.original_type.name = "foo"
 
     # sanity check on the 3 schemas
+    assert isinstance(nanobind_target_ir.nanobind_bindings[1], nanobind_binding.NanobindBinding)
     assert nanobind_target_ir.nanobind_bindings[1].resolved is not None
     assert isinstance(nanobind_target_ir.nanobind_bindings[1].resolved.original_type, typesys.Instantiation)
 
+    assert isinstance(nanobind_target_ir.nanobind_bindings[2], nanobind_binding.NanobindBinding)
     assert nanobind_target_ir.nanobind_bindings[2].resolved is not None
     assert isinstance(nanobind_target_ir.nanobind_bindings[2].resolved.original_type, typesys.Instantiation)
 
+    assert isinstance(nanobind_target_ir.nanobind_bindings[3], nanobind_binding.NanobindBinding)
     assert nanobind_target_ir.nanobind_bindings[3].resolved is not None
     assert isinstance(nanobind_target_ir.nanobind_bindings[3].resolved.original_type, typesys.Instantiation)
 

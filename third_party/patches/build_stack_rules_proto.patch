@@ -1,192 +1,87 @@
-diff --git MODULE.bazel MODULE.bazel
-new file mode 100644
-index 00000000..0250a2fa
---- /dev/null
-+++ MODULE.bazel
-@@ -0,0 +1,41 @@
-+module(name = "build_stack_rules_proto")
-+
-+bazel_dep(name = "aspect_rules_js")
-+bazel_dep(name = "aspect_rules_ts")
-+bazel_dep(name = "gazelle", version = "0.31.0", repo_name = "bazel_gazelle")
-+bazel_dep(name = "grpc", version = "1.48.1", repo_name = "com_github_grpc_grpc")
-+bazel_dep(name = "protobuf", repo_name = "com_google_protobuf")
-+bazel_dep(name = "rules_cc")
-+bazel_dep(name = "rules_go", repo_name = "io_bazel_rules_go")
-+bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
-+bazel_dep(name = "rules_python")
-+
-+npm = use_extension(
-+    "@aspect_rules_js//npm:extensions.bzl",
-+    "npm",
-+)
-+npm.npm_translate_lock(
-+    name = "npm_ts_proto",
-+    generate_bzl_library_targets = True,
-+    link_workspace = "build_stack_rules_proto",
-+    npmrc = "//:.npmrc",
-+    pnpm_lock = "//:pnpm-lock.yaml",
-+    verify_node_modules_ignored = "//:.bazelignore",
-+)
-+use_repo(npm, "npm_ts_proto")
-+
-+go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
-+go_deps.from_file(go_mod = "//:go.mod")
-+use_repo(
-+    go_deps,
-+    "com_github_bazelbuild_buildtools",
-+    "com_github_bmatcuk_doublestar",
-+    "com_github_emicklei_proto",
-+    "com_github_golang_glog",
-+    "com_github_grpc_ecosystem_grpc_gateway_v2",
-+    "in_gopkg_yaml_v3",
-+    "net_starlark_go",
-+    "org_golang_google_genproto_googleapis_api",
-+    "org_golang_google_grpc_cmd_protoc_gen_go_grpc",
-+    "org_golang_google_protobuf",
-+)
-diff --git deps/BUILD.bazel deps/BUILD.bazel
-index 01c28bc4..a59f6469 100644
---- deps/BUILD.bazel
-+++ deps/BUILD.bazel
-@@ -103,19 +103,19 @@ proto_dependency(
+diff --git BUILD.bazel BUILD.bazel
+index 5547de2f..fd4224d3 100644
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -1,4 +1,4 @@
+-load("@//rules:proto_gazelle.bzl", "proto_gazelle")
++load("@build_stack_rules_proto//rules:proto_gazelle.bzl", "proto_gazelle")
+ load("@bazel_gazelle//:def.bzl", "gazelle_binary")
+ load("@npm_ts_proto//:defs.bzl", "npm_link_all_packages")
+ 
+@@ -23,6 +23,7 @@ gazelle_binary(
+         "@bazel_gazelle//language/go",
+         "@bazel_gazelle//language/proto",
+         "//language/protobuf",
++        "@bazel_skylib_gazelle_plugin//bzl",
+     ],
      visibility = ["//visibility:public"],
  )
+diff --git MODULE.bazel MODULE.bazel
+index 62c165b9..fde48d1a 100644
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -30,6 +30,7 @@ bazel_dep(name = "grpc", version = "1.74.1", repo_name = "com_github_grpc_grpc")
+ bazel_dep(name = "grpc-java", version = "1.71.0", repo_name = "io_grpc_grpc_java")
+ bazel_dep(name = "gazelle", version = "0.45.0", repo_name = "bazel_gazelle")
+ bazel_dep(name = "bazel_skylib", version = "1.8.1")
++bazel_dep(name = "bazel_skylib_gazelle_plugin", version = "1.8.2")
+ bazel_dep(name = "bazel_features", version = "1.35.0")
+ bazel_dep(name = "aspect_rules_ts", version = "3.7.0")
+ bazel_dep(name = "aspect_rules_js", version = "2.5.0")
+@@ -155,6 +156,7 @@ use_repo(
+     "com_github_emicklei_proto",
+     "com_github_gogo_protobuf",
+     "com_github_google_go_cmp",
++    "com_github_grpc_ecosystem_grpc_gateway_v2",
+     "com_github_pmezard_go_difflib",
+     "com_github_stretchr_testify",
+     "in_gopkg_yaml_v3",
+@@ -233,7 +235,7 @@ use_repo(npm, "npm_ts_proto")
  
--# Release: v0.31.0
-+# Release: v0.35.0
- # TargetCommitish: master
--# Date: 2023-05-27 18:23:20 +0000 UTC
--# URL: https://github.com/bazelbuild/bazel-gazelle/releases/tag/v0.31.0
--# Size: 1870962 (1.9 MB)
-+# Date: 2023-12-21 18:18:45 +0000 UTC
-+# URL: https://github.com/bazelbuild/bazel-gazelle/releases/tag/v0.35.0
-+# Size: 1780790 (1.7 MB)
- proto_dependency(
-     name = "bazel_gazelle",
-     patch_args = ["-p1"],
-     patches = ["@build_stack_rules_proto//third_party:bazel-gazelle-revert-1152.patch"],
-     repository_rule = "http_archive",
--    sha256 = "bc9a8c259ad2eb54dd89404979c097451df8f2dc64852c9f38d2b7a248f84f32",
--    strip_prefix = "bazel-gazelle-0.31.0",
--    urls = ["https://github.com/bazelbuild/bazel-gazelle/archive/v0.31.0.tar.gz"],
-+    sha256 = "a0ee1d304f7caa46680ba06bdef0e5d9ec8815f6e01ec29398efd13256598c3f",
-+    strip_prefix = "bazel-gazelle-0.35.0",
-+    urls = ["https://github.com/bazelbuild/bazel-gazelle/archive/v0.35.0.tar.gz"],
-     deps = [":io_bazel_rules_go"],
+ maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+ maven.install(
+-    name = "maven",
++    name = "maven_rules_proto",
+     # these artifacts are specified only to disambiguate versions between
+     # multiple contributing modules (bazel mod warnings)
+     artifacts = [
+@@ -284,10 +286,10 @@ use_repo(
+     maven,
+     "com_google_protobuf_protobuf_java_3_19_6",
+     "com_thesamet_scalapb_compilerplugin_2_12_0_11_13",
+-    "maven",
+     "maven_akka",
+     "maven_scala",
+     "maven_zio",
++    maven = "maven_rules_proto",
  )
  
-diff --git deps/core_deps.bzl deps/core_deps.bzl
-index 70b2d8c5..558b9444 100644
---- deps/core_deps.bzl
-+++ deps/core_deps.bzl
-@@ -30,10 +30,10 @@ def bazel_gazelle():
-     _maybe(
-         http_archive,
-         name = "bazel_gazelle",
--        sha256 = "bc9a8c259ad2eb54dd89404979c097451df8f2dc64852c9f38d2b7a248f84f32",
--        strip_prefix = "bazel-gazelle-0.31.0",
-+        sha256 = "a0ee1d304f7caa46680ba06bdef0e5d9ec8815f6e01ec29398efd13256598c3f",
-+        strip_prefix = "bazel-gazelle-0.35.0",
-         urls = [
--            "https://github.com/bazelbuild/bazel-gazelle/archive/v0.31.0.tar.gz",
-+            "https://github.com/bazelbuild/bazel-gazelle/archive/v0.35.0.tar.gz",
-         ],
-         patches = [
-             "@build_stack_rules_proto//third_party:bazel-gazelle-revert-1152.patch",
+ # -------------------------------------------------------------------
 diff --git go.mod go.mod
-index a6f8c4b6..ecd76157 100644
+index e99a7a75..37236d27 100644
 --- go.mod
 +++ go.mod
-@@ -1,6 +1,6 @@
- module github.com/stackb/rules_proto
- 
--go 1.15
-+go 1.17
- 
+@@ -22,6 +22,7 @@ require (
  require (
- 	github.com/bazelbuild/bazel-gazelle v0.31.0
-@@ -9,8 +9,22 @@ require (
- 	github.com/bmatcuk/doublestar v1.2.2
- 	github.com/emicklei/proto v1.13.0
- 	github.com/google/go-cmp v0.5.9
+ 	github.com/bmatcuk/doublestar/v4 v4.7.1 // indirect
+ 	github.com/davecgh/go-spew v1.1.1 // indirect
 +	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
- 	github.com/pmezard/go-difflib v1.0.0
- 	github.com/stretchr/testify v1.7.0
- 	go.starlark.net v0.0.0-20220328144851-d1966c6b9fcd
--	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
-+	gopkg.in/yaml.v3 v3.0.1
-+	google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc
- )
-+
-+require (
-+	github.com/bmatcuk/doublestar/v4 v4.6.0 // indirect
-+	github.com/davecgh/go-spew v1.1.0 // indirect
-+	github.com/golang/glog v1.1.1 // indirect
-+	golang.org/x/mod v0.10.0 // indirect
-+	golang.org/x/sync v0.2.0 // indirect
-+	golang.org/x/sys v0.8.0 // indirect
-+	golang.org/x/tools v0.9.1 // indirect
-+	google.golang.org/protobuf v1.30.0 // indirect
-+ )
+ 	golang.org/x/mod v0.27.0 // indirect
+ 	golang.org/x/net v0.41.0 // indirect
+ 	golang.org/x/sync v0.15.0 // indirect
 diff --git go.sum go.sum
-index c720968b..96780d19 100644
+index e5b625e9..7d48b061 100644
 --- go.sum
 +++ go.sum
-@@ -41,6 +41,8 @@ github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7
- github.com/fsnotify/fsnotify v1.6.0/go.mod h1:sl3t1tCWJFWoRz9R8WJCbQihKKwmorjAbSClcnxKAGw=
- github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
- github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
-+github.com/golang/glog v1.1.1 h1:jxpi2eWoU84wbX9iIEyAeeoac3FLuifZpY9tcNUD9kw=
-+github.com/golang/glog v1.1.1/go.mod h1:zR+okUeTbrL6EL3xHUDxZuEtGv04p5shwip1+mL/rLQ=
- github.com/golang/mock v1.1.1/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
- github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
- github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
-@@ -68,6 +70,8 @@ github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
- github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
- github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
- github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
+@@ -18,6 +18,8 @@ github.com/gogo/protobuf v1.3.2 h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=
+ github.com/gogo/protobuf v1.3.2/go.mod h1:P1XiOD3dCwIKUDQYPy72D8LYyHL2YPYrpS2s69NZV8Q=
+ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+ github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 +github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 h1:YBftPWNWd4WwGqtY2yeZL2ef8rHAxPBD8KFhJpmcqms=
 +github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0/go.mod h1:YN5jB8ie0yfIUg6VvR9Kz84aCaG7AsGZnLjhHbUqwPg=
+ github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
+ github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
  github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
- github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
- github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
-@@ -166,6 +170,8 @@ google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8/go.mod h1:JiN7NxoA
- google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55/go.mod h1:DMBHOl98Agz4BDEuKkezgsaosCRResVns1a3J2ZsMNc=
- google.golang.org/genproto v0.0.0-20200513103714-09dca8ec2884/go.mod h1:55QSHmfGQM9UVYDPBsyGGes0y52j32PQ3BqQfXhyH3c=
- google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013/go.mod h1:NbSheEEYHJ7i3ixzK3sjbqSGDJWnxyFXZblF3eUsNvo=
-+google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc h1:8DyZCyvI8mE1IdLy/60bS+52xfymkE72wv1asokgtao=
-+google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc/go.mod h1:xZnkP7mREFX5MORlOPEzLMr+90PPZQ2QWzrVTWfAq64=
- google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
- google.golang.org/grpc v1.23.0/go.mod h1:Y5yQAOtifL1yxbo5wqy6BxZv8vAUGQwXBOALyacEbxg=
- google.golang.org/grpc v1.25.1/go.mod h1:c3i+UQWmh7LiEpx4sFZnkU36qjEYZ0imhYfXVyQciAY=
-@@ -173,6 +179,8 @@ google.golang.org/grpc v1.27.0/go.mod h1:qbnxyOmOxrQa7FizSgH+ReBfzJrCY1pSN7KXBS8
- google.golang.org/grpc v1.33.1/go.mod h1:fr5YgcSWrqhRRxogOsw7RzIpsmvOZ6IcH4kBYTpR3n0=
- google.golang.org/grpc v1.36.0/go.mod h1:qjiiYl8FncCW8feJPdyg3v6XW24KsRHe+dy9BAGRRjU=
- google.golang.org/grpc v1.50.0/go.mod h1:ZgQEeidpAuNRZ8iRrlBKXZQP1ghovWIVhdJRyCDK+GI=
-+google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0 h1:rNBFJjBCOgVr9pWD7rs/knKL4FRTKgpZmsRfV214zcA=
-+google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0/go.mod h1:Dk1tviKTvMCz5tvh7t+fh94dhmQVHuCt2OzJB3CTW9Y=
- google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
- google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
- google.golang.org/protobuf v0.0.0-20200228230310-ab0ca4ff8a60/go.mod h1:cfTl7dwQJ+fmap5saPgwCLgHXTUD7jkjRqWcaiX5VyM=
-@@ -186,6 +194,8 @@ google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp0
- google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
- google.golang.org/protobuf v1.27.1/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
- google.golang.org/protobuf v1.28.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
-+google.golang.org/protobuf v1.30.0 h1:kPPoIgf3TsEvrm0PFe15JQ+570QVxYzEvvHqChK+cng=
-+google.golang.org/protobuf v1.30.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
- gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
- gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
- gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
-@@ -193,5 +203,7 @@ gopkg.in/yaml.v2 v2.2.3/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
- gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
- gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b h1:h8qDotaEPuJATrMmW04NCwg7v22aHH28wwpauUhK9Oo=
- gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
-+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
- honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
- honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 diff --git pkg/language/protobuf/config.go pkg/language/protobuf/config.go
 index 4b65f556..e1644bbf 100644
 --- pkg/language/protobuf/config.go
@@ -495,102 +390,11 @@ index 8c3d7d29..03365de4 100644
  	return labels
  }
  
-diff --git pkg/protoc/resolver.go pkg/protoc/resolver.go
-index c2371006..0ce5a483 100644
---- pkg/protoc/resolver.go
-+++ pkg/protoc/resolver.go
-@@ -196,12 +196,8 @@ func (r *resolver) Resolve(lang, impLang, imp string) []resolve.FindResult {
- 	}
- 	if got, ok := known[imp]; ok {
- 		res := make([]resolve.FindResult, len(got))
--		// use last-wins semantics by providing FindResults in reverse to how
--		// they were provided.
--		var index int
--		for i := len(got) - 1; i >= 0; i-- {
--			res[index] = resolve.FindResult{Label: got[i]}
--			index++
-+		for i, l := range got {
-+			res[i] = resolve.FindResult{Label: l}
- 		}
- 		return res
- 	}
-@@ -270,20 +266,16 @@ func (r *resolver) Install(c *config.Config) {
- 	// The resolve config has already processed resolve directives, and there's
- 	// no public API. Take somewhat extreme measures to augment it's internal
- 	// override list via unsafe memory reallocation.
--	overrides := make([]overrideSpec, 0)
-+	overrides := make(overrideSpec, 0)
- 
- 	for key, known := range r.known {
- 		lang, impLang := keyLang(key)
- 		for imp, lbls := range known {
- 			for _, lbl := range lbls {
--				overrides = append(overrides, overrideSpec{
--					imp: resolve.ImportSpec{
--						Lang: impLang,
--						Imp:  imp,
--					},
-+				overrides[overrideKey{
-+					imp:  resolve.ImportSpec{Lang: impLang, Imp: imp},
- 					lang: lang,
--					dep:  lbl,
--				})
-+				}] = lbl
- 			}
- 		}
- 	}
-@@ -333,31 +325,36 @@ func getResolveConfig(c *config.Config) interface{} {
- 
- // rewriteResolveConfigOverrides reads the existing private attribute and
- // appends more overrides.
--func rewriteResolveConfigOverrides(rc interface{}, more []overrideSpec) {
-+func rewriteResolveConfigOverrides(rc interface{}, more overrideSpec) {
- 	rcv := reflect.ValueOf(rc).Elem()
- 	val := reflect.Indirect(rcv)
- 	member := val.FieldByName("overrides")
- 	ptrToOverrides := unsafe.Pointer(member.UnsafeAddr())
--	overrides := (*[]overrideSpec)(ptrToOverrides)
-+	overrides := (*overrideSpec)(ptrToOverrides)
- 
- 	// create new array: FindRuleWithOverride searches last entries first, so
- 	// respect the users own resolve directives by putting them last
--	newOverrides := make([]overrideSpec, 0)
--	newOverrides = append(newOverrides, more...)
--	newOverrides = append(newOverrides, *overrides...)
-+	newOverrides := make(overrideSpec, 0)
-+	for k, v := range more {
-+		newOverrides[k] = v
-+	}
-+	for k, v := range *overrides {
-+		newOverrides[k] = v
-+	}
- 
- 	// reassign memory value
- 	*overrides = newOverrides
- }
- 
-+type overrideKey struct {
-+	imp  resolve.ImportSpec
-+	lang string
-+}
-+
- // overrideSpec is a copy of the same private type in resolve/config.go.  It must be
- // kept in sync with the original to avoid discrepancy with the expected memory
- // layout.
--type overrideSpec struct {
--	imp  resolve.ImportSpec
--	lang string
--	dep  label.Label
--}
-+type overrideSpec map[overrideKey]label.Label
- 
- func langKey(lang, impLang string) string {
- 	return lang + " " + impLang
 diff --git pkg/rule/rules_python/py_library.go pkg/rule/rules_python/py_library.go
-index 4d9f5b25..b42fdbe2 100644
+index f189258d..8892a7bb 100644
 --- pkg/rule/rules_python/py_library.go
 +++ pkg/rule/rules_python/py_library.go
-@@ -14,6 +14,7 @@ import (
+@@ -15,6 +15,7 @@ import (
  var pyLibraryKindInfo = rule.KindInfo{
  	MergeableAttrs: map[string]bool{
  		"srcs":       true,
@@ -598,7 +402,7 @@ index 4d9f5b25..b42fdbe2 100644
  		"deps":       true,
  		"visibility": true,
  		"imports":    true,
-@@ -90,6 +91,15 @@ func (s *PyLibrary) Rule(otherGen ...*rule.Rule) *rule.Rule {
+@@ -102,6 +103,15 @@ func (s *PyLibrary) Rule(otherGen ...*rule.Rule) *rule.Rule {
  	newRule := rule.NewRule(s.Kind(), s.Name())
  
  	newRule.SetAttr("srcs", s.Srcs())
@@ -615,14 +419,16 @@ index 4d9f5b25..b42fdbe2 100644
  	deps := s.Deps()
  	if len(deps) > 0 {
 diff --git plugin/grpc-ecosystem/grpc-gateway/BUILD.bazel plugin/grpc-ecosystem/grpc-gateway/BUILD.bazel
-index 98943320..047e27da 100644
---- plugin/grpc-ecosystem/grpc-gateway/BUILD.bazel
+new file mode 100644
+index 00000000..24709fa9
+--- /dev/null
 +++ plugin/grpc-ecosystem/grpc-gateway/BUILD.bazel
-@@ -3,7 +3,13 @@ load("@build_stack_rules_proto//rules:proto_plugin.bzl", "proto_plugin")
- proto_plugin(
-     name = "protoc-gen-grpc-gateway",
-     options = ["paths=source_relative"],
--    tool = "@com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway",
+@@ -0,0 +1,21 @@
++load("@build_stack_rules_proto//rules:proto_plugin.bzl", "proto_plugin")
++
++proto_plugin(
++    name = "protoc-gen-grpc-gateway",
++    options = ["paths=source_relative"],
 +    tool = "@com_github_grpc_ecosystem_grpc_gateway_v2//protoc-gen-grpc-gateway",
 +    visibility = ["//visibility:public"],
 +)
@@ -630,26 +436,248 @@ index 98943320..047e27da 100644
 +proto_plugin(
 +    name = "protoc-gen-grpc-openapiv2",
 +    tool = "@com_github_grpc_ecosystem_grpc_gateway_v2//protoc-gen-openapiv2",
-     visibility = ["//visibility:public"],
++    visibility = ["//visibility:public"],
++)
++
++filegroup(
++    name = "all_files",
++    testonly = True,
++    srcs = ["BUILD.bazel"],
++    visibility = ["//plugin:__pkg__"],
++)
+diff --git rules/BUILD.bazel rules/BUILD.bazel
+index f0139417..96d665a9 100644
+--- rules/BUILD.bazel
++++ rules/BUILD.bazel
+@@ -1,3 +1,5 @@
++load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
++
+ filegroup(
+     name = "all_files",
+     testonly = True,
+@@ -13,3 +15,104 @@ filegroup(
+     ],
+     visibility = ["//:__pkg__"],
  )
- 
++
++bzl_library(
++    name = "example",
++    srcs = ["example.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@io_bazel_rules_go//go/tools/bazel_testing:def"],
++)
++
++bzl_library(
++    name = "golden_filegroup",
++    srcs = ["golden_filegroup.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@build_stack_rules_proto//rules:proto_compile_gencopy",
++        "@build_stack_rules_proto//rules:providers",
++    ],
++)
++
++bzl_library(
++    name = "proto_compile",
++    srcs = ["proto_compile.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        ":providers",
++        "@rules_proto//proto:defs",
++    ],
++)
++
++bzl_library(
++    name = "proto_compile_assets",
++    srcs = ["proto_compile_assets.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [":proto_compile_gencopy"],
++)
++
++bzl_library(
++    name = "proto_compile_gencopy",
++    srcs = ["proto_compile_gencopy.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [":providers"],
++)
++
++bzl_library(
++    name = "proto_compiled_source_update",
++    srcs = ["proto_compiled_source_update.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [":proto_compile_gencopy"],
++)
++
++bzl_library(
++    name = "proto_compiled_sources",
++    srcs = ["proto_compiled_sources.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        ":proto_compile",
++        ":proto_compile_gencopy",
++    ],
++)
++
++bzl_library(
++    name = "proto_descriptor_set",
++    srcs = ["proto_descriptor_set.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@rules_proto//proto:defs"],
++)
++
++bzl_library(
++    name = "proto_gazelle",
++    srcs = ["proto_gazelle.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@bazel_skylib//lib:shell",
++        "@rules_shell//shell:sh_binary",
++    ],
++)
++
++bzl_library(
++    name = "proto_plugin",
++    srcs = ["proto_plugin.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@build_stack_rules_proto//rules:providers",
++        "@rules_proto//proto:defs",
++    ],
++)
++
++bzl_library(
++    name = "protogenrule",
++    srcs = ["protogenrule.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@build_stack_rules_proto//rules:proto_compile_gencopy",
++        "@build_stack_rules_proto//rules:providers",
++    ],
++)
++
++bzl_library(
++    name = "providers",
++    srcs = ["providers.bzl"],
++    visibility = ["//visibility:public"],
++)
+diff --git rules/cc/BUILD.bazel rules/cc/BUILD.bazel
+index 59fe9aef..ed1122e1 100644
+--- rules/cc/BUILD.bazel
++++ rules/cc/BUILD.bazel
+@@ -1,3 +1,5 @@
++load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
++
+ filegroup(
+     name = "all_files",
+     testonly = True,
+@@ -8,3 +10,17 @@ filegroup(
+     ],
+     visibility = ["//rules:__pkg__"],
+ )
++
++bzl_library(
++    name = "grpc_cc_library",
++    srcs = ["grpc_cc_library.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@rules_cc//cc:defs_bzl"],
++)
++
++bzl_library(
++    name = "proto_cc_library",
++    srcs = ["proto_cc_library.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@rules_cc//cc:defs_bzl"],
++)
+diff --git rules/go/BUILD.bazel rules/go/BUILD.bazel
+index bd52ee34..1f1da7ee 100644
+--- rules/go/BUILD.bazel
++++ rules/go/BUILD.bazel
+@@ -1,3 +1,5 @@
++load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
++
+ filegroup(
+     name = "all_files",
+     testonly = True,
+@@ -8,3 +10,20 @@ filegroup(
+     ],
+     visibility = ["//rules:__pkg__"],
+ )
++
++bzl_library(
++    name = "proto_go_library",
++    srcs = ["proto_go_library.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@io_bazel_rules_go//go:def"],
++)
++
++bzl_library(
++    name = "proto_go_modules",
++    srcs = ["proto_go_modules.bzl"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@io_bazel_rules_go//go:def",
++        "@io_bazel_rules_go//go/private:common",
++    ],
++)
+diff --git rules/private/proto_repository_tools_srcs.bzl rules/private/proto_repository_tools_srcs.bzl
+index 9810725a..4cab9f29 100644
+--- rules/private/proto_repository_tools_srcs.bzl
++++ rules/private/proto_repository_tools_srcs.bzl
+@@ -91,6 +91,7 @@ PROTO_REPOSITORY_TOOLS_SRCS = [
+     "@build_stack_rules_proto//pkg/plugin/grpc/grpcweb:protoc-gen-grpc-web.go",
+     "@build_stack_rules_proto//pkg/plugin/grpcecosystem/grpcgateway:BUILD.bazel",
+     "@build_stack_rules_proto//pkg/plugin/grpcecosystem/grpcgateway:protoc-gen-grpc-gateway.go",
++    "@build_stack_rules_proto//pkg/plugin/grpcecosystem/grpcgateway:protoc-gen-grpc-openapiv2.go",
+     "@build_stack_rules_proto//pkg/plugin/scalapb/scalapb:BUILD.bazel",
+     "@build_stack_rules_proto//pkg/plugin/scalapb/scalapb:protoc_gen_scala.go",
+     "@build_stack_rules_proto//pkg/plugin/scalapb/zio_grpc:BUILD.bazel",
+@@ -173,6 +174,7 @@ PROTO_REPOSITORY_TOOLS_SRCS = [
+     "@build_stack_rules_proto//plugin/grpc/grpc-java:BUILD.bazel",
+     "@build_stack_rules_proto//plugin/grpc/grpc-node:BUILD.bazel",
+     "@build_stack_rules_proto//plugin/grpc/grpc-web:BUILD.bazel",
++    "@build_stack_rules_proto//plugin/grpc-ecosystem/grpc-gateway:BUILD.bazel",
+     "@build_stack_rules_proto//plugin/scalapb/scalapb:BUILD.bazel",
+     "@build_stack_rules_proto//plugin/scalapb/zio-grpc:BUILD.bazel",
+     "@build_stack_rules_proto//plugin/stackb/grpc_js:BUILD.bazel",
+diff --git rules/py/BUILD.bazel rules/py/BUILD.bazel
+index 3dc9072c..798e4f93 100644
+--- rules/py/BUILD.bazel
++++ rules/py/BUILD.bazel
+@@ -1,3 +1,5 @@
++load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
++
+ filegroup(
+     name = "all_files",
+     testonly = True,
+@@ -8,3 +10,17 @@ filegroup(
+     ],
+     visibility = ["//rules:__pkg__"],
+ )
++
++bzl_library(
++    name = "grpc_py_library",
++    srcs = ["grpc_py_library.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@rules_python//python:defs_bzl"],
++)
++
++bzl_library(
++    name = "proto_py_library",
++    srcs = ["proto_py_library.bzl"],
++    visibility = ["//visibility:public"],
++    deps = ["@rules_python//python:defs_bzl"],
++)
 diff --git rules/ts/proto_ts_library.bzl rules/ts/proto_ts_library.bzl
-index ac06a1ef..4087ffb0 100644
+index f2b49604..49bfa5dd 100644
 --- rules/ts/proto_ts_library.bzl
 +++ rules/ts/proto_ts_library.bzl
-@@ -26,10 +26,15 @@ def proto_ts_library(
-     """
-     ts_project(
-         name = name,
-+        transpiler = "tsc",
-         declaration = declaration,
+@@ -16,6 +16,9 @@ def proto_ts_library(
+         transpiler = "tsc",
          tsconfig = tsconfig or {
              "compilerOptions": {
 +                "moduleResolution": "node",
-+                "module": "commonjs",
++                "module": "esnext",
 +                "target": "ESNext",
                  "declaration": declaration,
-+                "esModuleInterop": True,
+                 "esModuleInterop": True,
              },
-         },
-         **kwargs

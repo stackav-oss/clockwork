@@ -4,8 +4,8 @@
 #pragma once
 
 #include "clockwork/cog/input_condition.hh"
-#include "clockwork/common/process_description.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -16,6 +16,8 @@
 #include <iterator>
 #include <memory>
 #include <tuple>
+#include <utility>
+#include <variant>
 
 namespace clockwork
 {
@@ -34,8 +36,10 @@ public:
   using InputConditionType = std::unique_ptr<InputCondition<Policy>>;
   using InputConditionsTuple = std::tuple<InputConditionType<Policies>...>;
   using ConditionsTuple = std::tuple<typename InputCondition<Policies>::ConditionType...>;
-  using LastConsumedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::BufferIterator>;
-  using PinionDifferenceType = typename std::iterator_traits<pinion::BufferIterator>::difference_type;
+  using LastConsumedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::SlotRef>;
+  using PinionDifferenceType = typename std::iterator_traits<pinion::SlotRef>::difference_type;
+  template <size_t index>
+  using PolicyType = typename std::tuple_element_t<index, PoliciesTuple>;
 
   /// Construct from a pinion subscriber handle.
   explicit CogConditions(jewels::memory::MemoryResource resource) noexcept;
@@ -61,7 +65,7 @@ public:
   /// Update the last consumed value with the saved iterator from make input.
   /// @param[in] endpoint_id The subscriber endpoint associated with this iteratro
   /// @param[in] las_consumed The iterator pointing to the last consumed
-  void commit(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::BufferIterator last_consumed);
+  void commit(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SlotRef last_consumed);
 
   /// Update the last consumed value with the saved iterator from make input.
   /// @param[in] records Arrray of last consumed iterators records.
@@ -74,6 +78,12 @@ public:
   /// @return Tuple of endpoint id and max new messages count.
   template <typename ViewPolicy>
   static PinionDifferenceType get_max_new_msgs(const ConditionsTuple& conditions);
+
+  /// Set the subscriber handle for a unit test cog
+  /// @tparam index Condition index
+  /// @param[in] handle Pinion subscriber handle
+  template <size_t index>
+  void set_unit_test_condition(pinion::SubscriberHandle handle);
 
 private:
   /// Memory resource

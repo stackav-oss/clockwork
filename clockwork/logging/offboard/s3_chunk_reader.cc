@@ -5,7 +5,6 @@
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
-#include "clockwork/logging/offboard/s3_utils.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -24,15 +23,15 @@ namespace clockwork_logging::offboard
 S3ChunkReader::S3ChunkReader(
   jewels::memory::MemoryResource memory_resource,
   LogUri file_uri,
-  const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr)
-  : memory_resource_(std::move(memory_resource)), file_uri_(std::move(file_uri)), s3_client_ptr_(s3_client_ptr)
+  const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr)
+  : memory_resource_(std::move(memory_resource)), file_uri_(std::move(file_uri)), s3_utils_ptr_(s3_utils_ptr)
 {
 }
 
 [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<S3ChunkReader>> S3ChunkReader::make_shared(
   const jewels::memory::MemoryResource& memory_resource,
   std::string_view file_uri,
-  const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr)
+  const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr)
 {
   auto maybe_log_uri = LogUri::try_make(file_uri, memory_resource);
   if (!maybe_log_uri || maybe_log_uri->scheme() != LogUriScheme::s3)
@@ -41,7 +40,7 @@ S3ChunkReader::S3ChunkReader(
     return jewels::unexpected(LogError::invalid_log_uri);
   }
   return jewels::memory::allocate_shared<S3ChunkReader, std::pmr::polymorphic_allocator<S3ChunkReader>>(
-    memory_resource, memory_resource, std::move(maybe_log_uri.value()), s3_client_ptr);
+    memory_resource, memory_resource, std::move(maybe_log_uri.value()), s3_utils_ptr);
 }
 
 [[nodiscard]] const LogUri& S3ChunkReader::file_uri() const noexcept
@@ -69,7 +68,7 @@ S3ChunkReader::S3ChunkReader(
   {
     return jewels::unexpected(LogError::not_open);
   }
-  return s3_get_object_size(*s3_client_ptr_, file_uri_);
+  return s3_utils_ptr_->get_object_size(file_uri_);
 }
 
 [[nodiscard]] LogExpected<std::pmr::vector<std::byte>> S3ChunkReader::read_chunk(size_t offset, size_t length)
@@ -78,7 +77,7 @@ S3ChunkReader::S3ChunkReader(
   {
     return jewels::unexpected(LogError::not_open);
   }
-  return s3_get_object(memory_resource_, *s3_client_ptr_, file_uri_, offset, length);
+  return s3_utils_ptr_->get_object(file_uri_, offset, length);
 }
 
 [[nodiscard]] LogExpected<void> S3ChunkReader::close()

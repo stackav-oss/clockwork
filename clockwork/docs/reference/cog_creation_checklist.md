@@ -15,34 +15,24 @@ It may also contain one or more `cpp_target` elements containing one or more sch
 
 - Define a [schema](schemas.md) if needed.
   - Schemas are required to describe `cog` inputs, outputs, and state.
-- Add the `schema` to a `cpp_target` to generate the C++ files with the schema definition.
-  - Include the `schema` element to capture the schema definition, the `representation` element, and the `interface` element.
-    See the [representation and interface](repr_iface.md) for more details.
-  - Optionally include a namespace to prefix the generated C++ code with.
+- Add `cpp` to the `generate` attribute for the Clockwork file and set the `namespace`.
 
 ```clockwork
-// Example for how to instantiate schemas for use in a cog.
-// Assumes schema definitions exist for "ExampleSchema" and "ExampleState"
-cpp_target example_schema
+#![generate(cpp)]
+#![cpp(namespace=user::defined::namespace)]
+
+// User schema
+schema SomeSchema
 {
-    options
-    {
-        namespace user::defined::namespace;
-    }
-
-    schema ExampleSchema;
-    representation Tachyon<ExampleSchema>;
-    interface Tappy<ExampleSchema>;
-
-    schema ExampleState;
-    representation Tachyon<ExampleState>;
-    interface Tappy<ExampleState>;
+  ...
 }
 ```
 
 ## Cog Definition
 
 - Create a new `cog` definition in a `.clk` file.
+  - Add cpp_cog to the generate attribute to generate a target for all of the cogs implemented in the clk file
+  - Add `use` statements for the entities needed in the cog definitions.
   - Create `state`s to capture persistent state as needed.
   - Create `input`s to accept messages from other cogs.
   - Create `output`s to publish output from your cog.
@@ -50,6 +40,11 @@ cpp_target example_schema
   - If your cog needs one-time setup at startup, create an `init` cog to perform that setup.
 
 ```clockwork
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=user::defined::namespace)]
+
+use path::to::example_schema::{ExampleSchema, ExampleState};
+
 // Example of a cog with resources, state, inputs, and outputs.
 // Uses the schema examples from the Schema Definition section.
 // Not all of these entry types may be needed for all cogs.
@@ -89,67 +84,27 @@ cog ExampleCog
 }
 ```
 
-- Import entities from other `.clk` files using [`use` statements](use.md) at the top of the `.clk` file.
-
-```clockwork
-use clockwork::examples::demo_system::demo_system
-use path::to::example_schema::{ExampleSchema, ExampleState}
-```
-
-- Add the `cog` to a `cpp_target` to generate C++ interface files.
-
-```clockwork
-cpp_target ExampleTarget
-{
-    cog ExampleCog;
-}
-```
-
-- Add the `cpp_target` to a `casing` within a `cpp_executable` to generate an executable containing the cog.
-
-```clockwork
-cpp_executable ExampleExecutable
-{
-    casing {
-        cog ExampleCog;
-    }
-}
-```
-
 ## Build file updates
 
-- For each new `.clk` file, add a `clk` stub to the `BUILD.bazel` file in the same directory.
-  By convention, the target's name should be the same as the `.clk` file's filename, with an underscore replacing the dot before the clk file extension.
-
-```clockwork
-load("//clockwork:rules.bzl", "clk")
-clk(
-    name = "new_file_clk",
-    srcs = ["new_file.clk],
-)
-```
-
-- Run `clk-deps` to automatically generate Bazel rules for each stub.
+- Run Gazelle to automatically generate Bazel rules for each stub.
 
 ## Cog Implementation
 
-The `BUILD.bazel` update added a `cog_name_impl` target to the cog target's dependency list.
-This target is intended for user-generated code necessary to implement your cog's functionality.
-The `cog_name_impl.cpp` target is not created automatically.
+The `generate` attribute with `cpp_cog` requires that a used provided cog_name_clk_cc_impl cc_library, where cog_name is the name of the clk file containing the cog definition.
+The cog_name_clk_cc_impl library must contain the execute_cog functions for all of the cogs in the clk file.
 
-- Create a `cog_name_impl` `cc_library` target for user cog code.
-- Create a `cog_name_impl.cpp` for each new `cog`, and add it to the target.
+- Create a `cog_name_clk_cc_impl` `cc_library` target for user cog code.
+- Create a `cog_name_clk_cc_impl.cpp` for each new `cog`, and add it to the target.
 - Create an `execute_cog` function in the `impl` file for Clockwork to execute.
 
 ```cpp
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 // Update the following includes to the paths in the repo containing the required elements.
-#include "path/to/cog/cog_name_dial.hh"
-#include "path/to/schema/schema_name.hh"
+#include "path/to/cog/cog_name_clk_cc_dial.hh"
+#include "path/to/schema/schema_name_clk_cc.hh"
 
-// If the `cpp_target` a cog was included in specified a namespace, adding the execute_cog function to that
-// namespace simplifies implementation.
+// Using the namespace from the `cpp` attribute in the clockwork file simplifies implementation.
 namespace cpp::target::namespace
 {
 
@@ -170,6 +125,9 @@ Channels are automatically instantiated in the Clockwork compiler, they do not n
 - Create or use existing `channel`s with the same schema used in a `cog`'s input and outputs.
 
 ```clockwork
+#![generate()]
+use path::to::example_schema::{ExampleSchema};
+
 channel ExampleInputChannel
 {
     message_type: Tachyon<ExampleSchema>;
@@ -193,7 +151,9 @@ They should be defined in a `.clk` file with their channels, or imported via a `
 - Create a new `ChannelLoggingPolicy` for each channel that needs to be logged.
 
 ```clockwork
-use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+#![generate()]
+
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
 use clockwork::logging::channel_type::ChannelType;
 use path::to::example_channels;
 
@@ -211,11 +171,11 @@ policy ChannelLoggingPolicy for example_channels::ExampleOutputChannel
 }
 ```
 
-## Cog instances and connections
+## Cog instances and connections and creating a C++ executable
 
 Instances of a `cog` are defined inside of a `box` element.
-A system must include one or more `box` elements.
-`box`es contain connections between cogs and channels, and a `box` is required to generate a `system_target`.
+An executable must include one or more `box` elements.
+`box`es contain connections between cogs and channels, and a `box` is required to generate a C++ executable.
 
 - Instantiate the cog in one or more `box`es in the system.
 - Make necessary connections between `cog` inputs/outputs and channels in the box.
@@ -223,6 +183,12 @@ A system must include one or more `box` elements.
 - Make necessary connections between `cog` states and state instances in the box.
 
 ```clockwork
+#![generate(cpp_exe)]
+#![cpp(namespace=user::defined::namespace)]
+
+use path::to::example_schema::{ExampleSchema, ExampleState};
+use path::to::example_cog::{ExampleSchema, ExampleCog};
+
 box ExampleBox
 {
     // Instantiate an ExampleCog named example_cog
@@ -241,24 +207,27 @@ box ExampleBox
 }
 ```
 
-## System Integration
-
 - Create or use an existing `cpu_domain` to specify where processes are executed in a multi-compute node architecture.
 
 ```clockwork
 cpu_domain ExampleCpu;
 ```
 
-- Create or use an existing `box` to map processes and executables to CPU domains.
+- Create a box to map processes and executables to CPU domains inside a Clockwork file that generates an executable.
+- The cog and executable can all be defined in the same box with `generate(cpp, cpp_cog, cpp_exe)`.
 
 ```clockwork
-box ExampleSystemBox
+#![generate(cpp_exe)]
+use path::to::example_box::{ExampleBox};
+use path::to::cpu_domain::{ExampleCpu};
+
+box ExampleExe
 {
     // Instantiate the ExampleBox defined above.
     new example_box: ExampleBox;
 
-    // Create a process with the cpp_executable defined above.
-    new example_process: Process(executable=ExampleExecutable)
+    // Create a process with the defined in this file (source file name plus _clk_exe suffix).
+    new example_process: Process(executable=example_exe_clk_exe)
 
     // Run the box on the process
     apply HostProcess(process=example_process) in example_box;
@@ -268,12 +237,17 @@ box ExampleSystemBox
 }
 ```
 
-- If needed, create a system target to generate the whole system from a top-level box.
+## System Integration
+
+- If needed create a system target for your system.
+- The system_target cannot have a `generate` attribute because it uses clk-deps to generate the build rules.
 
 ```clockwork
+use path:to:example_exe::{ExampleExe};
+
 system_target example_system
 {
-    box: ExampleSystemBox;
+    box: ExampleExe;
 }
 ```
 
@@ -281,5 +255,5 @@ system_target example_system
 
 ## Tips
 
-- Each time you add an entity or `use` statement to a `.clk` file, run `clk-deps` to add the new targets and dependencies to the `BUILD` file.
+- Each time you add an entity or `use` statement to a `.clk` file, run Gazelle to add the new targets and dependencies to the `BUILD` file.
 - Examples system definitions in `clockwork/examples/helloworld` and `clockwork/examples/demo_system` are available for reference.

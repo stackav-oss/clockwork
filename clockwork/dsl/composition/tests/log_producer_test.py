@@ -86,6 +86,7 @@ def test_logsim_system(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
             Path("logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon"),
             Path("logsimsys.logsim_system1.LogSimCpu_channel_allocations.csv"),
             Path("logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon"),
+            Path("logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon"),
         ],
     )
     assert output_targets == {

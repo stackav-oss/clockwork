@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -44,7 +44,7 @@ class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.S
     field_src_order: dict[int, int] = dc_field(repr=False)
     options: SchemaOptions | None = dc_field(repr=False)
     source: Schema | None = dc_field(repr=False)
-    history: ResolvedSchemaHistory = dc_field(repr=False)
+    history: SchemaHistory = dc_field(repr=False)
 
     def get_resolved(self) -> ResolvedSchema:
         """Get a resolved version of this object."""
@@ -74,128 +74,12 @@ class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.S
 
 
 @dataclass
-class HistoricalFieldDef(node.DocableEntity, node.CstNode[cst.FieldHistory]):
-    """Historical information about a field that no longer exists or has been replaced by another."""
-
-    num: int
-    name: str
-    original_type: typesys.TypeVal | ParameterRef | expr.TypeExpression | typesys.InferenceVar
-    module: node.Module = dc_field(repr=False)
-    removed_in_version: int | None = None
-    became_field_num: int | None = None
-    resolved: ResolvedHistoricalFieldDef | None = dc_field(repr=False, default=None)
-
-    @classmethod
-    def from_cst(
-        cls: type[HistoricalFieldDef],
-        cst_node: cst.FieldHistory,
-        module: node.Module,
-    ) -> HistoricalFieldDef:
-        """Create an IR HistoricalFieldDef from a CST node."""
-        if module.terminals is None:
-            msg = "Cannot construct IR nodes from CST without a TerminalSource"
-            raise ValueError(msg)
-
-        old_field = FieldDef.from_cst(cst_node.child_schema_field(), module)
-        field_change = cst_node.child_field_change()
-
-        hist_field = cls(
-            module=module,
-            cst_node=cst_node,
-            doc=old_field.doc,
-            num=old_field.num,
-            name=old_field.cur_name,
-            original_type=old_field.type_info,
-            removed_in_version=None,
-            became_field_num=None,
-        )
-
-        changed_version = int_from_cst(field_change.child_changed_version(), module.terminals)
-        if field_change.maybe_removed():
-            hist_field.removed_in_version = changed_version
-        elif field_change.maybe_became():
-            hist_field.became_field_num = changed_version
-
-        return hist_field
-
-    def resolve(self) -> ResolvedHistoricalFieldDef:
-        """Perform finalization of the field IR."""
-        if self.resolved:
-            return self.resolved
-
-        self.resolved = ResolvedHistoricalFieldDef(
-            num=self.num,
-            name=self.name,
-            original_type=_resolve_field_type(self.original_type, None, self.module),
-            removed_in_version=self.removed_in_version,
-            became_field_num=self.became_field_num,
-            source=self,
-        )
-        return self.resolved
-
-    def get_resolved(self) -> ResolvedHistoricalFieldDef:
-        """Get a resolved version of this object."""
-        if not self.resolved:
-            msg = "Attempt to access unresolved object"
-            raise RuntimeError(msg)
-        return self.resolved
-
-
-@dataclass
-class ResolvedHistoricalFieldDef:
-    """Resolved version of historical field information."""
-
-    num: int
-    name: str
-    original_type: typesys.TypeVal | ParameterRef
-    removed_in_version: int | None = None
-    became_field_num: int | None = None
-    source: HistoricalFieldDef | None = dc_field(repr=False, default=None)
-
-
-@dataclass
-class ResolvedSchemaHistory:
-    """Resolved version of schema history tracking."""
-
-    versions: list[int]
-    pseudoversions: list[int]
-    fields: dict[int, ResolvedHistoricalFieldDef]
-    old_names: dict[int, str]
-    source: SchemaHistory | None = dc_field(repr=False, default=None)
-
-
-@dataclass
-class InstantiatedHistoricalFieldDef:
-    """Instantiated version of historical field information."""
-
-    num: int
-    name: str
-    original_type: typesys.TypeVal
-    removed_in_version: int | None = None
-    became_field_num: int | None = None
-    source: ResolvedHistoricalFieldDef | None = dc_field(repr=False, default=None)
-
-
-@dataclass
-class InstantiatedSchemaHistory:
-    """Instantiated version of schema history tracking."""
-
-    versions: list[int]
-    pseudoversions: list[int]
-    fields: dict[int, InstantiatedHistoricalFieldDef]
-    old_names: dict[int, str]
-    source: ResolvedSchemaHistory | None = dc_field(repr=False, default=None)
-
-
-@dataclass
 class SchemaHistory:
     """Track historical information about a schema."""
 
-    versions: list[int]
-    pseudoversions: list[int]
-    fields: dict[int, HistoricalFieldDef]
-    old_names: dict[int, str]
-    resolved: ResolvedSchemaHistory | None = dc_field(repr=False, default=None)
+    version: int
+    legacy_became: dict[int, int]
+    removed: set[int]
 
     @classmethod
     def from_cst(
@@ -208,71 +92,45 @@ class SchemaHistory:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
 
-        versions = []
-        historical_fields = {}
-        old_names = {}
+        # Parse version
+        version_cst = cst_node.child_version_spec()
+        version = int_from_cst(version_cst.child_version(), module.terminals)
 
-        # Parse versions
-        version_spec = cst_node.child_version_spec()
-        versions = [int_from_cst(version_cst, module.terminals) for version_cst in version_spec.children_version()]
-        if len(versions) != len(set(versions)):
-            msg = node.append_error_line(version_spec, module, "Duplicate version numbers")
-            raise ValueError(msg)
-        if version_pseudofields_cst := version_spec.maybe_version_pseudofields():
-            pseudoversions = [
-                int_from_cst(version_cst, module.terminals)
-                for version_cst in version_pseudofields_cst.children_version()
-            ]
-            if len(pseudoversions) != len(set(pseudoversions)):
-                msg = node.append_error_line(version_pseudofields_cst, module, "Duplicate pseudofield version numbers")
-                raise ValueError(msg)
-        else:
-            pseudoversions = []
-
-        # Parse fields history if present
-        if fields_history := cst_node.maybe_fields_history():
-            for field_history in fields_history.children_field_history():
-                hist_field = HistoricalFieldDef.from_cst(field_history, module)
-                if hist_field.num in historical_fields:
+        # Parse legacy_became if present
+        legacy_became = {}
+        new_numbers = set()
+        if legacy_became_spec_cst := cst_node.maybe_legacy_became_spec():
+            for became_spec_cst in legacy_became_spec_cst.children_became_spec():
+                old_number_cst = became_spec_cst.child_old_number()
+                old_number = int_from_cst(old_number_cst, module.terminals)
+                if old_number in legacy_became:
                     msg = node.append_error_line(
-                        field_history, module, f"Duplicate field number {hist_field.num} in history block"
+                        old_number_cst, module, f"Duplicate old field number {old_number} in legacy became block"
                     )
                     raise ValueError(msg)
-                historical_fields[hist_field.num] = hist_field
+                new_number_cst = became_spec_cst.child_new_number()
+                new_number = int_from_cst(new_number_cst, module.terminals)
+                if new_number in new_numbers:
+                    msg = node.append_error_line(
+                        new_number_cst, module, f"Duplicate new field number {new_number} in legacy became block"
+                    )
+                    raise ValueError(msg)
+                legacy_became[old_number] = new_number
+                new_numbers.add(new_number)
 
-        # Parse schema name history if present
-        if schema_history := cst_node.maybe_schema_history():
-            name_block = schema_history.child_schema_history_name()
-            for name_change in name_block.children_identifier():
-                version = int_from_cst(name_block.child_version(), module.terminals)
-                old_names[version] = get_span(name_change.child_value(), module.terminals)
+        # Parse removed if present
+        removed = set()
+        if removed_spec_cst := cst_node.maybe_removed_spec():
+            for field_num_cst in removed_spec_cst.children_num():
+                field_num = int_from_cst(field_num_cst, module.terminals)
+                if field_num in legacy_became:
+                    msg = node.append_error_line(
+                        field_num_cst, module, f"Field number {field_num} is in both legacy_became and removed"
+                    )
+                    raise ValueError(msg)
+                removed.add(field_num)
 
-        return cls(versions=versions, pseudoversions=pseudoversions, fields=historical_fields, old_names=old_names)
-
-    def resolve(self) -> ResolvedSchemaHistory:
-        """Perform finalization of the history IR."""
-        if self.resolved:
-            return self.resolved
-
-        resolved_fields = {}
-        for num, field in self.fields.items():
-            resolved_fields[num] = field.resolve()
-
-        self.resolved = ResolvedSchemaHistory(
-            versions=self.versions,
-            pseudoversions=self.pseudoversions,
-            fields=resolved_fields,
-            old_names=self.old_names,
-            source=self,
-        )
-        return self.resolved
-
-    def get_resolved(self) -> ResolvedSchemaHistory:
-        """Get a resolved version of this object."""
-        if not self.resolved:
-            msg = "Attempt to access unresolved object"
-            raise RuntimeError(msg)
-        return self.resolved
+        return cls(version=version, legacy_became=legacy_became, removed=removed)
 
 
 @dataclass
@@ -291,6 +149,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
     options: SchemaOptions | None = dc_field(repr=False)
     resolved: ResolvedSchema | None = dc_field(repr=False)
     history: SchemaHistory | None = dc_field(repr=False)
+    attributes: node.ClkAttributes | None = dc_field(repr=False)
     programmatically_generated: bool = dc_field(default=False, repr=False)
 
     @classmethod
@@ -314,6 +173,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
+        attributes = module.handle_outer_attrs(cst_schema.maybe_clk_outer_attrs())
         name = get_span(cst_schema.child_identifier().child_value(), module.terminals)
         uuid_val = (
             uuid.UUID(hex=get_span(uuid_spec.child_uuid(), module.terminals))
@@ -405,6 +265,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
             field_src_order=field_src_order,
             options=schema_options_ir,
             history=history,
+            attributes=attributes,
             resolved=None,
         )
 
@@ -434,6 +295,25 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
             )
         return result
 
+    def _validate_parameters(self) -> None:
+        """Validate that parameters with defaults don't appear before parameters without defaults.
+
+        Raises:
+            ValueError: If any validation rule is violated
+        """
+        if not self.parameters:
+            return
+        seen_default = False
+        for _, param in sorted(self.parameters.items()):
+            resolved_param = param.get_resolved()
+            if resolved_param.init_value:
+                seen_default = True
+            elif seen_default:
+                msg = resolved_param.append_error_line(
+                    "Parameters with defaults cannot come before parameters without defaults"
+                )
+                raise ValueError(msg)
+
     def _validate_history(self) -> None:
         """Validate schema history.
 
@@ -446,25 +326,8 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
         current_field_nums = set(self.fields.keys())
         if self.parameters:
             current_field_nums.update(self.parameters.keys())
-        historical_nums = set(self.history.fields.keys())
-        all_field_nums = current_field_nums.union(historical_nums)
-
-        pseudo_set = set(self.history.pseudoversions)
-        overlap = pseudo_set.intersection(all_field_nums)
-        if overlap:
-            msg = self.append_error_line(
-                f"Pseudoversions {overlap} conflict with field numbers\n"  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-                "Please note: pseudofield numbers are reserved after creation and cannot be reused as field or parameter numbers.\n"
-                "If you're seeing this error after adding a field or parameter, renumber the field(s)/parameter(s)\n"
-                "to not conflict with any already-reserved pseudofield numbers."
-            )
-            raise ValueError(msg)
-
-        all_field_nums |= pseudo_set
+        historical_nums = set(itertools.chain(self.history.legacy_became.keys(), self.history.removed))
         self._validate_field_number_overlap(current_field_nums, historical_nums)
-        became_targets = self._validate_field_changes(self.history.fields.values(), all_field_nums)
-        self._validate_duplicate_became_targets(self.history.fields.values(), became_targets)
-        self._validate_version_list(self.history.versions, all_field_nums)
 
     def _validate_field_number_overlap(self, current_nums: set[int], historical_nums: set[int]) -> None:
         """Check that current and historical field numbers don't overlap.
@@ -478,101 +341,16 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
         """
         overlap = current_nums.intersection(historical_nums)
         if overlap:
-            msg = f"Field numbers {overlap} are used in both current and historical fields"
-            raise ValueError(msg)
-
-    def _validate_field_changes(
-        self,
-        historical_fields: Iterable[HistoricalFieldDef],
-        all_field_nums: set[int],
-    ) -> dict[int, int]:
-        """Validate changes to historical fields.
-
-        Args:
-            historical_fields: Iterator of historical field definitions
-            all_field_nums: Set of all field numbers (current and historical)
-
-        Returns:
-            Dict mapping target field numbers to source field numbers for 'became' transitions
-
-        Raises:
-            RuntimeError: If a field has no change version
-            ValueError: If change version is invalid
-        """
-        became_targets: dict[int, int] = {}
-
-        for hist_field in historical_fields:
-            change_version = hist_field.removed_in_version or hist_field.became_field_num
-            if change_version is None:
-                msg = hist_field.append_error_line(f"Historical field {hist_field.num} has no change version")
-                raise RuntimeError(msg)
-
-            if change_version <= hist_field.num:
-                msg = hist_field.append_error_line(
-                    f"Historical field {hist_field.num} cannot be changed in version {change_version}"
-                )
-                raise ValueError(msg)
-
-            if change_version not in all_field_nums:
-                msg = hist_field.append_error_line(
-                    f"Historical field {hist_field.num} references non-existent version {change_version}"
-                )
-                raise ValueError(msg)
-
-            if hist_field.became_field_num is not None:
-                became_targets[hist_field.became_field_num] = hist_field.num
-
-        return became_targets
-
-    def _validate_duplicate_became_targets(
-        self,
-        historical_fields: Iterable[HistoricalFieldDef],
-        became_targets: dict[int, int],
-    ) -> None:
-        """Check that no two fields become the same field.
-
-        Args:
-            historical_fields: Iterator of historical field definitions
-            became_targets: Dict mapping target field numbers to source field numbers
-
-        Raises:
-            ValueError: If multiple fields become the same field
-        """
-        for hist_field in historical_fields:
-            if hist_field.became_field_num is not None and (
-                hist_field.became_field_num in became_targets
-                and became_targets[hist_field.became_field_num] != hist_field.num
-            ):
-                msg = (
-                    f"Historical fields {became_targets[hist_field.became_field_num]} and {hist_field.num} "
-                    f"cannot both become field {hist_field.became_field_num}"
-                )
-                raise ValueError(msg)
-
-    def _validate_version_list(self, versions: list[int], all_field_nums: set[int]) -> None:
-        """Validate the version list.
-
-        Args:
-            versions: List of versions from history block
-            all_field_nums: Set of all field numbers (current and historical)
-
-        Raises:
-            ValueError: If version list contains invalid versions or is missing current version
-        """
-        for version in versions:
-            if version not in all_field_nums:
-                msg = f"Version {version} is listed in version history but not defined by any field"
-                raise ValueError(msg)
-
-        if self.current_version() not in versions:
-            msg = f"Historical version does not include current version {self.current_version()}"
+            msg = self.append_error_line(f"Field numbers {overlap} are used in both current and historical fields")
             raise ValueError(msg)
 
     def current_version(self) -> int:
         """Get the current version of the schema."""
-        max_field = max(list(self.fields.keys()) + (list(self.parameters.keys()) if self.parameters else [-1]))
-        max_pseudoversion = max(self.history.pseudoversions) if self.history and self.history.pseudoversions else -1
-        return max(max_field, max_pseudoversion)
+        return (
+            self.history.version
+            if self.history
+            else max(list(self.fields.keys()) + (list(self.parameters.keys()) if self.parameters else [-1]))
+        )
 
     def resolve(self) -> ResolvedSchema:
         """Perform finalization of the schema IR.
@@ -589,13 +367,13 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
         for field in itertools.chain(self.fields.values(), self.parameters.values() if self.parameters else []):
             field.resolve()
 
-        # Validate schema history
+        # Validate that parameters with defaults don't come before parameters without defaults
+        self._validate_parameters()
+
+        # Fill in history if schema didn't have a history block
+        if not self.history:
+            self.history = SchemaHistory(version=self.current_version(), legacy_became={}, removed=set())
         self._validate_history()
-        resolved_history = (
-            self.history.resolve()
-            if self.history
-            else SchemaHistory(versions=[self.current_version()], pseudoversions=[], fields={}, old_names={}).resolve()
-        )
 
         self.resolved = ResolvedSchema(
             name=self.name,
@@ -613,7 +391,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
             field_src_order=self.field_src_order,
             options=self.options,
             source=self,
-            history=resolved_history,
+            history=self.history,
         )
         return self.resolved
 
@@ -636,7 +414,7 @@ class InstantiatedSchema(typesys.TypeVal):
     options: SchemaOptions | None = dc_field(repr=False)
     schema: ResolvedSchema = dc_field(repr=False)
     arguments: Mapping[str, typesys.Value] | None
-    history: InstantiatedSchemaHistory = dc_field(repr=False)
+    history: SchemaHistory = dc_field(repr=False)
 
     @staticmethod
     def make(schema: ResolvedSchema, arguments: Mapping[str, typesys.Value]) -> InstantiatedSchema:
@@ -688,25 +466,7 @@ class InstantiatedSchema(typesys.TypeVal):
             options=schema.options,
             schema=schema,
             arguments=result_args,
-            history=(
-                InstantiatedSchemaHistory(
-                    versions=schema.history.versions,
-                    pseudoversions=schema.history.pseudoversions,
-                    fields={
-                        num: InstantiatedHistoricalFieldDef(
-                            num=field.num,
-                            name=field.name,
-                            original_type=substitute_parameter_refs(field.original_type, args, error_node=typespec),
-                            removed_in_version=field.removed_in_version,
-                            became_field_num=field.became_field_num,
-                            source=field,
-                        )
-                        for num, field in schema.history.fields.items()
-                    },
-                    old_names=schema.history.old_names,
-                    source=schema.history,
-                )
-            ),
+            history=schema.history,
         )
         for fld_num, fld in schema.fields.items():
             result.fields[fld_num] = InstantiatedFieldDef(
@@ -719,23 +479,6 @@ class InstantiatedSchema(typesys.TypeVal):
                 init_value=fld.init_value,
                 source=fld,
             )
-
-        # Validate historical field type changes
-        if result.history:
-            for hist_field in result.history.fields.values():
-                if hist_field.became_field_num is not None:
-                    old_type = hist_field.original_type
-                    new_field = result.fields.get(hist_field.became_field_num)
-                    if not new_field:
-                        continue  # Field might have been removed in a later version
-                    new_type = new_field.type_info
-
-                    if not _are_types_compatible(old_type, new_type):
-                        msg = new_field.append_error_line(
-                            f"Incompatible type change in schema {result.schema_name}: field {hist_field.name} "  # pyright: ignore[reportImplicitStringConcatenation] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
-                            f"(type {old_type.value_key()}) became field {new_field.cur_name} (type {new_type.value_key()})"
-                        )
-                        raise ValueError(msg)
 
         return result
 
@@ -758,10 +501,7 @@ class InstantiatedSchema(typesys.TypeVal):
 
     def cur_version(self) -> int:
         """Get the current version of the schema."""
-        max_field = max(self.fields)
-        max_param = max(self.schema.parameters) if self.schema.parameters else -1
-        max_pseudoversion = max(self.history.pseudoversions) if self.history.pseudoversions else -1
-        return max(max_field, max_param, max_pseudoversion)
+        return self.history.version
 
 
 @dataclass
@@ -769,6 +509,7 @@ class SchemaOptions(node.CstNode[cst.SchemaOptions]):
     """Options for the Schema type."""
 
     provide_constructor: bool
+    soa_enabled: bool
 
     @classmethod
     def from_cst(cls: type[SchemaOptions], cst_node: cst.SchemaOptions, module: node.Module) -> SchemaOptions:
@@ -778,8 +519,15 @@ class SchemaOptions(node.CstNode[cst.SchemaOptions]):
             raise ValueError(msg)
 
         provide_constructor = False
+        soa_enabled = False
+        constructor_count = 0
+        soa_enabled_count = 0
         for option in cst_node.children_schema_option():
             if constructor := option.maybe_schema_option_constructor():
+                constructor_count += 1
+                if constructor_count > 1:
+                    msg = "Schema option 'constructor' can only be specified once."
+                    raise ValueError(msg)
                 constructor_type = constructor.child_constructor_expr().maybe_identifier()
                 if (
                     not constructor_type
@@ -788,10 +536,19 @@ class SchemaOptions(node.CstNode[cst.SchemaOptions]):
                     msg = "Unsupported constructor type.  Only `source_code_order` is supported."
                     raise ValueError(msg)
                 provide_constructor = True
+            elif soa_option := option.maybe_schema_option_soa_enabled():
+                soa_enabled_count += 1
+                if soa_enabled_count > 1:
+                    msg = "Schema option 'soa_enabled' can only be specified once."
+                    raise ValueError(msg)
+                boolean_cst = soa_option.child_boolean()
+                soa_enabled = boolean_cst.maybe_true() is not None
             else:
                 msg = "Receieved unsupported schema option."
                 raise ValueError(msg)
-        return SchemaOptions(cst_node=cst_node, module=module, provide_constructor=provide_constructor)
+        return SchemaOptions(
+            cst_node=cst_node, module=module, provide_constructor=provide_constructor, soa_enabled=soa_enabled
+        )
 
 
 @dataclass
@@ -1124,6 +881,8 @@ def retrieve_schema(value: typesys.Value | None) -> InstantiatedSchema | str:
 
     Return: A schema or an error message.
     """
+    if isinstance(value, InstantiateStmt):
+        value = value.typespec
     if not isinstance(value, Schema | typesys.Instantiation):
         return "Argument must be a Schema or Instantiated Schema."
     schema_ir = value if isinstance(value, Schema) else value.instantiates
@@ -1245,9 +1004,11 @@ def make_field(  # noqa: PLR0913 (see above)
     return result
 
 
-def make_schema_options(module: node.Module, provide_constructor: bool = False) -> SchemaOptions:
+def make_schema_options(
+    module: node.Module, provide_constructor: bool = False, soa_enabled: bool = False
+) -> SchemaOptions:
     """Factory function for creating schemas programmatically."""
-    return SchemaOptions(module=module, cst_node=None, provide_constructor=provide_constructor)
+    return SchemaOptions(module=module, cst_node=None, provide_constructor=provide_constructor, soa_enabled=soa_enabled)
 
 
 # We have to suppress PLR0913 (too many args) because this is already an extremely simple function
@@ -1280,6 +1041,7 @@ def make_schema_class(  # noqa: PLR0913 (see above)
         options=options,
         resolved=None,
         history=None,
+        attributes=None,
         programmatically_generated=True,
     )
     schema.resolve()
@@ -1398,10 +1160,14 @@ def _is_container_type(typ: typesys.TypeVal) -> bool:
     if not isinstance(typ, typesys.Instantiation):
         return False
     return typ.instantiates in (
+        # keep-sorted start
+        clkbuiltins.FIXED_ARRAY,
+        clkbuiltins.FIXED_SOA,
         clkbuiltins.OPTIONAL,
         clkbuiltins.VAR_ARRAY,
-        clkbuiltins.FIXED_ARRAY,
+        clkbuiltins.VAR_SOA,
         clkbuiltins.VAR_STRING,
+        # keep-sorted end
     )
 
 
@@ -1569,3 +1335,75 @@ def _are_types_compatible(old_type: typesys.TypeVal, new_type: typesys.TypeVal) 
 
     # If none of the checks determined compatibility, types are incompatible
     return False
+
+
+@dataclass
+class InstantiateStmt(typesys.TypeDef, node.DocableEntity, node.CstNode[cst.InstantiateStmt]):
+    """IR Node representing an instantiate statement in low boilerplate clockwork files.
+
+    Attributes:
+        typespec: Instantiated schema
+        attributes: Outer attributes
+    """
+
+    typespec: expr.InstantiateExpr | typesys.Instantiation
+    attributes: node.ClkAttributes = dc_field(repr=False)
+
+    @classmethod
+    def from_cst(
+        cls: type[InstantiateStmt],
+        cst_node: cst.InstantiateStmt,
+        module: node.Module,
+    ) -> InstantiateStmt:
+        """Construct an IR node from a CST node."""
+        if module.terminals is None:
+            msg = "Cannot construct IR nodes from CST without a TerminalSource"
+            raise ValueError(msg)
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
+        assert attributes is not None
+        doc = node.Doc.maybe_from_cst(cst_node.maybe_doc(), module)
+        name = ""
+        if (cst_name := cst_node.maybe_name()) is not None:
+            name = get_span(cst_name.child_value(), module.terminals)
+        typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
+        if not isinstance(typespec, expr.InstantiateExpr):
+            msg = node.append_error_line(
+                cst_node.child_typespec(), module, "Instantiate statement expects a schema instantiation"
+            )
+            raise TypeError(msg)
+
+        return cls(
+            doc=doc,
+            module=module,
+            cst_node=cst_node,
+            type_info=clkbuiltins.TYPE_TYPE,
+            scope=module.inner_scope,
+            name=name,
+            typespec=typespec,
+            attributes=attributes,
+        )
+
+    def resolve(self) -> None:
+        """Perform finalization of the IR."""
+        if not isinstance(self.typespec, expr.InstantiateExpr):
+            msg = node.append_error_line(self, self.module, f"Attempt to resolve instantiate statement twice: {self}")
+            raise RuntimeError(msg)  # noqa: TRY004 (Resolving twice is a runtime error)
+
+        eval_result = self.typespec.evaluate()
+        if not isinstance(eval_result, typesys.Instantiation):
+            msg = node.append_error_line(
+                self.cst_node, self.module, "Error in type exression for instantiate statement"
+            )
+            raise TypeError(msg)
+        if not isinstance(eval_result.instantiates, Schema):
+            msg = node.append_error_line(
+                self.cst_node, self.module, "Instantiate statement expects a schema instantiation"
+            )
+            raise TypeError(msg)
+        self.typespec = eval_result
+
+    @override
+    def value_key(self) -> str:
+        """Generate a comparable, hashable, string representation of this value."""
+        assert isinstance(self.typespec, typesys.Instantiation)
+        return self.typespec.value_key()

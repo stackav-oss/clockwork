@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/epoll_manager.hh"
 #include "clockwork/runners/timerfd_timer.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
@@ -47,7 +48,7 @@ TEST_CASE("setup_timers + connect_timers")
 
   const jewels::memory::MemoryResource memres_sys(std::pmr::new_delete_resource());
 
-  std::vector<common::TimerInstanceDescriptionTap> configs;
+  std::vector<Tappy<common::TimerInstanceDescription<>>> configs;
   configs.emplace_back();
   configs.back().get_mutable_timer_id() = timer1_id;
   configs.back().get_underlying_instance_path_name().set_truncate("timer1");

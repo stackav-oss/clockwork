@@ -35,7 +35,7 @@ class SimpleLaunchClient:
         self, command: SimpleLaunchCommand | None, path: str | None = None, timeout: int = 5
     ) -> requests.Response:
         """Send simplelaunch a command."""
-        path_str = path if path else ""
+        path_str = path or ""
         response = requests.post(
             f"http://{self.host}:{self.port}/{path_str}",
             timeout=timeout,
@@ -85,6 +85,13 @@ class SimpleLaunchClient:
         """Start a process."""
         command = SimpleLaunchCommand()
         command.start_process = name
+        self._send_command(command=command)
+
+    def resume(self, name: str) -> None:
+        """Resume a process."""
+        command = SimpleLaunchCommand()
+        command.start_process = name
+        command.process_args.extend(["--pinion-resume", "dirty_resume"])
         self._send_command(command=command)
 
     def logs(self, name: str) -> str:

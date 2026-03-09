@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 import click
-from clockwork.dsl import clk_exception
 from clockwork.dsl.bazel import extract_targets
 from clockwork.dsl.composition import systemgen
 from clockwork.dsl.ir import compiler, cpp_executable, importer, node, system_target
@@ -115,9 +114,4 @@ def bazel_targets(input_file: Path, repo: str) -> None:
 
 
 if __name__ == "__main__":
-    logger = clk_exception.get_logger(Path(__file__).name)
-    try:
-        clkc()
-    except (ValueError, TypeError, KeyError, SyntaxError):
-        logger.exception("clkc -- Parsing Exception:")
-        raise
+    clkc()

@@ -3,7 +3,7 @@
 #include "clockwork/cog/set_cog_metrics.hh"
 
 #include "clockwork/cog/cog_statistics.hh"
-#include "clockwork/dsl/cog/min_max_mean_cpp.hh"
+#include "clockwork/dsl/cog/common_cog_telemetry_metrics_clk_cc.hh"
 #include "clockwork/dsl/cog/ten_nanosecond_type.hh"
 #include "clockwork/repr_iface.hh"
 

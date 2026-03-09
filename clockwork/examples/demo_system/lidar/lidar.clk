@@ -1,9 +1,12 @@
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::lidar::lidar_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::lidar)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::lidar::lidar_channels;
 use clockwork::examples::demo_system::lidar::lidar_state;
 use clockwork::examples::demo_system::lidar::lidar_message;
 use clockwork::examples::demo_system::localization::pose_message;
-use clockwork::examples::demo_system::localization::localization_channels;
+use[] clockwork::examples::demo_system::localization::localization_channels;
 
 // Cog to simulate the lidar device sending raw lidar packets
 cog LidarDeviceCog
@@ -61,17 +64,6 @@ cog LidarDriverCog
   }
 }
 
-cpp_target lidar_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::lidar;
-  }
-
-  cog LidarDeviceCog;
-  cog LidarDriverCog;
-}
-
 box LidarBox
 {
   new device_cog: LidarDeviceCog;
@@ -89,18 +81,10 @@ box LidarBox
   connect driver_cog.lidar_sweep to lidar_channels::LidarSweepChannel;
 }
 
-cpp_executable lidar_exe
-{
-  casing
-  {
-    box LidarBox;
-  }
-}
-
 box LidarExe
 {
   new lidar_box: LidarBox;
-  new lidar_proc: Process(executable=lidar_exe);
+  new lidar_proc: Process(executable=lidar_clk_exe);
   apply HostProcess(process=lidar_proc) in lidar_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to lidar_proc;
 }

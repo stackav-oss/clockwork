@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.cpp import context, typereg, types
 from clockwork.dsl.cpp.context import CppChunk, Header, SystemHeader
 from clockwork.dsl.ir import clkbuiltins, clkenum, expr, node, schema, typesys

@@ -55,7 +55,7 @@ cc_test(
     name = "hello_udp_not_var_packet_test",
     srcs = ["hello_udp_not_var_packet_test.cc"],
     deps = [
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/dsl/tests/support:hello_udp_not_var_packet",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
@@ -73,9 +73,9 @@ cc_test(
     name = "hello_udp_test",
     srcs = ["hello_udp_test.cc"],
     deps = [
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/dsl/tests/support:hello_udp",
-        "//clockwork/io:var_packet",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/pinion:bidirectional_udp",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
@@ -94,7 +94,7 @@ cc_test(
     name = "hellocog_test",
     srcs = ["hellocog_test.cc"],
     deps = [
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/dsl/tests/support:hellocog",
         "//clockwork/dsl/tests/support:hellocog_impl",  #keep
         "//clockwork/runners:online_cog_queue",
@@ -143,6 +143,92 @@ py_test(
     ],
 )
 
+py_test(
+    name = "signal_registry_test",
+    srcs = [
+        "signal_registry_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
+        "//clockwork/dsl/tests/support:test_signals.clk",
+        "//std:signals.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:signal",
+        "//clockwork/dsl/ir:signal_registry",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "signal_subscript_policy_test",
+    srcs = [
+        "signal_subscript_policy_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/diagnostics:report.clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics.clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
+        "//clockwork/dsl/cog:ten_nanosecond.clk",
+        "//clockwork/dsl/tests/support:test_signals.clk",
+        "//std:signals.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:signal",
+        "//clockwork/dsl/ir:signal_registry",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "signal_test",
+    srcs = [
+        "signal_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:expr",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:signal",
+        "@clockwork_pip//pytest",
+    ],
+)
+
 cc_test(
     name = "tapmsg_test",
     srcs = ["tapmsg_test.cc"],
@@ -156,7 +242,7 @@ cc_test(
     name = "taptags_test",
     srcs = ["taptags_test.cc"],
     deps = [
-        "//clockwork/dsl/tests/support:taptags",
+        "//clockwork/dsl/tests/support:taptags_clk_cc",
         "@catch2//:catch2_main",
     ],
 )

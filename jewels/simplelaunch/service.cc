@@ -23,7 +23,7 @@
 #include <boost/beast/http/status.hpp>
 #include <boost/beast/http/verb.hpp>
 #include <boost/system/system_category.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <google/protobuf/json/json.h>
 #include <google/protobuf/repeated_ptr_field.h>
 #include <google/protobuf/util/json_util.h>
@@ -39,10 +39,11 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
-#include <set>
 #include <string_view>
 #include <sys/wait.h>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace jewels::simplelaunch
 {
@@ -246,7 +247,7 @@ void TaskManagerImpl::process_action(
     }
     else
     {
-      child_process_iter->second.start();
+      child_process_iter->second.start({command.process_args().begin(), command.process_args().end()});
     }
   }
   else if (command.has_stop_process())
@@ -605,7 +606,7 @@ void TaskManagerImpl::spawn_subprocesses()
   // Then launch them
   for (auto& child_process : std::ranges::views::values(child_processes_))
   {
-    child_process.start();
+    child_process.start({});
   }
 }
 

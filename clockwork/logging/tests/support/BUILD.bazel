@@ -2,68 +2,27 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
 
-package(default_testonly = True)
-
-py_library(
-    name = "py_test_message",
-    srcs = ["py_test_message.py"],
-    data = [":test_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-cc_library(
-    name = "test_message",
-    srcs = [
-        "test_message.cc",
-        "test_message.inl",
-    ],
-    hdrs = ["test_message.hh"],
-    data = [":test_message_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
 )
 
 clk(
     name = "test_message_clk",
     srcs = ["test_message.clk"],
     outs = [
-        "py_test_message.py",
-        "test_message.cc",
-        "test_message.hh",
-        "test_message.inl",
+        "test_message_clk_cc.cc",
+        "test_message_clk_cc.hh",
+        "test_message_clk_cc.inl",
         "test_message_clk_nb.cc",
         "test_message_clk_nb.hh",
         "test_message_clk_nb.inl",
+        "test_message_clk_py.py",
     ],
-    visibility = ["//visibility:public"],
-)
-
-py_cc_binding(
-    name = "test_message_clk_nb",
-    srcs = [
-        "test_message_clk_nb.cc",
-        "test_message_clk_nb.hh",
-        "test_message_clk_nb.inl",
-    ],
-    data = [":test_message_clk"],
-    py_deps = ["//jewels/nanobind/clk_bindings/common:common_py"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":test_message",
-        "//jewels/nanobind/clk_bindings/common:common_cc",
+    generate = [
+        "cpp",
+        "nanobind",
+        "py",
     ],
 )

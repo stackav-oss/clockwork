@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
@@ -14,12 +14,14 @@
 #include "clockwork/logging/writers/deterministic_log_writer.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
-#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -36,7 +38,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -189,7 +190,7 @@ TEST_CASE("Log messages")
   const auto& logged_metrics_channel_metadata = *maybe_metrics_channel_metadata;
   REQUIRE(logged_metrics_channel_metadata.topic == metrics_channel_metadata_channel_name);
   const auto metrics_channel_metadata =
-    nolint_helper::byte_span_to_value_ptr<clockwork::tools::MetricsChannelMetadataReportTap>(
+    nolint_helper::byte_span_to_value_ptr<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>(
       logged_metrics_channel_metadata.data);
   REQUIRE(metrics_channel_metadata);
   const auto* const metrics_channel_metadata_ptr = metrics_channel_metadata.value();

@@ -253,6 +253,195 @@ There just needs to be a single Box that instantiates both sub-Boxes, and the co
 
 The directionality for all of these endpoint types is `connect <resource> to <cog endpoint>`.
 
+## Init cogs and state initialization
+
+State often needs to be initialized at startup before non-init Cogs begin executing.
+Clockwork provides _init Cogs_ for this purpose.
+
+### Defining an init Cog
+
+An init Cog is a Cog that uses the special `execute when: init` condition:
+
+```clockwork
+cog HelloInitCog
+{
+    resources
+    {
+        memory: persistent;
+    }
+
+    configs
+    {
+        config: Tappy<HelloConfig>;
+    }
+
+    states
+    {
+        hello_state: Tappy<HelloState>
+        {
+            mutable: true;
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+```
+
+Init Cogs execute exactly once, at startup, before any non-init Cogs execute.
+They typically have `mutable: true` access to state so they can initialize it.
+
+### Designating the init Cog for a state instance
+
+When you instantiate a State in a Box, you can optionally specify which init Cog endpoint is responsible for initializing it using the `init=` parameter:
+
+```clockwork
+box HelloBox
+{
+    new init_cog: HelloInitCog;
+    new main_cog: HelloMainCog;
+
+    new memory: HeapMemory(max_size=1'000'000);
+    new hello_state: State(
+        representation=Tachyon<HelloState>,
+        memory_resource=memory,
+        init=init_cog.hello_state  // Designates init_cog as the initializer
+    );
+
+    // The init= parameter implicitly connects the state to the init cog,
+    // so this explicit connect is optional but can be included for clarity:
+    // connect hello_state to init_cog.hello_state;
+
+    // Non-init cogs still need explicit connections:
+    connect hello_state to main_cog.hello_state;
+}
+```
+
+The `init=` parameter serves three purposes:
+
+1. **Implicit connection**: It automatically connects the state to the specified init Cog endpoint.
+2. **Documentation**: It explicitly declares which Cog is responsible for initializing this state.
+3. **Dependency ordering**: It establishes that the designated init Cog must execute before any other init Cogs that depend on this state.
+
+> [!NOTE]
+> You can include an explicit `connect` statement for the init Cog in addition to using `init=`, but it's redundant.
+> The connection is created automatically by the `init=` parameter.
+
+### Init Cog dependencies and execution order
+
+When multiple init Cogs exist in the same process, Clockwork automatically determines their execution order based on state dependencies.
+
+Consider this example where one init Cog needs to read state that another init Cog initializes:
+
+```clockwork
+cog PrimaryInitCog
+{
+    states
+    {
+        shared_state: Tappy<SharedState>
+        {
+            mutable: true;  // Primary initializer has write access
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+
+cog SecondaryInitCog
+{
+    states
+    {
+        shared_state: Tappy<SharedState>
+        {
+            mutable: false;  // Secondary only needs read access
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+
+box MyBox
+{
+    new primary_init: PrimaryInitCog;
+    new secondary_init: SecondaryInitCog;
+
+    new memory: HeapMemory(max_size=1'000'000);
+    new shared_state: State(
+        representation=Tachyon<SharedState>,
+        memory_resource=memory,
+        init=primary_init.shared_state  // Primary is the designated initializer
+    );
+
+    connect shared_state to primary_init.shared_state;
+    connect shared_state to secondary_init.shared_state;
+}
+```
+
+In this configuration:
+
+1. `primary_init` is designated as the initializer via `init=primary_init.shared_state`.
+2. `secondary_init` also connects to the same state (with `mutable: false`).
+3. Clockwork detects that `secondary_init` depends on state initialized by `primary_init`.
+4. Clockwork ensures `primary_init` executes before `secondary_init`.
+
+This pattern allows you to express initialization dependencies between init Cogs without explicit dependency declarations.
+
+### One init Cog, multiple states
+
+A single init Cog can initialize multiple state instances:
+
+```clockwork
+cog MultiStateInitCog
+{
+    states
+    {
+        state_a: Tappy<StateA>
+        {
+            mutable: true;
+        }
+        state_b: Tappy<StateB>
+        {
+            mutable: true;
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+
+box MyBox
+{
+    new init_cog: MultiStateInitCog;
+
+    new memory: HeapMemory(max_size=1'000'000);
+    new state_a: State(representation=Tachyon<StateA>, memory_resource=memory, init=init_cog.state_a);
+    new state_b: State(representation=Tachyon<StateB>, memory_resource=memory, init=init_cog.state_b);
+
+    connect state_a to init_cog.state_a;
+    connect state_b to init_cog.state_b;
+}
+```
+
+### Summary of init Cog behavior
+
+| Aspect                     | Behavior                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| Execution count            | Exactly once per process startup                                                    |
+| Execution timing           | Before any non-init Cogs execute                                                    |
+| Ordering between init Cogs | Determined by state dependencies via `init=`                                        |
+| State access               | Typically `mutable: true` for states being initialized                              |
+| Dependency expression      | Connect to state (mutable or not) to depend on another init Cog's initialized state |
+
 ## Casings and executables
 
 Cog and schema _classes_ must be compiled into C++ libraries.
@@ -266,8 +455,7 @@ cpp_executable helloworld_exe
 {
     casing
     {
-        interface Tap<Tachyon<hellomsg::HelloMsg>>;
-        cog hellocog::HelloCog;
+        box HelloBox;
     }
 }
 ```
@@ -275,6 +463,21 @@ cpp_executable helloworld_exe
 An executable includes a _Casing_, which is a little like a Box, except instead of holding _instances_ of Cogs, state, etc., it contains compiled _classes_ of Cog schema representations and schema interfaces.
 Those classes must also be part of some `cpp_target` somewhere (probably multiple `cpp_target`s).
 The casing links all of these different compiled classes into a form that can be executed as part of a system.
+
+The syntax shown above is the recommended and typically easiest way to specify a casing: You just use an existing Box, likely a box corresponding to the process you intend to run with this executable.
+Clockwork will automatically include all of the Cog and schema classes that are instantiated in that Box, and any Boxes nested within it, recursively.
+Or, just like in a Box, you can instantiate Cog and schema classes directly in the casing:
+
+```clockwork
+cpp_executable helloworld_exe
+{
+    casing
+    {
+        interface Tap<Tachyon<hellomsg::HelloMsg>>;
+        cog hellocog::HelloCog;
+    }
+}
+```
 
 As of right now, each executable can have only a single casing, and each casing must be inside a single executable.
 In the future this may change; in particular we may support multiple casings in a single executable.
@@ -411,6 +614,7 @@ ethernet Lan1
 Here we define an Ethernet network and tell it what address each CPU domain has on that network.
 We also give it a range of TCP ports which it can allocate for connections between those CPUs.
 It will auto-assign ports within this range as it needs to in order to create connections between processes on different CPUs.
+
 
 ## Defining systems
 

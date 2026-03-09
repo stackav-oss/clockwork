@@ -3,13 +3,18 @@
 
 #include "clockwork/logging/offboard/s3_utils.hh"
 
+#include "clockwork/logging/offboard/init_aws_api.hh"
+#include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/s3_read_streambuf.hh"
 #include "clockwork/logging/offboard/s3_write_streambuf.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/time/sync_time.hh"
 
+#include <aws/core/client/AWSError.h>
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/core/utils/Outcome.h>
+#include <aws/s3/S3Client.h>
 #include <aws/s3/S3Errors.h>
 #include <aws/s3/model/CommonPrefix.h>
 #include <aws/s3/model/CompleteMultipartUploadRequest.h>
@@ -27,13 +32,17 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 #include <aws/s3/model/UploadPartResult.h>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <algorithm>
+#include <chrono>
 #include <istream>
 #include <memory>
 #include <memory_resource>
+#include <ratio>
+#include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -43,94 +52,32 @@ namespace clockwork_logging::offboard
 namespace
 {
 
-/// Convert an S3 error to a LogError
-/// @param[in] s3_error S3 Error
-/// @return LogError value
-[[nodiscard]] LogError to_log_error(Aws::S3::S3Errors s3_error)
+/// Get the time elapsed since a start time in milliseconds
+/// @param[in] start_time Start time
+/// @return Elapsed time in milliseconds
+[[nodiscard]] double elapsed_ms(jewels::time::SteadyTime start_time)
 {
-  switch (s3_error)
-  {
-  case Aws::S3::S3Errors::INCOMPLETE_SIGNATURE:
-    return LogError::s3_incomplete_signature;
-  case Aws::S3::S3Errors::INTERNAL_FAILURE:
-    return LogError::s3_internal_failure;
-  case Aws::S3::S3Errors::INVALID_ACTION:
-    return LogError::s3_invalid_action;
-  case Aws::S3::S3Errors::INVALID_CLIENT_TOKEN_ID:
-    return LogError::s3_invalid_client_token_id;
-  case Aws::S3::S3Errors::INVALID_PARAMETER_COMBINATION:
-    return LogError::s3_invalid_parameter_combination;
-  case Aws::S3::S3Errors::INVALID_QUERY_PARAMETER:
-    return LogError::s3_invalid_query_parameter;
-  case Aws::S3::S3Errors::INVALID_PARAMETER_VALUE:
-    return LogError::s3_invalid_parameter_value;
-  case Aws::S3::S3Errors::MISSING_ACTION:
-    return LogError::s3_missing_action;
-  case Aws::S3::S3Errors::MISSING_AUTHENTICATION_TOKEN:
-    return LogError::s3_missing_authentication_token;
-  case Aws::S3::S3Errors::MISSING_PARAMETER:
-    return LogError::s3_missing_parameter;
-  case Aws::S3::S3Errors::OPT_IN_REQUIRED:
-    return LogError::s3_opt_in_required;
-  case Aws::S3::S3Errors::REQUEST_EXPIRED:
-    return LogError::s3_request_expired;
-  case Aws::S3::S3Errors::SERVICE_UNAVAILABLE:
-    return LogError::s3_service_unavailable;
-  case Aws::S3::S3Errors::THROTTLING:
-    return LogError::s3_throttling;
-  case Aws::S3::S3Errors::VALIDATION:
-    return LogError::s3_validation;
-  case Aws::S3::S3Errors::ACCESS_DENIED:
-    return LogError::s3_access_denied;
-  case Aws::S3::S3Errors::RESOURCE_NOT_FOUND:
-    return LogError::s3_resource_not_found;
-  case Aws::S3::S3Errors::UNRECOGNIZED_CLIENT:
-    return LogError::s3_unrecognized_client;
-  case Aws::S3::S3Errors::MALFORMED_QUERY_STRING:
-    return LogError::s3_malformed_query_string;
-  case Aws::S3::S3Errors::NETWORK_CONNECTION:
-    return LogError::s3_network_connection;
-  case Aws::S3::S3Errors::UNKNOWN:
-    return LogError::s3_unknown_error;
-  case Aws::S3::S3Errors::BUCKET_ALREADY_EXISTS:
-    return LogError::s3_bucket_already_exists;
-  case Aws::S3::S3Errors::BUCKET_ALREADY_OWNED_BY_YOU:
-    return LogError::s3_bucket_already_owned_by_you;
-  case Aws::S3::S3Errors::NO_SUCH_BUCKET:
-    return LogError::s3_no_such_bucket;
-  case Aws::S3::S3Errors::NO_SUCH_KEY:
-    return LogError::s3_no_such_key;
-  case Aws::S3::S3Errors::NO_SUCH_UPLOAD:
-    return LogError::s3_no_such_upload;
-  case Aws::S3::S3Errors::OBJECT_ALREADY_IN_ACTIVE_TIER:
-    return LogError::s3_object_already_in_active_tier;
-  case Aws::S3::S3Errors::OBJECT_NOT_IN_ACTIVE_TIER:
-    return LogError::s3_object_not_in_active_tier;
-  case Aws::S3::S3Errors::SLOW_DOWN:
-    return LogError::s3_slow_down;
-  case Aws::S3::S3Errors::REQUEST_TIME_TOO_SKEWED:
-    return LogError::s3_request_time_too_skewed;
-  case Aws::S3::S3Errors::INVALID_SIGNATURE:
-    return LogError::s3_invalid_signature;
-  case Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH:
-    return LogError::s3_signature_does_not_match;
-  case Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID:
-    return LogError::s3_invalid_access_key_id;
-  case Aws::S3::S3Errors::REQUEST_TIMEOUT:
-    return LogError::s3_request_timeout;
-  case Aws::S3::S3Errors::INVALID_OBJECT_STATE:
-    return LogError::s3_invalid_object_state;
-  }
-  return LogError::s3_unknown_error;
+  return std::chrono::duration<double, std::milli>(jewels::time::SteadyClock::now() - start_time).count();
 }
 
 } // namespace
 
-[[nodiscard]] LogExpected<S3ListObjectsResult> s3_list_objects_v2(
-  jewels::memory::MemoryResource memory_resource, const Aws::S3::S3Client& s3_client, const LogUri& s3_uri)
+S3Utils::S3Utils(jewels::memory::MemoryResource memory_resource, std::shared_ptr<Aws::S3::S3Client> s3_client_ptr)
+  : memory_resource_(std::move(memory_resource)), s3_client_ptr_(std::move(s3_client_ptr))
 {
+}
+
+[[nodiscard]] LogExpected<S3ListObjectsResult> S3Utils::list_objects_v2(const LogUri& s3_uri) const
+{
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER list_objects_v2({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to list objects under {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -139,7 +86,7 @@ namespace
   request.SetPrefix(std::string{s3_uri.path().substr(1U)});
   request.SetDelimiter("/");
 
-  const auto outcome = s3_client.ListObjectsV2(request);
+  const auto outcome = s3_client_ptr_->ListObjectsV2(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_error("Failed to list objects under {}: {}", s3_uri.string(), outcome.GetError().GetMessage());
@@ -147,28 +94,40 @@ namespace
   }
 
   S3ListObjectsResult result{};
-  result.objects = std::pmr::vector<std::pmr::string>{memory_resource};
-  result.prefixes = std::pmr::vector<std::pmr::string>{memory_resource};
+  result.objects = std::pmr::vector<std::pmr::string>{memory_resource_};
+  result.prefixes = std::pmr::vector<std::pmr::string>{memory_resource_};
   result.objects.reserve(outcome.GetResult().GetContents().size());
   for (const auto& object : outcome.GetResult().GetContents())
   {
-    std::pmr::string object_str{object.GetKey(), memory_resource};
+    std::pmr::string object_str{object.GetKey(), memory_resource_};
     result.objects.push_back(std::move(object_str));
   }
   result.prefixes.reserve(outcome.GetResult().GetCommonPrefixes().size());
   for (const auto& prefix : outcome.GetResult().GetCommonPrefixes())
   {
-    std::pmr::string prefix_str{prefix.GetPrefix(), memory_resource};
+    std::pmr::string prefix_str{prefix.GetPrefix(), memory_resource_};
     result.prefixes.push_back(std::move(prefix_str));
   }
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT list_objects_v2({}) {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {std::move(result)};
 }
 
-[[nodiscard]] LogExpected<std::pmr::string> s3_create_multipart_upload(
-  jewels::memory::MemoryResource memory_resource, const Aws::S3::S3Client& s3_client, const LogUri& s3_uri)
+[[nodiscard]] LogExpected<std::pmr::string> S3Utils::create_multipart_upload(const LogUri& s3_uri) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER create_multipart_upload({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to create multipart upload for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -177,25 +136,37 @@ namespace
   request.SetKey(std::string{s3_uri.path().substr(1U)});
   request.SetContentType("binary/octet-stream");
 
-  const auto outcome = s3_client.CreateMultipartUpload(request);
+  const auto outcome = s3_client_ptr_->CreateMultipartUpload(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_error(
       "Failed to create multipart upload for {}: {}", s3_uri.string(), outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
-  return std::pmr::string{outcome.GetResult().GetUploadId(), memory_resource};
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT create_multipart_upload({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
+  return std::pmr::string{outcome.GetResult().GetUploadId(), memory_resource_};
 }
 
-[[nodiscard]] LogExpected<Aws::S3::Model::CompletedPart> s3_upload_part(
-  const Aws::S3::S3Client& s3_client,
+[[nodiscard]] LogExpected<Aws::S3::Model::CompletedPart> S3Utils::upload_part(
   const LogUri& s3_uri,
   std::string_view upload_id,
   int32_t part_number,
-  std::pmr::vector<std::pmr::vector<std::byte>> buffers)
+  std::pmr::vector<std::pmr::vector<std::byte>> buffers) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER upload_part({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to create upload part for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -220,7 +191,7 @@ namespace
       ios_ptr->seekg(0);
     });
 
-  const auto outcome = s3_client.UploadPart(request);
+  const auto outcome = s3_client_ptr_->UploadPart(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_error(
@@ -230,17 +201,27 @@ namespace
   Aws::S3::Model::CompletedPart completed_part;
   completed_part.SetPartNumber(part_number);
   completed_part.SetETag(outcome.GetResult().GetETag());
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT upload_part({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {std::move(completed_part)};
 }
 
-[[nodiscard]] LogExpected<void> s3_complete_multipart_upload(
-  const Aws::S3::S3Client& s3_client,
-  const LogUri& s3_uri,
-  std::string_view upload_id,
-  std::span<Aws::S3::Model::CompletedPart> completed_parts)
+[[nodiscard]] LogExpected<void> S3Utils::complete_multipart_upload(
+  const LogUri& s3_uri, std::string_view upload_id, std::span<Aws::S3::Model::CompletedPart> completed_parts) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER complete_multipart_upload({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to complete multipart upload part for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -258,7 +239,7 @@ namespace
   }
   request.SetMultipartUpload(std::move(completed_upload));
 
-  const auto outcome = s3_client.CompleteMultipartUpload(request);
+  const auto outcome = s3_client_ptr_->CompleteMultipartUpload(request);
   if (!outcome.IsSuccess())
   {
     const auto error = to_log_error(outcome.GetError().GetErrorType());
@@ -269,14 +250,27 @@ namespace
       return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
     }
   }
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT complete_multipart_upload({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {};
 }
 
-[[nodiscard]] LogExpected<void> s3_put_object(
-  const Aws::S3::S3Client& s3_client, const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<std::byte>> buffers)
+[[nodiscard]] LogExpected<void>
+S3Utils::put_object(const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<std::byte>> buffers) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER put_object({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to put object for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -298,19 +292,32 @@ namespace
       ios_ptr->seekg(0);
     });
 
-  const auto outcome = s3_client.PutObject(request);
+  const auto outcome = s3_client_ptr_->PutObject(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_error("Failed to put object {}: {}", s3_uri.string(), outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT put_object({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {};
 }
 
-[[nodiscard]] LogExpected<size_t> s3_get_object_size(const Aws::S3::S3Client& s3_client, const LogUri& s3_uri)
+[[nodiscard]] LogExpected<size_t> S3Utils::get_object_size(const LogUri& s3_uri) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER get_object_size({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to get object size for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -318,20 +325,32 @@ namespace
   request.SetBucket(std::string{s3_uri.host()});
   request.SetKey(std::string{s3_uri.path().substr(1U)});
 
-  const auto outcome = s3_client.HeadObject(request);
+  const auto outcome = s3_client_ptr_->HeadObject(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_info("Failed to get object attributes {}: {}", s3_uri.string(), outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
 
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT get_object_size({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return static_cast<size_t>(outcome.GetResult().GetContentLength());
 }
 
-[[nodiscard]] LogExpected<void> s3_delete_object(const Aws::S3::S3Client& s3_client, const LogUri& s3_uri)
+[[nodiscard]] LogExpected<void> S3Utils::delete_object(const LogUri& s3_uri) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER delete_object({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to delete object for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
@@ -339,28 +358,37 @@ namespace
   request.SetBucket(std::string{s3_uri.host()});
   request.SetKey(std::string{s3_uri.path().substr(1U)});
 
-  const auto outcome = s3_client.DeleteObject(request);
+  const auto outcome = s3_client_ptr_->DeleteObject(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_info("Failed to delete object {}: {}", s3_uri.string(), outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
+
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT delete_object({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {};
 }
 
-[[nodiscard]] LogExpected<std::pmr::vector<std::byte>> s3_get_object(
-  jewels::memory::MemoryResource memory_resource,
-  const Aws::S3::S3Client& s3_client,
-  const LogUri& s3_uri,
-  size_t offset,
-  size_t length)
+[[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
+S3Utils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
 {
+  const auto start_time = jewels::time::SteadyClock::now();
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("ENTER get_object({})", s3_uri.string());
+  }
+
   if (s3_uri.scheme() != LogUriScheme::s3)
   {
+    jewels::log_cerr_error("Failed to get object for {}: invalid_log_uri", s3_uri.string());
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
-  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource);
+  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource_);
   S3ReadStreambuf sbuf(buffer);
 
   const auto range_str = fmt::format("bytes={}-{}", offset, offset + length - 1U);
@@ -377,7 +405,7 @@ namespace
     });
   request.SetRequestRetryHandler([&sbuf](const auto&) { sbuf.pubseekpos(0, std::ios_base::out); });
 
-  const auto outcome = s3_client.GetObject(request);
+  const auto outcome = s3_client_ptr_->GetObject(request);
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_info(
@@ -385,7 +413,21 @@ namespace
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
 
+  if (s3_logging_is_enabled())
+  {
+    jewels::log_cerr_info("EXIT get_object({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
+  }
+
   return {std::move(buffer)};
+}
+
+void S3Utils::retry_callback(
+  const Aws::Client::AWSError<Aws::Client::CoreErrors>& error, int64_t attempted_retries, bool should_retry)
+{
+  if (should_retry && (attempted_retries != 0) && (attempted_retries % num_retries_between_debug_messages == 0))
+  {
+    jewels::log_cerr_info("Retrying {}: attempted_retries {}", error.GetMessage(), attempted_retries);
+  }
 }
 
 } // namespace clockwork_logging::offboard

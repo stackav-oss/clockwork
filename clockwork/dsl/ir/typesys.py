@@ -19,7 +19,7 @@ from typing_extensions import override
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Iterable, Mapping, Sequence
 
-    from clockwork.dsl import cst
+    from clockwork.dsl import clockwork_cst as cst
 
 from clockwork.dsl.ir import node
 
@@ -448,11 +448,24 @@ class MembershipEntity:
 class InstantiatableEntity(ABC):
     """Base class for things which can have instances (i.e., which support the new operator)."""
 
+    # We have to suppress PLR0913 (too many args) because these args are needed to create objects.
+    # We have made the args kwonly to minimize the risk of mixups.
     @abstractmethod
-    def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+    def make_instance(  # noqa: PLR0913 (see above)
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> node.NamedEntity:
         """Create an instance of the entity."""
+
+    @abstractmethod
+    def get_module(self) -> node.Module:
+        """Access the entity's module."""
 
 
 class CallableEntity(ABC):
@@ -463,6 +476,23 @@ class CallableEntity(ABC):
         self, *, ir_node: node.CstNode[cst.Expr], module: node.Module, args: Sequence[tuple[str | None, Value]]
     ) -> Value:
         """Evaluate the call operation."""
+
+
+class SubscriptableEntity(ABC):
+    """Base class for things which support subscript syntax (e.g., signal[instance])."""
+
+    @abstractmethod
+    def evaluate_subscript(self, *, index: Value, cst_node: node.CstNode[cst.Expr], module: node.Module) -> Value:
+        """Evaluate the subscript operation.
+
+        Args:
+            index: The subscript index (use WildcardValue for wildcard '*')
+            cst_node: The CST node for error reporting
+            module: The module for context
+
+        Returns:
+            The result of the subscript operation
+        """
 
 
 def extract_kwargs(parameters: Iterable[str], args: Sequence[tuple[str | None, Value]]) -> dict[str, Value]:

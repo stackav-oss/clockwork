@@ -250,9 +250,8 @@ def _test_udp_socket_options(socket_type: str, socket_address: str) -> None:
     assert udp.SocketBindToDevice in socket_ir.options.options
     bind = socket_ir.options.options[udp.SocketBindToDevice]
     assert isinstance(bind, udp.SocketBindToDevice)
-    assert bind.value == clkbuiltins.TRUE_VALUE
-    expected_interface = socket_address if socket_type == "udp_socket" else "127.0.0.1"
-    assert bind.interface_address.value == expected_interface
+    assert isinstance(bind.value, primitive.IPv4Address)
+    assert bind.value.value == "127.0.0.1"
 
 
 def test_udp_socket_options() -> None:
@@ -285,7 +284,7 @@ def _test_udp_socket_repeated_options(socket_type: str, socket_address: str) -> 
         """,
     )
 
-    with pytest.raises(ValueError, match="Can only specify option `reuse_address` once."):
+    with pytest.raises(ValueError, match=r"Can only specify option `reuse_address` once\."):
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, f"repeated_options_{socket_type}"), importer=fs_importer
         )
@@ -372,7 +371,7 @@ def test_udp_socket_invalid_multicast_address() -> None:
         """,
     )
 
-    with pytest.raises(ValueError, match="10.0.0.1 is not a multicast address."):
+    with pytest.raises(ValueError, match=r"10\.0\.0\.1 is not a multicast address\."):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "invalid_multicast_address"), importer=fs_importer)
 
 
@@ -393,7 +392,7 @@ def test_udp_socket_bidirectional_multicast_missing_remote_port() -> None:
         """,
     )
 
-    with pytest.raises(ValueError, match="Need to specify remote_port for bidirectional socket"):
+    with pytest.raises(ValueError, match=r"Need to specify remote_port for bidirectional socket"):
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, "bidirectional_multicast_missing_remote_port"), importer=fs_importer
         )
@@ -451,7 +450,7 @@ def _test_invalid_udp_batch_size(socket_type: str, socket_address: str) -> None:
         """,
     )
 
-    with pytest.raises(TypeError, match="Type inference failed: ::String != ::UInt32"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::String != ::UInt32"):
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, f"invalid_batch_size_{socket_type}"), importer=fs_importer
         )
@@ -482,7 +481,7 @@ def _test_incompatible_udp_batch_size(socket_type: str, socket_address: str) -> 
         """,
     )
 
-    with pytest.raises(ValueError, match="Batch size parameter is only valid for incoming UDP sockets."):
+    with pytest.raises(ValueError, match=r"Batch size parameter is only valid for incoming UDP sockets\."):
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, f"incompatible_batch_size_{socket_type}"), importer=fs_importer
         )
@@ -496,33 +495,62 @@ def test_incompatible_multicast_udp_batch_size() -> None:
     _test_incompatible_udp_batch_size("multicast_udp_socket", "239.22.0.2")
 
 
-def _test_invalid_bind(socket_type: str, socket_address: str) -> None:
+def _test_bind_to_interface(binding: str) -> primitive.IPv4Address | primitive.StringValue | None:
     fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
     source = dedent(
         f"""
         use clockwork::io::var_packet;
         // Docs
-        {socket_type} IncomingWithBatchSize
+        udp_socket WithOptions
         {{
-          {_make_address_fields(socket_type, socket_address)}
+          address: 127.0.0.1;
           port: 12345;
           direction: incoming;
           message_type: Tachyon<var_packet::VarPacket<4>>;
+
           options
           {{
-            bind_to_interface: "hello world";
+            bind_to_interface: {binding};
           }}
         }}
         """,
     )
 
-    with pytest.raises(TypeError, match="bind_to_interface should be `true` or `false`"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, f"invalid_bind{socket_type}"), importer=fs_importer)
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "valid_options"), importer=fs_importer)
+
+    socket_ir = module.inner_scope.lookup("WithOptions")
+    assert isinstance(socket_ir, udp.UdpSocket)
+    assert socket_ir.options is not None
+
+    assert udp.SocketBindToDevice in socket_ir.options.options
+    bind = socket_ir.options.options[udp.SocketBindToDevice]
+    assert isinstance(bind, udp.SocketBindToDevice)
+    return bind.value
 
 
-def test_invalid_bind() -> None:
-    _test_invalid_bind("udp_socket", "127.0.0.1")
+def test_bind_to_interface_name() -> None:
+    bind_value = _test_bind_to_interface('"name_of_interface"')
+    assert isinstance(bind_value, primitive.StringValue)
+    assert bind_value.value == "name_of_interface"
 
 
-def test_invalid_multicast_bind() -> None:
-    _test_invalid_bind("multicast_udp_socket", "239.22.0.2")
+def test_bind_to_interface_address() -> None:
+    bind_value = _test_bind_to_interface("1.2.3.4")
+    assert isinstance(bind_value, primitive.IPv4Address)
+    assert bind_value.value == "1.2.3.4"
+
+
+def test_bind_to_interface_bool() -> None:
+    bind_value = _test_bind_to_interface("true")
+    assert isinstance(bind_value, primitive.IPv4Address)
+    assert bind_value.value == "127.0.0.1"
+
+    assert _test_bind_to_interface("false") is None
+
+
+def test_invalid_bind_to_interface() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"bind_to_interface should be one of: an IPv4 address, an interface name as a string, or a boolean",
+    ):
+        _test_bind_to_interface("1234")

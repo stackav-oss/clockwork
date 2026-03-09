@@ -6,12 +6,12 @@
 from __future__ import annotations
 
 import ipaddress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 from typing import Final, TypeAlias
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys, uuid_reg
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
@@ -124,15 +124,15 @@ class SocketReuseAddress(node.CstNode[cst.SocketReuseAddress]):
 class SocketBindToDevice(node.CstNode[cst.SocketBindToInterface]):
     """Option for SO_BINDTODEVICE."""
 
-    value_expr: expr.Expr
-    resolved_value: typesys.NamedValue | None
-    interface_address: primitive.IPv4Address
+    value_expr: expr.Expr | primitive.IPv4Address
+    bind_spec: primitive.IPv4Address | primitive.StringValue | None = None
+    is_resolved: bool = False
 
     @classmethod
     def from_cst(
         cls: type[SocketBindToDevice],
         cst_node: cst.SocketBindToInterface,
-        interface_address: primitive.IPv4Address,
+        local_address: primitive.IPv4Address,
         module: node.Module,
     ) -> SocketBindToDevice:
         """Construct a SocketBindToDevice IR node form a CST node."""
@@ -140,35 +140,52 @@ class SocketBindToDevice(node.CstNode[cst.SocketBindToInterface]):
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
 
+        if cst_node.maybe_address():
+            value_expr = primitive.IPv4Address.from_cst(cst_node.child_address(), module)
+        else:
+            value_expr = expr.Expr.from_cst(cst_node.child_typespec(), module)
+
         return SocketBindToDevice(
             cst_node=cst_node,
             module=module,
-            value_expr=expr.Expr.from_cst(cst_node.child_typespec(), module),
-            resolved_value=None,
-            interface_address=interface_address,
+            value_expr=value_expr,
+            bind_spec=local_address,
         )
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
-        if self.resolved_value is not None:
+        if self.is_resolved:
             msg = "Trying to resolve SocketBindToDevice twice."
             raise TypeError(msg)
 
-        value = self.value_expr.evaluate()
-        if value not in (clkbuiltins.TRUE_VALUE, clkbuiltins.FALSE_VALUE):
-            msg = node.append_error_line(self.cst_node, self.module, "bind_to_interface should be `true` or `false`")
-            raise TypeError(msg)
-        assert isinstance(value, typesys.NamedValue)
+        if isinstance(self.value_expr, primitive.IPv4Address):
+            self.bind_spec = self.value_expr
+        else:
+            value = self.value_expr.evaluate()
+            if value in (clkbuiltins.TRUE_VALUE, clkbuiltins.FALSE_VALUE):
+                # If value == TRUE_VALUE, then we bind to the local address which
+                # bind_spec is already set to in the from_cst() factory function.
+                if value == clkbuiltins.FALSE_VALUE:
+                    self.bind_spec = None
+            elif isinstance(value, primitive.StringLiteral):
+                self.bind_spec = value
+            else:
+                msg = node.append_error_line(
+                    self.value_expr.cst_node,
+                    self.module,
+                    "bind_to_interface should be one of: an IPv4 address, an interface name as a string, or a boolean",
+                )
+                raise TypeError(msg)
 
-        self.resolved_value = value
+        self.is_resolved = True
 
     @property
-    def value(self) -> typesys.NamedValue:
+    def value(self) -> primitive.IPv4Address | primitive.StringValue | None:
         """Convenience function to get the resolved value."""
-        if self.resolved_value is None:
+        if not self.is_resolved:
             msg = "SocketBindToDevice has not been resolved."
             raise TypeError(msg)
-        return self.resolved_value
+        return self.bind_spec
 
 
 @dataclass
@@ -308,6 +325,7 @@ class UdpSocket(
     batch_size: expr.Expr | primitive.DecimalValue | None
     multicast_group: primitive.IPv4Address | None
     options: UdpSocketOptions | None
+    attributes: node.ClkAttributes | None = field(repr=False)
 
     producer_endpoint: UdpSocketEndpoint | None
     observer_endpoint: UdpSocketEndpoint | None
@@ -322,6 +340,7 @@ class UdpSocket(
             raise ValueError(msg)
         doc = node.Doc.from_cst(cst_node.child_doc(), module)
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
         address = _get_socket_address(cst_node, module)
         port = primitive.DecimalLiteral.from_child_cst(
             cst_node.child_udp_socket_port().child_value().child_number(),
@@ -399,6 +418,7 @@ class UdpSocket(
             batch_size=batch_size,
             multicast_group=multicast_group,
             options=options,
+            attributes=attributes,
             observer_endpoint=observer_endpoint,
             producer_endpoint=producer_endpoint,
         )
@@ -444,10 +464,21 @@ class UdpSocket(
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> UdpSocketInstance:
         """Create an instance of the entity."""
         return UdpSocketInstance.make(socket=self, cst_node=cst_node, module=module, scope=scope, name=name, doc=doc)
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
 
 def _get_socket_address(cst_node: cst.UdpSocket | cst.MulticastUdpSocket, module: node.Module) -> primitive.IPv4Address:

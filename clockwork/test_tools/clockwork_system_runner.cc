@@ -14,13 +14,13 @@
 #include "clockwork/scaffolding/scaffolding.hh"
 #include "jewels/cli/tests/support/simple_exit_condition.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <cstdlib>
-#include <filesystem>
 #include <functional>
 #include <memory_resource>
 #include <utility>
@@ -159,10 +159,11 @@ jewels::expected<void, ClockworkSystemRunnerError> ClockworkSystemRunner::run()
   return {};
 }
 
-jewels::expected<std::shared_ptr<common::ProcessDescriptionTap>, ClockworkSystemRunnerError>
+jewels::expected<std::shared_ptr<Tappy<common::ProcessDescription<>>>, ClockworkSystemRunnerError>
 ClockworkSystemRunner::load_process_description(std::string_view process_description_path)
 {
-  auto maybe_process_desription = read_tachyon_config_to_heap<common::ProcessDescriptionTap>(process_description_path);
+  auto maybe_process_desription =
+    read_tachyon_config_to_heap<Tappy<common::ProcessDescription<>>>(process_description_path);
   if (!maybe_process_desription)
   {
     jewels::log_cerr_error("Error loading process description");

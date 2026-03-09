@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/container/at.hh" // IWYU pragma: keep
+#include "jewels/container/tap/optional.hh"
 #include "jewels/container/tap/protobuf_to_tap.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
@@ -48,6 +49,26 @@ TEST_CASE("Test string conversion")
 
   CHECK(ok_status);
   CHECK(big_enough.string_view() == test_string);
+
+  // Optional var string test
+  tap::Optional<tap::VarString<2>> optional_too_small;
+  const std::string test_string_opt = "Optional test string";
+  auto optional_error_status = protobuf_to_tap(optional_too_small, test_string_opt);
+  CHECK_FALSE(optional_error_status);
+
+  tap::Optional<tap::VarString<100>> optional_big_enough;
+  auto optional_ok_status = protobuf_to_tap(optional_big_enough, test_string_opt);
+  CHECK(optional_ok_status);
+  CHECK(optional_big_enough.has_value());
+  CHECK(optional_big_enough->string_view() == test_string_opt);
+
+  // Also test empty string case for optional
+  tap::Optional<tap::VarString<100>> optional_empty;
+
+  auto optional_empty_status = protobuf_to_tap(optional_empty, "");
+  CHECK(optional_empty_status);
+  CHECK(optional_empty.has_value());
+  CHECK(optional_empty->string_view().empty());
 }
 
 TEST_CASE("Test byte conversion")

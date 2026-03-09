@@ -2,39 +2,65 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/pinion/bridge_status.hh"
+#include "clockwork/pinion/bridge_status_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
+
+#include <wise_enum.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string_view>
 
 namespace clockwork::pinion
 {
 
-/// TCP bridge header magic nimber size
-static constexpr size_t tcp_message_header_magic_number_size = 8U;
+/// Interval for sending null headers while waiting for an acknowledgement
+static constexpr auto tcp_bridge_null_header_interval = std::chrono::milliseconds(2);
 
-/// TCP bridge header magic number used to recover after receiving invalid message headers
+/// Minimum interval between sends to keep the TCP connection alive
+static constexpr auto tcp_bridge_keep_alive_interval = std::chrono::milliseconds(200);
+
+/// Minimum reportable bridge latency
+static constexpr auto min_reportable_bridge_latency = std::chrono::milliseconds(25);
+
+/// Minimum reportable bridge bulk data latency
+static constexpr auto min_reportable_bridge_bulk_data_latency = std::chrono::milliseconds(1950);
+
+/// Maximum bridge bulk data transmit delay
+constexpr auto max_bridge_bulk_data_transmit_delay = std::chrono::milliseconds(1900);
+
+/// Time to wait before closing and reopening a stuck TCP connection
+static constexpr auto tcp_bridge_reconnect_interval = tcp_bridge_keep_alive_interval * 10;
+
+/// TCP bridge header magic number size
+static constexpr size_t tcp_message_header_magic_number_size = 7U;
+
+/// TCP bridge header magic number used to validate headers
 static constexpr std::array<std::byte, tcp_message_header_magic_number_size> tcp_message_header_magic_number = {
-  std::byte{'t'},
-  std::byte{'c'},
-  std::byte{'p'},
-  std::byte{'b'},
-  std::byte{'r'},
-  std::byte{'i'},
-  std::byte{'d'},
-  std::byte{'g'}};
+  std::byte{'t'}, std::byte{'c'}, std::byte{'p'}, std::byte{'b'}, std::byte{'r'}, std::byte{'i'}, std::byte{'d'}};
+
+/// Payload type for messages sent on a TCP socket.
+WISE_ENUM_CLASS(
+  (PayloadType, int8_t),
+  (invalid, 0),      // Invalid
+  (keep_alive, 107), // Keep alive ('k')
+  (message, 109),    // Message ('m')
+  (null_header, 110) // Null header ('n')
+)
 
 ///
 /// Header body for channel messages sent on a TCP socket.
 ///
-struct TcpMessageHeaderBody
+struct __attribute__((packed)) TcpMessageHeaderBody
 {
   /// Magic number used for framing
   std::array<std::byte, tcp_message_header_magic_number_size> magic_number{tcp_message_header_magic_number};
+
+  /// Payload type
+  PayloadType payload_type{};
 
   /// Sequence number
   uint64_t sequence_number{};
@@ -52,7 +78,7 @@ struct TcpMessageHeaderBody
 ///
 /// Header for channel messages sent on a TCP socket.
 ///
-struct TcpMessageHeader
+struct __attribute__((packed)) TcpMessageHeader
 {
   /// Message header body
   TcpMessageHeaderBody body{};
@@ -144,9 +170,80 @@ struct TcpBridgeDiagnosticsCounters
   uint64_t status_errors{};
   std::chrono::nanoseconds max_bridge_latency{};
   std::string_view max_latency_channel_name{};
+  std::chrono::nanoseconds max_bridge_bulk_data_latency{};
+  std::string_view max_bulk_data_latency_channel_name{};
 
   /// Comparison operator
   auto operator<=>(const TcpBridgeDiagnosticsCounters&) const = default;
+};
+
+/// Thread safe container for the counters reported in the TCP bridge diagnostics
+class TcpBridgeDiagnosticsState
+{
+public:
+  TcpBridgeDiagnosticsState() noexcept = default;
+  ~TcpBridgeDiagnosticsState() noexcept = default;
+
+  TcpBridgeDiagnosticsState(const TcpBridgeDiagnosticsState&) = delete;
+  TcpBridgeDiagnosticsState& operator=(const TcpBridgeDiagnosticsState&) = delete;
+  TcpBridgeDiagnosticsState(TcpBridgeDiagnosticsState&&) = delete;
+  TcpBridgeDiagnosticsState& operator=(TcpBridgeDiagnosticsState&&) = delete;
+
+  /// Get and reset the diagnostics counters
+  TcpBridgeDiagnosticsCounters get_and_reset_counters();
+
+  /// Increment the drop count
+  void increment_drop_count(size_t count = 1U);
+
+  /// Increment the failed send count
+  void increment_failed_sends(size_t count = 1U);
+
+  /// Increment the closed socket count
+  void increment_closed_socket_count(size_t count = 1U);
+
+  /// Incremement the failed receive count
+  void increment_failed_recvs(size_t count = 1U);
+
+  /// Increment the failed reservation count
+  void increment_failed_reservations(size_t count = 1U);
+
+  /// Increment the malformed message count
+  void increment_malformed_messages(size_t count = 1U);
+
+  /// Increment the failed commit count
+  void increment_failed_commits(size_t count = 1U);
+
+  /// Increment the failed discard count
+  void increment_failed_discards(size_t count = 1U);
+
+  /// Increment the client socket error count
+  void increment_client_socket_errors(size_t count = 1U);
+
+  /// Increment the progress error count
+  void increment_progress_errors(size_t count = 1U);
+
+  /// Increment the epoll count
+  void increment_epoll_errors(size_t count = 1U);
+
+  /// Increment the status error count
+  void increment_status_errors(size_t count = 1U);
+
+  /// Update the max bridge latency
+  /// @param[in] latency Bridge latency
+  /// @param[in] channel_name Channel name
+  void update_max_bridge_latency(std::chrono::nanoseconds latency, std::string_view channel_name);
+
+  /// Update the max bridge bulk data latency
+  /// @param[in] latency Bridge latency
+  /// @param[in] channel_name Channel name
+  void update_max_bridge_bulk_data_latency(std::chrono::nanoseconds latency, std::string_view channel_name);
+
+private:
+  /// Mutex used to serialize access to the counters
+  std::mutex mutex_;
+
+  /// Diagnostics counters
+  TcpBridgeDiagnosticsCounters counters_;
 };
 
 } // namespace clockwork::pinion

@@ -186,8 +186,8 @@ TEST_CASE("Validate TAP to Protobuf Conversion")
   CHECK(proto_destination.composition_var(1).other_number() == other_number2);
 
   REQUIRE(proto_destination.enum_arr_size() == 2);
-  CHECK(proto_destination.enum_arr(0) == my_proto::HelloEnum::hi);
-  CHECK(proto_destination.enum_arr(1) == my_proto::HelloEnum::ni_hao);
+  CHECK(proto_destination.enum_arr(0) == my_proto::HelloEnum::HELLO_ENUM_HI);
+  CHECK(proto_destination.enum_arr(1) == my_proto::HelloEnum::HELLO_ENUM_NI_HAO);
 
   // Check duration array
   REQUIRE(proto_destination.duration_ar_size() == 2);
@@ -196,8 +196,8 @@ TEST_CASE("Validate TAP to Protobuf Conversion")
 
   // Check FixedArray fields
   REQUIRE(proto_destination.fixed_enum_arr_size() == 2);
-  CHECK(proto_destination.fixed_enum_arr(0) == my_proto::HelloEnum::hi);
-  CHECK(proto_destination.fixed_enum_arr(1) == my_proto::HelloEnum::ni_hao);
+  CHECK(proto_destination.fixed_enum_arr(0) == my_proto::HelloEnum::HELLO_ENUM_HI);
+  CHECK(proto_destination.fixed_enum_arr(1) == my_proto::HelloEnum::HELLO_ENUM_NI_HAO);
 
   // Check fixed duration array
   REQUIRE(proto_destination.fixed_duration_ar_size() == 2);
@@ -222,9 +222,9 @@ TEST_CASE("Validate TAP to Protobuf Conversion")
 
   // Check nested generic schema
   REQUIRE(proto_destination.has_my_generic());
-  CHECK(proto_destination.my_generic().my_hello() == my_proto::HelloEnum::hola);
+  CHECK(proto_destination.my_generic().my_hello() == my_proto::HelloEnum::HELLO_ENUM_HOLA);
   REQUIRE(proto_destination.has_another_generic());
-  CHECK(proto_destination.another_generic().my_hello() == my_proto::HelloEnum::ni_hao);
+  CHECK(proto_destination.another_generic().my_hello() == my_proto::HelloEnum::HELLO_ENUM_NI_HAO);
 
   SECTION("Test with optional fields not set")
   {
@@ -319,6 +319,65 @@ TEST_CASE("Validate TAP to Protobuf conversion with optional strong type")
   testing::tap_to_protobuf(proto_destination_unset, tap_source);
 
   CHECK_FALSE(proto_destination_unset.has_distance());
+}
+
+TEST_CASE("Validate TAP to Protobuf conversion with VarSoa")
+{
+  constexpr int64_t seqno1 = 111;
+  constexpr int32_t other_number1 = 222;
+  constexpr int64_t seqno2 = 333;
+  constexpr int32_t other_number2 = 444;
+
+  Tap<Tachyon<demo::BetterThanInheritance>> tap_source;
+  auto& var_soa = tap_source.get_mutable_var_soa_composition();
+  var_soa.resize(2);
+  var_soa[0].set_seqno(seqno1);
+  var_soa[0].set_other_number(other_number1);
+  var_soa[1].set_seqno(seqno2);
+  var_soa[1].set_other_number(other_number2);
+
+  my_proto::BetterThanInheritance proto_destination;
+  demo::tap_to_protobuf(proto_destination, tap_source);
+
+  REQUIRE(proto_destination.var_soa_composition_size() == 2);
+  CHECK(proto_destination.var_soa_composition(0).seqno() == seqno1);
+  CHECK(proto_destination.var_soa_composition(0).other_number() == other_number1);
+  CHECK(proto_destination.var_soa_composition(1).seqno() == seqno2);
+  CHECK(proto_destination.var_soa_composition(1).other_number() == other_number2);
+}
+
+TEST_CASE("Validate TAP to Protobuf conversion with FixedSoa")
+{
+  constexpr int64_t seqno1 = 555;
+  constexpr int32_t other_number1 = 666;
+  constexpr int64_t seqno2 = 777;
+  constexpr int32_t other_number2 = 888;
+
+  Tap<Tachyon<demo::BetterThanInheritance>> tap_source;
+  auto& fixed_soa = tap_source.get_mutable_fixed_soa_composition();
+  fixed_soa[0].set_seqno(seqno1);
+  fixed_soa[0].set_other_number(other_number1);
+  fixed_soa[1].set_seqno(seqno2);
+  fixed_soa[1].set_other_number(other_number2);
+
+  my_proto::BetterThanInheritance proto_destination;
+  demo::tap_to_protobuf(proto_destination, tap_source);
+
+  REQUIRE(proto_destination.fixed_soa_composition_size() == 2);
+  CHECK(proto_destination.fixed_soa_composition(0).seqno() == seqno1);
+  CHECK(proto_destination.fixed_soa_composition(0).other_number() == other_number1);
+  CHECK(proto_destination.fixed_soa_composition(1).seqno() == seqno2);
+  CHECK(proto_destination.fixed_soa_composition(1).other_number() == other_number2);
+}
+
+TEST_CASE("Validate TAP to Protobuf conversion with empty VarSoa")
+{
+  Tap<Tachyon<demo::BetterThanInheritance>> tap_source;
+
+  my_proto::BetterThanInheritance proto_destination;
+  demo::tap_to_protobuf(proto_destination, tap_source);
+
+  CHECK(proto_destination.var_soa_composition_size() == 0);
 }
 
 } // namespace clockwork

@@ -8,6 +8,7 @@
 #include "jewels/std/expected.hh"
 
 #include <tuple>
+#include <variant>
 
 namespace clockwork::pinion
 {

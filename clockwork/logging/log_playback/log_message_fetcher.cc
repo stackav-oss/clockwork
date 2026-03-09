@@ -5,18 +5,19 @@
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
-#include "clockwork/logging/log_playback/end_of_log.hh"
+#include "clockwork/logging/log_playback/end_of_log_clk_cc.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/readers/log_reader_factory.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <exception>
@@ -33,7 +34,7 @@ namespace clockwork_logging
 {
 LogMessageFetcher::LogMessageFetcher(
   std::string_view log_uri,
-  jewels::memory::ObjectPtr<const ChannelPublisherConfigTap> channel_publisher_config,
+  jewels::memory::ObjectPtr<const clockwork::Tappy<ChannelPublisherConfig<>>> channel_publisher_config,
   std::optional<LogInterval> maybe_log_interval,
   jewels::memory::MemoryResource memory_resource)
   : memory_resource_(std::move(memory_resource)),
@@ -130,6 +131,13 @@ jewels::expected<void, jewels::MonoError> LogMessageFetcher::initialize()
   upgrader_ = std::make_unique<TachyonUpgrader>(memory_resource_, *channel_publisher_config_, reader_->get_metadata());
 
   return {};
+}
+
+jewels::BinaryOutcome LogMessageFetcher::reset() noexcept
+{
+  end_of_log_sent_ = false;
+  last_message_time_ = std::nullopt;
+  return initialize().has_value() ? jewels::success : jewels::failure;
 }
 
 } // namespace clockwork_logging

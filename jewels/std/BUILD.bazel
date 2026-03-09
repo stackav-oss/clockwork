@@ -17,6 +17,13 @@ cc_library(
 )
 
 cc_library(
+    name = "source_location",
+    testonly = True,
+    hdrs = ["source_location.hh"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "span",
     srcs = ["span.inl"],
     hdrs = ["span.hh"],

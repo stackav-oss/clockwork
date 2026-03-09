@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from textwrap import dedent
 from typing import TYPE_CHECKING, Any, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label, get_bazel_label_for_python_type
 from clockwork.dsl.cog.cpp_python_cog import CppPythonCog as PythonCogImplGenerator
 from clockwork.dsl.cog.cppcog import Cog as CogGenerator
@@ -65,7 +65,7 @@ _SOCKET_ENDPOINT_TYPE: Final = types.CppType(
 )
 
 _ENDPOINT_CLASS_ID_TYPE: Final = types.CppType(
-    includes=[Header(CLK_REPO, "clockwork/common/process_description.hh")],
+    includes=[Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
     type_name="EndpointClassId",
     cpp_namespace="clockwork::common",
 )
@@ -77,6 +77,7 @@ class CppCog:
 
     cog_ir: Cog | expr.Expr
     dial_header: Header | None
+    cog_header: Header | None
 
     @classmethod
     def from_cst(
@@ -89,7 +90,7 @@ class CppCog:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
         typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
-        return cls(cog_ir=typespec, dial_header=None)
+        return cls(cog_ir=typespec, dial_header=None, cog_header=None)
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
@@ -111,6 +112,9 @@ class CppCog:
         if not self.dial_header:
             msg = "Dial header was not resolved."
             raise TypeError(msg)
+        if not self.cog_header:
+            msg = "Cog header was not resolved."
+            raise TypeError(msg)
 
         dial_class_name = to_dial_name(self.cog_ir.name)
 
@@ -129,7 +133,7 @@ class CppCog:
 class CppPythonCog:
     """A wrapper around a CppCog to render the implementation for python cogs."""
 
-    cst_node: cst.CppPythonCog | cst.NewStmt
+    cst_node: cst.CppPythonCog | cst.NewStmt | None
     module: node.Module
     cpp_cog: CppCog
 
@@ -218,13 +222,26 @@ class CppSocketOptions:
                     name="so_receive_buffer",
                 )
                 cpp_option_value = str(value.value.as_unit(units.BYTE).value)
-            elif isinstance(value, udp.SocketBindToDevice) and value.value:
+            elif isinstance(value, udp.SocketBindToDevice) and value.value is not None:
+                iface_name_or_ip_address = value.value
+                type_name = (
+                    "AddressView"
+                    if isinstance(iface_name_or_ip_address, primitive.IPv4Address)
+                    else "InterfaceNameView"
+                )
                 cpp_option_enum = types.CppScopedValue(
                     scope=cpp_option_enum_type,
                     header=[networking_sock_opt_header],
                     name="so_bind_to_device",
                 )
-                cpp_option_value = f'"{value.interface_address.value}"'
+                cpp_option_value = types.CppValue(
+                    value_type=types.CppType(
+                        includes=[networking_sock_opt_header],
+                        type_name=type_name,
+                        cpp_namespace="jewels::networking",
+                    ),
+                    value=f'"{iface_name_or_ip_address.value}"',
+                )
             elif isinstance(value, udp.SocketMulticastGroup):
                 cpp_option_enum = types.CppScopedValue(
                     scope=cpp_option_enum_type,
@@ -293,6 +310,16 @@ class CppUdpSocket:
         typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
         return cls(udp_socket_ir=typespec, options=None)
 
+    @classmethod
+    def from_generate_cpp(cls: type[CppUdpSocket], udp_socket_ir: udp.UdpSocket) -> CppUdpSocket:
+        """Create an IR node for an auto generated CppTarget."""
+        result = cls(
+            udp_socket_ir=udp_socket_ir,
+            options=CppSocketOptions(udp_socket_ir.options.options) if udp_socket_ir.options else None,
+        )
+        result._resolve_multicast_group()
+        return result
+
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         if not isinstance(self.udp_socket_ir, expr.Expr):
@@ -348,7 +375,7 @@ class CppUdpSocket:
         uuid_type = typereg.get_cpp_template(compiler_context, clkbuiltins.UUID).instantiate(
             [
                 types.CppType(
-                    [Header(CLK_REPO, "clockwork/common/process_description.hh")],
+                    [Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
                     "IoConnectionClassId",
                     typereg.CLOCKWORK_NAMESPACE + "::common",
                 )
@@ -523,6 +550,11 @@ class CppAudioSource:
             raise TypeError(msg)
         self.audio_source_ir = typespec
 
+    @classmethod
+    def from_generate_cpp(cls: type[CppAudioSource], audio_source_ir: audio.AudioSource) -> CppAudioSource:
+        """Create an IR node for an auto generated CppTarget."""
+        return cls(audio_source_ir=audio_source_ir)
+
     def render(self, compiler_context: CompilerContext, enclosing_namespace: str) -> CppModuleChunks:
         """Convert the socket to C++."""
         if not isinstance(self.audio_source_ir, audio.AudioSource):
@@ -537,7 +569,7 @@ class CppAudioSource:
         uuid_type = typereg.get_cpp_template(compiler_context, clkbuiltins.UUID).instantiate(
             [
                 types.CppType(
-                    [Header(CLK_REPO, "clockwork/common/process_description.hh")],
+                    [Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
                     "IoConnectionClassId",
                     typereg.CLOCKWORK_NAMESPACE + "::common",
                 )
@@ -684,6 +716,13 @@ class CasingEntitySource(ABC):
         """Produce a set of casing entities."""
 
 
+@dataclass(slots=True)
+class CppExecutableCasingEntities:
+    """Structure for entities passed to CppExecutable.from_generate_cpp_exe."""
+
+    boxes: list[CasingEntitySource] = field(default_factory=list)
+
+
 @dataclass
 class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     """IR Node representing a casing declaration."""
@@ -697,6 +736,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     audio_sources: Sequence[CppAudioSource]
     boxes: Sequence[CasingEntitySource] | Sequence[expr.Expr]
     resolved: ResolvedCasing | None
+    entities_are_resolved: bool
 
     # We must disable C901 here (function complexity) because
     # we inherently have many branches, one for each type of module-level entity.
@@ -756,12 +796,10 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             audio_sources=audio_sources,
             boxes=boxes,
             resolved=None,
+            entities_are_resolved=False,
         )
 
-    def resolve(self) -> ResolvedCasing:
-        """Perform finalization of the IR."""
-        if self.resolved:
-            return self.resolved
+    def _resolve_entities(self) -> None:
         self.externs = [self._resolve_extern(extern) for extern in self.externs]
         self.representations = [self._resolve_representation(representation) for representation in self.representations]
         self.interfaces = [self._resolve_interface(interface) for interface in self.interfaces]
@@ -771,17 +809,6 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             cpp_udp_socket.resolve()
         for cpp_audio_source in self.audio_sources:
             cpp_audio_source.resolve()
-        entities = CasingEntities(
-            externs={extern.value_key(): extern for extern in self.externs},
-            representations={r: r for r in self.representations},
-            interfaces={i: i for i in self.interfaces},
-            cogs={cpp_cog.cog_ir.value_key(): cpp_cog for cpp_cog in self.cogs},
-            python_cogs={
-                cpp_python_cog.cpp_cog.cog_ir.value_key(): cpp_python_cog for cpp_python_cog in self.python_cogs
-            },
-            udp_sockets={udp.udp_socket_ir.value_key(): udp for udp in self.udp_sockets},
-            audio_sources={source.audio_source_ir.value_key(): source for source in self.audio_sources},
-        )
         boxes: list[CasingEntitySource] = []
         for box in self.boxes:
             assert isinstance(box, expr.Expr)
@@ -789,11 +816,63 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             if not isinstance(box_eval, CasingEntitySource):
                 msg = box.append_error_line(f"Expected a CasingEntitySource instance, got {type(box_eval)}")
                 raise TypeError(msg)
-            entities = entities.merged_with(box_eval.produce_casing_entities())
             boxes.append(box_eval)
         self.boxes = boxes
+        self.entities_are_resolved = True
+
+    def resolve(self) -> ResolvedCasing:
+        """Perform finalization of the IR."""
+        if self.resolved:
+            return self.resolved
+        if not self.entities_are_resolved:
+            self._resolve_entities()
+        externs: dict[str, ExternType] = {}
+        for extern in self.externs:
+            assert isinstance(extern, ExternType)
+            externs[extern.value_key()] = extern
+        representations: dict[schema_reg.RepresentationInfo, schema_reg.RepresentationInfo] = {}
+        for representation in self.representations:
+            assert isinstance(representation, schema_reg.RepresentationInfo)
+            representations[representation] = representation
+        interfaces: dict[schema_reg.InterfaceInfo, schema_reg.InterfaceInfo] = {}
+        for interface in self.interfaces:
+            assert isinstance(interface, schema_reg.InterfaceInfo)
+            interfaces[interface] = interface
+        entities = CasingEntities(
+            externs=externs,
+            representations=representations,
+            interfaces=interfaces,
+            cogs={cpp_cog.cog_ir.value_key(): cpp_cog for cpp_cog in self.cogs},
+            python_cogs={
+                cpp_python_cog.cpp_cog.cog_ir.value_key(): cpp_python_cog for cpp_python_cog in self.python_cogs
+            },
+            udp_sockets={udp.udp_socket_ir.value_key(): udp for udp in self.udp_sockets},
+            audio_sources={source.audio_source_ir.value_key(): source for source in self.audio_sources},
+        )
+        for box in self.boxes:
+            assert isinstance(box, CasingEntitySource)
+            entities = entities.merged_with(box.produce_casing_entities())
         self.resolved = ResolvedCasing(doc=self.doc, module=self.module, cst_node=self.cst_node, entities=entities)
         return self.resolved
+
+    @classmethod
+    def from_generate_cpp_exe(cls: type[Casing], module: node.Module, entities: CppExecutableCasingEntities) -> Casing:
+        """Generate an IR Casing from the entities defined in a module."""
+        return cls(
+            doc=module.doc,
+            module=module,
+            cst_node=None,
+            externs=[],
+            representations=[],
+            interfaces=[],
+            cogs=[],
+            python_cogs=[],
+            udp_sockets=[],
+            audio_sources=[],
+            boxes=entities.boxes,
+            resolved=None,
+            entities_are_resolved=True,
+        )
 
     def get_resolved(self) -> ResolvedCasing:
         """Get a resolved version of this object."""
@@ -875,7 +954,7 @@ class ResolvedCasing(node.CstNode[cst.Casing], node.DocableEntity):
 
     entities: CasingEntities
 
-    def render(self) -> CppModuleChunks:  # noqa: PLR0915 it's easier to follow the codegen with a single method.
+    def render(self, full_includes: bool = False) -> CppModuleChunks:  # noqa: PLR0915 it's easier to follow the codegen with a single method.
         """Convert to C++."""
         # make_casing has to be in the scaffolding namespace
         cpp_namespace = "clockwork::scaffolding"
@@ -888,9 +967,11 @@ class ResolvedCasing(node.CstNode[cst.Casing], node.DocableEntity):
 
         extra_cpp_headers = []
         all_cpp_cog_types = []
-        for cpp_cog in entities.cogs.values():
-            assert isinstance(cpp_cog.cog_ir, Cog)
-            all_cpp_cog_types.append(typereg.get_cpp_type(cpp_cog.cog_ir.module.context, cpp_cog.cog_ir))
+        if full_includes:
+            for cpp_cog in entities.cogs.values():
+                assert isinstance(cpp_cog.cog_ir, Cog)
+                all_cpp_cog_types.append(typereg.get_cpp_type(cpp_cog.cog_ir.module.context, cpp_cog.cog_ir))
+
         all_cpp_schema_types: list[types.CppTypeExpr] = []
         for extern in entities.externs.values():
             cxx_schema_map = types.CXX_SCHEMA_SCHEMA.instantiate(
@@ -903,7 +984,8 @@ class ResolvedCasing(node.CstNode[cst.Casing], node.DocableEntity):
                     ),
                 ]
             )
-            all_cpp_schema_types.append(cxx_schema_map)
+            if full_includes:
+                all_cpp_schema_types.append(cxx_schema_map)
         for representation in entities.representations:
             repr_ir = representation.representation_ir
             assert isinstance(repr_ir.typespec, typesys.TypeVal)
@@ -946,6 +1028,8 @@ class ResolvedCasing(node.CstNode[cst.Casing], node.DocableEntity):
                 and interface.interface_ir.representation.schema_ir.schema.source.programmatically_generated
             ):
                 continue
+            # This must be included with full_includes because even if these don't need proto conv, they still may
+            # include tachyon config which doesn't current have a factory registry.
             all_cpp_schema_types.append(
                 typereg.get_cpp_type(interface.interface_ir.module.context, interface.interface_ir.typespec)
             )
@@ -1025,8 +1109,6 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
 
     casing: Casing
     offline: bool | expr.Expr
-    offline_main: str | expr.Expr | None
-    python_offline_main: str | expr.Expr | None
 
     @classmethod
     def from_cst(cls: type[CppExecutable], cst_node: cst.CppExecutable, module: node.Module) -> CppExecutable:
@@ -1038,20 +1120,12 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
         casing = Casing.from_cst(cst_node.child_casing(), module)
         offline: bool | expr.Expr = False
-        offline_main: str | expr.Expr | None = None
-        python_offline_main: str | expr.Expr | None = None
         for param in cst_node.children_cpp_executable_param():
             param_name = get_span(param.child_param().child_value(), module.terminals)
             value = expr.Expr.from_cst(param.child_value(), module)
             if param_name == "offline":
                 typesys.unify(clkbuiltins.BOOL, value.type_info)
                 offline = value
-            elif param_name == "offline_main":
-                typesys.unify(clkbuiltins.STRING, value.type_info)
-                offline_main = value
-            elif param_name == "python_offline_main":
-                typesys.unify(clkbuiltins.STRING, value.type_info)
-                python_offline_main = value
             else:
                 msg = f"Unsupported cpp_executable parameter '{param_name}'"
                 raise NotImplementedError(msg)
@@ -1064,8 +1138,6 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
             cst_node=cst_node,
             casing=casing,
             offline=offline,
-            offline_main=offline_main,
-            python_offline_main=python_offline_main,
         )
 
     def resolve(self) -> None:
@@ -1078,23 +1150,49 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
                 )
                 raise TypeError(msg)
             self.offline = primitive.value_to_bool(result)
-        if isinstance(self.offline_main, expr.Expr):
-            result = self.offline_main.evaluate()
-            if not isinstance(result, primitive.StringValue):
-                msg = self.offline_main.append_error_line(
-                    f"Expected a string for parameter offline_main, but got {type(result)}",
-                )
-                raise TypeError(msg)
-            self.offline_main = result.value
-        if isinstance(self.python_offline_main, expr.Expr):
-            result = self.python_offline_main.evaluate()
-            if not isinstance(result, primitive.StringValue):
-                msg = self.python_offline_main.append_error_line(
-                    f"Expected a string for parameter python_offline_main, but got {type(result)}",
-                )
-                raise TypeError(msg)
-            self.python_offline_main = result.value
         self.casing.resolve()
+
+    @classmethod
+    def from_generate_cpp_exe(
+        cls: type[CppExecutable], module: node.Module, entities: CppExecutableCasingEntities
+    ) -> CppExecutable:
+        """Generate an IR CppExecutable from the entities defined in a module."""
+        if not entities.boxes:
+            msg = node.append_error_line(
+                module.cst_node, module, "At least one box is required when generating clk_exe"
+            )
+            raise ValueError(msg)
+        assert module.inner_attrs is not None
+        return cls(
+            doc=module.doc,
+            scope=module.inner_scope,
+            type_info=clkbuiltins.EXECUTABLE_TYPE,
+            name=f"{module.module_id.name.split('::')[-1]}_clk_exe",
+            module=module,
+            cst_node=None,
+            casing=Casing.from_generate_cpp_exe(module, entities),
+            offline=module.inner_attrs.get_exe_offline(),
+        )
+
+    @classmethod
+    def from_generate_py_exe(
+        cls: type[CppExecutable], module: node.Module, entities: CppExecutableCasingEntities
+    ) -> CppExecutable:
+        """Generate an IR CppExecutable from the entities defined in a module."""
+        if not entities.boxes:
+            msg = node.append_error_line(module.cst_node, module, "At least one box is required when generating py_exe")
+            raise ValueError(msg)
+        assert module.inner_attrs is not None
+        return cls(
+            doc=module.doc,
+            scope=module.inner_scope,
+            type_info=clkbuiltins.EXECUTABLE_TYPE,
+            name=f"{module.module_id.name.split('::')[-1]}_clk_exe",
+            module=module,
+            cst_node=None,
+            casing=Casing.from_generate_cpp_exe(module, entities),
+            offline=module.inner_attrs.get_exe_offline(),
+        )
 
     def render_and_write(self, root_dir: Path) -> None:
         """Render and write to a file."""
@@ -1107,7 +1205,7 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
 
     def output_targets(self) -> list[CcBinary | CcBinaryWithEmbeddedPy]:
         """Extract language target dependency information."""
-        exe_mod = self.casing.get_resolved().render()
+        exe_mod = self.casing.get_resolved().render(full_includes=True)
         include_dir = self.module.module_id.get_base_path().parent
         py_deps = self.casing.get_py_deps()
         online_main_label = get_bazel_label_for_clk_label(
@@ -1116,20 +1214,12 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
         python_online_main_label = get_bazel_label_for_clk_label(
             self.module.module_id.repo, "//clockwork/scaffolding:python_online_main"
         )
-        if self.offline_main:
-            assert isinstance(self.offline_main, str)
-            offline_main_label = Label(self.offline_main)
-        else:
-            offline_main_label = get_bazel_label_for_clk_label(
-                self.module.module_id.repo, "//clockwork/scaffolding:offline_main"
-            )
-        if self.python_offline_main:
-            assert isinstance(self.python_offline_main, str)
-            python_offline_main_label = Label(self.python_offline_main)
-        else:
-            python_offline_main_label = get_bazel_label_for_clk_label(
-                self.module.module_id.repo, "//clockwork/scaffolding:python_offline_main"
-            )
+        offline_main_label = get_bazel_label_for_clk_label(
+            self.module.module_id.repo, "//clockwork/scaffolding:offline_main"
+        )
+        python_offline_main_label = get_bazel_label_for_clk_label(
+            self.module.module_id.repo, "//clockwork/scaffolding:python_offline_main"
+        )
         if py_deps:
             binary_with_py = as_cc_binary_with_embedded_py(
                 exe_mod,

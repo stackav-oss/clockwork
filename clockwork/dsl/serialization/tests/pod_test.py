@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.cpp.context import CppContext
 from clockwork.dsl.ir import compiler, importer, parse, schema
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID

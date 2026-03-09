@@ -83,6 +83,11 @@ struct OptionalIntPolicy
   }
 };
 
+TEST_CASE("Concepts")
+{
+  STATIC_REQUIRE(std::ranges::random_access_range<CircularBuffer<jewels::memory::ObjectPolicy<int>>>);
+}
+
 TEST_CASE("Test default iterator construction")
 {
   using Iterator = CircularBuffer<jewels::memory::ObjectPolicy<int>>::iterator;
@@ -207,21 +212,21 @@ TEST_CASE("Test circular buffer | construction")
     REQUIRE(
       CircularBuffer<OptionalIntPolicy>::try_make(
         std::pmr::vector<std::optional<int>>(3),
-        TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+        clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
           .offset = 3,
           .size = 4,
         }}) == jewels::unexpected{CircularBufferConstructError::invalid_state_offset});
     REQUIRE(
       CircularBuffer<OptionalIntPolicy>::try_make(
         std::pmr::vector<std::optional<int>>(3),
-        TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+        clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
           .offset = 2,
           .size = 4,
         }}) == jewels::unexpected{CircularBufferConstructError::invalid_state_size});
     SECTION("Empty with non-zero offset")
     {
       std::array<std::optional<int>, 3U> storage{0, 1, 2};
-      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+      const clockwork::Tappy<CircularBufferState> state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
         .offset = 2,
         .size = 0,
       }};
@@ -235,15 +240,16 @@ TEST_CASE("Test circular buffer | construction")
       REQUIRE(storage[2] == 8);
       REQUIRE(*std::begin(*buffer) == 8);
       REQUIRE(
-        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
-                             .offset = 2,
-                             .size = 1,
-                           }});
+        buffer->state() ==
+        clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+          .offset = 2,
+          .size = 1,
+        }});
     }
     SECTION("Not empty")
     {
       std::array<std::optional<int>, 3U> storage{0, 1, 2};
-      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+      const clockwork::Tappy<CircularBufferState> state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
         .offset = 2,
         .size = 2,
       }};
@@ -256,15 +262,16 @@ TEST_CASE("Test circular buffer | construction")
       REQUIRE(std::ranges::equal(*buffer, std::array{2, 0, 8}));
       REQUIRE(std::ranges::equal(storage, std::array<std::optional<int>, 3U>{0, 8, 2}));
       REQUIRE(
-        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
-                             .offset = 2,
-                             .size = 3,
-                           }});
+        buffer->state() ==
+        clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+          .offset = 2,
+          .size = 3,
+        }});
     }
     SECTION("Full")
     {
       std::array<std::optional<int>, 3U> storage{0, 1, 2};
-      const TappyCircularBufferState state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+      const clockwork::Tappy<CircularBufferState> state{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
         .offset = 2,
         .size = 3,
       }};
@@ -278,10 +285,11 @@ TEST_CASE("Test circular buffer | construction")
       REQUIRE(std::ranges::equal(*buffer, std::array{0, 1, 8}));
       REQUIRE(std::ranges::equal(storage, std::array<std::optional<int>, 3U>{0, 1, 8}));
       REQUIRE(
-        buffer->state() == TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
-                             .offset = 0,
-                             .size = 3,
-                           }});
+        buffer->state() ==
+        clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+          .offset = 0,
+          .size = 3,
+        }});
     }
   }
 
@@ -611,6 +619,23 @@ TEST_CASE("Test circular buffer | force insertion")
     REQUIRE(*circular_buffer->begin() == 2);
     REQUIRE(*std::next(circular_buffer->begin()) == 0);
   }
+}
+
+TEST_CASE("Test circular buffer iterator | operator[]")
+{
+  static constexpr auto size{2U};
+  auto circular_buffer = CircularBuffer<jewels::memory::ObjectPolicy<int>>::try_make(
+    size, jewels::memory::MemoryResource{std::pmr::new_delete_resource()});
+  REQUIRE(circular_buffer);
+  REQUIRE(circular_buffer->emplace_back(0));
+  REQUIRE(circular_buffer->emplace_back(1));
+
+  const auto begin = std::begin(*circular_buffer);
+  REQUIRE(begin[0] == 0);
+  REQUIRE(begin[1] == 1);
+  const auto next = std::next(begin);
+  REQUIRE(next[0] == 1);
+  REQUIRE(next[-1] == 0);
 }
 
 struct AliveFlagElement

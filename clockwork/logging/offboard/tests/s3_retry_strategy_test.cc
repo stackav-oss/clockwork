@@ -1,11 +1,14 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/logging/offboard/s3_otel_utils.hh"
 #include "clockwork/logging/offboard/s3_retry_strategy.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
 #include "jewels/memory/memory_resource.hh"
 
 #include <aws/core/client/AWSError.h>
 #include <aws/core/client/CoreErrors.h>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory_resource>
@@ -15,10 +18,10 @@ namespace clockwork_logging::offboard
 namespace
 {
 
-TEST_CASE("S3RetryStrategy")
+TEMPLATE_TEST_CASE("S3RetryStrategy", "", S3Utils, S3OtelUtils)
 {
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
-  const S3RetryStrategy retry_strategy(memory_resource);
+  const S3RetryStrategy<TestType> retry_strategy(memory_resource);
 
   SECTION("Non-retriable error")
   {

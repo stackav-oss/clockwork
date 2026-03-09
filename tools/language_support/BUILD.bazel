@@ -7,6 +7,7 @@ load("@rules_multirun//:defs.bzl", "multirun")
 load("//tools/rules:python.bzl", "py_binary")
 
 exports_files([
+    "constraints.txt",
     "requirements.txt",
     "uv_wrapper.py",
 ])
@@ -15,12 +16,28 @@ bzl_library(
     name = "requirements_bzl",
     srcs = ["requirements.bzl"],
     visibility = ["//visibility:public"],
-    deps = ["@aspect_bazel_lib//lib:write_source_files"],
+    deps = ["@bazel_lib//lib:write_source_files"],
 )
 
 alias(
     name = "update_gazelle",
     actual = "//:gazelle_python_manifest.update",
+)
+
+multirun(
+    name = "update_repo",
+    commands = [
+        ":update_repo_requirements",
+        ":update_repo_constraints",
+    ],
+)
+
+multirun(
+    name = "update_repo_310",
+    commands = [
+        ":update_repo_requirements_310",
+        ":update_repo_constraints_310",
+    ],
 )
 
 # This is basically a copy of repo_requirements that we can use with pip and uv's `--constraint` option
@@ -76,11 +93,10 @@ write_python_requirements_source_file(
 multirun(
     name = "update_requirements",
     commands = [
-        ":update_repo_requirements",
-        ":update_repo_constraints",
-        ":update_repo_requirements_310",
-        ":update_repo_constraints_310",
+        ":update_repo",
+        ":update_repo_310",
     ],
+    jobs = 0,
 )
 
 alias(

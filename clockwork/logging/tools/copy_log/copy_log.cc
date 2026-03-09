@@ -8,6 +8,7 @@
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/otel/otel.hh"
 #include "jewels/std/expected.hh"
 
 #include <tclap/CmdLine.h>
@@ -66,6 +67,8 @@ int main(int32_t argc, char* argv[])
 {
   try
   {
+    jewels::otel::set_up_trace_provider("copy_log");
+
     TCLAP::CmdLine cmd("Copy log", ' ', "1.0", true);
     const TCLAP::MultiArg<std::string> topic_arg("t", "topic", "Topic to copy", false, "name", cmd);
     const TCLAP::MultiArg<std::string> excluded_topic_arg(

@@ -69,7 +69,7 @@ inline constexpr uint64_t another_number{456U};
 } // namespace dummy
 namespace dummy
 {
-// Interface aliases
+// Interface and instantiation aliases
 } // namespace dummy
 """
     )
@@ -94,6 +94,55 @@ A_FLOAT: typing.Final = 1.234
 A_STRING: typing.Final = "very interesting and useful string"
 \"\"\"A constant with an inferred type.\"\"\"
 ANOTHER_NUMBER: typing.Final = 456
+"""
+    )
+
+
+def test_clk_constants(fs_importer: FilesystemImporter) -> None:
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, fix_clockwork_path(Path("clockwork/dsl/tests/support/clk_constants.clk"))),
+        fs_importer,
+    )
+    assert module is not None
+
+    a_number_ir = module.inner_scope.lookup("a_number", recursive=False)
+    assert isinstance(a_number_ir, statement.ImmutableBinding)
+    assert isinstance(a_number_ir.type_info, typesys.InferenceVar)
+    assert a_number_ir.type_info.resolution() is clkbuiltins.UINT64
+
+    another_number_ir = module.inner_scope.lookup("another_number", recursive=False)
+    assert isinstance(another_number_ir, statement.ImmutableBinding)
+    assert isinstance(another_number_ir.type_info, typesys.InferenceVar)
+    assert another_number_ir.type_info.resolution() is clkbuiltins.UINT32
+
+    a_string_ir = module.inner_scope.lookup("a_string", recursive=False)
+    assert isinstance(a_string_ir, statement.ImmutableBinding)
+    assert isinstance(a_string_ir.type_info, typesys.InferenceVar)
+    assert a_string_ir.type_info.resolution() is clkbuiltins.STRING
+
+    cpp_target_ir = module.inner_scope.lookup("clk_constants_clk_cc", recursive=False)
+    assert cpp_target_ir is not None
+    assert isinstance(cpp_target_ir, cpp_target.CppTarget)
+    cpp_chunks = cpp_target_ir.render_cpp_entities()
+    assert (
+        cpp_chunks.header_chunk.render_str(render_includes=True)
+        == """#include <cstdint>
+#include <string_view>
+namespace dummy
+{
+/// A constant with an explicit type.
+inline constexpr uint64_t a_number{123U};
+/// A constant with an inferred type.
+inline constexpr uint32_t another_number{456U};
+/// A string.
+inline constexpr ::std::string_view a_string{"very interesting and useful string"};
+inline constexpr bool a_bool{false};
+inline constexpr float a_float{1.234f};
+} // namespace dummy
+namespace dummy
+{
+// Interface and instantiation aliases
+} // namespace dummy
 """
     )
 

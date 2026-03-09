@@ -120,7 +120,6 @@ cpp_target bind_array_msg_clk_cc
   interface Tappy<WithVarBytes>;
 }
 
-
 nanobind_target bind_array_msg_clk_nb
 {
   binding Tappy<SubMessage>;

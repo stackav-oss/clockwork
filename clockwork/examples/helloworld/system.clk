@@ -1,0 +1,8 @@
+// Demo cogs
+
+use clockwork::examples::helloworld::cogs;
+
+system_target producer_consumer
+{
+  box: cogs::FullSystem;
+}

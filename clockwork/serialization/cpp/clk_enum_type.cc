@@ -9,16 +9,17 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -445,28 +446,22 @@ public:
   [[nodiscard]] std::unordered_map<int32_t, ClkEnumValue>& get_values() noexcept;
 
   /// @return Set of values that have been removed from the current enum
-  [[nodiscard]] const std::unordered_set<int32_t>& get_removed() const noexcept;
+  [[nodiscard]] const std::set<int32_t>& get_removed() const noexcept;
 
   /// @return Set of values that have been removed from the current enum
-  [[nodiscard]] std::unordered_set<int32_t>& get_removed() noexcept;
+  [[nodiscard]] std::set<int32_t>& get_removed() noexcept;
 
   /// @return Map from old to new value numbers for values modified in the current enum
-  [[nodiscard]] const std::unordered_map<int32_t, int32_t>& get_became() const noexcept;
+  [[nodiscard]] const std::map<int32_t, int32_t>& get_became() const noexcept;
 
   /// @return Map from old to new value numbers for values modified in the current enum
-  [[nodiscard]] std::unordered_map<int32_t, int32_t>& get_became() noexcept;
-
-  /// @return Set of historical schema versions
-  [[nodiscard]] const std::unordered_set<int32_t>& get_versions() const noexcept;
-
-  /// @return Set of historical schema versions
-  [[nodiscard]] std::unordered_set<int32_t>& get_versions() noexcept;
+  [[nodiscard]] std::map<int32_t, int32_t>& get_became() noexcept;
 
   /// @return Enum options
-  [[nodiscard]] const std::unordered_set<ClkEnumOption>& get_options() const noexcept;
+  [[nodiscard]] const std::set<ClkEnumOption>& get_options() const noexcept;
 
   /// @return Enum options
-  [[nodiscard]] std::unordered_set<ClkEnumOption>& get_options() noexcept;
+  [[nodiscard]] std::set<ClkEnumOption>& get_options() noexcept;
 
   /// @see ClkType::use_memcpy_for_array_upgrade
   [[nodiscard]] bool use_memcpy_for_array_upgrade(const ClkType& src_type) override;
@@ -475,10 +470,13 @@ public:
   [[nodiscard]] bool is_legacy_wire_compatible(const ClkType& src_type) const override;
 
   /// @see ClkType::check_for_unexpected_schema_changes
-  void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) override;
+  void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) override;
+
+  /// @see ClkType::is_same_type
+  [[nodiscard]] bool is_same_type(const ClkType& src_type) const override;
 
 private:
-  /// Check for unexpectes changes to the enum values
+  /// Check for unexpected changes to the enum values
   /// @param[in] src_enum Source enum type
   /// @throws runtime_error on unexpected value changes
   void check_for_unexpected_value_changes(const ClkEnumType& src_enum);
@@ -502,16 +500,13 @@ private:
   std::unordered_map<int32_t, ClkEnumValue> values_;
 
   /// Enum options
-  std::unordered_set<ClkEnumOption> options_;
+  std::set<ClkEnumOption> options_;
 
   /// Set of values that have been removed from the current enum
-  std::unordered_set<int32_t> removed_;
+  std::set<int32_t> removed_;
 
   /// Map from old to new field numbers for fields modified in the current schema
-  std::unordered_map<int32_t, int32_t> became_;
-
-  /// Historical schema versions
-  std::unordered_set<int32_t> versions_;
+  std::map<int32_t, int32_t> became_;
 
   /// Cached results of checks whether to use memcpy for upgrade
   std::unordered_map<size_t, bool> use_memcpy_cache_;
@@ -576,42 +571,32 @@ ClkEnumType::ClkEnumType(
   return values_;
 }
 
-[[nodiscard]] const std::unordered_set<int32_t>& ClkEnumType::get_removed() const noexcept
+[[nodiscard]] const std::set<int32_t>& ClkEnumType::get_removed() const noexcept
 {
   return removed_;
 }
 
-[[nodiscard]] std::unordered_set<int32_t>& ClkEnumType::get_removed() noexcept
+[[nodiscard]] std::set<int32_t>& ClkEnumType::get_removed() noexcept
 {
   return removed_;
 }
 
-[[nodiscard]] const std::unordered_map<int32_t, int32_t>& ClkEnumType::get_became() const noexcept
+[[nodiscard]] const std::map<int32_t, int32_t>& ClkEnumType::get_became() const noexcept
 {
   return became_;
 }
 
-[[nodiscard]] std::unordered_map<int32_t, int32_t>& ClkEnumType::get_became() noexcept
+[[nodiscard]] std::map<int32_t, int32_t>& ClkEnumType::get_became() noexcept
 {
   return became_;
 }
 
-[[nodiscard]] const std::unordered_set<int32_t>& ClkEnumType::get_versions() const noexcept
-{
-  return versions_;
-}
-
-[[nodiscard]] std::unordered_set<int32_t>& ClkEnumType::get_versions() noexcept
-{
-  return versions_;
-}
-
-[[nodiscard]] const std::unordered_set<ClkEnumOption>& ClkEnumType::get_options() const noexcept
+[[nodiscard]] const std::set<ClkEnumOption>& ClkEnumType::get_options() const noexcept
 {
   return options_;
 }
 
-[[nodiscard]] std::unordered_set<ClkEnumOption>& ClkEnumType::get_options() noexcept
+[[nodiscard]] std::set<ClkEnumOption>& ClkEnumType::get_options() noexcept
 {
   return options_;
 }
@@ -664,7 +649,7 @@ ClkEnumType::ClkEnumType(
          uuid_ == src_enum_type.uuid_ && version_ == src_enum_type.version_ && values_ == src_enum_type.values_;
 }
 
-void ClkEnumType::check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name)
+void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*allow_changes*/, std::string_view name)
 {
   if (const auto inserted = unexpected_schema_changes_cache_.insert(src_type.get_type_index()).second; !inserted)
   {
@@ -680,7 +665,7 @@ void ClkEnumType::check_for_unexpected_schema_changes(const ClkType& src_type, s
         src_type.get_type_id(),
         get_fqn()));
   }
-  const auto& src_enum = dynamic_cast<const ClkEnumType&>(src_type);
+  auto& src_enum = dynamic_cast<ClkEnumType&>(src_type);
   if (src_enum.get_uuid() != get_uuid())
   {
     throw ClkTypeUpgradeError(
@@ -703,21 +688,15 @@ void ClkEnumType::check_for_unexpected_schema_changes(const ClkType& src_type, s
         get_fqn(),
         get_version()));
   }
-  if (src_enum.get_version() != get_version() && !get_versions().contains(src_enum.get_version()))
-  {
-    throw ClkTypeUpgradeError(
-      fmt::format(
-        "Cannot upgrade {} from {} to {}, version {} not in enum version history",
-        name,
-        src_enum.get_fqn(),
-        get_fqn(),
-        src_enum.get_version()));
-  }
-  if (src_enum.get_version() == get_version())
-  {
-    get_value_type().check_for_unexpected_schema_changes(src_enum.get_value_type(), get_fqn());
-  }
+  get_value_type().check_for_unexpected_schema_changes(
+    src_enum.get_value_type(), src_enum.get_version() != get_version(), get_fqn());
   check_for_unexpected_value_changes(src_enum);
+  check_for_unexpected_history_changes(
+    src_enum.get_became(), src_enum.get_removed(), became_, removed_, src_enum.get_version() != version_, get_fqn());
+  if (src_enum.get_version() == version_ && src_enum.get_options() != options_)
+  {
+    throw ClkTypeUpgradeError(fmt::format("Unsupported change to enum options for {} without changing version", name));
+  }
 }
 
 void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum)
@@ -766,11 +745,11 @@ void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum
     const auto& dest_value = values_.at(dest_value_num);
     if (src_value.get_num() == dest_value.get_num())
     {
-      if (src_value.get_name() != dest_value.get_name())
+      if (src_enum.get_version() == version_ && src_value.get_name() != dest_value.get_name())
       {
         throw ClkTypeUpgradeError(
           fmt::format(
-            "Value {} renamed to {} in {} without changing value number",
+            "Value {} renamed to {} in {} without changing schema version",
             src_value.get_name(),
             dest_value.get_name(),
             get_fqn()));
@@ -779,7 +758,7 @@ void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum
       {
         throw ClkTypeUpgradeError(
           fmt::format(
-            "Value for {} changed from {} to {} in {} without changing value number",
+            "Value for {} changed from {} to {} in {} without changing schema version",
             dest_value.get_name(),
             src_value.get_value(),
             dest_value.get_value(),
@@ -797,6 +776,16 @@ void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum
         dest_value.get_name(),
         get_fqn()));
   }
+}
+
+[[nodiscard]] bool ClkEnumType::is_same_type(const ClkType& src_type) const
+{
+  if (src_type.get_type_id() != ClkTypeId::clk_enum)
+  {
+    return false;
+  }
+  const auto& src_enum_type = dynamic_cast<const ClkEnumType&>(src_type);
+  return src_enum_type.get_uuid() == get_uuid();
 }
 
 /// Clockwork enum type implementation
@@ -930,15 +919,6 @@ ClkEnumTypeImpl<ValueType>::make_upgrader(const ClkType& src_type)
         src_enum.get_version(),
         get_fqn(),
         get_version()));
-  }
-  if (src_enum.get_version() != get_version() && !get_versions().contains(src_enum.get_version()))
-  {
-    throw ClkTypeUpgradeError(
-      fmt::format(
-        "Cannot upgrade from {} to {}, version {} not in enum version history",
-        src_enum.get_fqn(),
-        get_fqn(),
-        src_enum.get_version()));
   }
   switch (src_enum.get_value_type().get_type_id())
   {
@@ -1095,10 +1075,6 @@ std::unique_ptr<ClkType> make_clk_enum_type_from_proto(
     for (const auto removed_num : enum_proto.history().removed())
     {
       clk_enum->get_removed().insert(removed_num);
-    }
-    for (const auto version_num : enum_proto.history().versions())
-    {
-      clk_enum->get_versions().insert(version_num);
     }
   }
   return clk_enum;

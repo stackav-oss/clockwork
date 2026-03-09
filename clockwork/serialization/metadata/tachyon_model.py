@@ -22,12 +22,43 @@ if TYPE_CHECKING:
     from uuid import UUID
 
 
-ClkType: TypeAlias = "BuiltInType | SchemaType | ClkEnumType | TagType | StrongType"
+ClkType: TypeAlias = "BuiltInType | SchemaType | ClkEnumType | TagType | StrongType | SoaType"
 
 InitialValue: TypeAlias = "SignedInitialValue | UnsignedInitialValue | FloatInitialValue | BoolInitialValue"
 
 BUILT_IN_UUID_ADDED_IN_VERSION: Final = 2
 ENUM_UNDERLYING_TYPE_ADDED_IN_VERSION: Final = 3
+
+
+def _check_for_unexpected_history_changes(  # noqa: PLR0913 (mitigated by kwonly args)
+    *,
+    self_became: dict[int, int],
+    self_removed: set[int],
+    incoming_became: dict[int, int],
+    incoming_removed: set[int],
+    allow_changes: bool,
+    name: str,
+) -> None:
+    """Check for unexpected history changes."""
+    for old_number, new_number in incoming_became.items():
+        if old_number not in self_became:
+            msg = f"Unsupported deletion of legacy_became entry for field {old_number} in {name}"
+            raise ValueError(msg)
+        if self_became[old_number] != new_number:
+            msg = f"Unsupported modification of legacy_became entry in {name}, {old_number}->{new_number} to {old_number}->{self_became[old_number]}"
+            raise ValueError(msg)
+    for old_number in incoming_removed:
+        if old_number not in self_removed and old_number not in self_became and old_number not in self_became.values():
+            msg = f"Unsupported deletion of removed entry for field {old_number} in {name}"
+            raise ValueError(msg)
+
+    if not allow_changes and self_removed != incoming_removed:
+        msg = f"Unexpected change to removed in history for {name}"
+        raise ValueError(msg)
+
+    if not allow_changes and self_became != incoming_became:
+        msg = f"Unexpected change to legacy_became in history for {name}"
+        raise ValueError(msg)
 
 
 @dataclass(slots=True)
@@ -185,8 +216,72 @@ class BuiltInType:
             self.hash = result.digest()
         return self.hash
 
-    def check_for_unexpected_schema_changes(
-        self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType], name: str = ""
+    def get_lowest_underlying_type(self, self_types: Sequence[ClkType], name: str) -> ClkType:
+        """Get the underlying type below this builtin type.
+
+        Get the underlying type below this builtin type by descending through the arguments until
+        we locate a type that is not a built-in type.  This 'lowest' underlying type is the one we
+        need to use when checking for unexpected schema changes.
+
+        Arguments:
+            self_types: Self tachyon metadata types.
+            name: Name to use in exception strings.
+
+        Returns:
+            Lowest underlying type.
+        """
+        underlying_type = self
+        while isinstance(underlying_type, BuiltInType):
+            underlying_type_id: int | None = None
+            for arg in underlying_type.arguments:
+                if isinstance(arg, int):
+                    if underlying_type_id is not None:
+                        msg = f"Unsupported multiple arguments in definition of {name}"
+                        raise ValueError(msg)
+                    underlying_type_id = arg
+            if underlying_type_id is None:
+                return underlying_type
+            underlying_type = self_types[underlying_type_id]
+        return underlying_type
+
+    def is_same_type(self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType]) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            self_types: Self tachyon metadata types.
+            incoming: Schema type being upgraded to this type.
+            incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        if (
+            not isinstance(incoming, BuiltInType)
+            or self.fqn != incoming.fqn
+            or len(self.arguments) != len(incoming.arguments)
+        ):
+            return False
+        for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=False):
+            if isinstance(self_arg, str):
+                if not isinstance(incoming_arg, str) or incoming_arg != self_arg:
+                    return False
+            else:
+                assert isinstance(self_arg, int)
+                if not isinstance(incoming_arg, int) or not self_types[self_arg].is_same_type(
+                    self_types,
+                    incoming_types[incoming_arg],
+                    incoming_types,
+                ):
+                    return False
+        return True
+
+    def check_for_unexpected_schema_changes(  # noqa: C901 (disabling complexity to keep checks together)
+        self,
+        self_types: Sequence[ClkType],
+        incoming: ClkType,
+        incoming_types: Sequence[ClkType],
+        allow_changes: bool = False,
+        name: str = "",
     ) -> None:
         """Check for unexpected schema changes.
 
@@ -197,6 +292,7 @@ class BuiltInType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -205,30 +301,42 @@ class BuiltInType:
         if not name:
             name = self.fqn
 
-        if not isinstance(incoming, BuiltInType):
-            msg = f"Unsupported field type change for {name}"
-            raise TypeError(msg)
-
-        if self.fqn != incoming.fqn:
-            msg = f"Unsupported field type change for {name}: {self.fqn} -> {incoming.fqn}"
-            raise ValueError(msg)
-
-        if len(self.arguments) != len(incoming.arguments):
-            msg = f"Incompatible arguments for {name}"
-            raise ValueError(msg)
-
-        for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=True):
-            if isinstance(self_arg, str):
-                if not isinstance(incoming_arg, str) or self_arg != incoming_arg:
-                    msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
-                    raise ValueError(msg)
-            else:
-                if not isinstance(incoming_arg, int):
-                    msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
-                    raise TypeError(msg)
-                self_types[self_arg].check_for_unexpected_schema_changes(
-                    self_types, incoming_types[incoming_arg], incoming_types, name
+        if allow_changes:
+            self_underlying_type = self.get_lowest_underlying_type(self_types, name)
+            incoming_underlying_type = (
+                incoming.get_lowest_underlying_type(incoming_types, name)
+                if isinstance(incoming, BuiltInType)
+                else incoming
+            )
+            if isinstance(self_underlying_type, (SchemaType, ClkEnumType)):
+                self_underlying_type.check_for_unexpected_schema_changes(
+                    self_types, incoming_underlying_type, incoming_types, True, name
                 )
+        else:
+            if not isinstance(incoming, BuiltInType):
+                msg = f"Unsupported field type change for {name}"
+                raise TypeError(msg)
+
+            if self.fqn != incoming.fqn:
+                msg = f"Unsupported field type change for {name}: {self.fqn} -> {incoming.fqn}"
+                raise ValueError(msg)
+
+            if len(self.arguments) != len(incoming.arguments):
+                msg = f"Incompatible arguments for {name}"
+                raise ValueError(msg)
+
+            for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=True):
+                if isinstance(self_arg, str):
+                    if not isinstance(incoming_arg, str) or self_arg != incoming_arg:
+                        msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
+                        raise ValueError(msg)
+                else:
+                    if not isinstance(incoming_arg, int):
+                        msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
+                        raise TypeError(msg)
+                    self_types[self_arg].check_for_unexpected_schema_changes(
+                        self_types, incoming_types[incoming_arg], incoming_types, False, name
+                    )
 
 
 @dataclass(slots=True)
@@ -253,6 +361,7 @@ class SchemaType:
     alignment: int
     schema_uuid: UUID
     version: int
+    arguments: Sequence[int | str]
     fields: Sequence[SchemaField]
     hash: bytes | None = field(default=None, compare=False)
     removed: set[int] = field(default_factory=set, compare=False)
@@ -290,8 +399,44 @@ class SchemaType:
             msg = f"Field number {self_field_num} ({incoming_field.name}) removed from {name} without updating history"
             raise ValueError(msg)
 
+    def is_same_type(self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType]) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            self_types: Self tachyon metadata types.
+            incoming: Schema type being upgraded to this type.
+            incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        if (
+            not isinstance(incoming, SchemaType)
+            or self.schema_uuid != incoming.schema_uuid
+            or len(self.arguments) != len(incoming.arguments)
+        ):
+            return False
+        for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=False):
+            if isinstance(self_arg, str):
+                if not isinstance(incoming_arg, str) or incoming_arg != self_arg:
+                    return False
+            else:
+                assert isinstance(self_arg, int)
+                if not isinstance(incoming_arg, int) or not self_types[self_arg].is_same_type(
+                    self_types,
+                    incoming_types[incoming_arg],
+                    incoming_types,
+                ):
+                    return False
+        return True
+
     def check_for_unexpected_schema_changes(
-        self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType], name: str = ""
+        self,
+        self_types: Sequence[ClkType],
+        incoming: ClkType,
+        incoming_types: Sequence[ClkType],
+        _allow_changes: bool = False,
+        name: str = "",
     ) -> None:
         """Check for unexpected schema changes.
 
@@ -302,6 +447,7 @@ class SchemaType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -322,23 +468,37 @@ class SchemaType:
             msg = f"Incoming version for {name} is beyond latest version: {incoming.version} > {self.version}"
             raise ValueError(msg)
 
-        if self.version == incoming.version and len(self.fields) != len(incoming.fields):
-            msg = f"Unsupported schema change for {name}: num fields went from {len(incoming.fields)} to {len(self.fields)}"
+        _check_for_unexpected_history_changes(
+            self_became=self.became,
+            self_removed=self.removed,
+            incoming_became=incoming.became,
+            incoming_removed=incoming.removed,
+            allow_changes=self.version != incoming.version,
+            name=name,
+        )
 
         self_fields = {field.num: field for field in self.fields}
 
+        # Allow field type changes if the version number has changed or if the incoming type is not
+        # the same as this type due to a parameter change
+        allow_changes = self.version != incoming.version or not self.is_same_type(self_types, incoming, incoming_types)
         for incoming_field in incoming.fields:
             incoming_field_name = name + f".{incoming_field.name}"
             if incoming_field.num in self_fields:
-                self_field = self_fields[incoming_field.num]
+                if self.version == incoming.version:
+                    self_field = self_fields[incoming_field.num]
 
-                if self_field.name != incoming_field.name:
-                    msg = f"Unsupported field name change for {incoming_field_name}: new name is {self_field.name}"
-                    raise ValueError(msg)
+                    if self_field.name != incoming_field.name and self.version == incoming.version:
+                        msg = f"Unsupported field name change for {incoming_field_name}: new name is {self_field.name}"
+                        raise ValueError(msg)
 
-                self_types[self_field.type_id].check_for_unexpected_schema_changes(
-                    self_types, incoming_types[incoming_field.type_id], incoming_types, incoming_field_name
-                )
+                    self_types[self_field.type_id].check_for_unexpected_schema_changes(
+                        self_types,
+                        incoming_types[incoming_field.type_id],
+                        incoming_types,
+                        allow_changes,
+                        incoming_field_name,
+                    )
             elif self.version == incoming.version:
                 msg = f"Unsupported field removal: {incoming_field.name} removed from {name}"
                 raise ValueError(msg)
@@ -424,6 +584,7 @@ class ClkEnumType:
         Args:
             self_values: Values in this type by value number.
             incoming_value: Incoming modified enum value.
+            allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -436,8 +597,28 @@ class ClkEnumType:
             msg = f"Value number {self_value_num} ({incoming_value.name}) removed from {name} without updating history"
             raise ValueError(msg)
 
-    def check_for_unexpected_schema_changes(
-        self, _self_types: Sequence[ClkType], incoming: ClkType, _incoming_types: Sequence[ClkType], name: str = ""
+    def is_same_type(
+        self, _self_types: Sequence[ClkType], incoming: ClkType, _incoming_types: Sequence[ClkType]
+    ) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            _self_types: Self tachyon metadata types.
+            incoming: Schema type being upgraded to this type.
+            _incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        return isinstance(incoming, ClkEnumType) and self.enum_uuid == incoming.enum_uuid
+
+    def check_for_unexpected_schema_changes(  # noqa: C901 (disabling complexity to keep checks together)
+        self,
+        _self_types: Sequence[ClkType],
+        incoming: ClkType,
+        _incoming_types: Sequence[ClkType],
+        _allow_changes: bool = False,
+        name: str = "",
     ) -> None:
         """Check for unexpected schema changes.
 
@@ -445,6 +626,7 @@ class ClkEnumType:
             _self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             _incoming_types: Incoming tachyon metadata types.
+            _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -460,6 +642,18 @@ class ClkEnumType:
             msg = f"Incoming version for {name} is beyond latest version: {self.version} < {incoming.version}"
             raise ValueError(msg)
 
+        _check_for_unexpected_history_changes(
+            self_became=self.became,
+            self_removed=self.removed,
+            incoming_became=incoming.became,
+            incoming_removed=incoming.removed,
+            allow_changes=self.version != incoming.version,
+            name=name,
+        )
+
+        if self.version == incoming.version and incoming.options != self.options:
+            msg = f"Unsupported options change for {name}: {incoming.options} to {self.options}"
+
         if self.version == incoming.version and len(self.values) != len(incoming.values):
             msg = f"Unsupported schema change for {name}: num values went from {len(incoming.values)} to {len(self.values)}"
 
@@ -468,14 +662,15 @@ class ClkEnumType:
         for incoming_value in incoming.values:
             incoming_value_name = name + f".{incoming_value.name}"
             if incoming_value.num in self_values:
-                self_value = self_values[incoming_value.num]
+                if self.version == incoming.version:
+                    self_value = self_values[incoming_value.num]
 
-                if self_value.name != incoming_value.name:
-                    msg = f"Unsupported value name change for {incoming_value_name}: new name is {self_value.name}"
-                    raise ValueError(msg)
-                if self.version == incoming.version and self_value.value != incoming_value.value:
-                    msg = f"Unsupported enum value change for {incoming_value_name} from {incoming_value.value} to {self_value.value}"
-                    raise ValueError(msg)
+                    if self_value.name != incoming_value.name and self.version == incoming.version:
+                        msg = f"Unsupported value name change for {incoming_value_name}: new name is {self_value.name}"
+                        raise ValueError(msg)
+                    if self_value.value != incoming_value.value and self.version == incoming.version:
+                        msg = f"Unsupported enum value change for {incoming_value_name} from {incoming_value.value} to {self_value.value}"
+                        raise ValueError(msg)
             elif self.version == incoming.version:
                 msg = f"Unsupported value removal: {incoming_value.name} removed from {name}"
                 raise ValueError(msg)
@@ -528,8 +723,28 @@ class TagType:
             self.hash = TAG_HASH
         return self.hash
 
+    def is_same_type(
+        self, _self_types: Sequence[ClkType], incoming: ClkType, _incoming_types: Sequence[ClkType]
+    ) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            _self_types: Self tachyon metadata types.
+            incoming: Schema type being upgraded to this type.
+            _incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        return isinstance(incoming, TagType)
+
     def check_for_unexpected_schema_changes(
-        self, _self_types: Sequence[ClkType], incoming: ClkType, _incoming_types: Sequence[ClkType], name: str = ""
+        self,
+        _self_types: Sequence[ClkType],
+        incoming: ClkType,
+        _incoming_types: Sequence[ClkType],
+        _allow_changes: bool = False,
+        name: str = "",
     ) -> None:
         """Check for unexpected schema changes.
 
@@ -539,6 +754,7 @@ class TagType:
             _self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             _incoming_types: Incoming tachyon metadata types.
+            _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -573,8 +789,28 @@ class StrongType:
             self.hash = types[self.underlying_type_id].get_hash(types, force_recompute)
         return self.hash
 
+    def is_same_type(self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType]) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            self_types: Self tachyon metadata types.
+            incoming: Schema type being upgraded to this type.
+            incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        return isinstance(incoming, StrongType) and self_types[self.underlying_type_id].is_same_type(
+            self_types, incoming_types[incoming.underlying_type_id], incoming_types
+        )
+
     def check_for_unexpected_schema_changes(
-        self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType], name: str = ""
+        self,
+        self_types: Sequence[ClkType],
+        incoming: ClkType,
+        incoming_types: Sequence[ClkType],
+        allow_changes: bool = False,
+        name: str = "",
     ) -> None:
         """Check for unexpected schema changes.
 
@@ -585,6 +821,7 @@ class StrongType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -592,13 +829,136 @@ class StrongType:
         """
         if not name:
             name = self.fqn
-        if not isinstance(incoming, StrongType):
+
+        if not allow_changes:
+            if not isinstance(incoming, StrongType):
+                msg = f"Unsupported type change for {name}"
+                raise TypeError(msg)
+
+            self_types[self.underlying_type_id].check_for_unexpected_schema_changes(
+                self_types, incoming_types[incoming.underlying_type_id], incoming_types, False, name
+            )
+
+
+@dataclass(slots=True)
+class SoaType:
+    """Metadata for SoA (Structure of Arrays) types.
+
+    SoA types can only hold schemas, and they store each field as a separate
+    contiguous array rather than interleaving struct instances. For example,
+    FixedSoa<Point3f, 100> with fields x, y, z becomes:
+    [x0...x99][y0...y99][z0...z99] rather than [(x0,y0,z0)...(x99,y99,z99)].
+
+    Attributes:
+        fqn: Fully-qualified name (".FixedSoa" or ".VarSoa")
+        uuid: UUID of the SoA builtin type
+        size: Total size of the SoA structure in bytes
+        alignment: Alignment requirement for the structure
+        schema_type_id: Type ID of the underlying schema
+        container_size: Number of elements (FixedSoa) or max elements (VarSoa)
+        field_layouts: Layout info for each field array, in memory order.
+        size_field_offset: Byte offset of size field (None for FixedSoa)
+        size_field_type_id: Type ID of size field (None for FixedSoa, UInt8/16/32/64 for VarSoa)
+        hash: Opaque unique identifier
+    """
+
+    fqn: str = field(compare=False)
+    uuid: UUID
+    size: int
+    alignment: int
+    schema_type_id: int
+    container_size: int
+    field_layouts: Sequence[SchemaField]
+    size_field_offset: int | None
+    size_field_type_id: int | None
+    hash: bytes | None = field(default=None, compare=False)
+
+    def get_hash(self, types: Sequence[ClkType], force_recompute: bool = False) -> bytes:
+        """Return the hash of this SoA type, calculating it if needed."""
+        if self.hash is None or force_recompute:
+            result = md5(self.uuid.bytes)  # noqa: S324  (md5 not used for security)
+            result.update(types[self.schema_type_id].get_hash(types, force_recompute))
+            result.update(str(self.container_size).encode("utf-8"))
+            # Include field layouts in hash to detect layout algorithm changes
+            for fld in self.field_layouts:
+                result.update(fld.compute_hash(types, force_recompute))
+            if self.size_field_offset is not None:
+                result.update(str(self.size_field_offset).encode("utf-8"))
+                assert self.size_field_type_id is not None
+                result.update(types[self.size_field_type_id].get_hash(types, force_recompute))
+            self.hash = result.digest()
+        return self.hash
+
+    def is_same_type(self, self_types: Sequence[ClkType], incoming: ClkType, incoming_types: Sequence[ClkType]) -> bool:
+        """Test whether the incoming type is the same as this type.
+
+        Args:
+            self_types: Self tachyon metadata types.
+            incoming: Type being compared to this type.
+            incoming_types: Incoming tachyon metadata types.
+
+        Returns:
+            True if the incoming type is the same as this type.
+        """
+        if not isinstance(incoming, SoaType):
+            return False
+        if self.fqn != incoming.fqn or self.container_size != incoming.container_size:
+            return False
+        return self_types[self.schema_type_id].is_same_type(
+            self_types, incoming_types[incoming.schema_type_id], incoming_types
+        )
+
+    def check_for_unexpected_schema_changes(
+        self,
+        self_types: Sequence[ClkType],
+        incoming: ClkType,
+        incoming_types: Sequence[ClkType],
+        allow_changes: bool = False,
+        name: str = "",
+    ) -> None:
+        """Check for unexpected schema changes.
+
+        Args:
+            self_types: Self tachyon metadata types.
+            incoming: Type being upgraded to this type.
+            incoming_types: Incoming tachyon metadata types.
+            allow_changes: Allow parameter changes (like container size).
+            name: Name to use in exception strings.
+
+        Raises:
+            TypeError or ValueError if unexpected schema changes are found.
+        """
+        if not name:
+            name = self.fqn
+
+        # Require incoming to be a SoaType
+        if not isinstance(incoming, SoaType):
             msg = f"Unsupported type change for {name}"
             raise TypeError(msg)
 
-        self_types[self.underlying_type_id].check_for_unexpected_schema_changes(
-            self_types, incoming_types[incoming.underlying_type_id], incoming_types, name
-        )
+        # Require same SoA variant (FixedSoa vs VarSoa)
+        if self.fqn != incoming.fqn:
+            msg = f"Unsupported SoA type change for {name}: {incoming.fqn} -> {self.fqn}"
+            raise ValueError(msg)
+
+        if allow_changes:
+            # When allow_changes is True, container size can change but the underlying schema must be compatible
+            # Check the underlying schema for compatibility
+            self_types[self.schema_type_id].check_for_unexpected_schema_changes(
+                self_types, incoming_types[incoming.schema_type_id], incoming_types, True, f"{name} schema"
+            )
+        else:
+            # When allow_changes is False, require exact match including container size
+            if self.container_size != incoming.container_size:
+                msg = (
+                    f"Unsupported container size change for {name}: {incoming.container_size} -> {self.container_size}"
+                )
+                raise ValueError(msg)
+
+            # Check the underlying schema for changes (strict)
+            self_types[self.schema_type_id].check_for_unexpected_schema_changes(
+                self_types, incoming_types[incoming.schema_type_id], incoming_types, False, f"{name} schema"
+            )
 
 
 @dataclass(slots=True)

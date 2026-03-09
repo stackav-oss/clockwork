@@ -38,6 +38,7 @@ class TcpBridgeServerConfig(Tachyon["TcpBridgeServerConfig"]):
     listen_port: int
     num_clients: int
     channel_name: str
+    is_bulk_data: bool
 
 
 @dataclass(kw_only=True)

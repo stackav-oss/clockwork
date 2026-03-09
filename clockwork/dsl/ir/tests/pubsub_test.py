@@ -42,6 +42,7 @@ def test_channel(fs_importer: FilesystemImporter) -> None:
     assert chan1.message_size.value == 1064
     assert chan1.num_slots.value == 11
     assert chan1.publishers_option == pubsub.ChannelPublishersOption.single
+    assert not chan1.is_bulk_data
 
     assert isinstance(chan2.channel_name, primitive.StringValue)
     assert chan2.message_repr is not None
@@ -66,7 +67,7 @@ def test_channel(fs_importer: FilesystemImporter) -> None:
 
 def test_zero_max_num_messages(fs_importer: FilesystemImporter) -> None:
     source = """
-    use clockwork::dsl::tests::support::hellomsg
+    use clockwork::dsl::tests::support::hellomsg;
 
     // Doc
     channel ZeroChannelTest
@@ -85,7 +86,7 @@ def test_zero_max_num_messages(fs_importer: FilesystemImporter) -> None:
 def test_channel_num_slots(fs_importer: FilesystemImporter) -> None:
     max_num_messages = 123
     source = f"""
-    use clockwork::dsl::tests::support::hellomsg
+    use clockwork::dsl::tests::support::hellomsg;
 
     // Doc
     channel NumSlotTest
@@ -97,4 +98,79 @@ def test_channel_num_slots(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
     channel = module.inner_scope.lookup("NumSlotTest")
     assert isinstance(channel, pubsub.Channel)
+    assert not channel.is_published_once
     assert channel.num_slots.value == max_num_messages + 1
+
+
+def test_is_published_once(fs_importer: FilesystemImporter) -> None:
+    source = """
+    use clockwork::dsl::tests::support::hellomsg;
+
+    // Doc
+    channel NumSlotTest
+    {
+      message_type: Tachyon<hellomsg::HelloMsg>;
+      published_once: true;
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
+    channel = module.inner_scope.lookup("NumSlotTest")
+    assert isinstance(channel, pubsub.Channel)
+    assert channel.is_published_once
+    assert channel.num_slots.value == 1
+
+
+def test_is_bulk_data(fs_importer: FilesystemImporter) -> None:
+    source = """
+    use clockwork::dsl::tests::support::hellomsg;
+
+    // Doc
+    channel NumSlotTest
+    {
+      message_type: Tachyon<hellomsg::HelloMsg>;
+      max_num_messages: 2;
+      bulk_data: true;
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
+    channel = module.inner_scope.lookup("NumSlotTest")
+    assert isinstance(channel, pubsub.Channel)
+    assert channel.num_slots.value == 3
+    assert channel.is_bulk_data
+
+
+def test_is_published_once_must_be_true(fs_importer: FilesystemImporter) -> None:
+    source = """
+    use clockwork::dsl::tests::support::hellomsg;
+
+    // Doc
+    channel NumSlotTest
+    {
+      message_type: Tachyon<hellomsg::HelloMsg>;
+      published_once: false;
+    }
+    """
+    with pytest.raises(
+        ValueError,
+        match="published_once option must be set to true",
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
+
+
+def test_is_published_once_and_multiple_publishers_are_exclusive(fs_importer: FilesystemImporter) -> None:
+    source = """
+    use clockwork::dsl::tests::support::hellomsg;
+
+    // Doc
+    channel NumSlotTest
+    {
+      message_type: Tachyon<hellomsg::HelloMsg>;
+      published_once: true;
+      publishers: multiple;
+    }
+    """
+    with pytest.raises(
+        ValueError,
+        match="Cannot have multiple publishers when channel is published once",
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)

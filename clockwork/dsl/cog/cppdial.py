@@ -6,6 +6,7 @@
 from copy import deepcopy
 from dataclasses import dataclass, replace
 
+from clockwork.dsl.cog.cppdial_signals import make_signal_api_struct
 from clockwork.dsl.cog.pycog import (
     ConditionBase,
     ConditionsStruct,
@@ -19,6 +20,7 @@ from clockwork.dsl.cog.pycog import (
     OutputsStruct,
     Resource,
     ResourcesStruct,
+    SignalsStruct,
     State,
     StatesStruct,
 )
@@ -45,6 +47,7 @@ class DialMember:
 
     name: str
     cpp_type: CppType | CppTemplateType
+    store_by_reference: bool = False
 
     def arg_name(self) -> str:
         """Get the argument name."""
@@ -71,7 +74,7 @@ class DialMember:
 
     def public_accessor(self) -> CppMethod:
         """Return the cpp method for the public accessor."""
-        if not self.is_object_ptr():
+        if self.store_by_reference or not self.is_object_ptr():
             return_type = deepcopy(self.cpp_type)
         elif (
             isinstance(self.cpp_type, CppTemplateType)
@@ -198,7 +201,11 @@ class Dial:
                 name=f"{self.class_name}Inputs",
                 ir_fields=[
                     value
-                    for value in InputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.inputs).inputs.values()
+                    for value in InputsStruct.from_ir(
+                        self.cog_ir.module.context,
+                        self.cog_ir.inputs,
+                        self.cog_ir.execution_spec,
+                    ).inputs.values()
                     if not value.no_dial
                 ],
             ),
@@ -232,6 +239,13 @@ class Dial:
                 ir_fields=list(diagnostics.values()),
             )
             members.append(DialMember(name="diagnostics", cpp_type=substructs["diagnostics"].name))
+
+        signals_substruct, signals_member = _make_signals_substruct_and_member(
+            class_name=self.class_name,
+            cog_ir=self.cog_ir,
+        )
+        substructs["signals"] = signals_substruct
+        members.append(signals_member)
 
         infra_diag_header = infra_defs_header_from_dial_header(self.dial_header)
         infra_diag_header = replace(infra_diag_header, iwyu_pragma="IWYU pragma: keep")
@@ -269,7 +283,7 @@ class Dial:
         dial.public.extend(public_accessors)
         dial.private.extend(private_fields)
 
-        enclosing_namespace = self.cpp_namespace if self.cpp_namespace else ""
+        enclosing_namespace = self.cpp_namespace or ""
 
         chunks = CppModuleChunks()
         chunks.header_chunk.context.add_include(Header(CLK_REPO, "clockwork/dial/include_common.hh"))
@@ -283,7 +297,7 @@ class Dial:
     def _render_forward_decl_exec_func(self) -> CppModuleChunks:
         dial_type = CppType([], f"{self.class_name}&", self.cpp_namespace)
         cpp_mod = CppModuleChunks()
-        namespace_resolved = self.cpp_namespace if self.cpp_namespace else ""
+        namespace_resolved = self.cpp_namespace or ""
         cpp_mod.header_chunk.append(
             [
                 "/// Forward declare ///",
@@ -291,3 +305,41 @@ class Dial:
             ]
         )
         return cpp_mod
+
+
+def _make_signals_substruct_and_member(
+    class_name: str,
+    cog_ir: cog.Cog,
+) -> tuple[CppStruct, DialMember]:
+    """Create the signals substruct and dial member for the signal API.
+
+    Args:
+        class_name: The name of the cog class (used for naming the SignalApi struct).
+        cog_ir: The cog IR containing report groups.
+
+    Returns:
+        A tuple of (substruct, dial_member) for the signals API.
+    """
+    signals_struct = SignalsStruct.from_ir(cog_ir.module.context, cog_ir.report_groups)
+    has_batched_signals = any(signal.is_batched for signal in signals_struct.signals.values())
+    has_post_agg_signals = any(not signal.is_batched for signal in signals_struct.signals.values())
+
+    policy_class_name = f"{cog_ir.name}Policy"
+
+    if has_batched_signals or has_post_agg_signals:
+        signal_api_struct = make_signal_api_struct(
+            name=f"{class_name}SignalApi",
+            signals_struct=signals_struct,
+            policy_class_name=policy_class_name,
+        )
+    else:
+        signal_api_struct = CppStruct(
+            name=CppType(includes=[], type_name=f"{class_name}SignalApi", cpp_namespace=None),
+            doc="Empty SignalApi (no signals).",
+        )
+
+    signal_api_ref_type = deepcopy(signal_api_struct.name)
+    signal_api_ref_type.ref = Ref.L
+    member = DialMember(name="signals", cpp_type=signal_api_ref_type, store_by_reference=True)
+
+    return signal_api_struct, member

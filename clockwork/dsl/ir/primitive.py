@@ -9,7 +9,7 @@ from ast import literal_eval
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, node, typesys, units
 from clockwork.dsl.ir.cst_util import decimal_from_cst, get_span
 from typing_extensions import override
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Literal(typesys.Value, node.CstNode[cst.Literal]):
+class Literal(typesys.Value, node.CstNode[cst.Literal | cst.Number | cst.Integer | cst.NonnegativeInteger]):
     """Base class for literal values from Clockwork source."""
 
     @classmethod
@@ -117,23 +117,23 @@ class DecimalLiteral(Literal, DecimalValue):
     @classmethod
     def from_child_cst(
         cls: type[DecimalLiteral],
-        cst_node: cst.Number,
-        parent_cst: cst.Literal,
+        cst_node: cst.Number | cst.NonnegativeInteger | cst.Integer,
+        parent_cst: cst.Literal | None,
         module: node.Module,
     ) -> DecimalLiteral:
         """Construct an IR UnitLiteral from a CST UnitLiteral."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
-        value = decimal_from_cst(cst_number := cst_node, module.terminals)
+        value = decimal_from_cst(cst_node, module.terminals)
         numeric_type = (
             typesys.NumericType.FLOAT
-            if cst_number.maybe_fractional_part() is not None
+            if isinstance(cst_node, cst.Number) and cst_node.maybe_fractional_part() is not None
             else (typesys.NumericType.INTEGER if value >= 0 else typesys.NumericType.SIGNED_INTEGER)
         )
         return cls(
             module=module,
-            cst_node=parent_cst,
+            cst_node=parent_cst or cst_node,
             value=value,
             type_info=typesys.InferenceVar.make(context=module, cst_node=cst_node, numeric_type=numeric_type),
         )
@@ -291,7 +291,7 @@ def smallest_type_to_hold_range(min_value: int, max_value: int) -> clkbuiltins.I
     raise ValueError(msg)
 
 
-def value_to_bool(value: typesys.NamedValue) -> bool:
+def value_to_bool(value: typesys.Value) -> bool:
     """Converts a NamedValue to a bool value.
 
     Function verifies that NamedValue is a known bool type

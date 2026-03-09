@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, schema, typesys, units
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
 
@@ -279,6 +279,70 @@ class ResolvedReprInstantiation(node.NamedEntity, node.CstNode[cst.CppRepresenta
     def get_schema(self) -> schema.InstantiatedSchema:
         """Get the instantiated schema that this is a representation of."""
         return self.schema_ir
+
+    @classmethod
+    def from_schema(
+        cls: type[ResolvedReprInstantiation], schema_ir: schema.Schema | typesys.Instantiation, module: node.Module
+    ) -> ResolvedReprInstantiation:
+        """Create an resolved representitation instantiation from a resolved schema or schema instantiation.
+
+        Arguments:
+            schema_ir: Resolved schema or schema instantiation
+            module: Module containing the schema.
+
+        Returns:
+            Resolved representation instantion for the schema.
+        """
+        repr_typespec = typesys.Instantiation(
+            instantiates=clkbuiltins.TACHYON,
+            arguments={"schema": schema_ir},
+            type_info=clkbuiltins.TYPE_TYPE,
+        )
+        return cls(
+            module=module,
+            cst_node=None,
+            name="",
+            scope=module.inner_scope,
+            schema_ir=schema.InstantiatedSchema.from_typespec(schema_ir),
+            is_generic=False,
+            typespec=repr_typespec,
+        )
+
+    @classmethod
+    def from_proto_schema(
+        cls: type[ResolvedReprInstantiation],
+        schema_ir: schema.Schema | typesys.Instantiation,
+        module: node.Module,
+        name: str | None = None,
+    ) -> ResolvedReprInstantiation:
+        """Create an resolved protobuf representitation instantiation from a protobuf schema or schema instantiation.
+
+        Arguments:
+            schema_ir: Resolved schema or schema instantiation
+            module: Module containing the schema.
+            name: Representation alias name
+
+        Returns:
+            Resolved representation instantion for the schema.
+        """
+        repr_typespec = typesys.Instantiation(
+            instantiates=clkbuiltins.PROTOBUF,
+            arguments={"schema": schema_ir},
+            type_info=clkbuiltins.TYPE_TYPE,
+        )
+        return cls(
+            module=module,
+            cst_node=None,
+            name=name if name is not None else "",
+            scope=module.inner_scope,
+            schema_ir=schema.InstantiatedSchema.from_typespec(schema_ir),
+            is_generic=False,
+            typespec=repr_typespec,
+        )
+
+    def get_resolved(self) -> ResolvedReprInstantiation:
+        """Convenience method so code can work with resolved or unresolved representations."""
+        return self
 
 
 @dataclass

@@ -1,9 +1,16 @@
 {
   "IsLabelArg": {
-    "owners": true
+    "cpp_deps": true,
+    "cpp_exe_deps": true,
+    "owners": true,
+    "proto_deps": true,
+    "py_deps": true
   },
   "IsSortableListArg": {
+    "allowed_dep_trees": true,
+    "allowed_dep_wildcards": true,
     "allowed_deps": true,
+    "generated": true,
     "owners": true
   },
   "NamePriority": {

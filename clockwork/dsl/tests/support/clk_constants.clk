@@ -1,0 +1,15 @@
+#![generate(cpp)]
+#![cpp(namespace=dummy)]
+
+// A constant with an explicit type.
+a_number: UInt64 = 123;
+
+// A constant with an inferred type.
+another_number: UInt32 = 456;
+
+// A string.
+a_string = "very interesting and useful string";
+
+a_bool = false;
+
+a_float: Float32 = 1.234;

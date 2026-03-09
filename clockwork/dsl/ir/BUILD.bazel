@@ -15,7 +15,7 @@ py_library(
         ":module_id",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:types",
         "@clockwork_pip//typing_extensions",
@@ -40,10 +40,13 @@ py_library(
         ":pubsub",
         ":schema",
         ":schema_reg",
+        ":signal",
+        ":signal_registry",
         ":statement",
         ":typesys",
         ":udp",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
+        "//clockwork/dsl:compiler_context",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -70,7 +73,7 @@ py_library(
         ":node",
         ":primitive",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -91,12 +94,13 @@ py_library(
         ":message_type",
         ":node",
         ":primitive",
+        ":report_group",
         ":representation",
         ":schema",
         ":schema_reg",
         ":typesys",
         ":units",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -117,8 +121,9 @@ py_library(
         ":schema",
         ":schema_reg",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
+        "@fltk",
     ],
 )
 
@@ -131,7 +136,6 @@ py_library(
         ":cog_components",
         ":node",
         ":primitive",
-        ":representation",
         ":schema",
         ":typesys",
     ],
@@ -152,9 +156,12 @@ py_library(
         ":converter",
         ":cpp_executable",
         ":cpp_target",
+        ":dfl",
+        ":dfl_types",
         ":extern_type",
         ":hardware",
         ":importer",
+        ":importer_registry",
         ":interface",
         ":module_id",
         ":nanobind_target",
@@ -168,12 +175,15 @@ py_library(
         ":representation",
         ":schema",
         ":schema_reg",
+        ":signal",
+        ":signal_registry",
         ":statement",
         ":strongtypes",
         ":system_target",
         ":typesys",
         ":udp",
         ":uuid_reg",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/bazel:clk_targets",
         "//clockwork/dsl/cog:clk_cog_metrics",
@@ -221,8 +231,8 @@ py_library(
         ":schema",
         ":tap_to_proto",
         ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/cpp:context",
     ],
 )
@@ -251,8 +261,8 @@ py_library(
         ":udp",
         ":units",
         ":uuid_reg",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/bazel:cc_targets",
         "//clockwork/dsl/bazel:targets",
         "//clockwork/dsl/cog:cpp_python_cog",
@@ -276,8 +286,8 @@ py_library(
         ":node",
         ":primitive",
         ":strongtypes",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:literal",
         "//clockwork/dsl/cpp:typereg",
@@ -291,6 +301,7 @@ py_library(
     name = "cpp_target",
     srcs = ["cpp_target.py"],
     deps = [
+        ":audio",
         ":clkbuiltins",
         ":clkenum",
         ":cog",
@@ -299,6 +310,7 @@ py_library(
         ":cpp_extern",
         ":cst_util",
         ":expr",
+        ":extern_type",
         ":interface",
         ":module_id",
         ":nanobind_type_casters",
@@ -310,10 +322,12 @@ py_library(
         ":statement",
         ":strongtypes",
         ":typesys",
+        ":udp",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/bazel:cc_targets",
         "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/cog:cpp_test_cog",
         "//clockwork/dsl/cog:cppcog",
         "//clockwork/dsl/cog:cppdial",
         "//clockwork/dsl/cpp:context",
@@ -330,7 +344,63 @@ py_library(
     visibility = ["//visibility:public"],
     deps = [
         ":module_id",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "dfl",
+    srcs = ["dfl.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cst_util",
+        ":dfl_types",
+        ":expr",
+        ":module_id",
+        ":node",
+        ":primitive",
+        ":statement",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
+        "@clockwork_pip//typing_extensions",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "dfl_analysis",
+    srcs = ["dfl_analysis.py"],
+    deps = [":dfl"],
+)
+
+py_library(
+    name = "dfl_traits",
+    srcs = ["dfl_traits.py"],
+    deps = [
+        ":compiler",
+        ":dfl_types",
+        ":importer_registry",
+        ":module_id",
+        ":node",
+        "//clockwork/dsl:compiler_context",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "dfl_types",
+    srcs = ["dfl_types.py"],
+    deps = [
+        ":clkbuiltins",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
+        "//clockwork/dsl:compiler_context",
+        "@clockwork_pip//typing_extensions",
         "@fltk",
     ],
 )
@@ -350,7 +420,7 @@ py_library(
         ":primitive",
         ":typesys",
         ":uuid_reg",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:types",
     ],
@@ -367,7 +437,7 @@ py_library(
         ":parse",
         ":primitive",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -380,7 +450,7 @@ py_library(
         ":cst_util",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
     ],
 )
 
@@ -394,8 +464,8 @@ py_library(
         ":node",
         ":primitive",
         ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -413,6 +483,16 @@ py_library(
 )
 
 py_library(
+    name = "importer_registry",
+    srcs = ["importer_registry.py"],
+    deps = [
+        ":node",
+        "//clockwork/dsl:compiler_context",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
     name = "interface",
     srcs = ["interface.py"],
     deps = [
@@ -423,9 +503,9 @@ py_library(
         ":representation",
         ":schema",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/cpp:context",
-        "//clockwork/dsl/serialization:tap",
+        "//clockwork/dsl/serialization:tap_render",
     ],
 )
 
@@ -466,7 +546,7 @@ py_library(
         ":interface",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/serialization:tap",
     ],
 )
@@ -476,14 +556,18 @@ py_library(
     srcs = ["nanobind_target.py"],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":clkenum",
         ":cst_util",
+        ":interface",
         ":nanobind_binding",
         ":nanobind_target_render",
         ":nanobinding_registry",
         ":node",
         ":path_resolver",
+        ":schema",
         ":statement",
-        "//clockwork/dsl:cst",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/bazel:cc_targets",
         "//clockwork/dsl/bazel:clk_targets",
         "//clockwork/dsl/bazel:nanobind_targets",
@@ -496,7 +580,10 @@ py_library(
 py_library(
     name = "nanobind_target_render",
     srcs = ["nanobind_target_render.py"],
-    visibility = [":__subpackages__"],
+    visibility = [
+        ":__subpackages__",
+        "//clockwork:__pkg__",
+    ],
     deps = [
         ":clkbuiltins",
         ":clkenum",
@@ -533,7 +620,7 @@ py_library(
         ":py_target",
         ":schema",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/cpp:typereg",
         "//clockwork/dsl/cpp:types",
@@ -563,8 +650,8 @@ py_library(
     deps = [
         ":cst_util",
         ":module_id",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "@clockwork_pip//typing_extensions",
         "@fltk",
     ],
@@ -574,8 +661,7 @@ py_library(
     name = "parse",
     srcs = ["parse.py"],
     deps = [
-        "//clockwork/dsl:cst",
-        "//clockwork/dsl:parser",
+        "//clockwork/dsl:clockwork_cst",
         "@fltk",
     ],
 )
@@ -601,8 +687,8 @@ py_library(
         ":schema",
         ":statement",
         ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -616,7 +702,7 @@ py_library(
         ":node",
         ":typesys",
         ":units",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -631,10 +717,12 @@ py_library(
         ":node",
         ":path_resolver",
         ":representation",
+        ":schema",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/bazel:proto_targets",
         "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/composition:str_manip",
         "//clockwork/dsl/serialization:protobuf_clk",
     ],
 )
@@ -677,8 +765,8 @@ py_library(
         ":representation",
         ":schema_reg",
         ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/serialization:tachyon_reg",
         "@clockwork_pip//typing_extensions",
     ],
@@ -690,6 +778,7 @@ py_library(
     deps = [
         ":clkbuiltins",
         ":clkenum",
+        ":cog",
         ":cst_util",
         ":expr",
         ":interface",
@@ -703,8 +792,8 @@ py_library(
         ":statement",
         ":strongtypes",
         ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl:compiler_context",
-        "//clockwork/dsl:cst",
         "//clockwork/dsl/bazel:clk_targets",
         "//clockwork/dsl/bazel:py_targets",
         "//clockwork/dsl/bazel:targets",
@@ -718,15 +807,45 @@ py_library(
     name = "python_cog_dial",
     srcs = ["python_cog_dial.py"],
     deps = [
+        ":clkbuiltins",
         ":cog",
         ":cst_util",
         ":expr",
+        ":extern_type",
+        ":interface",
+        ":module_id",
         ":node",
         ":primitive",
-        "//clockwork/dsl:cst",
+        ":schema_reg",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
         "//clockwork/dsl/bazel:targets",
         "//clockwork/dsl/cog:cppcog",
         "//clockwork/dsl/python:py_context",
+    ],
+)
+
+py_library(
+    name = "report_group",
+    srcs = ["report_group.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cog_components",
+        ":cst_util",
+        ":expr",
+        ":interface",
+        ":node",
+        ":policy",
+        ":primitive",
+        ":representation",
+        ":schema",
+        ":schema_reg",
+        ":signal",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
+        "//clockwork/dsl/cog:report_group_policy",
+        "@fltk",
     ],
 )
 
@@ -742,7 +861,7 @@ py_library(
         ":schema",
         ":typesys",
         ":units",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
     ],
 )
 
@@ -759,7 +878,7 @@ py_library(
         ":statement",
         ":strongtypes",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -780,6 +899,47 @@ py_library(
 )
 
 py_library(
+    name = "signal",
+    srcs = ["signal.py"],
+    deps = [
+        ":clkbuiltins",
+        ":clkenum",
+        ":cst_util",
+        ":expr",
+        ":node",
+        ":primitive",
+        ":strongtypes",
+        ":typesys",
+        "//clockwork/dsl:clockwork_cst",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "signal_policy_validation",
+    srcs = ["signal_policy_validation.py"],
+    deps = [
+        ":cog",
+        ":node",
+        ":policy",
+        ":primitive",
+        ":signal",
+    ],
+)
+
+py_library(
+    name = "signal_registry",
+    srcs = ["signal_registry.py"],
+    deps = [
+        ":cog",
+        ":primitive",
+        ":signal",
+        "//clockwork/dsl:compiler_context",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
     name = "statement",
     srcs = ["statement.py"],
     deps = [
@@ -788,7 +948,7 @@ py_library(
         ":expr",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -802,7 +962,7 @@ py_library(
         ":expr",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -816,8 +976,9 @@ py_library(
         ":cst_util",
         ":expr",
         ":node",
+        ":signal_policy_validation",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
     ],
 )
 
@@ -851,7 +1012,7 @@ py_library(
     srcs = ["typesys.py"],
     deps = [
         ":node",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -867,7 +1028,7 @@ py_library(
         ":primitive",
         ":typesys",
         ":uuid_reg",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )
@@ -880,7 +1041,7 @@ py_library(
         ":cst_util",
         ":node",
         ":typesys",
-        "//clockwork/dsl:cst",
+        "//clockwork/dsl:clockwork_cst",
         "@clockwork_pip//typing_extensions",
     ],
 )

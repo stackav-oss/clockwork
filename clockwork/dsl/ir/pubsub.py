@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Final, final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, representation, schema_reg, typesys
 from clockwork.dsl.ir.cst_util import get_span
@@ -33,11 +33,14 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
     message_type: expr.TypeExpression | typesys.TypeVal
     message_repr: representation.ResolvedReprInstantiation | None
     message_size: expr.Expr | None | primitive.DecimalValue
-    num_slots_expr: expr.Expr | primitive.DecimalValue
+    num_slots_expr: expr.Expr | primitive.DecimalValue | None
+    is_published_once: bool
     publishers_option: ChannelPublishersOption
     is_diagnostics: bool
     is_bridge_status: bool
+    is_c2c_bridge_status: bool
     enforce_backwards_compatibility: bool
+    is_bulk_data: bool
 
     @classmethod
     def from_cst(cls: type[Channel], cst_node: cst.Channel, module: node.Module, scope: node.Scope) -> Channel:
@@ -62,22 +65,44 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
             typesys.unify(message_size.type_info, clkbuiltins.UINT32)
         else:
             message_size = None
-        num_slots = expr.Expr.from_cst(cst_node.child_channel_option_num_slots().child_value(), module)
+        if channel_option_num_slots := cst_node.maybe_channel_option_num_slots():
+            num_slots = expr.Expr.from_cst(channel_option_num_slots.child_value(), module)
+            is_published_once = False
+        else:
+            channel_option_is_published_once = cst_node.maybe_channel_option_published_once()
+            assert channel_option_is_published_once is not None
+            num_slots = None
+            is_published_once = channel_option_is_published_once.child_value().maybe_true() is not None
+            if not is_published_once:
+                msg = node.append_error_line(
+                    channel_option_is_published_once, module, "published_once option must be set to true"
+                )
+                raise ValueError(msg)
         cst_publishers_option: cst.ChannelOptionPublishers | None = cst_node.maybe_channel_option_publishers()
         publishers_option = (
             ChannelPublishersOption.single
             if not cst_publishers_option or cst_publishers_option.maybe_single()
             else ChannelPublishersOption.multiple
         )
+        if is_published_once and publishers_option != ChannelPublishersOption.single:
+            msg = node.append_error_line(
+                cst_publishers_option, module, "Cannot have multiple publishers when channel is published once"
+            )
+            raise ValueError(msg)
         is_diagnostics = bool(cst_publishers_option and cst_publishers_option.maybe_diagnostics())
         is_bridge_status = bool(cst_publishers_option and cst_publishers_option.maybe_bridge_status())
+        is_c2c_bridge_status = bool(cst_publishers_option and cst_publishers_option.maybe_c2c_bridge_status())
         enforce_backwards_compatibility: bool = True
+        is_bulk_data: bool = False
         if (
             maybe_enforce_backwards_compatibility_option
             := cst_node.maybe_channel_option_enforce_backwards_compatibility()
         ):
             enforce_backwards_compatibility_value = maybe_enforce_backwards_compatibility_option.child_boolean()
             enforce_backwards_compatibility = enforce_backwards_compatibility_value.maybe_true() is not None
+        if maybe_bulk_data_option := cst_node.maybe_channel_option_bulk_data():
+            bulk_data_option_value = maybe_bulk_data_option.child_boolean()
+            is_bulk_data = bulk_data_option_value.maybe_true() is not None
         result = cls(
             type_info=clkbuiltins.CHANNEL_TYPE,
             doc=doc,
@@ -90,10 +115,13 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
             message_repr=None,
             message_size=message_size,
             num_slots_expr=num_slots,
+            is_published_once=is_published_once,
             publishers_option=publishers_option,
             is_diagnostics=is_diagnostics,
             is_bridge_status=is_bridge_status,
+            is_c2c_bridge_status=is_c2c_bridge_status,
             enforce_backwards_compatibility=enforce_backwards_compatibility,
+            is_bulk_data=is_bulk_data,
         )
         scope.define(name, result, module.terminals)
         return result
@@ -116,6 +144,13 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
                 )
                 raise ValueError(msg)
             registry.bridge_status_channel = self
+        if self.is_c2c_bridge_status:
+            if registry.c2c_bridge_status_channel:
+                msg = self.append_error_line(
+                    f"Attempt to define multiple C2C bridge status channels {self.channel_name} and {registry.c2c_bridge_status_channel.channel_name}"
+                )
+                raise ValueError(msg)
+            registry.c2c_bridge_status_channel = self
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
@@ -155,7 +190,10 @@ class Channel(node.CstNode[cst.Channel], node.DocRequiredEntity, node.NamedEntit
     @property
     def num_slots(self) -> primitive.DecimalValue:
         """Get the buffer slot count."""
+        if self.is_published_once:
+            return primitive.DecimalValue(type_info=clkbuiltins.UINT32, value=Decimal(1))
         if not isinstance(self.num_slots_expr, primitive.DecimalValue):
+            assert self.num_slots_expr
             msg = self.num_slots_expr.append_error_line("Num slots not resolved before access.")
             raise TypeError(msg)
         # Add one so the requested max number of messages is always available.
@@ -225,6 +263,12 @@ def bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
     return registry.bridge_status_channel
 
 
+def c2c_bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
+    """Get the C2C bridge status channel."""
+    registry = compiler_context[CHANNEL_REGISTRY_KEY]
+    return registry.c2c_bridge_status_channel
+
+
 @final
 class ChannelRegistry(Context):
     """Channel Registry."""
@@ -247,6 +291,7 @@ class ChannelRegistry(Context):
         # definitions as they are encountered during parsing.
         self.diagnostics_channel: Channel | None = None
         self.bridge_status_channel: Channel | None = None
+        self.c2c_bridge_status_channel: Channel | None = None
 
     @override
     def import_from(self, other: ChannelRegistry) -> None:
@@ -263,6 +308,9 @@ class ChannelRegistry(Context):
 
         if other.bridge_status_channel and not self.bridge_status_channel:
             self.bridge_status_channel = other.bridge_status_channel
+
+        if other.c2c_bridge_status_channel and not self.c2c_bridge_status_channel:
+            self.c2c_bridge_status_channel = other.c2c_bridge_status_channel
 
         if other.diagnostics_channel and not self.diagnostics_channel:
             self.diagnostics_channel = other.diagnostics_channel

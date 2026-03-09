@@ -1,0 +1,13 @@
+diff --git BUILD.bazel BUILD.bazel
+index 4c0b70f..063eadd 100644
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -249,7 +249,7 @@ _BASE_CURL_COPTS = [
+     # These 3 all have to be set correctly
+     "-DCURL_HIDDEN_SYMBOLS",
+     '-DCURL_EXTERN_SYMBOL=__attribute__((__visibility__(\"default\")))',
+-    "-fvisibility=hidden",
++    # See https://github.com/bazelbuild/bazel-central-registry/issues/7073
+ ]
+ 
+ expand_template(

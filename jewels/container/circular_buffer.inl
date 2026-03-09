@@ -3,6 +3,7 @@
 
 #include "jewels/container/circular_buffer.hh"
 
+#include "clockwork/repr_iface.hh"
 #include "jewels/container/circular_buffer_state_clk_cc.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -11,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -143,6 +145,20 @@ std::ptrdiff_t CircularIterator<Policy, Reference>::distance_to(const CircularIt
   return position_.distance_to(other.position_, static_cast<std::ptrdiff_t>(span_.size()));
 }
 
+template <class Policy, class Reference>
+Reference CircularIterator<Policy, Reference>::operator[](std::ptrdiff_t n) const
+{
+  // The boost iterator facade assumes the reference type is a proxy reference
+  // and returns a type that can be casted to `Reference`.  In order to return
+  // `Reference` directly instead, we need to make sure `Reference` is not a
+  // proxy reference.  It's sufficient to test that `Reference` is actually a
+  // reference type.
+  static_assert(std::is_reference_v<Reference>, "Reference must not be a proxy reference.");
+  auto copy = *this;
+  copy.advance(n);
+  return copy.dereference();
+}
+
 template <class Policy, class Container>
 CircularBuffer<Policy, Container>::CircularBuffer(CircularBuffer&& other) noexcept
   : storage_(std::move(other.storage_)), begin_(other.begin_), end_(other.end_)
@@ -164,12 +180,13 @@ CircularBuffer<Policy, Container>::try_make(Container&& storage)
 {
   return try_make(
     std::move(storage),
-    TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{.offset = 0, .size = 0}});
+    clockwork::Tappy<CircularBufferState>{
+      clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{.offset = 0, .size = 0}});
 }
 
 template <class Policy, class Container>
 jewels::expected<CircularBuffer<Policy, Container>, CircularBufferConstructError>
-CircularBuffer<Policy, Container>::try_make(Container&& storage, TappyCircularBufferState state)
+CircularBuffer<Policy, Container>::try_make(Container&& storage, clockwork::Tappy<CircularBufferState> state)
 {
   if (storage.empty())
   {
@@ -349,9 +366,9 @@ bool CircularBuffer<Policy, Container>::full() const
 }
 
 template <class Policy, class Container>
-TappyCircularBufferState CircularBuffer<Policy, Container>::state() const
+clockwork::Tappy<CircularBufferState> CircularBuffer<Policy, Container>::state() const
 {
-  return TappyCircularBufferState{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
+  return clockwork::Tappy<CircularBufferState>{clockwork::TapInit<clockwork::Tachyon<CircularBufferState>>{
     .offset = static_cast<size_t>(begin_.position()),
     .size = size(),
   }};
@@ -364,7 +381,7 @@ CircularBuffer<Policy, Container>::~CircularBuffer()
 }
 
 template <class Policy, class Container>
-CircularBuffer<Policy, Container>::CircularBuffer(Container&& storage, TappyCircularBufferState state)
+CircularBuffer<Policy, Container>::CircularBuffer(Container&& storage, clockwork::Tappy<CircularBufferState> state)
   : storage_{std::move(storage)},
     begin_{static_cast<int64_t>(state.get_offset()), 0U},
     end_{static_cast<int64_t>(state.get_offset()), 0U}

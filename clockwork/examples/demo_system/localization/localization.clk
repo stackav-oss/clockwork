@@ -1,10 +1,13 @@
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::imu::imu_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::localization)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::imu::imu_channels;
 use clockwork::examples::demo_system::imu::imu_message;
-use clockwork::examples::demo_system::localization::localization_channels;
+use[] clockwork::examples::demo_system::localization::localization_channels;
 use clockwork::examples::demo_system::localization::localization_state;
 use clockwork::examples::demo_system::localization::pose_message;
-use clockwork::examples::demo_system::gps::gps_channels;
+use[] clockwork::examples::demo_system::gps::gps_channels;
 use clockwork::examples::demo_system::gps::gps_message;
 
 // Initialize the localization state
@@ -45,7 +48,7 @@ cog LocalizationGpsCog
 
   execution
   {
-    condition new_gps: new_message(gps, min=1, max=1);
+    condition new_gps: new_message(gps, max=1);
     execute when: new_gps;
   }
 }
@@ -76,22 +79,10 @@ cog LocalizationImuCog
 
   execution
   {
-    condition new_imu: new_message(imu, min=1, max=1);
+    condition new_imu: new_message(imu, max=1);
 
     execute when: new_imu;
   }
-}
-
-cpp_target localization_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::localization;
-  }
-
-  cog LocalizationInitCog;
-  cog LocalizationImuCog;
-  cog LocalizationGpsCog;
 }
 
 box LocalizationBox
@@ -110,18 +101,10 @@ box LocalizationBox
   connect gps_channels::GpsChannel to gps_cog.gps;
 }
 
-cpp_executable localization_exe
-{
-  casing
-  {
-    box LocalizationBox;
-  }
-}
-
 box LocalizationExe
 {
   new localization_box: LocalizationBox;
-  new localization_proc: Process(executable=localization_exe);
+  new localization_proc: Process(executable=localization_clk_exe);
   apply HostProcess(process=localization_proc) in localization_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to localization_proc;
 }

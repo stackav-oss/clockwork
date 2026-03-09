@@ -1,22 +1,24 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_reader.hh"
 #include "clockwork/logging/readers/serialization.hh"
 #include "clockwork/logging/readers/tests/support/test_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/std/expected.hh"
 
 #include <catch2/catch_test_macros.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <array>
 #include <cstdint>
@@ -64,9 +66,9 @@ TEST_CASE("LogReader iterator")
       {
         .name = "topic",
         .type = std::string{clockwork::LoggingTraits<MsgType>::schema_name},
-        .message_encoding = clockwork::LoggingTraits<MsgType>::message_encoding,
+        .message_encoding = static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding),
         .channel_type = ChannelType::regular,
-        .schema_encoding = clockwork::LoggingTraits<MsgType>::schema_encoding,
+        .schema_encoding = static_cast<SchemaEncoding>(clockwork::LoggingTraits<MsgType>::schema_encoding),
         .schema_definition =
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),

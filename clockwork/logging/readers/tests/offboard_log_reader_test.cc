@@ -8,6 +8,7 @@
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/tests/support/test_offboard_log_writer.hh"
 #include "clockwork/logging/readers/types.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/time/sync_time.hh"
@@ -20,9 +21,9 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <limits>
+#include <memory_resource>
 #include <optional>
 #include <ratio>
 #include <span>

@@ -1,0 +1,36 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@gazelle//:def.bzl", "gazelle_binary")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clk_plugin",
+    srcs = ["clk_plugin.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/clk_plugin",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tools/gazelle/clk_plugin/language",
+        "@@gazelle+//language",
+    ],
+)
+
+go_test(
+    name = "clk_plugin_test",
+    srcs = ["clk_plugin_test.go"],
+    data = [":gazelle_clk_test_binary"],
+    embed = [":clk_plugin"],
+    rundir = ".",
+    deps = [
+        "@@gazelle+//testtools",
+        "@com_github_stretchr_testify//require",
+        "@org_skia_go_infra//bazel/go/bazel",
+        "@org_skia_go_infra//go/testutils/unittest",
+    ],
+)
+
+gazelle_binary(
+    name = "gazelle_clk_test_binary",
+    args = ["--clockwork_is_root_repo"],
+    languages = [":clk_plugin"],
+)

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <fmt10/core.h>
+#include <fmt/core.h>
 
 #include <chrono>
 #include <cstdint>

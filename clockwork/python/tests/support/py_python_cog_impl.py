@@ -5,8 +5,8 @@
 """Test implementation of a python cog."""
 
 from clockwork.python.tests.support.py_python_cog_dial import PythonCogDial
-from clockwork.python.tests.support.py_test_output_message import TestOutputMessage as PyTestOutputMessage
 from clockwork.python.tests.support.test_output_message_clk_nb import TestOutputMessage as NbTestOutputMessage
+from clockwork.python.tests.support.test_output_message_clk_py import TestOutputMessage as PyTestOutputMessage
 from jewels.nanobind.nb_sync_time import SyncTime
 
 

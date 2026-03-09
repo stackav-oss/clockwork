@@ -7,9 +7,11 @@
 #include "jewels/time/sync_time.hh"
 
 #include <boost/container/static_vector.hpp>
+#include <wise_enum.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <sys/uio.h>
@@ -23,6 +25,16 @@ template <typename Policy>
 class AsyncWriteRequest
 {
 public:
+  /// Logged data type
+  WISE_ENUM_CLASS_MEMBER(
+    (DataType, uint8_t),
+    // Message data
+    message,
+    // Repeated persistent message data
+    repeated_persistent,
+    // Channel metadata
+    metadata)
+
   /// Write buffer size
   static constexpr size_t buffer_size = Policy::buffer_size;
 
@@ -87,17 +99,23 @@ public:
   /// Copy data into the current buffer
   /// @param[in] timestamp Data timestamp
   /// @param[in] data Data to be copied
+  /// @param[in] data_type Data type
   /// @return Number of byte copied into the write request
-  [[nodiscard]] size_t copy_data(jewels::time::SteadyTime timestamp, std::span<const std::byte> data);
+  [[nodiscard]] size_t
+  copy_data(jewels::time::SteadyTime timestamp, std::span<const std::byte> data, DataType data_type);
 
   /// Zero copy add data to the write request
   /// @param[in] timestamp Data timestamp
   /// @param[in] data Data to be added to the request
+  /// @param[in] data_type Data type
   /// @param[in] message_handle Message handle used to ensure that the data is valid
   /// @return Number of bytes added to the write request
   /// @pre The data must be aligned to the write alignment (std::terminate on violation)
-  [[nodiscard]] size_t
-  zero_copy_data(jewels::time::SteadyTime timestamp, std::span<const std::byte> data, MessageHandleType message_handle);
+  [[nodiscard]] size_t zero_copy_data(
+    jewels::time::SteadyTime timestamp,
+    std::span<const std::byte> data,
+    DataType data_type,
+    MessageHandleType message_handle);
 
   /// Test whether the write request is full
   /// @return True iff the request is full
@@ -105,6 +123,9 @@ public:
 
   /// Get the total size of the write request
   [[nodiscard]] size_t get_write_size() const;
+
+  /// Get the number of message data bytes in the write request
+  [[nodiscard]] size_t get_message_data_size() const;
 
   /// Get the timestamp of the oldest data contained in the write request
   /// @return Oldest data timestamp or nullopt if not set
@@ -126,6 +147,9 @@ private:
 
   /// Write request size in bytes
   size_t write_size_{0U};
+
+  /// Number of message data bytes in the write request
+  size_t message_data_size_{0U};
 
   /// Oldest timestamp of data stored in the write request
   std::optional<jewels::time::SteadyTime> maybe_oldest_data_timestamp_;

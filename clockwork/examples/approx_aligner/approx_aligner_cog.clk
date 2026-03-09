@@ -1,3 +1,6 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork)]
+
 use clockwork::dial::approx_aligner_config::{ApproxAlignerConfig, ApproxAlignerState};
 use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, AlignerFloatMsg, AlignerIntMsg};
 
@@ -44,18 +47,8 @@ cog ApproxAlignerCog
 
     execution
     {
-        condition new_int: new_message(min=1, input=in_int);
-        condition new_float: new_message(min=1, input=in_float);
+        condition new_int: new_message(input=in_int);
+        condition new_float: new_message(input=in_float);
         execute when: (new_int or new_float);
     }
-}
-
-cpp_target approx_aligner_cog
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  cog ApproxAlignerCog;
 }

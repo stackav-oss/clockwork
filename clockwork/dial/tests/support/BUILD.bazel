@@ -13,7 +13,7 @@ cc_library(
     hdrs = ["approx_aligner_fixture.hh"],
     deps = [
         "//clockwork/dial:approx_aligner",
-        "//clockwork/dial:approx_aligner_config",
+        "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:approx_aligner_policies",
         "//clockwork/dial:msg_input",
         "//jewels/container:circular_buffer",

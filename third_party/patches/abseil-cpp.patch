@@ -1,8 +1,8 @@
 diff --git absl/base/BUILD.bazel absl/base/BUILD.bazel
-index a7827dbf..9363c0f1 100644
+index 1d27796a..2659e785 100644
 --- absl/base/BUILD.bazel
 +++ absl/base/BUILD.bazel
-@@ -141,6 +141,7 @@ cc_library(
+@@ -153,6 +153,7 @@ cc_library(
          "policy_checks.h",
      ],
      copts = ABSL_DEFAULT_COPTS,
@@ -10,7 +10,7 @@ index a7827dbf..9363c0f1 100644
      linkopts = ABSL_DEFAULT_LINKOPTS,
  )
  
-@@ -209,7 +210,6 @@ cc_library(
+@@ -221,7 +222,6 @@ cc_library(
      linkopts = select({
          "@rules_cc//cc/compiler:msvc-cl": [],
          "@rules_cc//cc/compiler:clang-cl": [],
@@ -18,7 +18,7 @@ index a7827dbf..9363c0f1 100644
          "//conditions:default": ["-pthread"],
      }) + ABSL_DEFAULT_LINKOPTS,
      visibility = [
-@@ -278,7 +278,6 @@ cc_library(
+@@ -288,7 +288,6 @@ cc_library(
              "-DEFAULTLIB:advapi32.lib",
              "-ladvapi32",
          ],
@@ -27,7 +27,7 @@ index a7827dbf..9363c0f1 100644
      }) + ABSL_DEFAULT_LINKOPTS,
      deps = [
 diff --git absl/base/macros.h absl/base/macros.h
-index ff89944a..4b9d02df 100644
+index 446a4452..b6b37035 100644
 --- absl/base/macros.h
 +++ absl/base/macros.h
 @@ -75,8 +75,11 @@ ABSL_NAMESPACE_END
@@ -43,10 +43,10 @@ index ff89944a..4b9d02df 100644
  
  // ABSL_ASSERT()
 diff --git absl/debugging/BUILD.bazel absl/debugging/BUILD.bazel
-index 6e61bb36..c250d38e 100644
+index aad5e283..6be8bfab 100644
 --- absl/debugging/BUILD.bazel
 +++ absl/debugging/BUILD.bazel
-@@ -179,7 +179,6 @@ cc_test(
+@@ -215,7 +215,6 @@ cc_test(
      linkopts = select({
          "@rules_cc//cc/compiler:msvc-cl": [],
          "@rules_cc//cc/compiler:clang-cl": [],
@@ -55,10 +55,10 @@ index 6e61bb36..c250d38e 100644
      }) + ABSL_DEFAULT_LINKOPTS,
      deps = [
 diff --git absl/random/internal/BUILD.bazel absl/random/internal/BUILD.bazel
-index 666f4110..3489634b 100644
+index 1a3fef84..89b0ef06 100644
 --- absl/random/internal/BUILD.bazel
 +++ absl/random/internal/BUILD.bazel
-@@ -185,7 +185,6 @@ cc_library(
+@@ -184,7 +184,6 @@ cc_library(
      linkopts = select({
          "@rules_cc//cc/compiler:msvc-cl": [],
          "@rules_cc//cc/compiler:clang-cl": [],
@@ -88,10 +88,10 @@ index 120bc355..f8e0fd50 100644
  #else  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
  
 diff --git absl/strings/internal/str_format/parser.h absl/strings/internal/str_format/parser.h
-index b1d6d5fd..f27e599c 100644
+index 329b060a..c0b639d8 100644
 --- absl/strings/internal/str_format/parser.h
 +++ absl/strings/internal/str_format/parser.h
-@@ -221,11 +221,14 @@ class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
+@@ -223,11 +223,14 @@ class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
   public:
    explicit ExtendedParsedFormat(string_view format)
  #ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
@@ -107,10 +107,10 @@ index b1d6d5fd..f27e599c 100644
        : ExtendedParsedFormat(format, false) {
    }
 diff --git absl/synchronization/BUILD.bazel absl/synchronization/BUILD.bazel
-index 867e9866..26b5f871 100644
+index b3b55e74..56ec9b32 100644
 --- absl/synchronization/BUILD.bazel
 +++ absl/synchronization/BUILD.bazel
-@@ -126,7 +126,6 @@ cc_library(
+@@ -127,7 +127,6 @@ cc_library(
      linkopts = select({
          "@rules_cc//cc/compiler:msvc-cl": [],
          "@rules_cc//cc/compiler:clang-cl": [],
@@ -119,7 +119,7 @@ index 867e9866..26b5f871 100644
      }) + ABSL_DEFAULT_LINKOPTS,
      visibility = ["//visibility:public"],
 diff --git absl/types/compare.h absl/types/compare.h
-index 3cf4a917..74fe0612 100644
+index edf10398..0b1863a6 100644
 --- absl/types/compare.h
 +++ absl/types/compare.h
 @@ -70,12 +70,15 @@ using value_type = int8_t;

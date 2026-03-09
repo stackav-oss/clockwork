@@ -1,14 +1,17 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/config.hh"
+#include "clockwork/scaffolding/data_source_loader.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
 #include "clockwork/tags.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/file.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/monitor_resource.hh"
 #include "jewels/std/expected.hh"
@@ -21,7 +24,7 @@
 
 #include <cstddef>
 #include <fcntl.h>
-#include <filesystem>
+#include <functional>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -31,6 +34,12 @@
 
 namespace clockwork::scaffolding
 {
+
+// We rely on this in setup_configs()
+static_assert(
+  Tappy<common::ProcessDescription<>>::max_data_sources < common::max_data_source_id,
+  "data source capacity exceeds max_data_source_id");
+
 namespace
 {
 
@@ -62,12 +71,14 @@ TEST_CASE("setup_configs")
   jewels::memory::MonitorResource memory;
   const jewels::memory::MemoryResource sysres{memory};
   const jewels::memory::MemoryResource cfgres{std::pmr::new_delete_resource()};
+  FirstMessageCache first_message_cache{std::pmr::new_delete_resource()};
   MockCasing casing;
 
   SECTION("empty")
   {
-    std::vector<common::ConfigInstanceDescriptionTap> descs;
-    auto result = setup_configs(descs, sysres, cfgres, casing);
+    std::vector<Tappy<common::ConfigInstanceDescription<>>> descs;
+    std::vector<Tappy<common::DataSource<>>> data_sources;
+    auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
     REQUIRE(result);
     CHECK(memory.peak() == 0);
   }
@@ -76,40 +87,53 @@ TEST_CASE("setup_configs")
   {
     write(tmpdir, config1_filename, config1_dat);
 
-    std::vector<common::ConfigInstanceDescriptionTap> descs;
-    descs.emplace_back();
-    descs.back().get_mutable_representation_id() = config1_schema;
-    descs.back().get_mutable_config_instance_id() = config1_instance;
-    CHECK(descs.back().get_underlying_config_file_path().try_set((tmpdir_obj.get_path() / config1_filename).string()));
-    CHECK(descs.back().get_underlying_instance_path_name().try_set("node.config1"));
+    std::vector<Tappy<common::DataSource<>>> data_sources = {TapInit<Tachyon<common::DataSource<4096>>>{
+      .representation_id = config1_schema,
+      .data_source_type = common::DataSourceType::file,
+      .source_path_or_name = jewels::tap::VarString<4096>{""},
+      .fallback_source = common::no_fallback_data_source_sentinel}};
+    CHECK(
+      data_sources[0].get_underlying_source_path_or_name().try_set(
+        (tmpdir_obj.get_path() / config1_filename).string()));
+
+    std::vector<Tappy<common::ConfigInstanceDescription<>>> descs;
+    descs.emplace_back(
+      TapInit<Tachyon<common::ConfigInstanceDescription<512>>>{
+        .config_instance_id = config1_instance,
+        .instance_path_name = jewels::tap::VarString<512>{"node.config1"},
+        .init_data_source = 0U});
 
     SECTION("okay")
     {
       REQUIRE_CALL(casing, try_instantiate_config(config1_instance, config1_schema, config1_dat, cfgres))
         .RETURN(RetT{});
-      auto result = setup_configs(descs, sysres, cfgres, casing);
+      auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
       REQUIRE(result);
-      CHECK(memory.peak() == config1_dat.size() + 1);
     }
 
     SECTION("parse error")
     {
       REQUIRE_CALL(casing, try_instantiate_config(config1_instance, config1_schema, config1_dat, cfgres))
         .RETURN(jewels::unexpected(AbstractCasing::Error::invalid_class_uuid));
-      auto result = setup_configs(descs, sysres, cfgres, casing);
+      auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
       REQUIRE(!result);
-      CHECK(memory.peak() == config1_dat.size() + 1);
     }
 
     SECTION("two files")
     {
       REQUIRE_CALL(casing, try_instantiate_config(config1_instance, config1_schema, config1_dat, cfgres))
         .RETURN(RetT{});
+
+      // Add second data source
+      data_sources.emplace_back();
+      data_sources.back().get_mutable_representation_id() = config2_schema;
+      data_sources.back().get_mutable_data_source_type() = common::DataSourceType::file;
+      CHECK(data_sources.back().get_underlying_source_path_or_name().try_set(
+        (tmpdir_obj.get_path() / config2_filename).string()));
+
       descs.emplace_back();
-      descs.back().get_mutable_representation_id() = config2_schema;
       descs.back().get_mutable_config_instance_id() = config2_instance;
-      CHECK(
-        descs.back().get_underlying_config_file_path().try_set((tmpdir_obj.get_path() / config2_filename).string()));
+      descs.back().set_init_data_source(1);
       CHECK(descs.back().get_underlying_instance_path_name().try_set("node.config2"));
 
       SECTION("okay")
@@ -117,16 +141,16 @@ TEST_CASE("setup_configs")
         REQUIRE_CALL(casing, try_instantiate_config(config2_instance, config2_schema, config2_dat, cfgres))
           .RETURN(RetT{});
         write(tmpdir, config2_filename, config2_dat);
-        auto result = setup_configs(descs, sysres, cfgres, casing);
+        auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
         REQUIRE(result);
-        CHECK(memory.peak() == config1_dat.size() + 1);
       }
 
       SECTION("file error")
       {
-        auto result = setup_configs(descs, sysres, cfgres, casing);
+        REQUIRE_CALL(casing, try_instantiate_config(config2_instance, config1_schema, config1_dat, cfgres))
+          .RETURN(jewels::unexpected(AbstractCasing::Error::invalid_class_uuid));
+        auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
         REQUIRE(!result);
-        CHECK(memory.peak() == config1_dat.size() + 1);
       }
     }
   }
@@ -142,7 +166,7 @@ TEST_CASE("connect_configs")
   const auto endpoint3 = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto endpoint4 = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-  std::vector<common::ConfigConnectionTap> descs;
+  std::vector<Tappy<common::ConfigConnection>> descs;
   descs.emplace_back();
   descs.back().get_mutable_endpoint_id() = endpoint1;
   descs.back().get_mutable_config_id() = config1;

@@ -25,7 +25,7 @@ struct Foo
 };
 constexpr size_t max_size = 10U;
 
-using FooMsgInput = MessageInputDialWithCursorControl<Foo, max_size>;
+using FooMsgInput = MessageInputDialWithCursorControl<Foo, max_size, 0, 0>;
 using ContainerType = jewels::container::CircularBuffer<detail::MsgPolicy<Foo>, std::span<const Foo*, max_size>>;
 
 struct TestView

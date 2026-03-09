@@ -1,7 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//tools/rules:cc.bzl", "cc_binary", "cc_import", "cc_library")
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -60,10 +60,7 @@ cc_library(
 
 cc_library(
     name = "chunk_reader_writer_factory",
-    srcs = [
-        "chunk_reader_writer_factory.cc",
-        "chunk_reader_writer_factory.inl",
-    ],
+    srcs = ["chunk_reader_writer_factory.inl"],
     hdrs = ["chunk_reader_writer_factory.hh"],
     deps = [
         ":chunk_reader",
@@ -100,6 +97,7 @@ cc_library(
         ":chunk_reader_writer_factory",
         ":log_format",
         ":log_uri",
+        ":s3_otel_utils",
         ":types",
         ":writer",
         "//clockwork/logging:decompress_option",
@@ -185,7 +183,7 @@ cc_library(
         ":log_format",
         ":log_uri",
         ":reader_types",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
@@ -216,10 +214,10 @@ cc_library(
 )
 
 # keep
-cc_import(
+cc_library(
     name = "init_aws_api",
+    srcs = ["libinit_aws_api.so"],
     hdrs = ["init_aws_api.hh"],
-    shared_library = ":libinit_aws_api.so",
 )
 
 # keep
@@ -231,8 +229,32 @@ cc_binary(
     ],
     linkshared = True,
     deps = [
+        "//clockwork/logging:nolint_helper",
         "//jewels/log_cerr",
         "@aws_sdk_cpp//:aws_cpp_sdk_s3",
+    ],
+)
+
+cc_library(
+    name = "log_file_reader",
+    srcs = ["log_file_reader.cc"],
+    hdrs = ["log_file_reader.hh"],
+    deps = [
+        ":chunk_compressor",
+        ":chunk_reader",
+        ":index_chunk_reader",
+        ":log_file_trailer",
+        ":log_format",
+        ":log_uri",
+        ":metadata_chunk_reader",
+        ":metrics_chunk_reader",
+        ":reader_types",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
     ],
 )
 
@@ -261,10 +283,10 @@ cc_library(
     name = "log_format",
     hdrs = ["log_format.hh"],
     deps = [
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
-        "//clockwork/logging:message_encoding",
-        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "//clockwork/logging:wrapping_counter",
         "//jewels/math:constants",
     ],
@@ -277,6 +299,7 @@ cc_library(
     deps = [
         ":chunk_reader_writer_factory",
         ":log_metadata_helper_interface",
+        ":log_metadata_recovery_helper",
         ":log_uri",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
@@ -317,6 +340,29 @@ cc_library(
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//jewels/memory:memory_resource",
+    ],
+)
+
+cc_library(
+    name = "log_metadata_recovery_helper",
+    srcs = ["log_metadata_recovery_helper.cc"],
+    hdrs = ["log_metadata_recovery_helper.hh"],
+    deps = [
+        ":chunk_compressor",
+        ":chunk_reader",
+        ":chunk_reader_writer_factory",
+        ":log_file_reader",
+        ":log_metadata_helper_interface",
+        ":log_uri",
+        ":reader_types",
+        "//clockwork/logging:channel_type_clk_cc",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
     ],
 )
 
@@ -385,7 +431,7 @@ cc_library(
         ":log_format",
         ":log_uri",
         ":types",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
@@ -524,12 +570,13 @@ py_cc_binding(
     deps = [
         ":types",
         ":writer",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_timestamp",
-        "//clockwork/logging:message_encoding",
-        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
         "@fmt",
         "@nanobind",
         "@wise_enum",
@@ -544,11 +591,11 @@ py_cc_binding(
     pyi_file = "nb_types.pyi",
     deps = [
         ":types",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:log_timestamp",
-        "//clockwork/logging:message_encoding",
+        "//clockwork/logging:message_encoding_clk_cc",
         "//clockwork/logging:nolint_helper",
-        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "@nanobind",
         "@wise_enum",
     ],
@@ -575,18 +622,14 @@ cc_library(
         ":chunk_compressor",
         ":chunk_reader",
         ":chunk_reader_writer_factory",
-        ":index_chunk_reader",
-        ":log_file_trailer",
-        ":log_format",
+        ":log_file_reader",
         ":log_metadata_helper",
         ":log_metadata_helper_interface",
         ":log_uri",
         ":message_chunk_reader",
-        ":metadata_chunk_reader",
-        ":metrics_chunk_reader",
         ":reader_types",
         ":types",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:decompress_option",
         "//clockwork/logging:duplicate_message_filter",
         "//clockwork/logging:lite_compressor",
@@ -608,7 +651,7 @@ cc_library(
         ":chunk_compressor",
         ":chunk_reader",
         ":log_format",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
@@ -623,19 +666,18 @@ cc_library(
     deps = [
         ":chunk_reader",
         ":log_uri",
-        ":s3_utils",
+        ":s3_utils_interface",
         "//clockwork/logging:log_error",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
     ],
 )
 
 cc_library(
     name = "s3_chunk_reader_writer_factory",
-    srcs = ["s3_chunk_reader_writer_factory.cc"],
+    srcs = ["s3_chunk_reader_writer_factory.inl"],
     hdrs = ["s3_chunk_reader_writer_factory.hh"],
     deps = [
         ":chunk_reader",
@@ -664,7 +706,7 @@ cc_library(
         ":chunk_writer",
         ":log_format",
         ":log_uri",
-        ":s3_utils",
+        ":s3_utils_interface",
         "//clockwork/logging:log_error",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
@@ -672,6 +714,26 @@ cc_library(
         "//jewels/std:expected",
         "//jewels/time:sync_time",
         "@aws_sdk_cpp//:aws_cpp_sdk_s3",
+    ],
+)
+
+cc_library(
+    name = "s3_otel_utils",
+    srcs = ["s3_otel_utils.cc"],
+    hdrs = ["s3_otel_utils.hh"],
+    deps = [
+        ":log_uri",
+        ":s3_read_streambuf",
+        ":s3_utils_interface",
+        ":s3_write_streambuf",
+        "//clockwork/logging:log_error",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/otel",
+        "//jewels/std:expected",
+        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
+        "@fmt",
+        "@opentelemetry-cpp//api",
     ],
 )
 
@@ -684,10 +746,9 @@ cc_library(
 
 cc_library(
     name = "s3_retry_strategy",
-    srcs = ["s3_retry_strategy.cc"],
+    srcs = ["s3_retry_strategy.inl"],
     hdrs = ["s3_retry_strategy.hh"],
     deps = [
-        "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "@aws_sdk_cpp//:aws_cpp_sdk_s3",
     ],
@@ -698,15 +759,29 @@ cc_library(
     srcs = ["s3_utils.cc"],
     hdrs = ["s3_utils.hh"],
     deps = [
+        ":init_aws_api",
         ":log_uri",
         ":s3_read_streambuf",
+        ":s3_utils_interface",
         ":s3_write_streambuf",
         "//clockwork/logging:log_error",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
         "@aws_sdk_cpp//:aws_cpp_sdk_s3",
         "@fmt",
+    ],
+)
+
+cc_library(
+    name = "s3_utils_interface",
+    hdrs = ["s3_utils_interface.hh"],
+    deps = [
+        ":log_uri",
+        "//clockwork/logging:log_error",
+        "//jewels/memory:memory_resource",
+        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
     ],
 )
 
@@ -721,22 +796,19 @@ cc_library(
     name = "types",
     hdrs = ["types.hh"],
     deps = [
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
-        "//clockwork/logging:message_encoding",
-        "//clockwork/logging:schema_encoding",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "@wise_enum",
     ],
 )
 
 cc_library(
     name = "writer",
-    srcs = [
-        "writer.cc",
-        "writer.inl",
-    ],
+    srcs = ["writer.inl"],
     hdrs = ["writer.hh"],
     deps = [
         ":async_work_queue",
@@ -751,15 +823,18 @@ cc_library(
         ":metadata_chunk_writer",
         ":metrics_chunk_writer",
         ":reader_types",
+        ":s3_utils",
         ":types",
         ":writer_config",
         "//clockwork:repr_iface",
-        "//clockwork/logging:channel_type",
+        "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:compression_type",
         "//clockwork/logging:lite_compressor",
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "//clockwork/logging/offboard/v1:log_metadata_cc_library",
         "//jewels/log_cerr",
         "//jewels/math:constants",

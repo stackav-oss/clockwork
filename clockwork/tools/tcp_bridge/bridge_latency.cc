@@ -5,12 +5,13 @@
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/readers/log_processor.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/pinion/bridge_status.hh"
+#include "clockwork/pinion/bridge_status_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
+#include "jewels/math/constants.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/chrono.h> // IWYU pragma: keep
+#include <fmt/base.h>
+#include <fmt/chrono.h> // IWYU pragma: keep
 #include <tclap/CmdLine.h>
 #include <tclap/MultiArg.h>
 #include <tclap/UnlabeledValueArg.h>
@@ -40,7 +41,7 @@ namespace
 {
 
 /// Latency counter types
-WISE_ENUM_CLASS((LatencyType, uint8_t), recv, xfer, comprs, bridge)
+WISE_ENUM_CLASS((LatencyType, uint8_t), recv, xfer, comprs, bridge, rates)
 
 /// Bridge status channel name
 constexpr auto bridge_status_channel = "/tcp_bridge_status";
@@ -80,6 +81,7 @@ void init_tool_state(
   if (latency_types.empty())
   {
     tool_state.latency_type_set.insert(LatencyType::bridge);
+    tool_state.latency_type_set.insert(LatencyType::rates);
   }
   else
   {
@@ -106,6 +108,28 @@ void init_tool_state(
       }
     }
   }
+}
+
+/// Print a line of rates output
+/// @param[in] channel_name Channel name
+/// @param[in] prefix Client or server prefix string
+/// @param[in] latency_type Latency type (rates)
+/// @param[in] message_rate_hz Message rate in hz
+/// @param[in] compressed_data_rate_bps Compressed data rate in bytes/sec
+void print_rates_line(
+  std::string_view channel_name,
+  std::string_view prefix,
+  LatencyType latency_type,
+  float message_rate_hz,
+  float compressed_data_rate_bps)
+{
+  fmt::println(
+    "  {} {} {:6s} msgs/sec: {:.3f} KB/sec: {:.3f}",
+    channel_name,
+    prefix,
+    wise_enum::to_string(latency_type),
+    message_rate_hz,
+    compressed_data_rate_bps / jewels::math::constants::bytes_per_kb<float>);
 }
 
 /// Print a line of latency output
@@ -140,6 +164,15 @@ void print_bridge_status_counters(
   const std::unordered_set<LatencyType>& latency_types)
 {
   fmt::println("");
+  if (latency_types.contains(LatencyType::rates))
+  {
+    print_rates_line(
+      counters.get_channel_name(),
+      prefix,
+      LatencyType::rates,
+      counters.get_message_rate_hz(),
+      counters.get_compressed_data_rate_bps());
+  }
   if (latency_types.contains(LatencyType::recv))
   {
     print_latency_line(

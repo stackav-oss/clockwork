@@ -9,7 +9,7 @@
 #include "jewels/log_cerr/log_cerr.hh" // IWYU pragma: keep
 
 #include <Python.h>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/make_iterator.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>    // IWYU pragma: keep

@@ -3,8 +3,7 @@
 
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
-load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "cc_binary_with_embedded_py", "py_library")
+load("//tools/rules:python.bzl", "py_library")
 
 package(
     default_testonly = True,
@@ -20,6 +19,7 @@ simplelaunch_runner(
 clk(
     name = "example_channel_policies_clk",
     srcs = ["example_channel_policies.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
         ":example_channels_clk",
@@ -30,6 +30,7 @@ clk(
 clk(
     name = "example_channels_clk",
     srcs = ["example_channels.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork/python/tests/support:test_input_message_clk",
@@ -41,17 +42,47 @@ clk(
     name = "example_clk",
     srcs = ["example.clk"],
     outs = [
-        "clockwork.clockwork.python.example.example.example_sys.proc.tachyon",
-        "example.example_sys.LocalHost_channel_allocations.csv",
-        "example.example_sys.LocalHost_channel_spy_config.tachyon",
-        "example.example_sys.LocalHost_event_logger_config.tachyon",
-        "example.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
-        "example.example_sys.LocalHost_simplelaunch_config.textproto",
-        "example.example_sys.LocalHost_telemetry_logger_config.tachyon",
-        "example.example_sys.logged_channel_metadata.pbbin",
-        "example_exe.cc",
-        "example_exe.hh",
-        "example_exe.inl",
+        "example_clk_exe.cc",
+        "example_clk_exe.hh",
+        "example_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":example_cog_clk_cc",
+        "//clockwork/logging:log_writer_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_status_clk_cc",
+        "//clockwork/python:python_state_clk_cc",
+        "//clockwork/python/tests/support:test_config_clk_cc",
+        "//clockwork/python/tests/support:test_config_clk_proto_conv",
+        "//clockwork/python/tests/support:test_input_message_clk_cc",
+        "//clockwork/python/tests/support:test_output_message_clk_cc",
+        "//clockwork/python/tests/support:test_state_clk_cc",
+        "//clockwork/tools/channel_spy:channel_spy_config_clk_cc",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:python_online_main"],
+    data = [
+        "clockwork.clockwork.python.example.example_sys.example_sys.proc.tachyon",
+        "example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
+        "example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
+        "//clockwork/python/example/resources:channel_rates_config.pbtxt",
+        "//clockwork/python/example/resources:input1_config.pbtxt",
+        "//clockwork/python/example/resources:input2_config.pbtxt",
+        "//clockwork/python/example/resources:logger_config.pbtxt",
+    ],
+    generate = ["py_exe"],
+    proto_deps = [
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto",
+        "//clockwork/logging/writers:logger_config_clk_proto",
+        "//clockwork/python/tests/support:test_config_clk_proto",
+    ],
+    py_deps = [
+        ":example_cog_clk_py_dial",
+        ":example_cog_clk_py_impl",
     ],
     deps = [
         ":example_channel_policies_clk",
@@ -74,51 +105,40 @@ clk(
     ],
 )
 
-cc_library(
-    name = "example_cog",
-    srcs = [
-        "example_cog.cc",
-        "example_cog.inl",
-    ],
-    hdrs = ["example_cog.hh"],
-    data = [":example_cog_clk"],
-    deps = [
-        ":example_cog_dial",
-        ":example_cog_impl",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//clockwork/python/tests/support:test_input_message",
-        "//clockwork/python/tests/support:test_output_message",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
 clk(
     name = "example_cog_clk",
     srcs = ["example_cog.clk"],
     outs = [
-        "example_cog.cc",
-        "example_cog.hh",
-        "example_cog.inl",
-        "example_cog_dial.cc",
-        "example_cog_dial.hh",
-        "example_cog_dial.inl",
-        "example_cog_impl.cc",
-        "example_cog_impl.hh",
-        "example_cog_impl.inl",
-        "py_example_cog_dial.py",
+        "example_cog_clk_cc.cc",
+        "example_cog_clk_cc.hh",
+        "example_cog_clk_cc.inl",
+        "example_cog_clk_cc_dial.cc",
+        "example_cog_clk_cc_dial.hh",
+        "example_cog_clk_cc_dial.inl",
+        "example_cog_clk_cc_impl.cc",
+        "example_cog_clk_cc_impl.hh",
+        "example_cog_clk_cc_impl.inl",
+        "example_cog_clk_py_dial.py",
+    ],
+    cpp_deps = [
+        "//clockwork/python:python_state_clk_cc",
+        "//clockwork/python/tests/support:test_config_clk_cc",
+        "//clockwork/python/tests/support:test_input_message_clk_cc",
+        "//clockwork/python/tests/support:test_output_message_clk_cc",
+        "//clockwork/python/tests/support:test_state_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "py_cog",
+    ],
+    py_deps = [
+        "//clockwork/python/tests/support:test_config_clk_nb",
+        "//clockwork/python/tests/support:test_input_message_clk_nb",
+        "//clockwork/python/tests/support:test_output_message_clk_nb",
+        "//clockwork/python/tests/support:test_state_clk_nb",
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/python:python_state_clk",
         "//clockwork/python/tests/support:test_config_clk",
         "//clockwork/python/tests/support:test_input_message_clk",
@@ -127,135 +147,51 @@ clk(
     ],
 )
 
-cc_library(
-    name = "example_cog_dial",
-    srcs = [
-        "example_cog_dial.cc",
-        "example_cog_dial.inl",
-    ],
-    hdrs = ["example_cog_dial.hh"],
-    data = [":example_cog_clk"],
+py_library(
+    name = "example_cog_clk_py_impl",
+    srcs = ["example_cog_clk_py_impl.py"],
     deps = [
-        "//clockwork/dial:include_common",
-        "//clockwork/python:python_state",
-        "//clockwork/python/tests/support:test_config",
-        "//clockwork/python/tests/support:test_input_message",
-        "//clockwork/python/tests/support:test_output_message",
-        "//clockwork/python/tests/support:test_state",
+        ":example_cog_clk_py_dial",
+        "//clockwork/python/tests/support:test_input_message_clk_nb",
+        "//clockwork/python/tests/support:test_output_message_clk_nb",
+        "//jewels/nanobind:nb_sync_time",
     ],
 )
 
-cc_library(
-    name = "example_cog_impl",
-    srcs = [
-        "example_cog_impl.cc",
-        "example_cog_impl.inl",
+clk(
+    name = "example_sys_clk",
+    srcs = ["example_sys.clk"],
+    outs = [
+        "clockwork.clockwork.python.example.example_sys.example_sys.proc.tachyon",
+        "example_sys.example_sys.LocalHost_channel_allocations.csv",
+        "example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
+        "example_sys.example_sys.LocalHost_event_logger_config.tachyon",
+        "example_sys.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "example_sys.example_sys.LocalHost_signal_metadata_config.tachyon",
+        "example_sys.example_sys.LocalHost_simplelaunch_config.textproto",
+        "example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
+        "example_sys.example_sys.diagnostics_database_config.tachyon",
+        "example_sys.example_sys.logged_channel_metadata.pbbin",
     ],
-    hdrs = ["example_cog_impl.hh"],
-    data = [":example_cog_clk"],
-    deps = [
-        ":example_cog_dial",
-        "//clockwork/python:gil_lock_guard",
-        "//clockwork/python:python_init",
-        "//clockwork/python:python_object",
-        "//jewels/log_cerr",
-    ],
-)
-
-cc_binary_with_embedded_py(
-    name = "example_exe",
-    srcs = [
-        "example_exe.cc",
-        "example_exe.hh",
-        "example_exe.inl",
-    ],
-    data = [
-        "clockwork.clockwork.python.example.example.example_sys.proc.tachyon",
-        "example.example_sys.LocalHost_channel_spy_config.tachyon",
-        "example.example_sys.LocalHost_telemetry_logger_config.tachyon",
-        "//clockwork/python/example/resources:channel_rates_config.pbtxt",
-        "//clockwork/python/example/resources:input1_config.pbtxt",
-        "//clockwork/python/example/resources:input2_config.pbtxt",
-        "//clockwork/python/example/resources:logger_config.pbtxt",
-    ],
-    py_deps = [
-        ":py_example_cog_dial",
-        ":py_example_cog_impl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":example_cog",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/logging:log_writer_config",
-        "//clockwork/logging/writers:channel_message_rates",
-        "//clockwork/logging/writers:channel_message_rates_config",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_cc_library",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_conv",
-        "//clockwork/logging/writers:logger_cog",
-        "//clockwork/logging/writers:logger_cog_state",
-        "//clockwork/logging/writers:logger_config",
-        "//clockwork/logging/writers:logger_config_proto_cc_library",
-        "//clockwork/logging/writers:logger_config_proto_conv",
-        "//clockwork/logging/writers:logger_status",
-        "//clockwork/python:python_state",
-        "//clockwork/python/tests/support:test_config",
-        "//clockwork/python/tests/support:test_config_proto_cc_library",
-        "//clockwork/python/tests/support:test_config_proto_conv",
-        "//clockwork/python/tests/support:test_input_message",
-        "//clockwork/python/tests/support:test_output_message",
-        "//clockwork/python/tests/support:test_state",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:python_online_main",
-        "//clockwork/tools/channel_spy:channel_spy_config",
-        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/uuid",
-    ],
+    deps = [":example_clk"],
 )
 
 merge_simplelaunch_config(
     name = "localhost.textproto",
     srcs = [
-        "example.example_sys.LocalHost_simplelaunch_config.textproto",
+        "example_sys.example_sys.LocalHost_simplelaunch_config.textproto",
         "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
     ],
     data = [
-        "clockwork.clockwork.python.example.example.example_sys.proc.tachyon",
-        "example.example_sys.LocalHost_channel_allocations.csv",
-        "example.example_sys.LocalHost_channel_spy_config.tachyon",
-        "example.example_sys.LocalHost_event_logger_config.tachyon",
-        "example.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
-        "example.example_sys.LocalHost_telemetry_logger_config.tachyon",
-        ":example_exe",
+        "clockwork.clockwork.python.example.example_sys.example_sys.proc.tachyon",
+        "example_sys.example_sys.LocalHost_channel_allocations.csv",
+        "example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
+        "example_sys.example_sys.LocalHost_event_logger_config.tachyon",
+        "example_sys.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "example_sys.example_sys.LocalHost_signal_metadata_config.tachyon",
+        "example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
+        "example_sys.example_sys.diagnostics_database_config.tachyon",
+        ":example_clk_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
-    ],
-)
-
-py_library(
-    name = "py_example_cog_dial",
-    srcs = ["py_example_cog_dial.py"],
-    data = [":example_cog_clk"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/python/tests/support:py_test_config",
-        "//clockwork/python/tests/support:py_test_input_message",
-        "//clockwork/python/tests/support:test_output_message_clk_nb",
-        "//clockwork/python/tests/support:test_state_clk_nb",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
-)
-
-py_library(
-    name = "py_example_cog_impl",
-    srcs = ["py_example_cog_impl.py"],
-    deps = [
-        ":py_example_cog_dial",
-        "//clockwork/python/tests/support:py_test_input_message",
-        "//clockwork/python/tests/support:test_output_message_clk_nb",
-        "//jewels/nanobind:nb_sync_time",
     ],
 )

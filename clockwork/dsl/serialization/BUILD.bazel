@@ -48,6 +48,22 @@ py_library(
 )
 
 py_library(
+    name = "soa",
+    srcs = ["soa.py"],
+    deps = [
+        ":tachyon_reg",
+        ":tap",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
     name = "tachyon_layout",
     srcs = ["tachyon_layout.py"],
     deps = [
@@ -83,6 +99,7 @@ py_library(
         "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:clkenum",
         "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:typesys",
         "@clockwork_pip//typing_extensions",
     ],
@@ -111,5 +128,17 @@ py_library(
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/ir:uuid_reg",
         "//clockwork/serialization/metadata:tachyon",
+    ],
+)
+
+py_library(
+    name = "tap_render",
+    srcs = ["tap_render.py"],
+    deps = [
+        ":soa",
+        ":tap",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:typesys",
     ],
 )

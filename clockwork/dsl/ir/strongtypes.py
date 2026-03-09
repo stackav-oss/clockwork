@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
@@ -17,6 +17,8 @@ from typing_extensions import override
 class Tag(node.CstNode[cst.Tag], node.DocRequiredEntity, typesys.TypeDef):
     """A type tag declared in Clockwork."""
 
+    attributes: node.ClkAttributes | None = field(repr=False)
+
     @classmethod
     def from_cst(cls: type[Tag], cst_node: cst.Tag, module: node.Module, scope: node.Scope) -> Tag:
         """Construct an IR node from a CST node."""
@@ -25,7 +27,16 @@ class Tag(node.CstNode[cst.Tag], node.DocRequiredEntity, typesys.TypeDef):
             raise ValueError(msg)
         doc = node.Doc.from_cst(cst_node.child_doc(), module)
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
-        result = cls(doc=doc, module=module, cst_node=cst_node, name=name, scope=scope, type_info=clkbuiltins.TYPE_TYPE)
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
+        result = cls(
+            doc=doc,
+            module=module,
+            cst_node=cst_node,
+            name=name,
+            scope=scope,
+            type_info=clkbuiltins.TYPE_TYPE,
+            attributes=attributes,
+        )
         scope.define(name, result, module.terminals)
         return result
 
@@ -35,6 +46,7 @@ class StrongType(node.CstNode[cst.StrongType], node.DocRequiredEntity, typesys.T
     """A class that is a strong type for a primitive type."""
 
     typespec: clkbuiltins.PrimitiveType | expr.Expr
+    attributes: node.ClkAttributes | None = field(repr=False)
 
     @classmethod
     def from_cst(cls: type[StrongType], cst_node: cst.StrongType, module: node.Module) -> StrongType:
@@ -47,6 +59,22 @@ class StrongType(node.CstNode[cst.StrongType], node.DocRequiredEntity, typesys.T
         name = get_span(cst_node.child_identifier().child_value(), module.terminals)
         underlying_type = cst_node.child_underlying_type()
         typespec = expr.Expr.from_cst(underlying_type.child_typespec(), module)
+        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
+        if module.generates is not None:
+            assert attributes is not None
+            if node.GenerateTarget.cpp in module.generates:
+                has_cpp_type_namespace = attributes.get_cpp_type_namespace() is not None
+                has_cpp_type_header = attributes.get_cpp_type_header() is not None
+                if has_cpp_type_namespace != has_cpp_type_header:
+                    msg = node.append_error_line(
+                        cst_node, module, "cpp type_namespace and type_header must both be either set or unset"
+                    )
+                    raise ValueError(msg)
+                if has_cpp_type_namespace and attributes.get_cpp_type_factory() is None:
+                    msg = node.append_error_line(
+                        cst_node, module, "cpp type_factory is required when cpp type_namesapce is set"
+                    )
+                    raise ValueError(msg)
 
         return StrongType(
             doc=doc,
@@ -56,6 +84,7 @@ class StrongType(node.CstNode[cst.StrongType], node.DocRequiredEntity, typesys.T
             cst_node=cst_node,
             type_info=clkbuiltins.TYPE_TYPE,
             typespec=typespec,
+            attributes=attributes,
         )
 
     def resolve(self) -> None:

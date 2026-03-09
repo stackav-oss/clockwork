@@ -4,8 +4,8 @@
 """Wrapper macros for Python.
 """
 
-load("@aspect_bazel_lib//lib:expand_make_vars.bzl", "expand_variables")
-load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
+load("@bazel_lib//lib:expand_make_vars.bzl", "expand_variables")
+load("@bazel_lib//lib:expand_template.bzl", "expand_template")
 load("@rules_python//python:defs.bzl", "PyRuntimeInfo", _py_binary = "py_binary", _py_library = "py_library", _py_test = "py_test")
 load("@rules_python//python:packaging.bzl", _py_wheel = "py_wheel")
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -391,7 +391,7 @@ def cc_binary_with_embedded_py(name, deps = [], py_deps = [], visibility = None,
         visibility = visibility,
     )
 
-def cc_test_with_embedded_py(name, deps = [], py_deps = [], tags = [], **kwargs):
+def cc_test_with_embedded_py(name, deps = [], py_deps = [], py_imports = [], tags = [], **kwargs):
     """C/C++ test with embedded python.
 
     Augments cc_test by wrapping the test in a python wrapper to setup the
@@ -403,6 +403,7 @@ def cc_test_with_embedded_py(name, deps = [], py_deps = [], tags = [], **kwargs)
       name: The name of the python wrapper
       deps: C/C++ dependencies
       py_deps: Python dependencies
+      py_imports: Python imports
       tags: Extra tags applied to the py_test
       **kwargs: Additional args to pass to underlying cc_binary rule.
     """
@@ -432,6 +433,7 @@ def cc_test_with_embedded_py(name, deps = [], py_deps = [], tags = [], **kwargs)
         use_pytest = False,
         srcs = [python_wrapper_source],
         main = python_wrapper_source,
+        imports = py_imports,
         data = [":" + cc_binary_name],
         deps = py_deps,
         tags = tags,

@@ -11,6 +11,9 @@ See documentation on [representations and interfaces](repr_iface.md).
 Consider the following schema:
 
 ```clockwork
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 schema MySchema
 {
   fields
@@ -18,22 +21,10 @@ schema MySchema
     #1 field: Type;
   }
 }
-
-cpp_target my_code
-{
-  options
-  {
-    namespace clockwork;
-  }
-  schema MySchema;
-  representation Tachyon<MySchema>;
-  interface Tap<Tachyon<MySchema>>;
-}
-
 ```
 
 `MySchema` is a schema with exactly one field named `field` of type `Type`.
-In the `cpp_target`, the requested representation of the schema is `Tachyon` and the requested interface is `Tap`.
+The Clockwork compiler will generate a `Tachyon` representation and a `Tap` interface for every schema defined in the file.
 The APIs provided by `Tap` are dependent on `Type` (the type of `field`).
 The following sections will provide the methods that will be generated depending on the field type.
 

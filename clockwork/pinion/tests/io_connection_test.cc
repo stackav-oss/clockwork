@@ -21,7 +21,7 @@ namespace clockwork::pinion
 TEST_CASE("Base IoConnection")
 {
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<int, 1UL> channel{memres};
+  InMemoryChannel<int, 1UL, false> channel{memres};
   auto subscriber = channel.make_subscriber();
   IoConnection io_stream{};
   REQUIRE(

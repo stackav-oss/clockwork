@@ -6,7 +6,7 @@
 
 #include "jewels/networking/socket_endpoint.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 constexpr fmt::format_parse_context::iterator
 fmt::formatter<jewels::networking::SocketEndpoint>::parse(fmt::format_parse_context& ctx)

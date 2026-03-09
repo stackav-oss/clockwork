@@ -1,6 +1,8 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::log_runner)]
 
-use clockwork::examples::log_runner::test_message::TestMessage;
-use clockwork::logging::log_playback::end_of_log::EndOfLog;
+use clockwork::examples::log_runner::test_message::{TestMessage};
+use clockwork::logging::log_playback::end_of_log::{EndOfLog};
 
 // Cog to to publish on the channel
 cog ExampleCogPublisher
@@ -33,15 +35,4 @@ cog ExampleCogSubscriber
     condition new_test_message: new_message(test_message_input);
     execute when: new_test_message;
   }
-}
-
-cpp_target example_cogs
-{
-    options
-    {
-        namespace clockwork::log_runner;
-    }
-
-    cog ExampleCogPublisher;
-    cog ExampleCogSubscriber;
 }

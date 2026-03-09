@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Thin wrapper around nanobind stubgen."""
-# TODO(OI-3125): De-duplicate wrapper.
 
 import re
 import sys
@@ -12,9 +11,17 @@ import click
 from nanobind.stubgen import main as stubgen_main
 
 REPLACEMENTS = [
-    # We want an NDArray, not an ArrayLike
+    # We want an NDArray, not an ArrayLike.
+    # Turn this:
+    # > Annotated[ArrayLike, dict(dtype='uint8', shape=(68), writable=False)]
+    # into this:
+    # > Annotated[numpy.typing.NDArray[np.uint8], Literal[68]]
     (
-        r"Annotated\[ArrayLike, dict\(dtype='([^']+)', shape=\(([^)]+)\), order='[^']+'\)\]",
+        r"Annotated\[ArrayLike, dict"
+        + r"\(dtype='([^']+)'"
+        + r", shape=\(([^)]+)\)"
+        + r"(?:, order='[^']+')?"  # optional order
+        + r"\)\]",
         r"Annotated[numpy.typing.NDArray[np.\1], Literal[\2]]",
     )
 ]

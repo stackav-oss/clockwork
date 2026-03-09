@@ -25,9 +25,12 @@ def _list(host: str) -> None:  # pyright: ignore[reportUnusedFunction] # TODO(DX
     """List processes."""
     table = rich.table.Table("Name", "Status", "Core Dumped", "PID")
 
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
-    process_list = client.list_procs()
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
+    if not client.is_server_running():
+        click.echo("** The simplelaunch server is not running **")
+        return
 
+    process_list = client.list_procs()
     for process in process_list.process_info:
         table.add_row(process.name, ProcessState.Name(process.state), repr(process.core_dumped), str(process.pid))
 
@@ -42,7 +45,7 @@ def _list(host: str) -> None:  # pyright: ignore[reportUnusedFunction] # TODO(DX
 @_HOST_FLAG
 def quit_cmd(host: str) -> None:
     """Stop all processes and exit."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
     client.quit()
 
 
@@ -51,7 +54,7 @@ def quit_cmd(host: str) -> None:
 @click.argument("name")
 def stop(host: str, name: str) -> None:
     """Stop a process."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
     client.stop(name)
 
 
@@ -59,7 +62,7 @@ def stop(host: str, name: str) -> None:
 @_HOST_FLAG
 def stop_all(host: str) -> None:
     """Stop all processes."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
     client.stop_all()
 
 
@@ -68,8 +71,18 @@ def stop_all(host: str) -> None:
 @click.argument("name")
 def start(host: str, name: str) -> None:
     """Start a process."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
     client.start(name)
+
+
+@cli.command()
+@_HOST_FLAG
+@click.argument("name")
+def resume(host: str, name: str) -> None:
+    """Resume a process allowing publishing to dirty pinion buffers."""
+    addr, port = host.split(":")
+    client = SimpleLaunchClient(addr, int(port))
+    client.resume(name)
 
 
 @cli.command()
@@ -77,15 +90,19 @@ def start(host: str, name: str) -> None:
 @click.argument("name")
 def logs(host: str, name: str) -> None:
     """Get the log output from a process."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
-    click.echo(client.logs(name))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
+    click.echo(client.logs(name) if client.is_server_running() else "** The simplelaunch server is not running **")
 
 
 @cli.command()
 @_HOST_FLAG
 def is_running(host: str) -> None:
     """Returns 'yes' if all nodes are running, 'no' otherwise."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
+    if not client.is_server_running():
+        click.echo("** The simplelaunch server is not running **")
+        return
+
     click.echo("yes" if client.is_running() else "no")
 
 
@@ -93,7 +110,7 @@ def is_running(host: str) -> None:
 @_HOST_FLAG
 def is_stopped(host: str) -> None:
     """Returns 'yes' if all nodes are not running, 'no' otherwise."""
-    client = SimpleLaunchClient(host.split(":")[0], int(host.split(":")[1]))
+    client = SimpleLaunchClient(host.split(":", maxsplit=1)[0], int(host.split(":")[1]))
     click.echo("yes" if client.is_stopped() else "no")
 
 

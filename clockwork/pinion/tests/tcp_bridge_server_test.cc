@@ -1,9 +1,7 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/lite_compressor.hh"
-#include "clockwork/logging/xxh3_checksum.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/detail/socket_common.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
@@ -11,257 +9,81 @@
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
-#include "clockwork/pinion/tcp_bridge_config.hh"
+#include "clockwork/pinion/tcp_bridge_config_clk_cc.hh"
 #include "clockwork/pinion/tcp_bridge_server.hh"
+#include "clockwork/pinion/tests/support/bridge_test_support.hh"
 #include "clockwork/pinion/tests/support/epoll_snooper.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/file_descriptor.hh"
+#include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
-#include "jewels/networking/sock_opt.hh"
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/fix_catch2_cerr_nonthreadsafe_redirect.hh" // IWYU pragma: keep
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
-#include <algorithm>
 #include <array>
-#include <cerrno>
 #include <chrono>
 #include <compare>
 #include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <functional>
 #include <memory>
 #include <memory_resource>
-#include <optional>
-#include <span>
+#include <ratio>
 #include <string>
-#include <string_view>
 #include <sys/epoll.h>
-#include <sys/socket.h>
 #include <thread>
-#include <tuple>
-#include <vector>
+#include <unordered_set>
 
 namespace clockwork::pinion
 {
 
-namespace
-{
-
-/// Default timeout for receiving from the server
-constexpr auto default_recv_timeout = std::chrono::seconds(10);
-
-/// Timeout for receiving from the server when we don't expect anything
-constexpr auto short_recv_timeout = std::chrono::milliseconds(1);
-
-template <typename Msg>
-std::optional<Msg>
-decompress_message(uint64_t counts_checksum, uint64_t data_checksum, std::span<const std::byte> compressed_data)
-{
-  clockwork_logging::LiteCompressor compressor{jewels::memory::MemoryResource{std::pmr::new_delete_resource()}};
-  Msg message{};
-  const auto decompress_outcome = compressor.decompress(
-    counts_checksum, data_checksum, compressed_data, std::as_writable_bytes(std::span{&message, 1U}));
-  if (!decompress_outcome.ok())
-  {
-    return std::nullopt;
-  }
-  return message;
-}
-
-bool receive_buffer(
-  int sock,
-  std::span<std::byte> recv_buffer,
-  const std::function<void()>& notify_fn,
-  std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  const auto recv_deadline = jewels::time::SyncClock::now() + recv_timeout;
-  while (!recv_buffer.empty())
-  {
-    notify_fn();
-    auto recv_bytes = ::recv(sock, recv_buffer.data(), recv_buffer.size(), 0);
-    if (recv_bytes < 0)
-    {
-      if (errno == EAGAIN && jewels::time::SyncClock::now() < recv_deadline)
-      {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
-        continue;
-      }
-      return false;
-    }
-    if (recv_bytes == 0)
-    {
-      return false;
-    }
-    recv_buffer = recv_buffer.subspan(static_cast<size_t>(recv_bytes));
-  }
-  return true;
-}
-
-std::optional<TcpMessageHeader> recv_header(
-  int sock, const std::function<void()>& notify_fn, std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  TcpMessageHeader header{};
-  if (!receive_buffer(sock, std::as_writable_bytes(std::span{&header, 1U}), notify_fn, recv_timeout))
-  {
-    return std::nullopt;
-  }
-  return header;
-}
-
-template <typename Msg>
-std::optional<std::tuple<TcpMessageHeader, Msg, TcpMessageTail>> recv_and_unpack(
-  int sock,
-  const Msg& expected_message,
-  const std::function<void()>& notify_fn,
-  std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  const auto maybe_header = recv_header(sock, notify_fn, recv_timeout);
-  if (!maybe_header)
-  {
-    return std::nullopt;
-  }
-  CHECK(
-    maybe_header->checksum ==
-    clockwork_logging::compute_xxh3_checksum(std::as_bytes(std::span{&maybe_header->body, 1U})));
-  CHECK(
-    maybe_header->body.message_length <=
-    sizeof(expected_message) + clockwork_logging::LiteCompressor::max_compression_overhead_bytes);
-  std::vector<std::byte> recv_buffer(maybe_header->body.message_length + sizeof(TcpMessageTail));
-  if (!receive_buffer(sock, recv_buffer, notify_fn, recv_timeout))
-  {
-    return std::nullopt;
-  }
-  TcpMessageTail tail{};
-  std::memcpy(&tail, std::span{recv_buffer}.last(sizeof(TcpMessageTail)).data(), sizeof(TcpMessageTail));
-
-  const auto decompress_result = decompress_message<Msg>(
-    tail.counts_checksum, tail.data_checksum, std::span{recv_buffer}.first(maybe_header->body.message_length));
-  CHECK(decompress_result);
-  if (!decompress_result)
-  {
-    return std::nullopt;
-  }
-
-  return {{maybe_header.value(), *decompress_result, tail}};
-}
-
-bool recv_null_header(
-  int sock, const std::function<void()>& notify_fn, std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  const auto maybe_header = recv_header(sock, notify_fn, recv_timeout);
-  if (!maybe_header)
-  {
-    return false;
-  }
-  CHECK(
-    maybe_header->checksum ==
-    clockwork_logging::compute_xxh3_checksum(std::as_bytes(std::span{&maybe_header->body, 1U})));
-  CHECK(maybe_header->body.sequence_number == 0U);
-  return maybe_header->checksum ==
-           clockwork_logging::compute_xxh3_checksum(std::as_bytes(std::span{&maybe_header->body, 1U})) &&
-         maybe_header->body.sequence_number == 0U;
-}
-
-bool send_acknowledgement(int sock, uint64_t sequence_number)
-{
-  auto ack_byte = static_cast<uint8_t>(sequence_number);
-  auto send_bytes = ::send(sock, &ack_byte, 1U, 0);
-  return send_bytes == 1;
-}
-
-template <typename Msg>
-bool check_next_payload(
-  int sock,
-  uint64_t expected_seqno,
-  const Msg& expected_message,
-  int64_t expected_publish_time,
-  int64_t expected_commit_time,
-  const std::function<void()>& notify_fn,
-  std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  auto payload = recv_and_unpack(sock, expected_message, notify_fn, recv_timeout);
-  if (!payload)
-  {
-    CHECK(payload);
-    return false;
-  }
-  const auto& [header, message, tail] = *payload;
-  CHECK(header.body.sequence_number == expected_seqno);
-  CHECK(header.body.publish_timestamp == expected_publish_time);
-  CHECK(header.body.source_commit_timestamp == expected_commit_time);
-  CHECK(message == expected_message);
-  return header.body.sequence_number == expected_seqno && header.body.publish_timestamp == expected_publish_time &&
-         message == expected_message && header.body.source_commit_timestamp == expected_commit_time;
-}
-
-template <typename Msg>
-bool check_next_payload(
-  int sock,
-  uint64_t expected_seqno,
-  Msg expected_message,
-  const std::function<void()>& notify_fn,
-  std::chrono::nanoseconds recv_timeout = default_recv_timeout)
-{
-  auto payload = recv_and_unpack<Msg>(sock, expected_message, notify_fn, recv_timeout);
-  if (!payload)
-  {
-    CHECK(payload);
-    return false;
-  }
-  const auto& [header, message, tail] = *payload;
-  CHECK(header.body.sequence_number == expected_seqno);
-  // CHECK(message == expected_message);
-  return header.body.sequence_number == expected_seqno && message == expected_message;
-}
-
-constexpr auto socket_host = std::string_view{"127.0.0.1"};
-
-} // namespace
-
 TEST_CASE("TcpBridgeServer | Simple Send/Recv")
 {
-  using Msg = uint32_t;
+  const auto is_bulk_data = GENERATE(false, true);
+  CAPTURE(is_bulk_data);
+  constexpr auto message_size = jewels::math::constants::bytes_per_kb<size_t> + 1U;
+  using Msg = std::array<std::byte, message_size>;
   constexpr size_t num_slots = 3;
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots> channel(memres);
+  InMemoryChannel<Msg, num_slots, false> channel(memres);
   auto publisher = channel.make_publisher(max_observer);
 
   EPollSnooper epoll{};
 
   // Create the bridge.
   constexpr size_t max_clients = 3;
-  TcpBridgeServerConfigTap config{};
+  Tappy<TcpBridgeServerConfig> config{};
   config.set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
   config.get_mutable_buffer_layout().set_num_slots(num_slots);
   config.get_mutable_buffer_layout().set_message_size(sizeof(Msg));
-  config.get_underlying_listen_address().set_truncate(socket_host);
+  config.get_underlying_listen_address().set_truncate(support::local_socket_host);
   config.set_listen_port(0U);
   config.set_num_clients(max_clients);
   config.get_underlying_channel_name().set_truncate("test_channel");
+  config.set_is_bulk_data(is_bulk_data);
 
-  const auto diagnostics_counters = std::make_shared<TcpBridgeDiagnosticsCounters>();
+  const auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   auto bridge_server = TcpBridgeServer::make(
-    memres,
-    config,
-    channel.make_subscriber(),
-    jewels::memory::make_non_null_from_ref(epoll),
-    diagnostics_counters,
-    TcpBridgeServerMode::production);
+    memres, config, channel.make_subscriber(), jewels::memory::make_non_null_from_ref(epoll), diagnostics_state);
   REQUIRE(bridge_server);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)));
   const auto listen_addr =
-    jewels::networking::SocketAddress::create(std::string{socket_host}, bridge_server->listen_port());
-  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{socket_host}, 0);
+    jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, bridge_server->listen_port());
+  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, 0);
 
   SECTION("Connect and Send")
   {
@@ -272,40 +94,44 @@ TEST_CASE("TcpBridgeServer | Simple Send/Recv")
 
     // Tell the server that a a client is waiting to be accepted.
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client_fd = epoll.pop_fd();
-    REQUIRE(client_fd);
-    // client descriptor will flagged as writeable immediately after accept().
-    const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
+    CHECK(support::recv_null_header(tcp_client->descriptor(), 0U));
 
-    // This should fail. The publisher hasn't produced any messages yet.
-    CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
+    const auto start_time = jewels::time::SteadyClock::now();
 
     // Send some messages and check that they arrive in order
+    const auto msg2 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xdeadU,
+      *msg2,
       jewels::time::SyncTime{std::chrono::nanoseconds{1234L}},
       2,
       jewels::time::SyncTime{std::chrono::nanoseconds{2345L}});
-    CHECK(check_next_payload(tcp_client->descriptor(), 2, 0xdeadU, 1234L, 2345L, notify_fn));
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 2, *msg2, 1234L, 2345L));
+    const auto msg3 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xf00dU,
+      *msg3,
       jewels::time::SyncTime{std::chrono::nanoseconds{5677L}},
       3,
       jewels::time::SyncTime{std::chrono::nanoseconds{6788L}});
+    const auto msg4 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xbeefU,
+      *msg4,
       jewels::time::SyncTime{std::chrono::nanoseconds{5678L}},
       4,
       jewels::time::SyncTime{std::chrono::nanoseconds{6789L}});
-    CHECK(check_next_payload(tcp_client->descriptor(), 3, 0xf00dU, 5677L, 6788L, notify_fn));
-    CHECK(check_next_payload(tcp_client->descriptor(), 4, 0xbeefU, 5678L, 6789L, notify_fn));
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 3, *msg3, 5677L, 6788L));
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 4, *msg4, 5678L, 6789L));
 
-    // Should fail until more messages arrive.
-    CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
-    CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
+    if (is_bulk_data)
+    {
+      const auto end_time = jewels::time::SteadyClock::now();
+      REQUIRE(end_time - start_time > 3 * max_bridge_bulk_data_transmit_delay);
+    }
+
+    const auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
+    CHECK(support::compare_diagnostics_counters(diagnostics_counters, TcpBridgeDiagnosticsCounters{}));
   }
 
   SECTION("Server only sends newest message after connect")
@@ -316,152 +142,159 @@ TEST_CASE("TcpBridgeServer | Simple Send/Recv")
     REQUIRE(set_nonblocking(tcp_client->descriptor(), true));
 
     // Send some messages before the client connects, the client should only receive the last one
+    const auto msg0 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xbaadU,
+      *msg0,
       jewels::time::SyncTime{std::chrono::nanoseconds{1232L}},
       0,
       jewels::time::SyncTime{std::chrono::nanoseconds{2343L}});
+    const auto msg1 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xbaadU,
+      *msg1,
       jewels::time::SyncTime{std::chrono::nanoseconds{1233L}},
       1,
       jewels::time::SyncTime{std::chrono::nanoseconds{2344L}});
+    const auto msg2 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xdeadU,
+      *msg2,
       jewels::time::SyncTime{std::chrono::nanoseconds{1234L}},
       2,
       jewels::time::SyncTime{std::chrono::nanoseconds{2345L}});
 
     // Tell the server that a a client is waiting to be accepted.
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client_fd = epoll.pop_fd();
-    REQUIRE(client_fd);
-    // client descriptor will flagged as writeable immediately after accept().
-    const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
 
-    CHECK(check_next_payload(tcp_client->descriptor(), 2, 0xdeadU, 1234L, 2345L, notify_fn));
+    // Server will send the first message immediately after accepting the connection
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 2, *msg2, 1234L, 2345L));
 
+    const auto msg3 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xf00dU,
+      *msg3,
       jewels::time::SyncTime{std::chrono::nanoseconds{5677L}},
       3,
       jewels::time::SyncTime{std::chrono::nanoseconds{6788L}});
+    const auto msg4 = support::make_random_message<message_size>();
     testing::publish(
       publisher,
-      0xbeefU,
+      *msg4,
       jewels::time::SyncTime{std::chrono::nanoseconds{5678L}},
       4,
       jewels::time::SyncTime{std::chrono::nanoseconds{6789L}});
-    CHECK(check_next_payload(tcp_client->descriptor(), 3, 0xf00dU, 5677L, 6788L, notify_fn));
-    CHECK(check_next_payload(tcp_client->descriptor(), 4, 0xbeefU, 5678L, 6789L, notify_fn));
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 3, *msg3, 5677L, 6788L));
+    CHECK(support::check_next_payload(tcp_client->descriptor(), 4, *msg4, 5678L, 6789L));
 
-    // Should fail until more messages arrive.
-    CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
-    CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
+    const auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
+    CHECK(support::compare_diagnostics_counters(diagnostics_counters, TcpBridgeDiagnosticsCounters{}));
   }
 
   SECTION("Fanout")
   {
+    CHECK(support::check_num_clients(*bridge_server, 0U));
+
     auto client1 = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
     REQUIRE(client1);
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client1_fd = epoll.pop_fd();
-    REQUIRE(client1_fd);
-    const auto notify_fn1 = [&epoll, &client1_fd]() { epoll.notify(*client1_fd, EPOLLOUT); };
+    CHECK(support::check_num_clients(*bridge_server, 1U));
+    CHECK(support::recv_null_header(client1->descriptor(), 0U));
 
-    testing::publish(publisher, 1111);
-    CHECK(check_next_payload(client1->descriptor(), 0, 1111U, notify_fn1));
+    const auto msg0 = support::make_random_message<message_size>();
+    testing::publish(publisher, *msg0);
+    CHECK(support::check_next_payload(client1->descriptor(), 0, *msg0));
+
+    const auto msg1 = support::make_random_message<message_size>();
+    testing::publish(publisher, *msg1);
 
     auto client2 = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
     REQUIRE(client2);
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client2_fd = epoll.pop_fd();
-    REQUIRE(client2_fd);
-    const auto notify_fn2 = [&epoll, &client2_fd]() { epoll.notify(*client2_fd, EPOLLOUT); };
+    CHECK(support::check_num_clients(*bridge_server, 2U));
 
-    testing::publish(publisher, 2222);
-    CHECK(check_next_payload(client1->descriptor(), 1, 2222U, notify_fn1));
-    CHECK(check_next_payload(client2->descriptor(), 1, 2222U, notify_fn2));
+    CHECK(support::check_next_payload(client1->descriptor(), 1, *msg1));
+    CHECK(support::check_next_payload(client2->descriptor(), 1, *msg1));
+
+    const auto msg2 = support::make_random_message<message_size>();
+    testing::publish(publisher, *msg2);
 
     auto client3 = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
     REQUIRE(client3);
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client3_fd = epoll.pop_fd();
-    REQUIRE(client3_fd);
-    const auto notify_fn3 = [&epoll, &client3_fd]() { epoll.notify(*client3_fd, EPOLLOUT); };
+    CHECK(support::check_num_clients(*bridge_server, 3U));
 
     // This one should get discarded by the bridge.
     auto client4 = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
     REQUIRE(client4);
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
+    CHECK(support::check_num_clients(*bridge_server, 3U));
 
-    testing::publish(publisher, 3333);
-    CHECK(check_next_payload(client1->descriptor(), 2, 3333U, notify_fn1));
-    CHECK(check_next_payload(client2->descriptor(), 2, 3333U, notify_fn2));
-    CHECK(check_next_payload(client3->descriptor(), 2, 3333U, notify_fn3));
-    CHECK(!recv_and_unpack<Msg>(client4->descriptor(), Msg{}, []() {}, short_recv_timeout));
+    CHECK(support::check_next_payload(client1->descriptor(), 2, *msg2));
+    CHECK(support::check_next_payload(client2->descriptor(), 2, *msg2));
+    CHECK(support::check_next_payload(client3->descriptor(), 2, *msg2));
 
-    epoll.notify(*client3_fd, EPOLLRDHUP);
-    epoll.remove(*client3_fd);
+    CHECK(client3->release_descriptor().close());
+    CHECK(support::check_num_clients(*bridge_server, 2U));
+
+    const auto msg3 = support::make_random_message<message_size>();
+    testing::publish(publisher, *msg3);
+
+    CHECK(support::check_next_payload(client1->descriptor(), 3, *msg3));
+    CHECK(support::check_next_payload(client2->descriptor(), 3, *msg3));
 
     // This one should work now that client3 has closed.
     auto client5 = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
     REQUIRE(client5);
     bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-    auto client5_fd = epoll.pop_fd();
-    REQUIRE(client5_fd);
-    const auto notify_fn5 = [&epoll, &client5_fd]() { epoll.notify(*client5_fd, EPOLLOUT); };
+    CHECK(bridge_server->get_num_clients() == 3U);
 
-    testing::publish(publisher, 4444);
-    CHECK(check_next_payload(client1->descriptor(), 3, 4444U, notify_fn1));
-    CHECK(check_next_payload(client2->descriptor(), 3, 4444U, notify_fn2));
-
-    CHECK(check_next_payload(client5->descriptor(), 3, 4444U, notify_fn5));
-    CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
+    CHECK(support::check_next_payload(client5->descriptor(), 3, *msg3));
+    const auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
+    CHECK(
+      support::compare_diagnostics_counters(
+        diagnostics_counters, TcpBridgeDiagnosticsCounters{.closed_socket_count = 1U}));
   }
 }
 
 TEST_CASE("TcpBridgeServer | Overrun")
 {
-  using Msg = uint32_t;
+  constexpr auto message_size = jewels::math::constants::bytes_per_kb<size_t>;
+  using Msg = std::array<std::byte, message_size>;
   constexpr size_t num_slots = 3;
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots> channel(memres);
+  InMemoryChannel<Msg, num_slots, false> channel(memres);
   auto publisher = channel.make_publisher(max_observer);
 
   EPollSnooper epoll{};
 
   // Create the bridge.
   constexpr size_t max_clients = 3;
-  TcpBridgeServerConfigTap config{};
+  Tappy<TcpBridgeServerConfig> config{};
   config.set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
   config.get_mutable_buffer_layout().set_num_slots(num_slots);
   config.get_mutable_buffer_layout().set_message_size(sizeof(Msg));
-  config.get_underlying_listen_address().set_truncate(socket_host);
+  config.get_underlying_listen_address().set_truncate(support::local_socket_host);
   config.set_listen_port(0U);
   config.set_num_clients(max_clients);
   config.get_underlying_channel_name().set_truncate("test_channel");
 
-  const auto diagnostics_counters = std::make_shared<TcpBridgeDiagnosticsCounters>();
+  const auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   auto bridge_server = TcpBridgeServer::make(
     memres,
     config,
     channel.make_subscriber(),
     jewels::memory::make_non_null_from_ref(epoll),
-    diagnostics_counters,
-    TcpBridgeServerMode::overrun_test);
+    diagnostics_state,
+    TcpBridgeServer::Mode::overrun_test);
   REQUIRE(bridge_server);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)));
   const auto listen_addr =
-    jewels::networking::SocketAddress::create(std::string{socket_host}, bridge_server->listen_port());
-  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{socket_host}, 0);
+    jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, bridge_server->listen_port());
+  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, 0);
 
   auto tcp_client = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
   REQUIRE(tcp_client);
@@ -470,100 +303,98 @@ TEST_CASE("TcpBridgeServer | Overrun")
 
   // Tell the server that a a client is waiting to be accepted.
   bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-  auto client_fd = epoll.pop_fd();
-  REQUIRE(client_fd);
-  // client descriptor will flagged as writeable immediately after accept().
-  const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
-
-  // This should fail. The publisher hasn't produced any messages yet.
-  CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
+  CHECK(support::recv_null_header(tcp_client->descriptor(), 0U));
 
   // Send some messages and check that they arrive in order
+  const auto msg1 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xdeadU,
+    *msg1,
     jewels::time::SyncTime{std::chrono::nanoseconds{1234L}},
-    2,
+    1,
     jewels::time::SyncTime{std::chrono::nanoseconds{2345L}});
-  CHECK(check_next_payload(tcp_client->descriptor(), 2, 0xdeadU, 1234L, 2345L, notify_fn));
+  const auto msg2 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xbeefU,
+    *msg2,
     jewels::time::SyncTime{std::chrono::nanoseconds{5678L}},
-    3,
+    2,
     jewels::time::SyncTime{std::chrono::nanoseconds{6789L}});
-  CHECK(check_next_payload(tcp_client->descriptor(), 3, 0xbeefU, 5678L, 6789L, notify_fn));
-  CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
+  bridge_server->forced_notify();
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 1, *msg1, 1234L, 2345L));
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 2, *msg2, 5678L, 6789L));
 
   // Overrun the buffer and check that the server jumps to the end of the buffer
+  const auto msg3 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xbaadU,
+    *msg3,
     jewels::time::SyncTime{std::chrono::nanoseconds{5680L}},
-    4,
+    3,
     jewels::time::SyncTime{std::chrono::nanoseconds{6790L}});
+  std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  const auto msg4 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xbaadU,
+    *msg4,
     jewels::time::SyncTime{std::chrono::nanoseconds{5681L}},
-    5,
+    4,
     jewels::time::SyncTime{std::chrono::nanoseconds{6791L}});
+  const auto msg5 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xbaadU,
+    *msg5,
     jewels::time::SyncTime{std::chrono::nanoseconds{5682L}},
-    6,
+    5,
     jewels::time::SyncTime{std::chrono::nanoseconds{6792L}});
+  const auto msg6 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xf00dU,
-    jewels::time::SyncTime{std::chrono::nanoseconds{5689L}},
-    10,
-    jewels::time::SyncTime{std::chrono::nanoseconds{6799L}});
-  CHECK(check_next_payload(tcp_client->descriptor(), 10, 0xf00dU, 5689L, 6799L, notify_fn));
+    *msg6,
+    jewels::time::SyncTime{std::chrono::nanoseconds{5683L}},
+    6,
+    jewels::time::SyncTime{std::chrono::nanoseconds{6793L}});
 
-  // Should fail until more messages arrive.
-  CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
-  CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{.drop_count = 3});
+  bridge_server->forced_notify();
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 6, *msg6, 5683L, 6793L));
+
+  const auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
+  CHECK(support::compare_diagnostics_counters(diagnostics_counters, TcpBridgeDiagnosticsCounters{.drop_count = 3U}));
 }
 
-TEST_CASE("TcpBridgeServer | Send null header until acked")
+TEST_CASE("TcpBridgeServer | Send null header until acked and send keep-alives periodically")
 {
-  using Msg = uint32_t;
+  constexpr auto message_size = jewels::math::constants::bytes_per_kb<size_t>;
+  using Msg = std::array<std::byte, message_size>;
   constexpr size_t num_slots = 3;
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots> channel(memres);
+  InMemoryChannel<Msg, num_slots, false> channel(memres);
   auto publisher = channel.make_publisher(max_observer);
 
   EPollSnooper epoll{};
 
   // Create the bridge.
   constexpr size_t max_clients = 3;
-  TcpBridgeServerConfigTap config{};
+  Tappy<TcpBridgeServerConfig> config{};
   config.set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
   config.get_mutable_buffer_layout().set_num_slots(num_slots);
   config.get_mutable_buffer_layout().set_message_size(sizeof(Msg));
-  config.get_underlying_listen_address().set_truncate(socket_host);
+  config.get_underlying_listen_address().set_truncate(support::local_socket_host);
   config.set_listen_port(0U);
   config.set_num_clients(max_clients);
   config.get_underlying_channel_name().set_truncate("test_channel");
 
-  const auto diagnostics_counters = std::make_shared<TcpBridgeDiagnosticsCounters>();
+  const auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   auto bridge_server = TcpBridgeServer::make(
-    memres,
-    config,
-    channel.make_subscriber(),
-    jewels::memory::make_non_null_from_ref(epoll),
-    diagnostics_counters,
-    TcpBridgeServerMode::production);
+    memres, config, channel.make_subscriber(), jewels::memory::make_non_null_from_ref(epoll), diagnostics_state);
   REQUIRE(bridge_server);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)));
   const auto listen_addr =
-    jewels::networking::SocketAddress::create(std::string{socket_host}, bridge_server->listen_port());
-  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{socket_host}, 0);
+    jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, bridge_server->listen_port());
+  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, 0);
 
   auto tcp_client = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
   REQUIRE(tcp_client);
@@ -572,242 +403,114 @@ TEST_CASE("TcpBridgeServer | Send null header until acked")
 
   // Tell the server that a a client is waiting to be accepted.
   bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-  auto client_fd = epoll.pop_fd();
-  REQUIRE(client_fd);
-  REQUIRE(jewels::networking::set_sock_opt<jewels::networking::SockOption::tcp_nodelay>(*client_fd, 1));
-
-  // client descriptor will flagged as writeable immediately after accept().
-  const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
-
-  // This should fail. The publisher hasn't produced any messages yet.
-  CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
+  CHECK(support::recv_null_header(tcp_client->descriptor(), 0U));
 
   // Send some messages and check that they arrive in order.
+  const auto msg2 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xdeadU,
+    *msg2,
     jewels::time::SyncTime{std::chrono::nanoseconds{1234L}},
     2,
     jewels::time::SyncTime{std::chrono::nanoseconds{2345L}});
-  CHECK(check_next_payload(tcp_client->descriptor(), 2, 0xdeadU, 1234L, 2345L, notify_fn));
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 2, *msg2, 1234L, 2345L));
+  const auto msg4 = support::make_random_message<message_size>();
   testing::publish(
     publisher,
-    0xbeefU,
+    *msg4,
     jewels::time::SyncTime{std::chrono::nanoseconds{5678L}},
     4,
     jewels::time::SyncTime{std::chrono::nanoseconds{6789L}});
-  CHECK(check_next_payload(tcp_client->descriptor(), 4, 0xbeefU, 5678L, 6789L, notify_fn));
-
-  // Should fail until more messages arrive.
-  CHECK(!recv_and_unpack<Msg>(tcp_client->descriptor(), Msg{}, notify_fn, short_recv_timeout));
-  CHECK_FALSE(recv_null_header(tcp_client->descriptor(), notify_fn, short_recv_timeout));
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 4, *msg4, 5678L, 6789L));
 
   // Server should send null headers until ack is received
-  CHECK(bridge_server->is_waiting_for_ack());
-  bridge_server->send_null_header_if_waiting_for_ack();
-  CHECK(recv_null_header(tcp_client->descriptor(), notify_fn));
+  CHECK_FALSE(
+    support::recv_null_header(tcp_client->descriptor(), 4U, {PayloadType::keep_alive}, support::short_recv_timeout));
+  CHECK(support::recv_null_header(tcp_client->descriptor(), 4U, {PayloadType::null_header}));
 
   // Send an ack for the first message, server should still keep sending null headers
-  CHECK(send_acknowledgement(tcp_client->descriptor(), 2));
-  epoll.notify(*client_fd, EPOLLIN);
-  CHECK(bridge_server->is_waiting_for_ack());
-  bridge_server->send_null_header_if_waiting_for_ack();
-  CHECK(recv_null_header(tcp_client->descriptor(), notify_fn));
+  CHECK(support::send_acknowledgement(tcp_client->descriptor(), 2));
+  CHECK_FALSE(
+    support::recv_null_header(tcp_client->descriptor(), 4U, {PayloadType::keep_alive}, support::short_recv_timeout));
+  CHECK(support::recv_null_header(tcp_client->descriptor(), 4U, {PayloadType::null_header}));
 
-  // Send an ack for the last message, server should stop sending null headers
-  CHECK(send_acknowledgement(tcp_client->descriptor(), 4));
-  const auto acked_deadline = jewels::time::SyncClock::now() + default_recv_timeout;
-  while (bridge_server->is_waiting_for_ack() && jewels::time::SyncClock::now() < acked_deadline)
-  {
-    epoll.notify(*client_fd, EPOLLIN);
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
-  }
-  CHECK_FALSE(bridge_server->is_waiting_for_ack());
-  bridge_server->send_null_header_if_waiting_for_ack();
-  CHECK_FALSE(recv_null_header(tcp_client->descriptor(), notify_fn, short_recv_timeout));
-  CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
+  // Send an ack for the last message, server should stop sending null headers and start sending keepalives
+  CHECK(support::send_acknowledgement(tcp_client->descriptor(), 4));
+  CHECK(
+    support::recv_null_header(
+      tcp_client->descriptor(),
+      4U,
+      {PayloadType::keep_alive},
+      tcp_bridge_keep_alive_interval + std::chrono::seconds(1)));
+
+  const auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
+  CHECK(support::compare_diagnostics_counters(diagnostics_counters, TcpBridgeDiagnosticsCounters{}));
 }
 
-TEST_CASE("TcpBridgeServer | Retry Failed Send")
+TEST_CASE("TcpBridgeServer | Large messages")
 {
-  constexpr size_t message_data_size = 1024;
-  using Msg = std::array<std::byte, message_data_size>;
+  constexpr auto message_size = 32U * jewels::math::constants::bytes_per_mb<size_t>;
+  using Msg = std::array<std::byte, message_size>;
   constexpr size_t num_slots = 2;
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots> channel(memres);
+  InMemoryChannel<Msg, num_slots, false> channel(memres);
   auto publisher = channel.make_publisher(max_observer);
 
   EPollSnooper epoll{};
 
   // Create the bridge.
   constexpr auto max_clients = 1;
-  TcpBridgeServerConfigTap config{};
+  Tappy<TcpBridgeServerConfig> config{};
   config.set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
   config.get_mutable_buffer_layout().set_num_slots(num_slots);
   config.get_mutable_buffer_layout().set_message_size(sizeof(Msg));
-  config.get_underlying_listen_address().set_truncate(socket_host);
+  config.get_underlying_listen_address().set_truncate(support::local_socket_host);
   config.set_listen_port(0U);
   config.set_num_clients(max_clients);
   config.get_underlying_channel_name().set_truncate("test_channel");
 
-  const auto diagnostics_counters = std::make_shared<TcpBridgeDiagnosticsCounters>();
+  const auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   auto bridge_server = TcpBridgeServer::make(
-    memres,
-    config,
-    channel.make_subscriber(),
-    jewels::memory::make_non_null_from_ref(epoll),
-    diagnostics_counters,
-    TcpBridgeServerMode::production);
+    memres, config, channel.make_subscriber(), jewels::memory::make_non_null_from_ref(epoll), diagnostics_state);
   REQUIRE(bridge_server);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)));
   const auto listen_addr =
-    jewels::networking::SocketAddress::create(std::string{socket_host}, bridge_server->listen_port());
-  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{socket_host}, 0);
+    jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, bridge_server->listen_port());
+  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, 0);
 
   auto tcp_client = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
   REQUIRE(tcp_client);
   REQUIRE(set_nonblocking(tcp_client->descriptor(), true));
   bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-  auto client_fd = epoll.pop_fd();
-  REQUIRE(client_fd);
-  const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
 
-  // Make the socket buffers as small as possible. The kernel will clamp this to
-  // the system minimum.
-  int bufsize = 1;
-  REQUIRE(::setsockopt(*client_fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(int)) == 0);
+  const auto msg1 = support::make_random_message<message_size>();
+  testing::publish(
+    publisher,
+    *msg1,
+    jewels::time::SyncTime{std::chrono::nanoseconds{1001L}},
+    1,
+    jewels::time::SyncTime{std::chrono::nanoseconds{2001}});
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 1, *msg1, 1001L, 2001L));
 
-  Msg message1{};
-  message1.fill(std::byte{0x11});
-  testing::publish(publisher, message1, jewels::time::SyncTime{std::chrono::nanoseconds{1111L}});
-  auto payload = recv_and_unpack<Msg>(tcp_client->descriptor(), message1, notify_fn);
-  REQUIRE(payload);
-  CHECK(std::get<0U>(*payload).body.publish_timestamp == 1111L);
-  CHECK(std::ranges::equal(message1, std::get<1U>(*payload)));
-
-  // Fill up the send buffer with garbage.
-  std::array<std::byte, 4096> garbage_buffer{};
-  size_t total_sent = 0;
-  while (true)
-  {
-    const auto sent = ::send(*client_fd, garbage_buffer.data(), garbage_buffer.size(), 0);
-    if (sent == -1)
-    {
-      CHECK(errno == EAGAIN);
-      break;
-    }
-    total_sent += static_cast<size_t>(sent);
-  }
-
-  Msg message2{};
-  message2.fill(std::byte{0x22});
-  Msg message3{};
-  message3.fill(std::byte{0x33});
-  testing::publish(publisher, message2, jewels::time::SyncTime{std::chrono::nanoseconds{2222L}});
-  testing::publish(publisher, message3, jewels::time::SyncTime{std::chrono::nanoseconds{3333L}});
-
-  // Drain the buffer.
-  while (total_sent > 0)
-  {
-    auto recvd =
-      ::recv(tcp_client->descriptor(), garbage_buffer.data(), std::min(garbage_buffer.size(), total_sent), 0);
-    if (recvd == -1)
-    {
-      CHECK(errno == EAGAIN);
-      std::this_thread::sleep_for(std::chrono::microseconds(1));
-      continue;
-    }
-    total_sent -= static_cast<size_t>(recvd);
-  }
-  CHECK(total_sent == 0);
-
-  // The bridge should have failed to send the messages published above.
-  REQUIRE_FALSE(recv_and_unpack<Msg>(tcp_client->descriptor(), message2, []() {}, short_recv_timeout));
-
-  SECTION("Normal Case")
-  {
-    // When the socket becomes writeable again, the bridge should retry.
-    payload = recv_and_unpack<Msg>(tcp_client->descriptor(), message2, notify_fn);
-    REQUIRE(payload);
-    CHECK(std::get<0U>(*payload).body.publish_timestamp == 2222L);
-    CHECK(std::ranges::equal(std::as_bytes(std::span{&message2, 1U}), std::get<1U>(*payload)));
-
-    payload = recv_and_unpack<Msg>(tcp_client->descriptor(), message3, notify_fn);
-    REQUIRE(payload);
-    CHECK(std::get<0U>(*payload).body.publish_timestamp == 3333L);
-    CHECK(std::ranges::equal(std::as_bytes(std::span{&message3, 1U}), std::get<1U>(*payload)));
-
-    epoll.notify(*client_fd, EPOLLOUT);
-    CHECK_FALSE(recv_and_unpack<Msg>(tcp_client->descriptor(), message2, notify_fn, short_recv_timeout));
-    CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
-  }
-}
-
-TEST_CASE("TcpBridgeServer | Retry Partial Send")
-{
-  constexpr size_t message_data_size = 1U << 17U;
-  using Msg = std::array<std::byte, message_data_size>;
-  constexpr size_t num_slots = 3;
-  constexpr size_t max_observer = 1;
-
-  const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots> channel(memres);
-  auto publisher = channel.make_publisher(max_observer);
-
-  EPollSnooper epoll{};
-
-  // Create the bridge.
-  constexpr auto max_clients = 1;
-  TcpBridgeServerConfigTap config{};
-  config.set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
-  config.get_mutable_buffer_layout().set_num_slots(num_slots);
-  config.get_mutable_buffer_layout().set_message_size(sizeof(Msg));
-  config.get_underlying_listen_address().set_truncate(socket_host);
-  config.set_listen_port(0U);
-  config.set_num_clients(max_clients);
-  config.get_underlying_channel_name().set_truncate("test_channel");
-
-  const auto diagnostics_counters = std::make_shared<TcpBridgeDiagnosticsCounters>();
-
-  auto bridge_server = TcpBridgeServer::make(
-    memres,
-    config,
-    channel.make_subscriber(),
-    jewels::memory::make_non_null_from_ref(epoll),
-    diagnostics_counters,
-    TcpBridgeServerMode::production);
-  REQUIRE(bridge_server);
-  REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)));
-  const auto listen_addr =
-    jewels::networking::SocketAddress::create(std::string{socket_host}, bridge_server->listen_port());
-  const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{socket_host}, 0);
-
-  auto tcp_client = TcpSocket::create_connect(*listen_addr, *ephemeral_addr);
-  REQUIRE(tcp_client);
-  REQUIRE(set_nonblocking(tcp_client->descriptor(), true));
-
-  bridge_server->notify(epoll, bridge_server->listen_fd(), EPOLLIN);
-  auto client_fd = epoll.pop_fd();
-  REQUIRE(client_fd);
-  const auto notify_fn = [&epoll, &client_fd]() { epoll.notify(*client_fd, EPOLLOUT); };
-
-  // Make the socket buffers as small as possible. The kernel will clamp this to
-  // the system minimum.
-  int bufsize = 1;
-  REQUIRE(::setsockopt(*client_fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(int)) == 0);
-
-  Msg message{};
-  message.fill(std::byte{0x99});
-  testing::publish(publisher, message, jewels::time::SyncTime{std::chrono::nanoseconds{1111L}});
-
-  auto payload = recv_and_unpack<Msg>(tcp_client->descriptor(), message, notify_fn);
-  REQUIRE(payload);
-  CHECK(std::get<0U>(*payload).body.publish_timestamp == 1111L);
-  CHECK(std::ranges::equal(message, std::get<1U>(*payload)));
-  CHECK(*diagnostics_counters == TcpBridgeDiagnosticsCounters{});
+  const auto msg2 = support::make_random_message<message_size>();
+  testing::publish(
+    publisher,
+    *msg2,
+    jewels::time::SyncTime{std::chrono::nanoseconds{1002L}},
+    2,
+    jewels::time::SyncTime{std::chrono::nanoseconds{2002}});
+  const auto msg3 = support::make_random_message<message_size>();
+  testing::publish(
+    publisher,
+    *msg3,
+    jewels::time::SyncTime{std::chrono::nanoseconds{1003L}},
+    3,
+    jewels::time::SyncTime{std::chrono::nanoseconds{2003}});
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 2, *msg2, 1002L, 2002L));
+  CHECK(support::check_next_payload(tcp_client->descriptor(), 3, *msg3, 1003L, 2003L));
 }
 
 } // namespace clockwork::pinion

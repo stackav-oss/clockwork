@@ -1,6 +1,9 @@
-use clockwork::diagnostics::report
+#![generate(cpp)]
+#![cpp(namespace=clockwork::diagnostics)]
 
-max_reporter_name: UInt64 = 256;
+use clockwork::diagnostics::report;
+
+max_reporter_name: UInt64 = 512;
 
 max_reporters: UInt64 = 400;
 
@@ -22,6 +25,10 @@ schema ReporterInfo
     // Name of this instance, may be empty if it's the only one (matches `SignalGroup<>::InstanceType`)
     #4 instance: VarString<max_reporter_name>;
   }
+  history
+  {
+    version: 5;
+  }
 }
 
 //
@@ -36,21 +43,4 @@ schema DatabaseInfo
     // Connections to remote bridge servers.
     #3 reporters: VarArray<ReporterInfo, max_size=max_reporters>;
   }
-}
-
-cpp_target database_config
-{
-  options
-  {
-    namespace clockwork::diagnostics;
-  }
-
-  schema ReporterInfo;
-  schema DatabaseInfo;
-
-  representation Tachyon<ReporterInfo>;
-  representation Tachyon<DatabaseInfo>;
-
-  interface ReporterInfoTap : Tap<Tachyon<ReporterInfo>>;
-  interface DatabaseInfoTap : Tap<Tachyon<DatabaseInfo>>;
 }

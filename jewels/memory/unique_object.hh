@@ -38,6 +38,10 @@ class UniqueObject
   static constexpr auto noexcept_release{noexcept(std::declval<Deleter>()(std::declval<Object>()))};
 
 public:
+  using element_type = Object;
+
+  using deleter_type = Deleter;
+
   /// Construct from a object.
   template <class InDeleter>
   UniqueObject(Object&& object, InDeleter&& deleter);

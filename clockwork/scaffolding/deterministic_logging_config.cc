@@ -7,7 +7,7 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/readers/log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/container/compare.hh"
@@ -31,8 +31,8 @@ get_deterministic_logging_config(const ExecutionParams& execution_params)
   DeterministicLoggingConfig logging_config;
   if (execution_params.log_writer_config_path)
   {
-    auto log_writer_config_status =
-      read_tachyon_config_to_heap<clockwork_logging::LogWriterConfigTap>(*execution_params.log_writer_config_path);
+    auto log_writer_config_status = read_tachyon_config_to_heap<Tappy<clockwork_logging::LogWriterConfig<>>>(
+      *execution_params.log_writer_config_path);
     if (!log_writer_config_status)
     {
       return jewels::unexpected(jewels::MonoError{});
@@ -41,8 +41,9 @@ get_deterministic_logging_config(const ExecutionParams& execution_params)
   }
   if (execution_params.channel_publisher_config_path)
   {
-    auto channel_publisher_config_status = read_tachyon_config_to_heap<clockwork_logging::ChannelPublisherConfigTap>(
-      *execution_params.channel_publisher_config_path);
+    auto channel_publisher_config_status =
+      read_tachyon_config_to_heap<Tappy<clockwork_logging::ChannelPublisherConfig<>>>(
+        *execution_params.channel_publisher_config_path);
     if (!channel_publisher_config_status)
     {
       return jewels::unexpected(jewels::MonoError{});
@@ -52,7 +53,7 @@ get_deterministic_logging_config(const ExecutionParams& execution_params)
   if (execution_params.metrics_channel_metadata_config_path)
   {
     auto metrics_channel_metadata_config_status =
-      read_tachyon_config_to_heap<clockwork::tools::MetricsChannelMetadataConfigTap>(
+      read_tachyon_config_to_heap<Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>(
         *execution_params.metrics_channel_metadata_config_path);
     if (!metrics_channel_metadata_config_status)
     {

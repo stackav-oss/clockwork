@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <type_traits>
+
 namespace
 {
 
@@ -12,6 +14,17 @@ TEST_CASE("ctor", "[tapmsg]")
 {
   REQUIRE_NOTHROW(clockwork::Tap<clockwork::Tachyon<::clockwork::testing::SubMsg>>());
   REQUIRE_NOTHROW(clockwork::Tap<clockwork::Tachyon<::clockwork::testing::TapMsg<234>>>());
+  REQUIRE_NOTHROW(clockwork::Tap<clockwork::Tachyon<::clockwork::testing::TapMsg<>>>());
+  STATIC_REQUIRE(clockwork::Tap<clockwork::Tachyon<::clockwork::testing::TapMsg<>>>::signed_value == 234);
+  STATIC_REQUIRE(clockwork::Tap<clockwork::Tachyon<::clockwork::testing::GenericMsg<>>>::value_par == 3);
+  STATIC_REQUIRE(
+    std::is_same_v<
+      clockwork::Tachyon<::clockwork::testing::GenericMsg<>>::TypePar,
+      clockwork::Tappy<clockwork::testing::TapMsg<>>>);
+  STATIC_REQUIRE(
+    std::is_same_v<
+      clockwork::Tap<clockwork::Tachyon<::clockwork::testing::GenericMsg<>>>::TypePar,
+      clockwork::Tappy<clockwork::testing::TapMsg<>>>);
 }
 
 TEST_CASE("optional", "[tapmsg]")

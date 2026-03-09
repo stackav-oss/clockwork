@@ -1,5 +1,7 @@
-use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
-use clockwork::logging::channel_type::ChannelType;
+#![generate()]
+
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
 use clockwork::examples::demo_system::gps::gps_channels;
 
 // Defining this policy adds the channel to both the telemety log writer configuration and

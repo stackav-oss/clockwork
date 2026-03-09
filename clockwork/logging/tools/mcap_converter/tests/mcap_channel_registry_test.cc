@@ -1,10 +1,11 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/tools/mcap_converter/mcap_channel_registry.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -19,8 +20,9 @@
 #include <mcap/writer.hpp>
 #include <wise_enum.h>
 
+#include <cstddef>
 #include <cstring>
-#include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <memory_resource>
 #include <span>
@@ -86,6 +88,23 @@ TEST_CASE("McapChannelRegistry")
   REQUIRE(registry->try_get_channel_id(metadata1.channel_name).value() == channel_id1);
   REQUIRE(registry->try_get_channel_id(metadata2.channel_name).value() == channel_id2);
   REQUIRE(registry->try_get_channel_id(metadata3.channel_name).value() == channel_id3);
+
+  // Write a dummy message on each channel so the mcap writer includes
+  // their schemas and channels in the summary section.
+  const std::byte dummy_byte{0};
+  for (const auto channel_id : {channel_id1, channel_id2, channel_id3})
+  {
+    mcap::Message msg{};
+    msg.channelId = channel_id;
+    msg.sequence = 0;
+    msg.logTime = 0;
+    msg.publishTime = 0;
+    msg.dataSize = sizeof(dummy_byte);
+    msg.data = &dummy_byte;
+    const auto write_status = mcap_writer.write(msg);
+    REQUIRE(write_status.ok());
+  }
+
   mcap_writer.close();
 
   auto mcap_reader = mcap::McapReader();

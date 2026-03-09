@@ -11,7 +11,7 @@
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
@@ -19,6 +19,7 @@
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -102,7 +103,7 @@ constexpr bool is_create_callable = CreateCallableImpl<Cog, std::tuple<Args...>>
 struct Config
 {
   template <typename Msg>
-  using ValueT = std::shared_ptr<const CogConfigDataImpl<Msg>>;
+  using ValueT = std::shared_ptr<CogConfigDataImpl<Msg>>;
   using IdTag = common::ConfigInstanceId;
   template <typename MsgT>
   struct Traits
@@ -120,8 +121,10 @@ struct Config
   struct Traits<ProtoSchema<ProtoT, uuid_v, Tap<Tachyon<SchemaT>>>>
   {
     using Msg = Tap<Tachyon<SchemaT>>;
+    using Proto = ProtoT;
     // NOLINTNEXTLINE(fuchsia-statically-constructed-objects)  UUID same for all instances of a type.
     static constexpr auto uuid = uuid_v;
+    static constexpr bool is_proto_schema = true;
     static ValueT<Msg> create(jewels::memory::MemoryResource memres, std::span<const std::byte> data);
   };
 };
@@ -223,7 +226,7 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
   /// @return A pointer to AbstractCog (to register with runner), or error
   ///
   jewels::expected<std::shared_ptr<AbstractCog>, Error> try_instantiate_cog(
-    const common::CogInstanceDescriptionTap& description,
+    const Tappy<common::CogInstanceDescription<>>& description,
     std::shared_ptr<AbstractCogQueue> runner_queue,
     jewels::memory::MemoryResource execution_resource) override;
 
@@ -237,13 +240,23 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
     pinion::PublisherHandle publisher) override;
 
   ///
+  /// Instantiate pure serialized state with initial data.
+  /// Allocates an instance of the given ClassId and assigns it the given InstanceId, then loads data into it
+  ///
+  Outcome try_instantiate_state(
+    jewels::Uuid<common::StateInstanceId> instance_id,
+    jewels::Uuid<RepresentationTag> repr_id,
+    pinion::PublisherHandle publisher,
+    std::span<const std::byte> data) final;
+
+  ///
   /// Instantiate pure C++ state.
   /// Allocates an instance of the given ClassId and assigns it the given InstanceId
   ///
   jewels::expected<void, Error> try_instantiate_state(
-    jewels::Uuid<common::StateInstanceId> /*unused*/,
-    jewels::Uuid<RepresentationTag> /*unused*/,
-    jewels::memory::MemoryResource /*unused*/) override;
+    jewels::Uuid<common::StateInstanceId> instance_id,
+    jewels::Uuid<RepresentationTag> repr_id,
+    jewels::memory::MemoryResource memres) override;
 
   ///
   /// Instantiate hybrid C++/serialized state.
@@ -260,10 +273,22 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
   /// Allocates an instance of the given ClassId and assigns it the given InstanceId
   ///
   jewels::expected<void, Error> try_instantiate_config(
-    jewels::Uuid<common::ConfigInstanceId> /*unused*/,
-    jewels::Uuid<RepresentationTag> /*unused*/,
-    std::span<const std::byte> /*unused*/,
-    jewels::memory::MemoryResource /*unused*/) override;
+    jewels::Uuid<common::ConfigInstanceId> instance_id,
+    jewels::Uuid<RepresentationTag> repr_id,
+    std::span<const std::byte> data,
+    jewels::memory::MemoryResource memres) override;
+
+  ///
+  /// Deserialize data from protobuf format to tachyon format.
+  /// @param repr_id The representation ID identifying the schema type
+  /// @param input_data The input data in protobuf text format
+  /// @param output_data The output buffer to store the deserialized tachyon data
+  /// @return Outcome indicating success or specific failure reason
+  ///
+  Outcome try_deserialize_data(
+    jewels::Uuid<RepresentationTag> repr_id,
+    std::span<const std::byte> input_data,
+    std::span<std::byte> output_data) override;
 
   ///
   /// Instantiate a local publisher.
@@ -332,6 +357,11 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
     jewels::Uuid<common::EndpointInstanceId> endpoint, jewels::memory::MemoryResource memres) override;
 
   ///
+  /// Connect a snapshot publisher to a state or config endpoint
+  ///
+  SnapshotConfigOutcome try_configure_snapshot(const Tappy<common::SnapshotConfig>& snapshot_config) override;
+
+  ///
   /// Try to instantiate an IO stream.
   ///
   jewels::expected<std::shared_ptr<EPollable>, AbstractCasing::Error> try_instantiate_io_connection(
@@ -398,6 +428,15 @@ private:
   try_instantiate_thing(InstanceId instance_id, TypeId type_id, Args&&... args);
 
   ///
+  /// Helper to deserialize a specific schema type from protobuf to tachyon
+  /// @tparam SchemaT The schema type to deserialize
+  /// @param input_data The input protobuf data
+  /// @param output_data The output buffer for tachyon data
+  ///
+  template <typename SchemaT>
+  Outcome try_deserialize_schema(std::span<const std::byte> input_data, std::span<std::byte> output_data);
+
+  ///
   /// Dispatches to a cog instance's set_handle.  If Cog0 defines a matching `set_handle(endpoint, args...)` and an
   /// instance of Cog0 defines the matching EndpointInstanceId then it calls set_handle with the provided args and
   /// forwards its return value (if any).  If either condition is false, recurses to the next Cog in CogN.
@@ -439,7 +478,7 @@ private:
   ///
   /// Config/state instances
   ///
-  UuidMap<common::ConfigInstanceId, std::shared_ptr<const CogConfigData>> configs_;
+  UuidMap<common::ConfigInstanceId, std::shared_ptr<CogConfigData>> configs_;
   UuidMap<common::StateInstanceId, std::shared_ptr<CogStateData>> states_;
 };
 /// @}

@@ -17,17 +17,25 @@
 
 namespace jewels::networking
 {
+
 /// A wrapper around `sockaddr`.
 class SocketAddress
 {
 public:
   /// Construct an address from a hostname/IP and port.
-  /// TODO(OI-3219) Make compatible with SocketEndpoint and pmr.
+  /// @tparam Allocator The allocator type for the string.
   /// @param[in] host A hostname or IP address.
   /// @param[in] port The port.
   /// @param[in] family The address family.
-  static jewels::expected<SocketAddress, filesystem::ErrorCode>
-  create(const std::string& host, uint16_t port, sa_family_t family = AF_INET) noexcept;
+  template <class Allocator>
+  static jewels::expected<SocketAddress, filesystem::ErrorCode> create(
+    const std::basic_string<char, std::char_traits<char>, Allocator>& host,
+    uint16_t port,
+    sa_family_t family = AF_INET) noexcept;
+
+  /// Construct an address from for IN_ADDR_ANY from a port.
+  /// @param[in] port The port.
+  [[nodiscard]] static SocketAddress create_any_address(uint16_t port) noexcept;
 
   /// Get the address as a sockaddr pointer.
   [[nodiscard]] const ::sockaddr* ptr() const noexcept;
@@ -78,3 +86,5 @@ private:
 };
 
 } // namespace jewels::networking
+
+#include "jewels/networking/socket_address.inl"

@@ -2,6 +2,11 @@
 schema ProtoTester
 {
   uuid: cbe6ee0b-ec41-40ce-8587-fb3583e5385d;
+  options
+  {
+    constructor: source_code_order;
+    soa_enabled: true;
+  }
   fields
   {
     // Test stuff
@@ -104,6 +109,15 @@ schema BetterThanInheritance
 
     // Fixed array of small int
     #27 fixed_array_of_small_int: FixedArray<Int8, 3>;
+
+    // Optional String
+    #28 optional_string: Optional<VarString<50>>;
+
+    // VarSoa of ProtoTester elements
+    #29 var_soa_composition: VarSoa<ProtoTester, 50>;
+
+    // FixedSoa of ProtoTester elements
+    #30 fixed_soa_composition: FixedSoa<ProtoTester, 2>;
   }
 }
 
@@ -248,6 +262,7 @@ proto_target better_than_inheritance
   {
     package clockwork.my_proto;
     validate_proto true;
+    prefix_enum_value_names true;
   }
   enum HelloEnum;
   representation my_alias: Protobuf<GenericMsg<Float32, 32>>;

@@ -49,13 +49,14 @@ message GetProcessListResponse {
 
 message SimpleLaunchCommand {
   oneof command {
-    // The name of the process to stop.
-    string start_process = 1;
     // The name of the process to start.
+    string start_process = 1;
+    // The name of the process to stop.
     string stop_process = 2;
     // Get logs from a process.
     string get_logs = 3;
     // Stop all processes.
     bool stop_all_processes = 4;
   }
+  repeated string process_args = 5;
 }

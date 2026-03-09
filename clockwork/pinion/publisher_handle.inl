@@ -5,72 +5,37 @@
 
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
-#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <cstring>
+#include <cstddef>
 #include <new>
 #include <span>
+#include <type_traits>
 
 namespace clockwork::pinion
 {
-
-/// A typed wrapper around ReservedSlot that can be passed to a cog.
-template <class Message>
-jewels::expected<Publishable<Message>, jewels::MonoError>
-Publishable<Message>::try_make(jewels::memory::ObjectPtr<ReservedSlot> reserved_slot) noexcept
+namespace detail
 {
-  // Check if the cast is valid so we can store the underlying
-  // reserved slot and not need to re-check later.
-  if (!marshal_as<Message>(reserved_slot->slot().message()))
+template <typename Message, typename = void>
+struct InitMessageData
+{
+  static void clear(std::span<std::byte> msg)
   {
-    return jewels::unexpected{jewels::MonoError{}};
+    new (msg.data()) Message{};
   }
+};
 
-  return Publishable<Message>{reserved_slot};
-}
-
-template <class Message>
-Publishable<Message>::Publishable(jewels::memory::ObjectPtr<ReservedSlot> reserved_slot) noexcept
-  : reserved_slot_{reserved_slot}
+template <typename Message>
+struct InitMessageData<Message, std::void_t<decltype(Message::clear())>>
 {
-  // Default construct to get the correct default value for this type.
-  // The other parts of the slot are already zero'd by the buffer
-  // handle on reserve.
-  new (reserved_slot_->slot().message().data()) Message{};
-}
+  static void clear(std::span<std::byte> msg)
+  {
+    unsafe_marshal_as<Message>(msg)->clear();
+  }
+};
 
-template <class Message>
-Message& Publishable<Message>::message() const noexcept
-{
-  // This is safe to call, because the safe version was checked in try_make.
-  return *unsafe_marshal_as<Message>(reserved_slot_->slot().message());
-}
-
-template <class Message>
-void Publishable<Message>::mark_for_publish() noexcept
-{
-  reserved_slot_->mark_for_commit();
-}
-
-template <class Message>
-void Publishable<Message>::sim_only_mark_for_publish_with_fake_timestamp(jewels::time::SyncTime fake_time) noexcept
-{
-  reserved_slot_->sim_only_mark_for_commit_with_fake_timestamp(fake_time);
-}
-
-template <class Message>
-bool Publishable<Message>::is_marked_for_publish() const noexcept
-{
-  return reserved_slot_->state() == ReservationState::State::commit;
-}
-
-template <class Message>
-bool Publishable<Message>::connected() const noexcept
-{
-  return reserved_slot_->connected();
-}
+} // namespace detail
 
 template <size_t num_slots>
 jewels::expected<void, WriteError>

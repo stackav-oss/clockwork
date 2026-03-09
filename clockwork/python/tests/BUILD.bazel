@@ -6,6 +6,31 @@ load("//tools/rules:python.bzl", "cc_test_with_embedded_py")
 package(default_testonly = True)
 
 cc_test_with_embedded_py(
+    name = "clk_python_dial_test",
+    srcs = ["clk_python_dial_test.cc"],
+    linkopts = ["-lpthread"],
+    py_deps = [
+        "//clockwork/python/tests/support:clk_python_cog_clk_py_dial",
+        "//clockwork/python/tests/support:clk_python_cog_clk_py_impl",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/python:gil_lock_guard",
+        "//clockwork/python:python_init",
+        "//clockwork/python:python_object",
+        "//clockwork/python:python_state",
+        "//clockwork/python/tests/support:test_config_clk_cc",
+        "//clockwork/python/tests/support:test_input_message_clk_cc",
+        "//clockwork/python/tests/support:test_output_message_clk_cc",
+        "//clockwork/python/tests/support:test_state_clk_cc",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:span",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test_with_embedded_py(
     name = "python_dial_test",
     srcs = ["python_dial_test.cc"],
     linkopts = ["-lpthread"],
@@ -19,10 +44,10 @@ cc_test_with_embedded_py(
         "//clockwork/python:python_init",
         "//clockwork/python:python_object",
         "//clockwork/python:python_state",
-        "//clockwork/python/tests/support:test_config",
-        "//clockwork/python/tests/support:test_input_message",
-        "//clockwork/python/tests/support:test_output_message",
-        "//clockwork/python/tests/support:test_state",
+        "//clockwork/python/tests/support:test_config_clk_cc",
+        "//clockwork/python/tests/support:test_input_message_clk_cc",
+        "//clockwork/python/tests/support:test_output_message_clk_cc",
+        "//clockwork/python/tests/support:test_state_clk_cc",
         "//jewels/container/tap:var_string",
         "//jewels/memory:memory_resource",
         "//jewels/std:span",
@@ -34,17 +59,13 @@ cc_test_with_embedded_py(
     name = "python_object_test",
     srcs = ["python_object_test.cc"],
     linkopts = ["-lpthread"],
-    py_deps = [
-        "//clockwork/python/tests/support:python_object_test_helper",
-        "//:clockwork",
-    ],
+    py_deps = ["//clockwork/python/tests/support:python_object_test_helper"],
+    py_imports = ["../../.."],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork/python:gil_lock_guard",
         "//clockwork/python:python_init",
         "//clockwork/python:python_object",
-        "//clockwork/python/tests/support:test_input_message",
-        "//clockwork/python/tests/support:test_output_message",
         "//jewels/container/tap:var_string",
         "//jewels/memory:memory_resource",
         "//jewels/scope_guard",

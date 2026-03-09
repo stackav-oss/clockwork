@@ -6,6 +6,7 @@
 #include "clockwork/common/cog_gpu_assignment_config_clk_cc.hh"
 #include "clockwork/logging/writers/deterministic_log_writer.hh"
 #include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/pointers.hh"
@@ -110,7 +111,7 @@ get_cog_gpu_assignment_config(const ExecutionParams& execution_params)
   if (execution_params.cog_gpu_assignment_config_path)
   {
     auto cog_gpu_assignment_config_status =
-      read_tachyon_config_to_heap<CogGpuAssignmentConfigTap>(*execution_params.cog_gpu_assignment_config_path);
+      read_tachyon_config_to_heap<Tappy<CogGpuAssignmentConfig>>(*execution_params.cog_gpu_assignment_config_path);
     if (!cog_gpu_assignment_config_status)
     {
       return jewels::unexpected(jewels::MonoError{});

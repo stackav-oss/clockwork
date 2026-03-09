@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::dial::approx_aligner_config;
 use clockwork::examples::demo_system::perception::perception_message;
 

@@ -19,7 +19,13 @@ src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/s2n/tls/s2n_cipher_suites.c
 src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/aws-c-common/source/hash_table.c
 src:external/aws_sdk_cpp+/crt/aws-crt-cpp/crt/aws-c-common/source/ref_count.c
 src:external/onnxruntime+/onnxruntime/core/session/provider_bridge_ort.cc
+src:external/openssl+/crypto/evp/digest.c
+src:external/openssl+/crypto/evp/evp_fetch.c
+src:external/openssl+/crypto/property/property.c
+src:external/openssl+/providers/implementations/encode_decode/decode_der2key.c
 src:external/pytorch_cpuinfo+/src/linux/multiline.c
+src:external/systemd+/src/basic/hash-funcs.c
+src:external/systemd+/src/basic/path-util.c
 # [function] end
 
 [function]

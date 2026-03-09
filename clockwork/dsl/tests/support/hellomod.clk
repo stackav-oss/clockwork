@@ -1,4 +1,5 @@
-use clockwork::dsl::tests::support::{hellocog, hellomsg};
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
 use clockwork::io::var_packet;
 use clockwork::diagnostics::report;
 

@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 // Error Enum for Cog execution errors
 enum CogExecutionError
 {
@@ -20,14 +23,4 @@ enum CogExecutionError
     // Overrun
     #7 overrun;
   }
-}
-
-cpp_target cog_execution_error
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  enum CogExecutionError;
 }

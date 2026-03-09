@@ -1,4 +1,7 @@
-use clockwork::common::process_description::CogInstanceId;
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork)]
+
+use clockwork::common::process_description::{CogInstanceId};
 
 // An individual cog-gpu assignment
 schema CogGpuAssignment {
@@ -18,25 +21,4 @@ schema CogGpuAssignmentConfig {
     // The list of cog gpu assignments
     #1 cog_gpu_assignments: VarArray<type=CogGpuAssignment, max_size=1024>;
   }
-}
-
-cpp_target cog_gpu_assignment_config_clk_cc
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  schema CogGpuAssignment;
-  schema CogGpuAssignmentConfig;
-  representation Tachyon<CogGpuAssignment>;
-  representation Tachyon<CogGpuAssignmentConfig>;
-  interface Tap<Tachyon<CogGpuAssignment>>;
-  interface CogGpuAssignmentConfigTap: Tap<Tachyon<CogGpuAssignmentConfig>>;
-}
-
-py_target cog_gpu_assignment_config_clk_py
-{
-  interface Tappy<CogGpuAssignment>;
-  interface Tappy<CogGpuAssignmentConfig>;
 }

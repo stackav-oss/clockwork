@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import fields
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema
@@ -118,3 +119,614 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     msg_meta.array_of_schema.append(SubMsgDyn(field=3))
     with pytest.raises(ValueError, match=re.escape("Attempt to serialize array of length 3, max 2")):
         msg_meta.serialize_tachyon(memoryview(buffer))
+
+
+def test_fixed_soa_basic(fs_importer: FilesystemImporter) -> None:
+    """Test basic FixedSoa serialization and deserialization with metadata."""
+    source = """
+// 3D point
+schema Point3f
+{
+  uuid: d5fe1bc7-3407-4722-b05d-1aff6c19fe09;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container for points
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Fixed-size SoA of points
+    #0 points: FixedSoa<type=Point3f, size=5>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Create a container with FixedSoa
+    points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
+    container = container_class(  # type: ignore[call-arg]
+        points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            x=[1.0, 2.0, 3.0, 4.0, 5.0],
+            y=[10.0, 20.0, 30.0, 40.0, 50.0],
+            z=[100.0, 200.0, 300.0, 400.0, 500.0],
+        )
+    )
+
+    # Serialize
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container.serialize_tachyon(memoryview(buffer))
+
+    # Deserialize
+    container2 = container_class.deserialize_tachyon(memoryview(bytes(buffer)))
+
+    # Verify
+    assert container2.points.x == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert container2.points.y == [10.0, 20.0, 30.0, 40.0, 50.0]
+    assert container2.points.z == [100.0, 200.0, 300.0, 400.0, 500.0]
+
+
+def test_var_soa_basic(fs_importer: FilesystemImporter) -> None:
+    """Test basic VarSoa serialization and deserialization with metadata."""
+    source = """
+// 3D point
+schema Point3f
+{
+  uuid: d5fe1bc7-3407-4722-b05d-1aff6c19fe09;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container for points
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of points
+    #0 points: VarSoa<type=Point3f, max_size=10>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Create a container with VarSoa
+    points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
+    container = container_class(  # type: ignore[call-arg]
+        points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            x=[1.0, 2.0, 3.0],
+            y=[10.0, 20.0, 30.0],
+            z=[100.0, 200.0, 300.0],
+        )
+    )
+
+    # Serialize
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container.serialize_tachyon(memoryview(buffer))
+
+    # Deserialize
+    container2 = container_class.deserialize_tachyon(memoryview(bytes(buffer)))
+
+    # Verify
+    assert container2.points.x == [1.0, 2.0, 3.0]
+    assert container2.points.y == [10.0, 20.0, 30.0]
+    assert container2.points.z == [100.0, 200.0, 300.0]
+
+
+def test_var_soa_empty(fs_importer: FilesystemImporter) -> None:
+    """Test VarSoa with empty arrays with metadata."""
+    source = """
+// 3D point
+schema Point3f
+{
+  uuid: d5fe1bc7-3407-4722-b05d-1aff6c19fe09;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container for points
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of points
+    #0 points: VarSoa<type=Point3f, max_size=10>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Create empty VarSoa
+    points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
+    container = container_class(points=points_type())  # type: ignore[call-arg,misc] # pyright: ignore[reportCallIssue]
+
+    # Serialize
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container.serialize_tachyon(memoryview(buffer))
+
+    # Deserialize
+    container2 = container_class.deserialize_tachyon(memoryview(bytes(buffer)))
+
+    # Verify all fields are empty
+    assert container2.points.x == []
+    assert container2.points.y == []
+    assert container2.points.z == []
+
+
+def test_soa_with_padding(fs_importer: FilesystemImporter) -> None:
+    """Test SoA with a schema that has padding in AoS form with metadata."""
+    source = """
+// Message with padding
+schema PaddedMsg
+{
+  uuid: 8fa1ff8b-a84d-45cc-9d93-28b8cc9c3323;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // Large field
+    #0 large: Int64;
+    // Small field
+    #1 small: Bool;
+  }
+}
+
+// Container for messages
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of messages
+    #0 messages: VarSoa<type=PaddedMsg, max_size=5>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<PaddedMsg>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "padded"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Create container with SoA
+    messages_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "messages")
+    container = container_class(  # type: ignore[call-arg]
+        messages=messages_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            large=[100, 200, 300],
+            small=[True, False, True],
+        )
+    )
+
+    # Serialize
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container.serialize_tachyon(memoryview(buffer))
+
+    # Deserialize
+    container2 = container_class.deserialize_tachyon(memoryview(bytes(buffer)))
+
+    # Verify - SoA should handle padding correctly
+    assert container2.messages.large == [100, 200, 300]
+    assert container2.messages.small == [True, False, True]
+
+
+def test_soa_size_validation(fs_importer: FilesystemImporter) -> None:
+    """Test that VarSoa validates size limits with metadata."""
+    source = """
+// 3D point
+schema Point3f
+{
+  uuid: d5fe1bc7-3407-4722-b05d-1aff6c19fe09;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container for points
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of points
+    #0 points: VarSoa<type=Point3f, max_size=3>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Try to create with too many elements
+    points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
+    container = container_class(  # type: ignore[call-arg]
+        points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            x=[1.0, 2.0, 3.0, 4.0],  # More than max_size=3
+            y=[1.0, 2.0, 3.0, 4.0],
+            z=[1.0, 2.0, 3.0, 4.0],
+        )
+    )
+
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+
+    with pytest.raises(ValueError, match=r"SoA size 4 exceeds max_size 3"):
+        container.serialize_tachyon(memoryview(buffer))
+
+
+def test_soa_mismatched_field_sizes(fs_importer: FilesystemImporter) -> None:
+    """Test that SoA validates all field arrays have the same size with metadata."""
+    source = """
+// 3D point
+schema Point3f
+{
+  uuid: d5fe1bc7-3407-4722-b05d-1aff6c19fe09;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container for points
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of points
+    #0 points: VarSoa<type=Point3f, max_size=10>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Create with mismatched sizes
+    points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
+    container = container_class(  # type: ignore[call-arg]
+        points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            x=[1.0, 2.0, 3.0],
+            y=[1.0, 2.0],  # Different size!
+            z=[1.0, 2.0, 3.0],
+        )
+    )
+
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+
+    with pytest.raises(ValueError, match=r"All SoA field arrays must have same size"):
+        container.serialize_tachyon(memoryview(buffer))
+
+
+def test_soa_with_different_types(fs_importer: FilesystemImporter) -> None:
+    """Test SoA with various field types with metadata."""
+    source = """
+// Color enum
+enum Color
+{
+  uuid: 489c0935-f5c0-4bf8-813a-4eee01a826d3;
+  values
+  {
+    // Red
+    #0 red default;
+    // Green
+    #1 green;
+    // Blue
+    #2 blue;
+  }
+}
+
+// Schema with mixed types
+schema MixedTypes
+{
+  uuid: 6a50f228-6577-49f5-96fa-4d703a33fd7e;
+  options
+  {
+    soa_enabled: true;
+  }
+  fields
+  {
+    // Integer field
+    #0 int_field: Int32;
+    // Float field
+    #1 float_field: Float64;
+    // Boolean field
+    #2 bool_field: Bool;
+    // Enum field
+    #3 enum_field: Color;
+  }
+}
+
+// Container for mixed types
+schema Container
+{
+  uuid: 37be6478-70c6-43ac-81e6-01a4ecc1b157;
+  fields
+  {
+    // Variable-size SoA of mixed types
+    #0 data: VarSoa<type=MixedTypes, max_size=4>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<MixedTypes>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "mixed"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, py_types = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    color_class = py_types["@test::mixed::Color"]
+
+    # Create container
+    data_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "data")
+    container = container_class(  # type: ignore[call-arg]
+        data=data_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
+            int_field=[10, 20],
+            float_field=[1.5, 2.5],
+            bool_field=[True, False],
+            enum_field=[color_class.red, color_class.blue],
+        )
+    )
+
+    # Serialize
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container.serialize_tachyon(memoryview(buffer))
+
+    # Deserialize
+    container2 = container_class.deserialize_tachyon(memoryview(bytes(buffer)))
+
+    # Verify
+    assert container2.data.int_field == [10, 20]
+    assert container2.data.float_field == [1.5, 2.5]
+    assert container2.data.bool_field == [True, False]
+    assert container2.data.enum_field == [color_class.red, color_class.blue]
+
+
+def test_soa_class_naming(fs_importer: FilesystemImporter) -> None:
+    """Test that SoA types generate correct Python class names."""
+    source = """
+// 3D point with namespace delimiters in FQN
+schema Point3f
+{
+  uuid: 11111111-1111-1111-1111-111111111111;
+  options { soa_enabled: true; }
+  fields
+  {
+    // X coordinate
+    #0 x: Float32;
+    // Y coordinate
+    #1 y: Float32;
+    // Z coordinate
+    #2 z: Float32;
+  }
+}
+
+// Container with both Fixed and Var SoA
+schema Container
+{
+  uuid: 22222222-2222-2222-2222-222222222222;
+  fields
+  {
+    // Fixed-size SoA of points
+    #0 fixed_points: FixedSoa<type=Point3f, size=10>;
+    // Variable-size SoA of points
+    #1 var_points: VarSoa<type=Point3f, max_size=5>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options { namespace test; }
+  representation Tachyon<Point3f>;
+  representation Tachyon<Container>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "soa_naming"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("Container")
+    assert isinstance(container_schema, schema.Schema)
+    container_ir = schema.InstantiatedSchema.from_typespec(container_schema)
+
+    container_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        container_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, container_ir),
+    )
+
+    # Deserialize empty buffer to get instances with the SoA dataclasses
+    buffer = bytearray(container_class.get_tachyon_constraint().size)
+    container_instance = container_class.deserialize_tachyon(memoryview(buffer))
+
+    # Verify class names use schema name (not field names concatenated)
+    # The FQN is "@test::soa_naming::Point3f" and we extract "Point3f"
+    assert type(container_instance.fixed_points).__name__ == "FixedSoa_Point3f_10"
+    assert type(container_instance.var_points).__name__ == "VarSoa_Point3f_5"

@@ -3,19 +3,19 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/writers/rate_filter.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/aligner/aligner.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -205,6 +205,8 @@ public:
 
   /// Message handle type
   using MessageHandleType = typename Policy::MessageHandleType;
+  static_assert(
+    !std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>, "Clockwork message handles are ephemeral");
 
   /// Aligner type
   using AlignerType = jewels::Aligner<alignment>;
@@ -213,6 +215,7 @@ public:
   /// @param[in] init_memory_resource Memory resource used to allocate memory during initialization
   /// @param[in] runtime_memory_resource Memory resource used to allocate memory after initialization
   /// @param[in] max_write_mib_per_sec Maximum write rate in MiB per second
+  /// @param[in] max_log_file_duration Time before switching to the next log file
   /// @param[in] writer_environment Writer environment type
   Writer(
     jewels::memory::MemoryResource init_memory_resource,
@@ -225,6 +228,7 @@ public:
   /// @param[in] init_memory_resource Memory resource used to allocate memory during initialization
   /// @param[in] runtime_memory_resource Memory resource used to allocate memory after initialization
   /// @param[in] buffer_pool_ptr Buffer pool pointer
+  /// @param[in] max_log_file_duration Time before switching to the next log file
   /// @param[in] writer_environment Writer environment type
   Writer(
     jewels::memory::MemoryResource init_memory_resource,
@@ -287,7 +291,7 @@ public:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message(
     const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-    requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>);
+    requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>);
 
   /// Add a message to the log blocking as needed to avoid overrunning the log device
   /// @param[in] message Message to log
@@ -296,7 +300,7 @@ public:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message_wait(
     const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-    requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>);
+    requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>);
 
   /// Save a persistent message to the log
   /// @param[in] message Message to log
@@ -313,7 +317,7 @@ public:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_clockwork_message(
     std::string_view channel_name,
-    const ClockworkMessageHandle& message_handle,
+    const ::clockwork::pinion::SlotRef& message_handle,
     LogTimestamp log_time,
     jewels::time::SteadyTime current_steady_time);
 
@@ -326,7 +330,7 @@ public:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_clockwork_message_wait(
     std::string_view channel_name,
-    const ClockworkMessageHandle& message_handle,
+    const ::clockwork::pinion::SlotRef& message_handle,
     LogTimestamp log_time,
     jewels::time::SteadyTime current_steady_time);
 
@@ -336,7 +340,7 @@ public:
   /// @param[in] log_time Message log timestamp
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> save_persistent_clockwork_message(
-    std::string_view channel_name, const ClockworkMessageHandle& message_handle, LogTimestamp log_time)
+    std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle, LogTimestamp log_time)
     requires std::is_same_v<MessageHandleType, NullMessageHandle>;
 
   /// Add message to the log
@@ -359,17 +363,25 @@ public:
   /// @param[in] message Message to log
   /// @param[in] is_lite_compressed True if the message data is lite-compressed
   /// @param[in] current_steady_time Current steady time
+  /// @param[in] is_repeated_persistent True if the message data is a repeated persistent message
   /// @return LogError on failure
-  [[nodiscard]] LogExpected<void>
-  log_message_wait(const Message& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time);
+  [[nodiscard]] LogExpected<void> log_message_wait(
+    const Message& message,
+    bool is_lite_compressed,
+    jewels::time::SteadyTime current_steady_time,
+    bool is_repeated_persistent = false);
 
   /// Add a message to the log blocking as needed to avoid overrunning the log device
   /// @param[in] message Message to log
   /// @param[in] is_lite_compressed True if the message data is lite-compressed
+  /// @param[in] is_repeated_persistent True if the message data is a repeated persistent message
   /// @param[in] current_steady_time Current steady time
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message_wait(
-    const ZeroCopyMessage& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time);
+    const ZeroCopyMessage& message,
+    bool is_lite_compressed,
+    jewels::time::SteadyTime current_steady_time,
+    bool is_repeated_persistent = false);
 
   /// Save a message to the log
   /// @param[in] message Message to save
@@ -434,10 +446,20 @@ public:
   [[nodiscard]] static size_t
   calculate_write_buffer_pool_size(size_t max_write_mib_per_sec, std::chrono::nanoseconds max_backlog) noexcept;
 
+  /// Calculate the maximum number of pending message data bytes
+  /// @param[in] max_write_mib_per_sec Maximum write rate in MiB per second
+  /// @param[in] max_backlog Maximum write backlog interval
+  [[nodiscard]] static constexpr size_t
+  calculate_max_pending_message_data_bytes(size_t max_write_mib_per_sec, std::chrono::nanoseconds max_backlog) noexcept;
+
   /// Stop writing to the current log file and start writing to the next
   /// @param[in] current_steady_time Current steady time
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> split_log(jewels::time::SteadyTime current_steady_time);
+
+  /// Get the number of pending message data bytes
+  /// @return Number of pending message data bytes
+  [[nodiscard]] size_t get_pending_message_data_bytes() const;
 
 private:
   /// Check that the resources needed to write a message are available and the max write backlog has not been exceeded
@@ -456,8 +478,11 @@ private:
   /// @param[in] is_lite_compressed True if the message is lite-compressed
   /// @param[out] record_header
   [[nodiscard]] LogExpected<void> fill_message_record_header(
-    const ZeroCopyMessage& message, bool is_lite_compressed, MessageRecordHeader& record_header)
-    requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>);
+    const ZeroCopyMessage& message,
+    bool is_lite_compressed,
+    bool is_repeated_persistent,
+    MessageRecordHeader& record_header)
+    requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>);
 
   /// Add a message to the log after error checking has been done
   /// @param[in] message Message to log
@@ -466,7 +491,7 @@ private:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message_impl(
     const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-    requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>);
+    requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>);
 
   /// Write a message to the log using zero copy
   /// @param[in] record_header Message record header
@@ -482,7 +507,7 @@ private:
     const RecordTrailer& record_trailer,
     const MessageHandleType& message_handle,
     jewels::time::SteadyTime current_steady_time)
-    requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>);
+    requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>);
 
   /// Add a clockwork message to the log without zero copy after error checking has been done
   /// @param[in] channel_name Channel name
@@ -491,7 +516,7 @@ private:
   /// @param[in] current_steady_time Current steady time
   [[nodiscard]] LogExpected<void> log_clockwork_message_impl(
     std::string_view channel_name,
-    const ClockworkMessageHandle& message_handle,
+    const ::clockwork::pinion::SlotRef& message_handle,
     LogTimestamp log_time,
     jewels::time::SteadyTime current_steady_time)
     requires std::is_same_v<MessageHandleType, NullMessageHandle>;
@@ -499,10 +524,14 @@ private:
   /// Add a message to the log after error checking has been done
   /// @param[in] message Message to log
   /// @param[in] is_lite_compressed True if the message data is lite-compressed
+  /// @param[in] is_repeated_persistent True if the message data is a repeated persistent message
   /// @param[in] current_steady_time Current steady time
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message_impl(
-    const ZeroCopyMessage& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time);
+    const ZeroCopyMessage& message,
+    bool is_lite_compressed,
+    bool is_repeated_persistent,
+    jewels::time::SteadyTime current_steady_time);
 
   /// Write the most recent message from each persistent channel to the log
   /// @param[in] current_steady_time Current steady time
@@ -566,15 +595,19 @@ private:
   /// @param[in] data_spans Data spans to be logged
   /// @param[in] current_steady_time Current steady time
   /// @return Log error on failure
-  [[nodiscard]] LogExpected<void>
-  copy_log_data(std::span<std::span<const std::byte>> data_spans, jewels::time::SteadyTime current_steady_time);
+  [[nodiscard]] LogExpected<void> copy_log_data(
+    std::span<std::span<const std::byte>> data_spans,
+    AsyncWriteRequestType::DataType data_type,
+    jewels::time::SteadyTime current_steady_time);
 
   /// Asynchronously write data with data copy
   /// @param[in] data Data to be logged
   /// @param[in] current_steady_time Current steady time
   /// @return Log error on failure
-  [[nodiscard]] LogExpected<void>
-  copy_log_data(std::span<const std::byte> data, jewels::time::SteadyTime current_steady_time);
+  [[nodiscard]] LogExpected<void> copy_log_data(
+    std::span<const std::byte> data,
+    AsyncWriteRequestType::DataType data_type,
+    jewels::time::SteadyTime current_steady_time);
 
   /// Asynchronously write data with zero copy
   /// @param[in] data Data to be logged
@@ -583,6 +616,7 @@ private:
   /// @return Log error on failure
   [[nodiscard]] LogExpected<void> zero_copy_log_data(
     std::span<const std::byte> data,
+    AsyncWriteRequestType::DataType data_type,
     const MessageHandleType& message_handle,
     jewels::time::SteadyTime current_steady_time);
 
@@ -686,6 +720,9 @@ private:
 
   /// Writer environment type
   WriterEnvironment writer_environment_;
+
+  /// Maximum number of pending message data bytes
+  size_t max_pending_message_data_bytes_;
 };
 
 } // namespace clockwork_logging::onboard

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from clockwork.dsl.composition import gen_logger_configs, logger_config, logger_config_proto, system
-from clockwork.dsl.ir import box, compiler, pubsub
+from clockwork.dsl.ir import box, compiler, importer_registry, pubsub
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
@@ -21,23 +21,31 @@ def fs_importer() -> FilesystemImporter:
 
 
 def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
-    def basic_helper(config: logger_config_proto.LogWriterConfig) -> None:
-        # Test serialization/deserialization
-        buffer = bytearray(logger_config.LogWriterConfig.get_tachyon_constraint().size)
-        config.serialize_tachyon(memoryview(buffer))
-        config_from_serdes = logger_config.LogWriterConfig.deserialize_tachyon(memoryview(buffer))
-        assert config == config_from_serdes
-        # Test read/write file
-        tmp_file = tmp_path / "LogWriterConfig.tachyon"
-        protocol.write_tachyon_to_file(config, tmp_file)
-        config_from_file = protocol.read_tachyon_from_file(logger_config.LogWriterConfig, tmp_file)
-        assert config == config_from_file
 
     # Generate configs
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/composition/tests/support/simplesys.clk")),
         fs_importer,
     )
+
+    # Store the importer in the module's context for logger_config to use
+    importer_reg = module.context[importer_registry.IMPORTER_REGISTRY_KEY]
+    importer_reg.importer = fs_importer
+
+    entities = logger_config.get_entities(module.context)
+
+    def basic_helper(config: logger_config_proto.LogWriterConfig) -> None:
+        # Test serialization/deserialization
+        buffer = bytearray(entities.log_writer_config.get_tachyon_constraint().size)
+        config.serialize_tachyon(memoryview(buffer))
+        config_from_serdes = entities.log_writer_config.deserialize_tachyon(memoryview(buffer))
+        assert config == config_from_serdes
+        # Test read/write file
+        tmp_file = tmp_path / "LogWriterConfig.tachyon"
+        protocol.write_tachyon_to_file(config, tmp_file)
+        config_from_file = protocol.read_tachyon_from_file(entities.log_writer_config, tmp_file)
+        assert config == config_from_file
+
     box_template_ir = module.inner_scope.lookup("System1")
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
@@ -62,7 +70,7 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
     assert len(tel_conf1.channels) == 1
     assert {ch.channel_name for ch in tel_conf1.channels} == {"Chan1"}
     chan1_conf = tel_conf1.channels[0]
-    assert chan1_conf.schema_encoding == logger_config.SchemaEncoding.clockwork_tachyon
+    assert chan1_conf.schema_encoding == entities.schema_encoding.clockwork_tachyon
     chan1 = module.inner_scope.lookup("Chan1")
     assert isinstance(chan1, pubsub.Channel)
     assert chan1.message_repr is not None
@@ -73,12 +81,12 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
 
     basic_helper(configs[cpu2_uuid].events_config)  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     event_conf2 = configs[cpu2_uuid].events_config  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert len(event_conf2.channels) == 3
-    assert {ch.channel_name for ch in event_conf2.channels} == {"Chan2", "MultiChan2"}
+    assert len(event_conf2.channels) == 4
+    assert {ch.channel_name for ch in event_conf2.channels} == {"Chan1", "Chan2", "MultiChan2"}
     basic_helper(configs[cpu2_uuid].telemetry_config)  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
     tel_conf2 = configs[cpu2_uuid].telemetry_config  # pyright: ignore[reportPossiblyUnboundVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert len(tel_conf2.channels) == 1
-    assert {ch.channel_name for ch in tel_conf2.channels} == {"Chan2"}
+    assert len(tel_conf2.channels) == 2
+    assert {ch.channel_name for ch in tel_conf2.channels} == {"Chan1", "Chan2"}
 
 
 def test_gen_logged_channel_metadata(fs_importer: FilesystemImporter) -> None:
@@ -87,6 +95,11 @@ def test_gen_logged_channel_metadata(fs_importer: FilesystemImporter) -> None:
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/composition/tests/support/simplesys.clk")),
         fs_importer,
     )
+
+    # Store the importer in the module's context for logger_config to use
+    importer_reg = module.context[importer_registry.IMPORTER_REGISTRY_KEY]
+    importer_reg.importer = fs_importer
+
     box_template_ir = module.inner_scope.lookup("System1")
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)

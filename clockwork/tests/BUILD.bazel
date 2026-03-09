@@ -34,6 +34,10 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/tests/resources:restore_test_config.textproto",
+        "//clockwork/tests/resources:snapshot_test_config.textproto",
+        "//clockwork/tests/support:logical_system_interface_test_system_clk",
+        "//clockwork/tests/support:restore_log_config_system_clk",
         "//clockwork/tests/support:test_system_description_2_clk",
         "//clockwork/tests/support:test_system_description_clk",
         "//clockwork/tests/support:test_system_multi_node_clk",
@@ -56,14 +60,14 @@ cc_test(
     data = ["//clockwork/tests/support:clockwork.clockwork.tests.support.test_system.test_system.proc.tachyon"],
     deps = [
         "//clockwork:repr_iface",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/dial:msg_input",
         "//clockwork/memory:start_lifetime_as",
-        "//clockwork/pinion:buffer",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publishable",
         "//clockwork/pinion:shm_channel_factory",
         "//clockwork/pinion:shm_subscriber",
         "//clockwork/pinion:slot",
+        "//clockwork/pinion:slot_ref",
         "//clockwork/pinion:subscriber_handle",
         "//clockwork/pinion/tests/support:pub_sub",
         "//clockwork/scaffolding:end_process_exception",
@@ -71,11 +75,12 @@ cc_test(
         "//clockwork/scaffolding:offline_scaffolding",  # keep
         "//clockwork/scaffolding/tests/support:runtime_tools",
         "//clockwork/scaffolding/tests/support:test_cogs_dial",
-        "//clockwork/scaffolding/tests/support:test_msgs",
+        "//clockwork/scaffolding/tests/support:test_msgs_clk_cc",
         "//clockwork/tests/support:test_system_exe_library",  # keep
         "//jewels/container:compare",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file",
+        "//jewels/filesystem:path",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
@@ -86,5 +91,168 @@ cc_test(
         "@boost//:iterator",
         "@catch2//:catch2_main",
         "@gsl//:util",
+    ],
+)
+
+cc_test(
+    name = "restore_log_config_test",
+    srcs = ["restore_log_config_test.cc"],
+    data = [
+        "//clockwork/tests/resources:restore_test_config.textproto",
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.restore_log_config_system.restore_log_config_system.proc.tachyon",
+        "//clockwork/tests/support:restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_channel_publisher_config.tachyon",
+        "//clockwork/tests/support:restore_log_config_system.restore_log_config_system.RestoreLogConfigCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:exec_time",
+        "//clockwork/tests/support:restore_log_config_system_lib",  # keep
+        "//clockwork/tests/support:snapshot_test_messages",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "restore_log_state_default_test",
+    srcs = ["restore_log_state_default_test.cc"],
+    data = [
+        "//clockwork/tests/resources:snapshot_test_config.textproto",
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.restore_log_state_default_system.restore_log_state_default_system.proc.tachyon",
+        "//clockwork/tests/support:restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_channel_publisher_config.tachyon",
+        "//clockwork/tests/support:restore_log_state_default_system.restore_log_state_default_system.RestoreLogStateDefaultCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:exec_time",
+        "//clockwork/tests/support:restore_log_state_default_system_lib",  # keep
+        "//clockwork/tests/support:snapshot_test_messages",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "restore_log_state_test",
+    srcs = ["restore_log_state_test.cc"],
+    data = [
+        "//clockwork/tests/resources:snapshot_test_config.textproto",
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.restore_log_state_system.restore_log_state_system.proc.tachyon",
+        "//clockwork/tests/support:restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_channel_publisher_config.tachyon",
+        "//clockwork/tests/support:restore_log_state_system.restore_log_state_system.RestoreLogStateCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:exec_time",
+        "//clockwork/tests/support:restore_log_state_system_lib",  # keep
+        "//clockwork/tests/support:snapshot_test_messages",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "restore_protobuf_state_test",
+    srcs = ["restore_protobuf_state_test.cc"],
+    data = [
+        "//clockwork/tests/resources:restore_test_state.textproto",
+        "//clockwork/tests/resources:snapshot_test_config.textproto",
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.restore_protobuf_state_system.restore_protobuf_state_system.proc.tachyon",
+        "//clockwork/tests/support:restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_channel_publisher_config.tachyon",
+        "//clockwork/tests/support:restore_protobuf_state_system.restore_protobuf_state_system.RestoreProtobufStateCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:exec_time",
+        "//clockwork/tests/support:restore_protobuf_state_system_lib",  # keep
+        "//clockwork/tests/support:snapshot_test_messages",
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "signal_report_group_test",
+    srcs = ["signal_report_group_test.cc"],
+    data = [
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.signal_test_system.signal_test_system.proc.tachyon",
+        "//clockwork/tests/support:signal_test_system.signal_test_system.SignalTestCpu_event_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:decompress_option",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging/readers:offboard_log_reader",
+        "//clockwork/logging/readers:types",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:signal_cog_clk_cc",
+        "//clockwork/tests/support:signal_cog_clk_cc_dial",
+        "//clockwork/tests/support:signal_test_box_clk_exe_lib",  # keep
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/filesystem:path",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "snapshot_test",
+    srcs = ["snapshot_test.cc"],
+    data = [
+        "//clockwork/tests/resources:snapshot_test_config.textproto",
+        "//clockwork/tests/support:clockwork.clockwork.tests.support.snapshot_test_system.snapshot_test_system.proc.tachyon",
+        "//clockwork/tests/support:snapshot_test_system.snapshot_test_system.SnapshotTestCpu_channel_publisher_config.tachyon",
+        "//clockwork/tests/support:snapshot_test_system.snapshot_test_system.SnapshotTestCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/runners:channel_publisher",
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//clockwork/tests/support:exec_time",
+        "//clockwork/tests/support:snapshot_test_messages",
+        "//clockwork/tests/support:snapshot_test_system_lib",  # keep
+        "//jewels/container:compare",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
     ],
 )

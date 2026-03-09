@@ -15,3 +15,17 @@ cc_test(
         "@catch2//:catch2_main",
     ],
 )
+
+cc_test(
+    name = "tmp_directory_guard_test",
+    srcs = ["tmp_directory_guard_test.cc"],
+    deps = [
+        "//jewels/filesystem",
+        "//jewels/filesystem:path",
+        "//jewels/memory:default_memory_resource",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)

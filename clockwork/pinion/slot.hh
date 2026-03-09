@@ -45,8 +45,12 @@ using ByteMatchingConstnessOf =
 /// buffer is divided into slots and each slot has multiple fields.
 /// When messages are passed to Cogs, the message bytes will be
 /// converted to a typed reference.
-class Slot
+template <typename T>
+class BaseSlot
 {
+  template <typename U>
+  using MaybeConst = std::conditional_t<std::is_const_v<T>, const U, U>;
+
 public:
   /// Alignment of the entire slot.
   static constexpr auto slot_alignment{64UL};
@@ -72,35 +76,41 @@ public:
   /// Create a slot from bytes and a message size.
   /// @param ptr A pointer to an underlying buffer.
   /// @param message_size The size of the message payload.
-  explicit Slot(AlignedPtr<slot_alignment> ptr, size_t message_size) noexcept;
+  explicit BaseSlot(AlignedPtr<T, slot_alignment> ptr, size_t message_size) noexcept;
+
+  // NOLINTNEXTLINE(google-explicit-constructor) allow implicit conversion to const
+  BaseSlot(const BaseSlot<std::remove_const_t<T>>& other) noexcept
+    requires std::is_const_v<T>;
+
+  BaseSlot(const BaseSlot&) noexcept = default;
+  BaseSlot(BaseSlot&&) noexcept = default;
+  BaseSlot& operator=(const BaseSlot&) noexcept = default;
+  BaseSlot& operator=(BaseSlot&&) noexcept = default;
+  ~BaseSlot() noexcept = default;
 
   /// Access the Pinion header.
-  /// @{
-  [[nodiscard]] jewels::memory::ObjectPtr<const Header> header() const noexcept;
-  [[nodiscard]] jewels::memory::ObjectPtr<Header> header() noexcept;
-  /// @}
+  [[nodiscard]] jewels::memory::ObjectPtr<MaybeConst<Header>> header() const noexcept;
 
   /// Access the message as bytes.
-  /// @{
-  [[nodiscard]] std::span<const std::byte> message() const noexcept;
-  [[nodiscard]] std::span<std::byte> message() noexcept;
-  /// @}
+  [[nodiscard]] std::span<T> message() const noexcept;
 
   /// Access the underlying bytes for the entire slot.
-  /// @{
-  [[nodiscard]] std::span<const std::byte> bytes() const noexcept;
-  [[nodiscard]] std::span<std::byte> bytes() noexcept;
-  /// @}
+  [[nodiscard]] std::span<T> bytes() const noexcept;
 
-  std::array<std::span<std::byte>, 2UL> headers_footers() noexcept;
+  [[nodiscard]] std::array<std::span<T>, 2UL> headers_footers() const noexcept;
 
 private:
+  friend class BaseSlot<const T>;
+
   /// Span over the entire slot (excludes padding at the end for alignment).
-  std::span<std::byte> bytes_;
+  std::span<T> bytes_;
 
   /// Size of the message payload.
   size_t message_size_;
 };
+
+using Slot = BaseSlot<std::byte>;
+using ConstSlot = BaseSlot<const std::byte>;
 
 /// Get the byte offset to the trail padding
 /// @param message_size Size of the message payload in bytes.

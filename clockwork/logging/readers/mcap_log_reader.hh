@@ -5,7 +5,7 @@
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/memory/pointers.hh"

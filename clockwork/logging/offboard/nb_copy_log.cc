@@ -6,7 +6,7 @@
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/memory/memory_resource.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/list.h>        // IWYU pragma: keep
 #include <nanobind/stl/optional.h>    // IWYU pragma: keep

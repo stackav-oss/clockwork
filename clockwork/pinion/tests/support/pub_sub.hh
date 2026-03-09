@@ -5,10 +5,10 @@
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_publisher.hh"

@@ -36,6 +36,9 @@ WISE_ENUM_CLASS(
 ///
 /// This class also implements some backing store independent implementations of utility
 /// functions needed to read and write logs.
+///
+/// @tparam S3UtilsType S3 utility helper class type
+template <typename S3UtilsType = S3Utils>
 class ChunkReaderWriterFactory
 {
 public:
@@ -130,7 +133,7 @@ private:
   FileChunkReaderWriterFactory file_factory_;
 
   /// S3 chunk reader/writer factory, initialized when required
-  std::optional<S3ChunkReaderWriterFactory> maybe_s3_factory_;
+  std::optional<S3ChunkReaderWriterFactory<S3UtilsType>> maybe_s3_factory_;
 };
 
 } // namespace clockwork_logging::offboard

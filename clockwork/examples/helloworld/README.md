@@ -4,19 +4,13 @@ This example demonstrates a simple single producer - single consumer relationshi
 
 ## Running
 
-In one terminal run the following to start the producer Cog:
+Run the system
 
 ```bash
-bazel run //clockwork/examples/helloworld:cogs_exe -- clockwork/examples/helloworld/clockwork.clockwork.examples.helloworld.cogs.producer_consumer.producer_process.tachyon
+bazel run //clockwork/examples/helloworld
 ```
 
-In another terminal, run the following to start the consumer Cog:
-
-```bash
-bazel run //clockwork/examples/helloworld:cogs_exe -- clockwork/examples/helloworld/clockwork.clockwork.examples.helloworld.cogs.producer_consumer.consumer_process.tachyon
-```
-
-You should see the following input in the consumer terminal:
+You should see the following input in the output file ("/tmp/simplelaunch_logs/consumer_process_0.log"):
 
 ```bash
 Received a new message on InputA: 42

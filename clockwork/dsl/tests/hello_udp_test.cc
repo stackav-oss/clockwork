@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dsl/tests/support/hello_udp.hh"
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/pinion/bidirectional_udp.hh"
 #include "clockwork/pinion/incoming_udp.hh"
 #include "clockwork/pinion/outgoing_udp.hh"
@@ -137,6 +137,12 @@ TEST_CASE("UDP Socket")
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Needed for C struct polymorphism
     REQUIRE(::getsockname(bidirectional_socket->fd(), reinterpret_cast<::sockaddr*>(&addr), &addr_size) == 0);
     REQUIRE(addr.sin_addr.s_addr == ::be32toh(0xef160002)); // 239.22.0.2
+  }
+  SECTION("Bind to interfae")
+  {
+    const jewels::memory::MemoryResource memres(std::pmr::new_delete_resource());
+    REQUIRE(IncomingSocketBindIFace::try_make(memres));
+    REQUIRE(IncomingSocketBindAddress::try_make(memres));
   }
 }
 

@@ -72,16 +72,16 @@ Even when attached to parameters, we typically refer to these just as "field num
 Field numbers serve two purposes, both related to providing backward compatibility when schemas evolve:
 
 - Provide a stable identifier for the field or parameter, so it can be renamed with backward compatibility.
-- Associate fields with schema versions to provide a complete history of the schema as fields and parameters are added, removed, and modified.
+- Associate fields from prior versions to support upgrading previous versions to the current version.
 
-Field numbers are not just field identifiers, but also schema version numbers.
+If a schema doesn't have a history section the schema version is implicitly defined by the highest field number.
 In the above example, the schema version number is 7, the highest field number.
-When you add a new field, you also create a new schema version automatically.
+When you add a new field to a schema that does not have a history section you also create a new schema version implicitly.
 New fields must have a field number greater than the previous highest field number, so that they form a fully ordered sequence where the fields are ordered by when they were added to the schema.
 
 A few rules:
 
-- Never change the number of a field, because this will break backward compatibility.
+- Never change the number of a field or enum value, because this will break backward compatibility.
 - Gaps in the field number sequence are OK.
 - Fields (and parameters) can be out of order in the schema source code; order of declaration does not matter.
   Feel free to reorder fields and parameters in the source code to group them logically for readability.
@@ -121,19 +121,21 @@ User-defined types include schemas, enums, and tags (explained below).
 
 Built-in types are in the table below.
 
-| Type                                       | C++                                                                               | Python                                        | Notes                                                                                          |
-| ------------------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `Bool`                                     | `bool`                                                                            | `bool`                                        | Not convertible to integers; values are `true` or `false`                                      |
-| `Byte`                                     | `std::byte`                                                                       | `int` when alone, `bytes` when in a container |                                                                                                |
-| `Float32`, `Float64`                       | `float`, `double`                                                                 | `float`                                       |                                                                                                |
-| `Int8`, `Int16`, `Int32`, `Int64`          | `int8_t`, `int16_t`, `int32_t`, `int64_t`                                         | `int`                                         |                                                                                                |
-| `UInt8`, `UInt16`, `UInt32`, `UInt64`      | `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`                                     | `int`                                         |                                                                                                |
-| `VarString<max_size: UInt64>`              | Custom bounded analog of `std::string`, typically accessed via `std::string_view` | `str`                                         |                                                                                                |
-| `FixedArray<type: Type, max_size: UInt64>` | `std::array<type, max_size>` but accessed via span                                | `list[type]`                                  |                                                                                                |
-| `VarArray<type: Type, max_size: UInt64>`   | Similar interface to a `std::vector` but a custom Clockwork implementation        | `list[type]`                                  | In C++ prefer to use spans, ranges, and iterators and avoid hard-coding the container type.    |
-| `Duration`                                 | `std::chrono::nanoseconds`                                                        | Clockwork-specific `Duration` type            | This is a strong type in Clockwork with [unit literal syntax](common_syntax.md#unit-literals). |
-| `SyncTime`                                 | `jewels::time::SyncTime`                                                          | Clockwork-specific `SyncTime` type            | This is also a strong type but without any literal syntax.                                     |
-| `Uuid<tag: Type>`                          | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                   | Tag type is discarded in Python. See below for defining tag types in Clockwork.                |
+| Type                                     | C++                                                                               | Python                                        | Notes                                                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Bool`                                   | `bool`                                                                            | `bool`                                        | Not convertible to integers; values are `true` or `false`                                             |
+| `Byte`                                   | `std::byte`                                                                       | `int` when alone, `bytes` when in a container |                                                                                                       |
+| `Float32`, `Float64`                     | `float`, `double`                                                                 | `float`                                       |                                                                                                       |
+| `Int8`, `Int16`, `Int32`, `Int64`        | `int8_t`, `int16_t`, `int32_t`, `int64_t`                                         | `int`                                         |                                                                                                       |
+| `UInt8`, `UInt16`, `UInt32`, `UInt64`    | `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`                                     | `int`                                         |                                                                                                       |
+| `VarString<max_size: UInt64>`            | Custom bounded analog of `std::string`, typically accessed via `std::string_view` | `str`                                         |                                                                                                       |
+| `FixedArray<type: Type, size: UInt64>`   | `std::array<type, size>` but accessed via span                                    | `list[type]`                                  |                                                                                                       |
+| `VarArray<type: Type, max_size: UInt64>` | Similar interface to a `std::vector` but a custom Clockwork implementation        | `list[type]`                                  | In C++ prefer to use spans, ranges, and iterators and avoid hard-coding the container type.           |
+| `FixedSoa<type: Type, size: UInt64>`     | `clockwork::FixedSoa<type, size>`                                                 | Dataclass with list fields                    | Struct-of-Arrays layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md).  |
+| `VarSoa<type: Type, max_size: UInt64>`   | `clockwork::VarSoa<type, max_size>`                                               | Dataclass with list fields                    | Variable-size SoA layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md). |
+| `Duration`                               | `std::chrono::nanoseconds`                                                        | Clockwork-specific `Duration` type            | This is a strong type in Clockwork with [unit literal syntax](common_syntax.md#unit-literals).        |
+| `SyncTime`                               | `jewels::time::SyncTime`                                                          | Clockwork-specific `SyncTime` type            | This is also a strong type but without any literal syntax.                                            |
+| `Uuid<tag: Type>`                        | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                   | Tag type is discarded in Python. See below for defining tag types in Clockwork.                       |
 
 ### Clockwork strong types (Duration, SyncTime, UUID, tags)
 
@@ -368,7 +370,7 @@ Enums can also be defined in the same file as a schema that uses them, in any or
 
 But in many cases, you'll want to put schemas in different modules.
 In that case, you just import what you need.
-Details on how to import other Clockwork modules are provided [in this separate document](use.md).
+Details on how to import other Clockwork modules are provided [in this separate document](attributes.md).
 
 ## Defining enums
 

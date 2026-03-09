@@ -74,6 +74,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
         alignment=8,
         schema_uuid=UUID("cae6ee0b-ec41-40cf-8b87-fb1583e5985d"),
         version=24,
+        arguments=("234",),
         fields=(
             model.SchemaField(offset=160, num=1, name="integer", type_id=builder.value_key_to_id["::Int64"]),
             model.SchemaField(
@@ -219,7 +220,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
     assert len(pb_meta.types) == len(meta.types)
     # This output can be helpful when the underlying message changes, requiring
     # changes to the JSON-serialized metadata below.
-    print(json_format.MessageToJson(pb_meta))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    print(json_format.MessageToJson(pb_meta))
     meta2 = tachyon.from_protobuf(pb_meta)
     assert meta2 == meta
     pb_bytes = pb_meta.SerializeToString()
@@ -395,11 +396,13 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
           ],
           "became": {{
             "19": 23
-          }},
-          "versions": [
-            21, 23, 24
-          ]
-        }}
+          }}
+        }},
+        "arguments": [
+          {{
+            "value": "234"
+          }}
+        ]
       }}
     }},
     {{
@@ -511,13 +514,13 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
           {{
             "num": 1,
             "name": "field",
-            "typeId": 1
+            "typeId": 1,
+            "initValue": {{
+              "signedValue": "99"
+            }}
           }}
         ],
-        "hash": "M20viTs+0+VatnGxcdgzlg==",
-        "history": {{
-          "versions": [ 1 ]
-        }}
+        "hash": "M20viTs+0+VatnGxcdgzlg=="
       }}
     }},
     {{
@@ -573,10 +576,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
           ],
           "became": {{
             "1": 3
-          }},
-          "versions": [
-            2, 4
-          ]
+          }}
         }}
       }}
     }},
@@ -717,10 +717,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
           ],
           "became": {{
             "1": 3
-          }},
-          "versions": [
-            0, 6
-          ]
+          }}
         }}
       }}
     }},
@@ -741,6 +738,6 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
   ],
   "version": 3
 }}"""
-    expected = json_format.Parse(expected_json, model_pb2.TachyonMetadata())  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-    assert json_format.MessageToJson(expected) == json_format.MessageToJson(pb_meta2)  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    expected = json_format.Parse(expected_json, model_pb2.TachyonMetadata())
+    assert json_format.MessageToJson(expected) == json_format.MessageToJson(pb_meta2)
     assert expected == pb_meta2

@@ -3,7 +3,7 @@
 
 #pragma once
 #include "clockwork/dial/approx_aligner.hh"
-#include "clockwork/dial/approx_aligner_config.hh"
+#include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/dial/approx_aligner_policies.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "jewels/container/circular_buffer.hh"
@@ -52,6 +52,8 @@ struct Input0
   using MsgType = TestMsg0;
   using ValueType = int64_t;
   static constexpr auto max_msgs = 10;
+  static constexpr auto min_msgs = 0;
+  static constexpr auto min_new_msgs = 0;
 
   static constexpr ValueType get_value(const MsgType& msg)
   {
@@ -64,6 +66,8 @@ struct Input1
   using MsgType = TestMsg1;
   using ValueType = int64_t;
   static constexpr auto max_msgs = 10;
+  static constexpr auto min_msgs = 0;
+  static constexpr auto min_new_msgs = 0;
 
   static constexpr ValueType get_value(const MsgType& msg)
   {
@@ -76,6 +80,8 @@ struct Input2
   using MsgType = TestMsg2;
   using ValueType = int64_t;
   static constexpr auto max_msgs = 10;
+  static constexpr auto min_msgs = 0;
+  static constexpr auto min_new_msgs = 0;
 
   static constexpr ValueType get_value(const MsgType& msg)
   {
@@ -93,6 +99,8 @@ struct DoubleInput
   using MsgType = DoubleMsg;
   using ValueType = double;
   static constexpr auto max_msgs = 10;
+  static constexpr auto min_msgs = 0;
+  static constexpr auto min_new_msgs = 0;
 
   static constexpr ValueType get_value(const MsgType& msg)
   {
@@ -106,7 +114,9 @@ class MsgDialInputMaker
 public:
   using MsgType = typename InputPolicy::MsgType;
   static constexpr auto max_msgs = InputPolicy::max_msgs;
-  using InputType = MessageInputDialWithCursorControl<MsgType, max_msgs>;
+  static constexpr auto min_msgs = InputPolicy::min_msgs;
+  static constexpr auto min_new_msgs = InputPolicy::min_new_msgs;
+  using InputType = MessageInputDialWithCursorControl<MsgType, max_msgs, min_msgs, min_new_msgs>;
 
   MsgDialInputMaker()
     : MsgDialInputMaker({})
@@ -188,7 +198,11 @@ struct TestAlignerPolicy
   using ValuePtrArray = std::array<const ValueType*, input_count>;
   using ValueVector = std::pmr::vector<ValueType>;
   template <typename InputPolicy>
-  using InputType = MessageInputDialWithCursorControl<typename InputPolicy::MsgType, InputPolicy::max_msgs>;
+  using InputType = MessageInputDialWithCursorControl<
+    typename InputPolicy::MsgType,
+    InputPolicy::max_msgs,
+    InputPolicy::min_msgs,
+    InputPolicy::min_new_msgs>;
   using InputTuple = std::tuple<InputType<InputPolicies>&...>;
   using InputItTuple = std::tuple<typename InputType<InputPolicies>::IteratorType...>;
   using IndexArray = std::array<ssize_t, input_count>;

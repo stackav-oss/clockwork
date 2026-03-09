@@ -5,7 +5,7 @@
 
 #include "clockwork/cog/time_since_last_exec_handler.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <memory>
 #include <tuple>
+#include <utility>
 
 namespace clockwork
 {
@@ -82,6 +83,22 @@ public:
   /// Prime the timers. To be called on startup to start the timers for the first time.
   /// @param[in] start_time The start time.
   [[nodiscard]] jewels::expected<void, jewels::MonoError> prime(jewels::time::SyncTime start_time);
+
+  /// Set the timer handle at the specified index
+  ///
+  /// Used by unit test cogs to setup the dummy timers
+  ///
+  /// @tparam index Timer index
+  /// @param[in] timer_ptr Timer pointer
+  template <size_t index>
+  void set_unit_test_timer(TimerPtr<typename std::tuple_element_t<index, PoliciesTuple>> timer_ptr);
+
+  /// Call notify for expired timers
+  ///
+  /// Used by unit test cogs which run with dummy timers
+  ///
+  /// @param[in] now Current time
+  void notify_expired_unit_test_timers(jewels::time::SyncTime now);
 
 private:
   /// Memory resource

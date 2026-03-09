@@ -81,3 +81,43 @@ cog Example
   }
 }
 ```
+
+## Init condition
+
+The `init` condition is a special execution condition that marks a Cog as an _init Cog_.
+Init Cogs execute exactly once, at process startup, before any non-init Cogs execute.
+
+```clockwork
+cog MyInitCog
+{
+    states
+    {
+        my_state: Tappy<MyState>
+        {
+            mutable: true;
+        }
+    }
+
+    execution
+    {
+        execute when: init;
+    }
+}
+```
+
+### Init Cog characteristics
+
+- **Single execution**: Init Cogs execute exactly once per process startup.
+- **Ordered before non-init Cogs**: All init Cogs in a process complete before any non-init Cogs begin executing.
+- **Inter-init ordering**: When multiple init Cogs exist, their execution order is determined by state dependencies.
+  See [Init cogs and state initialization](../concepts/composition.md#init-cogs-and-state-initialization) for details.
+
+### Typical use cases
+
+- Initializing state that requires runtime configuration data
+- Allocating resources that cannot be default-constructed (e.g., GPU contexts, file handles)
+- Performing one-time setup that must complete before the main Cog logic runs
+
+> [!NOTE]
+> Unlike other execution conditions, `init` cannot be combined with other conditions using `and` or `or`.
+> A Cog is either an init Cog or it is not.

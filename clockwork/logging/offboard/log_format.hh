@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/wrapping_counter.hh"
 #include "jewels/math/constants.hh"
 
@@ -16,7 +16,7 @@ namespace clockwork_logging::offboard
 {
 
 /// Maximum message data size
-static constexpr size_t max_message_data_size = 64U * jewels::math::constants::bytes_per_mib<size_t>;
+static constexpr size_t max_message_data_size = 640U * jewels::math::constants::bytes_per_mib<size_t>;
 
 /// Maximum message header size
 static constexpr size_t max_message_header_size = std::numeric_limits<uint16_t>::max();

@@ -4,7 +4,8 @@
 #include "clockwork/cog/cog_publishers.hh"
 
 #include "clockwork/cog/detail.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -74,8 +75,19 @@ bool CogPublishers<Policies...>::validate() const
 }
 
 template <typename... Policies>
+bool CogPublishers<Policies...>::validate_published_once_outputs() const
+{
+  auto validate = []<typename Policy>(const Publisher<Policy>& publisher)
+  {
+    return publisher.handle &&
+           (!publisher.handle->buffer().is_published_once() || publisher.handle->buffer().get_publish_count() == 0);
+  };
+  return detail::validate_helper<Publisher>(publishers_, validate);
+}
+
+template <typename... Policies>
 jewels::expected<void, jewels::MonoError> CogPublishers<Policies...>::set_handle(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle handle, bool connected)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::PublisherHandle&& handle, bool connected)
 {
   auto try_set = [this, &endpoint_id, &handle, connected]<typename Publisher>(Publisher& publisher)
   {
@@ -198,7 +210,7 @@ void CogPublishers<Policies...>::set_infra_diagnostics(
   std::integer_sequence<Enum, signal_ids...> /*signal_ids*/) const
 {
   static_assert(sizeof...(signal_ids) <= sizeof...(Policies));
-  auto dispatch = [&]<
+  auto dispatch = [&slots, &report, &publish_time]<
                     Enum signal_id0,
                     Enum... signal_id,
                     size_t policy_idx0,
@@ -252,6 +264,15 @@ void CogPublishers<Policies...>::set_infra_diagnostics(
       std::index_sequence_for<Policies...>{},
       std::tuple<Policies...>{});
   }
+}
+
+template <typename... Policies>
+template <size_t index>
+void CogPublishers<Policies...>::set_unit_test_publisher(pinion::PublisherHandle&& handle)
+{
+  std::get<index>(publishers_).handle =
+    jewels::memory::make_pmr_shared<pinion::PublisherHandle>(resource_, std::move(handle));
+  std::get<index>(publishers_).connected = true;
 }
 
 } // namespace clockwork

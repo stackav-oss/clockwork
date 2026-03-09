@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     expr,
@@ -32,10 +32,9 @@ if TYPE_CHECKING:
 class Converter(node.NamedEntity, node.CstNode[cst.Converter]):
     """A class that specifies a conversion between representations and or interfaces."""
 
-    schema_ir: schema.Schema | None
     source_reference: RepresentationReference | InterfaceReference | None
     destination_reference: RepresentationReference | InterfaceReference | None
-    typespec: typesys.Instantiation | expr.Expr
+    typespec: typesys.Instantiation | expr.Expr | None
     namespace: str
 
     @classmethod
@@ -56,12 +55,62 @@ class Converter(node.NamedEntity, node.CstNode[cst.Converter]):
             module=module,
             scope=module.inner_scope,
             cst_node=cst_node,
-            schema_ir=None,
             name=name,
             typespec=typespec,
             namespace=namespace,
             source_reference=None,
             destination_reference=None,
+        )
+
+    @classmethod
+    def from_generate_proto_conv(
+        cls: type[Converter],
+        module: node.Module,
+        namespace: str,
+        converter_type: typesys.TypeVal,
+        cpp_typespec: typesys.Instantiation,
+        proto_typespec: typesys.Instantiation,
+    ) -> Converter:
+        """Create an IR node for auto generated proto_conv."""
+        cpp_reference = InterfaceReference.from_typespec(cpp_typespec)
+        assert not isinstance(cpp_reference, str)
+        proto_reference = RepresentationReference.from_typespec(proto_typespec)
+        assert not isinstance(proto_reference, str)
+        if converter_type is clkbuiltins.PROTOBUF_TO_TAP:
+            return cls(
+                module=module,
+                scope=module.inner_scope,
+                cst_node=None,
+                name="",
+                typespec=typesys.Instantiation(
+                    instantiates=clkbuiltins.PROTOBUF_TO_TAP,
+                    arguments={
+                        "source": proto_typespec,
+                        "destination": cpp_typespec,
+                    },
+                    type_info=clkbuiltins.TYPE_TYPE,
+                ),
+                namespace=namespace,
+                source_reference=proto_reference,
+                destination_reference=cpp_reference,
+            )
+        assert converter_type is clkbuiltins.TAP_TO_PROTOBUF
+        return cls(
+            module=module,
+            scope=module.inner_scope,
+            cst_node=None,
+            name="",
+            typespec=typesys.Instantiation(
+                instantiates=clkbuiltins.TAP_TO_PROTOBUF,
+                arguments={
+                    "source": cpp_typespec,
+                    "destination": proto_typespec,
+                },
+                type_info=clkbuiltins.TYPE_TYPE,
+            ),
+            namespace=namespace,
+            source_reference=cpp_reference,
+            destination_reference=proto_reference,
         )
 
     def resolve(self) -> None:

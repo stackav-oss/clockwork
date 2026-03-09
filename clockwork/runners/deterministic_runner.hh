@@ -5,12 +5,14 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_timer.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/cli/exit_condition.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/log_cerr/log_time.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -92,6 +94,10 @@ struct DeterministicRunnerConfig
   std::shared_ptr<AbstractChannelPublisher> channel_publisher;
   /// Map from cogs to assigned GPU
   std::pmr::unordered_map<jewels::memory::ObjectPtr<AbstractCog>, int16_t> cog_to_gpu_id;
+  /// Playback speed multiplier (1.0 = real-time, 0.5 = half speed, 2.0 = double speed).
+  /// When 0.0 (default), runs as fast as possible.
+  /// Experimental flag controlled via --playback-speed; may be removed once validated.
+  double playback_speed = 0.0;
 };
 
 class DeterministicRunner
@@ -116,8 +122,10 @@ public:
   /// Run the system
   /// @param[in] start_time The simulation start time
   /// @param[in] end_time The simulation end time; this function returns when the simulated clock reaches this time
+  /// @return BinaryOutcome indicating success or failure
   ///
-  void start(jewels::time::SyncTime start_time, jewels::time::SyncTime end_time, jewels::cli::ExitCondition& exit);
+  jewels::BinaryOutcome
+  start(jewels::time::SyncTime start_time, jewels::time::SyncTime end_time, jewels::cli::ExitCondition& exit);
 
 private:
   ///
@@ -128,7 +136,7 @@ private:
 
   void update_timers();
   [[nodiscard]] std::optional<jewels::time::SyncTime> get_next_timer_time() const;
-  void update_time(const jewels::time::SyncTime& new_time);
+  jewels::time::SyncTime maybe_update_time(const jewels::time::SyncTime& new_time);
 
   DeterministicRunnerConfig config_;
   std::pmr::list<std::shared_ptr<DeterministicTimer>> timers_;
@@ -138,6 +146,7 @@ private:
   jewels::time::SyncTime current_time_;
   jewels::time::SteadyTime wall_start_time_;
   jewels::time::SteadyTime wall_update_time_;
+  std::shared_ptr<jewels::SimLogClock> sim_log_clock_;
 };
 
 } // namespace clockwork

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "clockwork/cog/input_view.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/observer.hh"
@@ -36,8 +36,10 @@ public:
   using SubscriberType = std::shared_ptr<InputView<Policy>>;
   using SubscribersTuple = std::tuple<SubscriberType<Policies>...>;
   using InputDialTuple = std::tuple<typename InputView<Policies>::InputDialType...>;
-  using LastViewedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::BufferIterator>;
+  using LastViewedTuple = std::tuple<jewels::Uuid<common::EndpointClassId>, pinion::SlotRef>;
   using LastViewedArray = std::array<LastViewedTuple, policy_count>;
+  template <size_t index>
+  using PolicyType = typename std::tuple_element_t<index, PoliciesTuple>;
 
   /// Construct from a pinion subscriber handle.
   /// @param running_offline Whether or not this cog is running offline.
@@ -88,6 +90,10 @@ public:
   /// @return true if any of the saved dial inputs are close to be overrun by their producers.
   [[nodiscard]] bool almost_overrun() const;
 
+  /// Check for published once channels that have been published more than once
+  /// @return true If any of the dial inputs are published once and have been published more than once
+  [[nodiscard]] bool is_published_once_channel_invalid() const;
+
   /// Set diagnostics for each input
   template <typename Report, typename Enum, Enum... missing_ids, Enum... safety_skip_ids>
   void set_infra_diagnostics(
@@ -100,13 +106,30 @@ public:
   /// @return The tuple of subscribers.
   [[nodiscard]] SubscribersTuple& subscribers();
 
+  /// Set the input subscriber handle at the specified index
+  ///
+  /// Used by unit test cogs to initialize the unit test input channels
+  ///
+  /// @tparam<index> Input index
+  /// @tparam<CogType> Cog type
+  /// @param[in] handle Subscriber handle
+  /// @param[in] cog Cog pointer
+  template <size_t index, typename CogType>
+  void set_unit_test_input(pinion::SubscriberHandle handle);
+
+  /// Get the default number of slots in the pinion buffer for a unit test input channel
+  ///
+  /// Used by unit test cogs to get the default slot counts for input channels
+  ///
+  /// @tparam ConditionsType Cog input conditions
+  template <typename ConditionsType>
+  [[nodiscard]] static constexpr std::array<uint32_t, policy_count> get_default_unit_test_slot_counts();
+
 private:
   /// Memory resource
   jewels::memory::MemoryResource resource_;
   /// True if running offline.
   bool running_offline_;
-  /// Policy structs
-  PoliciesTuple policies_;
   /// The subscribers
   SubscribersTuple subscribers_;
   /// Mutex to coordinate access to the underlying subscribers

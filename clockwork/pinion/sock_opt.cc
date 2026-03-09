@@ -5,7 +5,7 @@
 
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/log_cerr/log_cerr.hh"
-#include "jewels/networking/ifaddrs.hh"
+#include "jewels/meta/overloaded.hh"
 #include "jewels/networking/sock_opt.hh"
 #include "jewels/std/expected.hh"
 
@@ -16,7 +16,6 @@
 #include <cerrno>
 #include <climits>
 #include <netinet/in.h>
-#include <string>
 #include <sys/socket.h>
 
 namespace clockwork::pinion
@@ -83,16 +82,17 @@ handle_sock_option(int file_desc, SockOptionValue<jewels::networking::SockOption
 jewels::expected<void, jewels::filesystem::ErrorCode>
 handle_sock_option(int file_desc, SockOptionValue<jewels::networking::SockOption::so_bind_to_device> value)
 {
-  auto iface_name = jewels::networking::lookup_interface_name(value.value);
-  if (!iface_name)
-  {
-    return jewels::unexpected{iface_name.error()};
-  }
   auto result =
-    jewels::networking::set_sock_opt<jewels::networking::SockOption::so_bind_to_device>(file_desc, *iface_name);
+    jewels::networking::set_sock_opt<jewels::networking::SockOption::so_bind_to_device>(file_desc, value.value);
   if (!result)
   {
-    jewels::log_cerr_error("Failed to set {} to {}", jewels::networking::SockOption::so_bind_to_device, value.value);
+    const std::string_view value_string_view = std::visit(
+      jewels::meta::Overloaded{
+        [](jewels::networking::AddressView underlying_value) { return underlying_value.address; },
+        [](jewels::networking::InterfaceNameView underlying_value) { return underlying_value.name; }},
+      value.value);
+    jewels::log_cerr_error(
+      "Failed to set {} to {}", jewels::networking::SockOption::so_bind_to_device, value_string_view);
   }
   return result;
 }

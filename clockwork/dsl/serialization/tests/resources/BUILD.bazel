@@ -4,6 +4,12 @@
 package(default_testonly = True)
 
 filegroup(
+    name = "expected_soa_outputs",
+    srcs = glob(["expected_*.txt"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
     name = "tapmsg_tachyon",
     srcs = [
         "generic_primitives.bin",

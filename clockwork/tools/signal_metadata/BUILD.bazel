@@ -1,0 +1,35 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+clk(
+    name = "signal_metadata_init_clk",
+    srcs = ["signal_metadata_init.clk"],
+    outs = [
+        "signal_metadata_init_clk_cc.cc",
+        "signal_metadata_init_clk_cc.hh",
+        "signal_metadata_init_clk_cc.inl",
+        "signal_metadata_init_clk_cc_dial.cc",
+        "signal_metadata_init_clk_cc_dial.hh",
+        "signal_metadata_init_clk_cc_dial.inl",
+    ],
+    cpp_deps = ["//clockwork/common:signal_metadata_config_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//clockwork/common:signal_metadata_config_clk"],
+)
+
+cc_library(
+    name = "signal_metadata_init_clk_cc_impl",
+    srcs = ["signal_metadata_init_clk_cc_impl.cc"],
+    deps = [
+        ":signal_metadata_init_clk_cc_dial",
+        "//clockwork/common:signal_metadata_config_clk_cc",
+        "//clockwork/pinion:publishable",
+    ],
+)

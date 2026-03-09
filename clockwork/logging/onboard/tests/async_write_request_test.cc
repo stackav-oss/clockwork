@@ -66,6 +66,8 @@ struct TestAsyncWriterPolicy
   using BufferReferenceType = BufferPoolType::SharedReference;
 };
 
+using AsyncWriteRequestType = AsyncWriteRequest<TestAsyncWriterPolicy>;
+
 TEST_CASE("Smoke test")
 {
   constexpr size_t write_buffer_count = 16U;
@@ -79,7 +81,7 @@ TEST_CASE("Smoke test")
 
   const jewels::time::SteadyTime time10{std::chrono::seconds(10)};
 
-  AsyncWriteRequest<TestAsyncWriterPolicy> write_request;
+  AsyncWriteRequestType write_request;
   REQUIRE_FALSE(write_request.is_full());
   REQUIRE(write_request.get_write_size() == 0U);
   REQUIRE(write_request.get_io_vector().empty());
@@ -91,7 +93,10 @@ TEST_CASE("Smoke test")
 
     const jewels::time::SteadyTime time2{std::chrono::seconds(2)};
     const std::vector<char> message1(message_size, 'A');
-    REQUIRE(write_request.copy_data(time2, std::as_bytes(std::span{message1.data(), message1.size()})) == 0U);
+    REQUIRE(
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::message) ==
+      0U);
+    REQUIRE(write_request.get_message_data_size() == 0U);
 
     const auto write_buf1_result = write_buffer_pool.get_shared_buffer();
     REQUIRE(write_buf1_result);
@@ -100,16 +105,20 @@ TEST_CASE("Smoke test")
     std::vector<std::byte> expected_buf1(TestAsyncWriterPolicy::buffer_size);
 
     REQUIRE(
-      write_request.copy_data(time2, std::as_bytes(std::span{message1.data(), message1.size()})) == message1.size());
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::message) ==
+      message1.size());
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time2);
+    REQUIRE(write_request.get_message_data_size() == message_size);
     std::memcpy(expected_buf1.data(), message1.data(), message1.size());
 
     const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
     const std::vector<char> message2(message_size, 'B');
     const size_t msg2_split_offset = 51U;
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{message2.data(), message2.size()})) == msg2_split_offset);
+      write_request.copy_data(time1, std::as_bytes(std::span{message2}), AsyncWriteRequestType::DataType::message) ==
+      msg2_split_offset);
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time1);
+    REQUIRE(write_request.get_message_data_size() == message_size + msg2_split_offset);
     std::memcpy(&expected_buf1.at(message1.size()), message2.data(), msg2_split_offset);
 
     const auto write_buf2_result = write_buffer_pool.get_shared_buffer();
@@ -121,10 +130,73 @@ TEST_CASE("Smoke test")
 
     REQUIRE(
       write_request.copy_data(
-        time1, std::as_bytes(std::span{&message2.at(msg2_split_offset), message2.size() - msg2_split_offset})) ==
-      message2.size() - msg2_split_offset);
+        time1,
+        std::as_bytes(std::span{message2}.subspan(msg2_split_offset)),
+        AsyncWriteRequestType::DataType::message) == message2.size() - msg2_split_offset);
     std::memcpy(expected_buf2.data(), &message2.at(msg2_split_offset), message2.size() - msg2_split_offset);
     REQUIRE(write_request.get_write_size() == message1.size() + message2.size());
+    REQUIRE(write_request.get_message_data_size() == message_size * 2U);
+
+    const auto io_vector = write_request.get_io_vector();
+    std::memset(&expected_buf2.at(message2.size() - msg2_split_offset), 0, buf2_pad_size);
+    REQUIRE(write_request.get_write_size() == message1.size() + message2.size() + buf2_pad_size);
+    REQUIRE(io_vector.size() == 2U);
+
+    REQUIRE(jewels::at(io_vector, 0).iov_len == expected_buf1.size());
+    REQUIRE(std::memcmp(expected_buf1.data(), jewels::at(io_vector, 0).iov_base, expected_buf1.size()) == 0);
+    REQUIRE(jewels::at(io_vector, 1).iov_len == expected_buf2.size());
+    REQUIRE(std::memcmp(expected_buf2.data(), jewels::at(io_vector, 1).iov_base, expected_buf2.size()) == 0);
+  }
+
+  SECTION("Copy metadata into write request")
+  {
+    constexpr size_t message_size = 77U;
+
+    const jewels::time::SteadyTime time2{std::chrono::seconds(2)};
+    const std::vector<char> message1(message_size, 'A');
+    REQUIRE(
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::metadata) ==
+      0U);
+    REQUIRE(write_request.get_message_data_size() == 0U);
+
+    const auto write_buf1_result = write_buffer_pool.get_shared_buffer();
+    REQUIRE(write_buf1_result);
+    REQUIRE(write_request.add_buffer(write_buf1_result.value()));
+    REQUIRE(write_buf1_result.value().get_reference_count() == 2U);
+    std::vector<std::byte> expected_buf1(TestAsyncWriterPolicy::buffer_size);
+
+    REQUIRE(
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::metadata) ==
+      message1.size());
+    REQUIRE(write_request.try_get_oldest_data_timestamp() == time2);
+    REQUIRE(write_request.get_message_data_size() == 0U);
+    std::memcpy(expected_buf1.data(), message1.data(), message1.size());
+
+    const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
+    const std::vector<char> message2(message_size, 'B');
+    const size_t msg2_split_offset = 51U;
+    REQUIRE(
+      write_request.copy_data(time1, std::as_bytes(std::span{message2}), AsyncWriteRequestType::DataType::metadata) ==
+      msg2_split_offset);
+    REQUIRE(write_request.try_get_oldest_data_timestamp() == time1);
+    REQUIRE(write_request.get_message_data_size() == 0U);
+    std::memcpy(&expected_buf1.at(message1.size()), message2.data(), msg2_split_offset);
+
+    const auto write_buf2_result = write_buffer_pool.get_shared_buffer();
+    REQUIRE(write_buf2_result);
+    REQUIRE(write_request.add_buffer(write_buf2_result.value()));
+    REQUIRE(write_buf2_result.value().get_reference_count() == 2U);
+    const auto buf2_pad_size = jewels::Aligner<TestAsyncWriterPolicy::alignment>::aligned_remainder(message_size * 2U);
+    std::vector<std::byte> expected_buf2(message_size - msg2_split_offset + buf2_pad_size);
+
+    REQUIRE(
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{message2}.subspan(msg2_split_offset)),
+        AsyncWriteRequestType::DataType::metadata) == message2.size() - msg2_split_offset);
+    std::memcpy(expected_buf2.data(), &message2.at(msg2_split_offset), message2.size() - msg2_split_offset);
+    REQUIRE(write_request.get_write_size() == message1.size() + message2.size());
+    REQUIRE(write_request.get_message_data_size() == 0U);
 
     const auto io_vector = write_request.get_io_vector();
     std::memset(&expected_buf2.at(message2.size() - msg2_split_offset), 0, buf2_pad_size);
@@ -143,7 +215,9 @@ TEST_CASE("Smoke test")
 
     const jewels::time::SteadyTime time2{std::chrono::seconds(2)};
     const std::vector<char> message1(message_size, 'A');
-    REQUIRE(write_request.copy_data(time2, std::as_bytes(std::span{message1.data(), message1.size()})) == 0U);
+    REQUIRE(
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::message) ==
+      0U);
 
     auto write_buf_result = write_buffer_pool.get_shared_buffer();
     REQUIRE(write_buf_result);
@@ -153,7 +227,8 @@ TEST_CASE("Smoke test")
     const auto msg1_split_offset = TestAsyncWriterPolicy::buffer_size;
     const auto msg1_remainder = message_size - msg1_split_offset;
     REQUIRE(
-      write_request.copy_data(time2, std::as_bytes(std::span{message1.data(), message1.size()})) == msg1_split_offset);
+      write_request.copy_data(time2, std::as_bytes(std::span{message1}), AsyncWriteRequestType::DataType::message) ==
+      msg1_split_offset);
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time2);
     std::memcpy(expected_buf1.data(), message1.data(), msg1_split_offset);
 
@@ -163,8 +238,10 @@ TEST_CASE("Smoke test")
     std::vector<std::byte> expected_buf2(TestAsyncWriterPolicy::buffer_size);
 
     REQUIRE(
-      write_request.copy_data(time2, std::as_bytes(std::span{&message1.at(msg1_split_offset), msg1_remainder})) ==
-      msg1_remainder);
+      write_request.copy_data(
+        time2,
+        std::as_bytes(std::span{message1}.subspan(msg1_split_offset)),
+        AsyncWriteRequestType::DataType::message) == msg1_remainder);
     std::memcpy(expected_buf2.data(), &message1.at(msg1_split_offset), msg1_remainder);
 
     const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
@@ -172,7 +249,9 @@ TEST_CASE("Smoke test")
     const size_t msg2_split_offset = 79U;
     const size_t msg2_remainder = message_size - msg2_split_offset;
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{message2.data(), message2.size()})) == msg2_split_offset);
+      write_request.copy_data(
+        time1, std::as_bytes(std::span{message2.data(), message2.size()}), AsyncWriteRequestType::DataType::message) ==
+      msg2_split_offset);
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time1);
     std::memcpy(&expected_buf2.at(msg1_remainder), message2.data(), msg2_split_offset);
 
@@ -182,15 +261,19 @@ TEST_CASE("Smoke test")
     std::vector<std::byte> expected_buf3(TestAsyncWriterPolicy::buffer_size);
 
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{&message2.at(msg2_split_offset), msg2_remainder})) ==
-      msg2_remainder);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{&message2.at(msg2_split_offset), msg2_remainder}),
+        AsyncWriteRequestType::DataType::message) == msg2_remainder);
     std::memcpy(expected_buf3.data(), &message2.at(msg2_split_offset), msg2_remainder);
 
     const std::vector<char> message3(message_size, 'C');
     const size_t msg3_split_offset = 30U;
     const size_t msg3_remainder = message_size - msg3_split_offset;
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{message3.data(), message3.size()})) == msg3_split_offset);
+      write_request.copy_data(
+        time1, std::as_bytes(std::span{message3.data(), message3.size()}), AsyncWriteRequestType::DataType::message) ==
+      msg3_split_offset);
     std::memcpy(&expected_buf3.at(msg2_remainder), message3.data(), msg3_split_offset);
 
     write_buf_result = write_buffer_pool.get_shared_buffer();
@@ -199,13 +282,18 @@ TEST_CASE("Smoke test")
     std::vector<std::byte> expected_buf4(TestAsyncWriterPolicy::buffer_size);
 
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{&message3.at(msg3_split_offset), msg3_remainder})) ==
-      TestAsyncWriterPolicy::buffer_size);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{&message3.at(msg3_split_offset), msg3_remainder}),
+        AsyncWriteRequestType::DataType::message) == TestAsyncWriterPolicy::buffer_size);
     std::memcpy(expected_buf4.data(), &message3.at(msg3_split_offset), TestAsyncWriterPolicy::buffer_size);
 
     REQUIRE(write_request.is_full());
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{&message3.at(msg3_split_offset), msg3_remainder})) == 0U);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{&message3.at(msg3_split_offset), msg3_remainder}),
+        AsyncWriteRequestType::DataType::message) == 0U);
     REQUIRE(
       write_request.get_write_size() ==
       message1.size() + message2.size() + msg3_split_offset + TestAsyncWriterPolicy::buffer_size);
@@ -237,7 +325,9 @@ TEST_CASE("Smoke test")
     const jewels::time::SteadyTime time2{std::chrono::seconds(2)};
     const std::vector<char> message1(message1_size, 'A');
     REQUIRE(
-      write_request.copy_data(time2, std::as_bytes(std::span{message1.data(), message1.size()})) == message1.size());
+      write_request.copy_data(
+        time2, std::as_bytes(std::span{message1.data(), message1.size()}), AsyncWriteRequestType::DataType::message) ==
+      message1.size());
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time2);
     std::memcpy(expected_buf1.data(), message1.data(), message1.size());
 
@@ -247,8 +337,10 @@ TEST_CASE("Smoke test")
 
     const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{pre_aligned2.data(), pre_align2_size})) ==
-      pre_align2_size);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{pre_aligned2.data(), pre_align2_size}),
+        AsyncWriteRequestType::DataType::message) == pre_align2_size);
     REQUIRE(write_request.try_get_oldest_data_timestamp() == time1);
     std::memcpy(&expected_buf1.at(message1_size + align2_pad_size), pre_aligned2.data(), pre_align2_size);
 
@@ -257,8 +349,11 @@ TEST_CASE("Smoke test")
     auto msg2_aligned = std::move(msg2_aligned_result).value();
     std::memset(msg2_aligned->data(), 'C', msg2_aligned->size());
     REQUIRE(
-      write_request.zero_copy_data(time1, std::as_bytes(std::span{*msg2_aligned}), MessageHandle{msg2_aligned}) ==
-      msg2_aligned->size());
+      write_request.zero_copy_data(
+        time1,
+        std::as_bytes(std::span{*msg2_aligned}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{msg2_aligned}) == msg2_aligned->size());
     REQUIRE(msg2_aligned.get_reference_count() == 2U);
     REQUIRE(write_request.get_write_size() == expected_buf1.size() + msg2_aligned->size());
 
@@ -266,7 +361,10 @@ TEST_CASE("Smoke test")
     constexpr size_t post_align2_size = 11U;
     const std::vector<char> post_aligned2(post_align2_size, 'D');
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{post_aligned2.data(), post_aligned2.size()})) == 11U);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{post_aligned2.data(), post_aligned2.size()}),
+        AsyncWriteRequestType::DataType::message) == 11U);
     std::memcpy(expected_buf2.data(), post_aligned2.data(), post_align2_size);
 
     constexpr size_t pre_align3_size = 166U;
@@ -278,8 +376,10 @@ TEST_CASE("Smoke test")
 
     const auto pre_align3_split = expected_buf2.size() - post_align2_size - pad3_size;
     REQUIRE(
-      write_request.copy_data(time1, std::as_bytes(std::span{pre_aligned3.data(), pre_aligned3.size()})) ==
-      pre_align3_split);
+      write_request.copy_data(
+        time1,
+        std::as_bytes(std::span{pre_aligned3.data(), pre_aligned3.size()}),
+        AsyncWriteRequestType::DataType::message) == pre_align3_split);
     std::memcpy(&expected_buf2.at(post_align2_size + pad3_size), pre_aligned3.data(), pre_align3_split);
 
     write_buf_result = write_buffer_pool.get_shared_buffer();
@@ -288,8 +388,9 @@ TEST_CASE("Smoke test")
 
     REQUIRE(
       write_request.copy_data(
-        time1, std::as_bytes(std::span{&pre_aligned3.at(pre_align3_split), pre_aligned3.size() - pre_align3_split})) ==
-      pre_aligned3.size() - pre_align3_split);
+        time1,
+        std::as_bytes(std::span{&pre_aligned3.at(pre_align3_split), pre_aligned3.size() - pre_align3_split}),
+        AsyncWriteRequestType::DataType::message) == pre_aligned3.size() - pre_align3_split);
     std::vector<std::byte> expected_buf3(pre_aligned3.size() - pre_align3_split);
     std::memcpy(expected_buf3.data(), &pre_aligned3.at(pre_align3_split), pre_aligned3.size() - pre_align3_split);
 
@@ -298,8 +399,11 @@ TEST_CASE("Smoke test")
     auto msg3_aligned = std::move(msg3_aligned_result).value();
     std::memset(msg3_aligned->data(), 'D', msg3_aligned->size());
     REQUIRE(
-      write_request.zero_copy_data(time1, std::as_bytes(std::span{*msg3_aligned}), MessageHandle{msg3_aligned}) ==
-      msg3_aligned->size());
+      write_request.zero_copy_data(
+        time1,
+        std::as_bytes(std::span{*msg3_aligned}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{msg3_aligned}) == msg3_aligned->size());
 
     std::vector<std::byte> expected_buf4(message_buffer_size);
     std::memcpy(expected_buf4.data(), msg3_aligned->data(), message_buffer_size);
@@ -321,8 +425,11 @@ TEST_CASE("Smoke test")
       REQUIRE(msg4_aligned_result);
       auto msg4_aligned = std::move(msg4_aligned_result).value();
       REQUIRE(
-        write_request.zero_copy_data(time1, std::as_bytes(std::span{*msg4_aligned}), MessageHandle{msg4_aligned}) ==
-        0U);
+        write_request.zero_copy_data(
+          time1,
+          std::as_bytes(std::span{*msg4_aligned}),
+          AsyncWriteRequestType::DataType::message,
+          MessageHandle{msg4_aligned}) == 0U);
       REQUIRE(write_request.is_full());
     }
 
@@ -347,16 +454,22 @@ TEST_CASE("Smoke test")
     auto message1 = std::move(message_result).value();
     std::memset(message1->data(), 'A', message1->size());
     REQUIRE(
-      write_request.zero_copy_data(time10, std::as_bytes(std::span{*message1}), MessageHandle{message1}) ==
-      message1->size());
+      write_request.zero_copy_data(
+        time10,
+        std::as_bytes(std::span{*message1}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{message1}) == message1->size());
 
     message_result = message_buffer_pool.get_shared_buffer();
     REQUIRE(message_result);
     auto message2 = std::move(message_result).value();
     std::memset(message2->data(), 'B', message2->size());
     REQUIRE(
-      write_request.zero_copy_data(time10, std::as_bytes(std::span{*message2}), MessageHandle{message2}) ==
-      message2->size());
+      write_request.zero_copy_data(
+        time10,
+        std::as_bytes(std::span{*message2}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{message2}) == message2->size());
 
     message_result = message_buffer_pool.get_shared_buffer();
     REQUIRE(message_result);
@@ -364,8 +477,11 @@ TEST_CASE("Smoke test")
     const size_t message3_split_offset = TestAsyncWriterPolicy::max_write_size - message1->size() - message2->size();
     std::memset(message3->data(), 'C', message3->size());
     REQUIRE(
-      write_request.zero_copy_data(time10, std::as_bytes(std::span{*message3}), MessageHandle{message3}) ==
-      message3_split_offset);
+      write_request.zero_copy_data(
+        time10,
+        std::as_bytes(std::span{*message3}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{message3}) == message3_split_offset);
 
     REQUIRE(write_request.is_full());
 

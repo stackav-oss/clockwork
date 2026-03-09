@@ -6,9 +6,8 @@
 #include "clockwork/pinion/tests/support/mock_slot.hh"
 #include "jewels/std/span.hh"
 
-#include <boost/atomic/atomic_ref.hpp>
-
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <iterator>
 #include <limits>
@@ -20,8 +19,8 @@ namespace clockwork::pinion::support
 /// Mockup of the underlying control block.
 struct ControlBlock
 {
-  alignas(boost::atomic_ref<BufferIndex>::required_alignment) BufferIndex head{};
-  alignas(boost::atomic_ref<BufferIndex>::required_alignment) BufferIndex tail{};
+  alignas(std::atomic_ref<BufferIndex>::required_alignment) BufferIndex head{};
+  alignas(std::atomic_ref<BufferIndex>::required_alignment) BufferIndex tail{};
 };
 
 /// Underlying storage for a buffer.

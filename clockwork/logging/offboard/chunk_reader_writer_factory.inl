@@ -5,11 +5,19 @@
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/nolint_helper.hh"
+#include "clockwork/logging/offboard/chunk_reader.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
+#include "clockwork/logging/offboard/file_chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/log_uri.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
 #include <google/protobuf/text_format.h>
 
+#include <cstddef>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -20,8 +28,189 @@
 namespace clockwork_logging::offboard
 {
 
+template <typename S3UtilsType>
+ChunkReaderWriterFactory<S3UtilsType>::ChunkReaderWriterFactory(jewels::memory::MemoryResource memory_resource)
+  : memory_resource_(std::move(memory_resource)), file_factory_(memory_resource_)
+{
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkReader>>
+ChunkReaderWriterFactory<S3UtilsType>::make_chunk_reader(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.make_chunk_reader(log_uri);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->make_chunk_reader(log_uri);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkWriter>>
+ChunkReaderWriterFactory<S3UtilsType>::make_chunk_writer(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.make_chunk_writer(log_uri);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->make_chunk_writer(log_uri);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<bool> ChunkReaderWriterFactory<S3UtilsType>::exists(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  auto log_uri = make_result.value();
+  while (!log_uri.path().empty() && log_uri.path() != "/" && log_uri.path().back() == '/')
+  {
+    log_uri = log_uri.parent_uri();
+  }
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.exists(log_uri);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->exists(log_uri);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<void> ChunkReaderWriterFactory<S3UtilsType>::create_directories(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.create_directories(log_uri);
+  case LogUriScheme::s3:
+    // Create directories is a noop on S3
+    return {};
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<std::pmr::vector<std::pmr::string>>
+ChunkReaderWriterFactory<S3UtilsType>::list_log_files(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.list_log_files(log_uri);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->list_log_files(log_uri);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<void>
+ChunkReaderWriterFactory<S3UtilsType>::write_log_file(std::string_view uri_str, std::span<const std::byte> data)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.write_log_file(log_uri, data);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->write_log_file(log_uri, data);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
+ChunkReaderWriterFactory<S3UtilsType>::read_log_file(std::string_view uri_str)
+{
+  const auto make_result = LogUri::try_make(uri_str, memory_resource_);
+  if (!make_result)
+  {
+    jewels::log_cerr_error("Invalid log URI: {}", uri_str);
+    return jewels::unexpected(LogError::invalid_log_uri);
+  }
+  const auto& log_uri = make_result.value();
+  switch (log_uri.scheme())
+  {
+  case LogUriScheme::file:
+    return file_factory_.read_log_file(log_uri);
+  case LogUriScheme::s3:
+    if (!maybe_s3_factory_)
+    {
+      maybe_s3_factory_.emplace(memory_resource_);
+    }
+    return maybe_s3_factory_->read_log_file(log_uri);
+  }
+  __builtin_unreachable();
+}
+
+template <typename S3UtilsType>
 template <typename ProtobufType>
-[[nodiscard]] LogExpected<void> ChunkReaderWriterFactory::write_text_proto(
+[[nodiscard]] LogExpected<void> ChunkReaderWriterFactory<S3UtilsType>::write_text_proto(
   std::string_view uri_str, std::string_view header, const ProtobufType& protobuf)
 {
   std::string header_str{header};
@@ -35,9 +224,10 @@ template <typename ProtobufType>
   return write_log_file(uri_str, std::as_bytes(std::span{header_str}));
 }
 
+template <typename S3UtilsType>
 template <typename ProtobufType>
 [[nodiscard]] LogExpected<ProtobufType>
-ChunkReaderWriterFactory::read_text_proto(std::string_view uri_str, ProtobufReadMode read_mode)
+ChunkReaderWriterFactory<S3UtilsType>::read_text_proto(std::string_view uri_str, ProtobufReadMode read_mode)
 {
   const auto& read_result = read_log_file(uri_str);
   if (!read_result)
@@ -58,9 +248,10 @@ ChunkReaderWriterFactory::read_text_proto(std::string_view uri_str, ProtobufRead
   return {std::move(protobuf)};
 }
 
+template <typename S3UtilsType>
 template <typename ProtobufType>
 [[nodiscard]] LogExpected<void>
-ChunkReaderWriterFactory::write_binary_proto(std::string_view uri_str, const ProtobufType& protobuf)
+ChunkReaderWriterFactory<S3UtilsType>::write_binary_proto(std::string_view uri_str, const ProtobufType& protobuf)
 {
   std::string proto_str;
   if (!protobuf.SerializeToString(&proto_str))
@@ -71,9 +262,10 @@ ChunkReaderWriterFactory::write_binary_proto(std::string_view uri_str, const Pro
   return write_log_file(uri_str, std::as_bytes(std::span{proto_str}));
 }
 
+template <typename S3UtilsType>
 template <typename ProtobufType>
 [[nodiscard]] LogExpected<ProtobufType>
-ChunkReaderWriterFactory::read_binary_proto(std::string_view uri_str, ProtobufReadMode read_mode)
+ChunkReaderWriterFactory<S3UtilsType>::read_binary_proto(std::string_view uri_str, ProtobufReadMode read_mode)
 {
   const auto& read_result = read_log_file(uri_str);
   if (!read_result)

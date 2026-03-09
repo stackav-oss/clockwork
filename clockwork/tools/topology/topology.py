@@ -5,9 +5,20 @@
 
 from __future__ import annotations
 
+import itertools
 import pickle
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Route:
+    """A bridge route between CPUs for a channel."""
+
+    source_cpu: str
+    dest_cpu: str
+    bridge_type: str
+    endpoint: str | None = None
 
 
 @dataclass
@@ -15,10 +26,12 @@ class Channel:
     """A clockwork channel."""
 
     name: str
+    size: int
     publishers: list[str]
     subscribers: list[str]
     message_type: str
     message_size: int
+    routes: list[Route] = field(default_factory=list)
 
 
 @dataclass
@@ -26,9 +39,18 @@ class Entity:
     """An entity with inputs / outputs."""
 
     name: str
-    cpu: str
+    process: str
     outputs: list[str]
     inputs: list[str]
+
+
+@dataclass
+class Process:
+    """A process with entities."""
+
+    name: str
+    cpu: str
+    entities: list[str]
 
 
 @dataclass
@@ -36,7 +58,7 @@ class Cpu:
     """A physical cpu."""
 
     name: str
-    entities: list[str]
+    processes: list[str]
 
 
 @dataclass
@@ -46,6 +68,7 @@ class System:
     cpus: dict[str, Cpu]
     entities: dict[str, Entity]
     channels: dict[str, Channel]
+    processes: dict[str, Process]
 
 
 def save_system(system: System, io_handle: typing.BinaryIO) -> None:
@@ -68,34 +91,48 @@ def _validate_names(system: System) -> None:
     """Validate names."""
     dict_fields = (system.cpus, system.entities, system.channels)
 
-    for field in dict_fields:
-        for key, value in field.items():
+    for dict_field in dict_fields:
+        for key, value in dict_field.items():
             if key != value.name:
                 msg = f"Entity {value.name} has unexpected key {key}."
                 raise ValueError(msg)
 
 
-def _validate_nodes(system: System) -> None:
-    """Validate entities are mapped to the correct nodes."""
-    cpus = {cpu.name: set(cpu.entities) for cpu in system.cpus.values()}
+def _validate_entities_in_procs(system: System) -> None:
+    """Validate entities are mapped to the correct processes."""
+    procs = {proc.name: set(proc.entities) for proc in system.processes.values()}
     for entity in system.entities.values():
-        if entity.cpu not in cpus:
-            msg = f"Entity {entity.name} is assigned to an invalid cpu {entity.cpu}"
-            raise ValueError(msg)
-        matched_cpus = [cpu for cpu in cpus if entity.name in cpus[cpu]]
-        if not matched_cpus:
-            msg = f"CPU {entity.cpu} does not contain entity {entity.name}."
-            raise ValueError(msg)
-        if len(matched_cpus) > 1:
-            msg = f"Entity {entity.name} found in multiple cpus."
+        procs_with_entity = [proc for proc in procs if entity.name in procs[proc]]
+        if procs_with_entity != [entity.process]:
+            msg = (
+                f"Entity {entity.name} is expected to be in process {entity.process}, but found in {procs_with_entity}"
+            )
             raise ValueError(msg)
 
-        cpus[matched_cpus[0]].remove(entity.name)
+        procs[entity.process].remove(entity.name)
 
-    for cpu_name, cpu_entities in cpus.items():
-        if not cpu_entities:
+    for proc_name, proc_entities in procs.items():
+        if not proc_entities:
             continue
-        msg = f"CPU {cpu_name} expected additional entities that didn't exist: {', '.join(cpu_entities)}"
+        msg = f"Process {proc_name} expected additional entities that didn't exist: {', '.join(proc_entities)}"
+        raise ValueError(msg)
+
+
+def _validate_procs_in_cpus(system: System) -> None:
+    """Validate processes are mapped to the correct nodes."""
+    cpus = {cpu.name: set(cpu.processes) for cpu in system.cpus.values()}
+    for proc in system.processes.values():
+        cpus_with_proc = [cpu for cpu in cpus if proc.name in cpus[cpu]]
+        if cpus_with_proc != [proc.cpu]:
+            msg = f"Process {proc.name} is expected to be in cpu {proc.cpu}, but found in {cpus_with_proc}."
+            raise ValueError(msg)
+
+        cpus[proc.cpu].remove(proc.name)
+
+    for cpu_name, cpu_processes in cpus.items():
+        if not cpu_processes:
+            continue
+        msg = f"CPU {cpu_name} expected additional processes that didn't exist: {', '.join(cpu_processes)}"
         raise ValueError(msg)
 
 
@@ -149,7 +186,8 @@ def _validate_subscribers(system: System) -> None:
 def validate_system(system: System) -> System:
     """Validate the structure of the system."""
     _validate_names(system)
-    _validate_nodes(system)
+    _validate_entities_in_procs(system)
+    _validate_procs_in_cpus(system)
     _validate_publishers(system)
     _validate_subscribers(system)
     return system
@@ -163,7 +201,7 @@ def channel_to_publisher_cpu_mapping(system: System) -> dict[str, str]:
             if channel_name in mapping:
                 msg = f'A publisher already exists for channel: "{channel_name}"'
                 raise RuntimeError(msg)
-            mapping[channel_name] = entity.cpu
+            mapping[channel_name] = system.processes[entity.process].cpu
 
     return mapping
 
@@ -173,7 +211,7 @@ def channel_to_subscriber_cpu_mapping(system: System) -> dict[str, set[str]]:
     mapping = {}
     for entity in system.entities.values():
         for channel_name in entity.inputs:
-            mapping.setdefault(channel_name, set()).add(entity.cpu)
+            mapping.setdefault(channel_name, set()).add(system.processes[entity.process].cpu)
 
     return mapping
 
@@ -199,7 +237,9 @@ def channel_flow_for_cpu(
         inbound_channels=set(),
         outbound_channels=set(),
     )
-    for entity in system.cpus[cpu_name].entities:
+    for entity in itertools.chain.from_iterable(
+        system.processes[process].entities for process in system.cpus[cpu_name].processes
+    ):
         for channel_name in system.entities[entity].outputs:
             subscribed_cpus = channel_to_subscriber_cpu.get(channel_name)
             if not subscribed_cpus:

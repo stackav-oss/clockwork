@@ -187,7 +187,7 @@ class CppContext:
             Header(CLK_REPO, "clockwork/cog/simple_cog.hh"),
             Header(CLK_REPO, "clockwork/common/abstract_cog.hh"),
             Header(CLK_REPO, "clockwork/common/abstract_cog_queue.hh"),
-            Header(CLK_REPO, "clockwork/common/process_description.hh"),
+            Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh"),
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
         },
         Header(CLK_REPO, "clockwork/dial/include_common.hh"): {
@@ -198,6 +198,7 @@ class CppContext:
             Header(CLK_REPO, "clockwork/dial/cond_time_since_last_exec.hh"),
             Header(CLK_REPO, "clockwork/dial/msg_input.hh"),
             Header(CLK_REPO, "clockwork/pinion/publisher_handle.hh"),
+            Header(CLK_REPO, "clockwork/pinion/publishable.hh"),
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
         },
     }
@@ -376,7 +377,7 @@ class CppModuleChunks:
         )
 
 
-def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, module_id: ModuleID) -> CcLibrary:
+def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, module_id: ModuleID, testonly: bool) -> CcLibrary:
     """Generate a CcLibrary target."""
     suffixes = ("hh", "inl", "cc")
     # Paths are relative to the module's directory.
@@ -406,6 +407,7 @@ def as_cc_library(cpp_mod: CppModuleChunks, name: str, package: Path, module_id:
         data=[
             module_to_clk(module_id.repo, module_id),
         ],
+        testonly=testonly,
     )
 
 
@@ -413,7 +415,7 @@ def as_cc_binary(cpp_mod: CppModuleChunks, name: str, package: Path, module_id: 
     """Generate a CcBinary target."""
     # A cc_binary is pretty much a cc_library without headers.
     # Construct a cc_library and shove the hdrs into srcs.
-    cc_library = as_cc_library(cpp_mod, name, package, module_id)
+    cc_library = as_cc_library(cpp_mod, name, package, module_id, False)
 
     clk_target = module_to_clk(module_id.repo, module_id)
     data = [*cc_library.data]

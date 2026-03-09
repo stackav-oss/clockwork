@@ -10,9 +10,9 @@
 #include "jewels/math/power_of_two.hh"
 #include "jewels/std/expected.hh"
 
-#include <boost/atomic/atomic_ref.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -32,14 +32,16 @@ struct BufferLayout
   static constexpr auto control_block_size{head_size + tail_size};
 
   /// Alignment of the head index.
-  static constexpr auto head_alignment{boost::atomic_ref<BufferIndex>::required_alignment};
+  static constexpr auto head_alignment{std::atomic_ref<BufferIndex>::required_alignment};
   /// Alignment of the tail index.
-  static constexpr auto tail_alignment{boost::atomic_ref<BufferIndex>::required_alignment};
+  static constexpr auto tail_alignment{std::atomic_ref<BufferIndex>::required_alignment};
 
   /// Number of slots in the buffer.
   size_t num_slots;
   /// Size of the message payload.
   size_t message_size;
+  /// True if the channel is only published once
+  bool is_published_once;
 };
 
 /// Get the size of the buffer as a multiple of the alignment.
@@ -76,7 +78,7 @@ public:
   /// @param buffer A pointer to the start of the underlying buffer.
   /// @param layout The layout of the buffer.
   /// @param index The index of the element for the iterator position.
-  BufferIterator(AlignedPtr<Slot::slot_alignment> buffer, BufferLayout layout, BufferIndex index) noexcept;
+  BufferIterator(AlignedBytePtr<Slot::slot_alignment> buffer, BufferLayout layout, BufferIndex index) noexcept;
 
   /// Dereference the iterator to get the current slot.
   /// @note Dereferencing requires a modulo operation which is not
@@ -123,7 +125,7 @@ private:
   friend bool is_sentinel_iterator(const BufferIterator& iterator) noexcept;
 
   /// Pointer to the start of the underlying buffer.
-  AlignedPtr<Slot::slot_alignment> buffer_{AlignedPtr<Slot::slot_alignment>::from_ref(default_data_)};
+  AlignedBytePtr<Slot::slot_alignment> buffer_{AlignedBytePtr<Slot::slot_alignment>::from_ref(default_data_)};
   /// Layout of the buffer.
   BufferLayout layout_{};
   /// Modulo the number of slots gives the index to the slot within the buffer.
@@ -186,23 +188,39 @@ public:
   [[nodiscard]] std::span<std::byte> bytes() const noexcept;
 
   /// Aligned pointer to the underlying buffer.
-  [[nodiscard]] AlignedPtr<Slot::slot_alignment> get() const noexcept;
+  [[nodiscard]] AlignedBytePtr<Slot::slot_alignment> get() const noexcept;
 
   /// Layout of the buffer.
   [[nodiscard]] const BufferLayout& layout() const noexcept;
 
+  /// Check whether this buffer is published once.
+  [[nodiscard]] bool is_published_once() const noexcept;
+
+  /// Get the number of messages that have been published to the buffer
+  [[nodiscard]] size_t get_publish_count() const noexcept;
+
+  /// Check if the iterator still points to an available message.
+  /// This is useful for subscribers to check if their messages was
+  /// overwritten while reading it.  After execution, if this returns
+  /// true for the oldest message they consumed, then the data was not
+  /// corrupted.
+  /// @param iterator An iterator to a slot in the buffer to check
+  /// availability for.
+  /// @return True if still available and false otherwise.
+  [[nodiscard]] bool still_available(const BufferIterator& iterator) const;
+
 private:
   /// Get an atomic reference to the head index.
-  [[nodiscard]] boost::atomic_ref<BufferIndex> head_ref() const noexcept;
+  [[nodiscard]] std::atomic_ref<BufferIndex> head_ref() const noexcept;
 
   /// Get an atomic reference to the tail index.
-  [[nodiscard]] boost::atomic_ref<BufferIndex> tail_ref() const noexcept;
+  [[nodiscard]] std::atomic_ref<BufferIndex> tail_ref() const noexcept;
 
   // Constructor to be called by the factory function.
-  Buffer(AlignedPtr<Slot::slot_alignment> buffer, BufferLayout layout) noexcept;
+  Buffer(AlignedBytePtr<Slot::slot_alignment> buffer, BufferLayout layout) noexcept;
 
   /// Span of bytes for the underlying buffer.
-  AlignedPtr<Slot::slot_alignment> buffer_;
+  AlignedBytePtr<Slot::slot_alignment> buffer_;
 
   /// Layout of the buffer.
   BufferLayout layout_;

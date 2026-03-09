@@ -10,7 +10,7 @@
 #include "clockwork/logging/readers/onboard_log_reader.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <filesystem>
 #include <stdexcept>
@@ -51,7 +51,8 @@ std::unique_ptr<AbstractLogReader> make_reader(
       }
       if (
         (dir_entry.path().filename().string() == offboard::log_metadata_filename) ||
-        (dir_entry.path().filename().string() == offboard::log_union_filename))
+        (dir_entry.path().filename().string() == offboard::log_union_filename) ||
+        (dir_entry.path().extension().string() == offboard::log_file_suffix))
       {
         return std::make_unique<OffboardLogReader>(
           log_uri, maybe_log_interval, maybe_relative_interval, decompress_option);

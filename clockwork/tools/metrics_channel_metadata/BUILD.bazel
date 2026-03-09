@@ -8,100 +8,49 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files(["metrics_channel_metadata_config.clk"])
 
-cc_library(
-    name = "metrics_channel_metadata_config",
-    srcs = [
-        "metrics_channel_metadata_config.cc",
-        "metrics_channel_metadata_config.inl",
-    ],
-    hdrs = ["metrics_channel_metadata_config.hh"],
-    data = [":metrics_channel_metadata_config_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/common:process_description",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "metrics_channel_metadata_config_clk",
     srcs = ["metrics_channel_metadata_config.clk"],
     outs = [
-        "metrics_channel_metadata_config.cc",
-        "metrics_channel_metadata_config.hh",
-        "metrics_channel_metadata_config.inl",
+        "metrics_channel_metadata_config_clk_cc.cc",
+        "metrics_channel_metadata_config_clk_cc.hh",
+        "metrics_channel_metadata_config_clk_cc.inl",
     ],
-    deps = ["//clockwork/common:process_description_clk"],
+    cpp_deps = ["//clockwork/common:process_description_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
+    deps = [
+        "//clockwork/common:constants_clk",
+        "//clockwork/common:process_description_clk",
+    ],
 )
 
 clk(
     name = "metrics_channel_metadata_init_clk",
     srcs = ["metrics_channel_metadata_init.clk"],
     outs = [
-        "metrics_channel_metadata_init_cog.cc",
-        "metrics_channel_metadata_init_cog.hh",
-        "metrics_channel_metadata_init_cog.inl",
-        "metrics_channel_metadata_init_cog_dial.cc",
-        "metrics_channel_metadata_init_cog_dial.hh",
-        "metrics_channel_metadata_init_cog_dial.inl",
+        "metrics_channel_metadata_init_clk_cc.cc",
+        "metrics_channel_metadata_init_clk_cc.hh",
+        "metrics_channel_metadata_init_clk_cc.inl",
+        "metrics_channel_metadata_init_clk_cc_dial.cc",
+        "metrics_channel_metadata_init_clk_cc_dial.hh",
+        "metrics_channel_metadata_init_clk_cc_dial.inl",
     ],
-    deps = [
-        ":metrics_channel_metadata_config_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    cpp_deps = [":metrics_channel_metadata_config_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
     ],
+    deps = [":metrics_channel_metadata_config_clk"],
 )
 
 cc_library(
-    name = "metrics_channel_metadata_init_cog",
-    srcs = [
-        "metrics_channel_metadata_init_cog.cc",
-        "metrics_channel_metadata_init_cog.inl",
-    ],
-    hdrs = ["metrics_channel_metadata_init_cog.hh"],
-    data = [":metrics_channel_metadata_init_clk"],
+    name = "metrics_channel_metadata_init_clk_cc_impl",
+    srcs = ["metrics_channel_metadata_init_clk_cc_impl.cc"],
     deps = [
-        ":metrics_channel_metadata_config",
-        ":metrics_channel_metadata_init_cog_dial",
-        ":metrics_channel_metadata_init_cog_impl",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
-cc_library(
-    name = "metrics_channel_metadata_init_cog_dial",
-    srcs = [
-        "metrics_channel_metadata_init_cog_dial.cc",
-        "metrics_channel_metadata_init_cog_dial.inl",
-    ],
-    hdrs = ["metrics_channel_metadata_init_cog_dial.hh"],
-    data = [":metrics_channel_metadata_init_clk"],
-    deps = [
-        ":metrics_channel_metadata_config",
-        "//clockwork/dial:include_common",
-    ],
-)
-
-cc_library(
-    name = "metrics_channel_metadata_init_cog_impl",
-    srcs = ["metrics_channel_metadata_init_cog_impl.cc"],
-    deps = [
-        ":metrics_channel_metadata_config",
-        ":metrics_channel_metadata_init_cog_dial",
-        "//clockwork/pinion:publisher_handle",
+        ":metrics_channel_metadata_config_clk_cc",
+        ":metrics_channel_metadata_init_clk_cc_dial",
+        "//clockwork/pinion:publishable",
         "//jewels/container/tap:var_array",
     ],
 )

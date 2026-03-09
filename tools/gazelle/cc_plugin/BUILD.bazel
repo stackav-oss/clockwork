@@ -7,7 +7,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cc_plugin",
     srcs = ["extension.go"],
-    data = ["resources/third_party_mapping.json"],
+    data = [":third_party_mapping"],
     importpath = "github.com/stackav-oss/clockwork/tools/gazelle/cc_plugin",
     visibility = ["//visibility:public"],
     deps = [
@@ -20,8 +20,8 @@ go_test(
     name = "cc_plugin_test",
     srcs = ["extension_test.go"],
     data = [
-        "resources/test_filemap.json",
         ":gazelle_cc_test_binary",
+        ":test_filemap",
     ],
     embed = [":cc_plugin"],
     rundir = ".",
@@ -36,4 +36,15 @@ go_test(
 gazelle_binary(
     name = "gazelle_cc_test_binary",
     languages = [":cc_plugin"],
+)
+
+filegroup(
+    name = "test_filemap",
+    srcs = ["resources/test_filemap.json"],
+)
+
+filegroup(
+    name = "third_party_mapping",
+    srcs = ["resources/third_party_mapping.json"],
+    visibility = ["//visibility:public"],
 )

@@ -50,17 +50,45 @@ By running the `channel` subcommand, users can sees which CPU the publisher and 
 $ bazel run @clockwork//clockwork/tools/topology:query -- @clockwork//clockwork/tools/topology/tests:test_system_multi_node_topology_summary channel MultiNodeChan
 ...
 Channel: MultiNodeChan
+  Size: 9 messages (72 bytes)
   Type: @clockwork::clockwork::tests::support::test_messages_multi_node.MultiNodeMessage
-  Size: 8 bytes
+  Message Size: 8 bytes
   Publishers:
     - CPU: TestSystemCpu1
         - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_1.source_cog
   Subscribers
     - CPU: TestSystemCpu2
         - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog
+  Routes:
+    - TestSystemCpu1 -> TestSystemCpu2: tcp (Port: 1111)
 ```
 
-Currently, the only supported bridge is via TCP so it can be assumed any channel crossing two nodes will impact the network.
+The `Routes` section shows the bridge type and connection details for channels that cross CPU boundaries:
+
+- For TCP bridges: displays the port number
+
+
+Channels with multiple subscribers on different CPUs will show multiple routes:
+
+```console
+$ bazel run @clockwork//clockwork/tools/topology:query -- @clockwork//clockwork/tools/topology/tests:test_system_multi_route_topology_summary channel MultiRouteChan
+...
+Channel: MultiRouteChan
+  Size: 9 messages (72 bytes)
+  Type: @clockwork::clockwork::tests::support::test_messages_multi_node.MultiNodeMessage
+  Message Size: 8 bytes
+  Publishers:
+    - CPU: MultiRouteCpu1
+        - @clockwork::clockwork::tests::support::test_system_multi_route.test_system_multi_route.source_box.source_cog
+  Subscribers
+    - CPU: MultiRouteCpu2
+        - @clockwork::clockwork::tests::support::test_system_multi_route.test_system_multi_route.sink_box_1.sink_cog
+    - CPU: MultiRouteCpu3
+        - @clockwork::clockwork::tests::support::test_system_multi_route.test_system_multi_route.sink_box_2.sink_cog
+  Routes:
+    - MultiRouteCpu1 -> MultiRouteCpu2: tcp (Port: 2000)
+    - MultiRouteCpu1 -> MultiRouteCpu3: tcp (Port: 2000)
+```
 
 If you are unsure of the exact channel name to query for, simply list them out first.
 

@@ -6,7 +6,6 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
-#include "clockwork/logging/offboard/s3_utils.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -31,10 +30,10 @@ namespace clockwork_logging::offboard
 S3ChunkWriter::S3ChunkWriter(
   jewels::memory::MemoryResource memory_resource,
   LogUri file_uri,
-  jewels::memory::NonNullSharedPtr<Aws::S3::S3Client> s3_client_ptr)
+  jewels::memory::NonNullSharedPtr<S3UtilsInterface> s3_utils_ptr)
   : memory_resource_(std::move(memory_resource)),
     file_uri_(std::move(file_uri)),
-    s3_client_ptr_(std::move(s3_client_ptr)),
+    s3_utils_ptr_(std::move(s3_utils_ptr)),
     pending_buffer_(memory_resource_)
 {
 }
@@ -50,7 +49,7 @@ S3ChunkWriter::~S3ChunkWriter()
 [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<S3ChunkWriter>> S3ChunkWriter::make_shared(
   const jewels::memory::MemoryResource& memory_resource,
   std::string_view file_uri,
-  const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr)
+  const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr)
 {
   auto maybe_log_uri = LogUri::try_make(file_uri, memory_resource);
   if (!maybe_log_uri || maybe_log_uri->scheme() != LogUriScheme::s3)
@@ -59,7 +58,7 @@ S3ChunkWriter::~S3ChunkWriter()
     return jewels::unexpected(LogError::invalid_log_uri);
   }
   return jewels::memory::allocate_shared<S3ChunkWriter, std::pmr::polymorphic_allocator<S3ChunkWriter>>(
-    memory_resource, memory_resource, std::move(maybe_log_uri.value()), s3_client_ptr);
+    memory_resource, memory_resource, std::move(maybe_log_uri.value()), s3_utils_ptr);
 }
 
 [[nodiscard]] const LogUri& S3ChunkWriter::file_uri() const noexcept
@@ -123,7 +122,7 @@ S3ChunkWriter::~S3ChunkWriter()
   {
     if (upload_id_.empty())
     {
-      auto create_result = s3_create_multipart_upload(memory_resource_, *s3_client_ptr_, file_uri_);
+      auto create_result = s3_utils_ptr_->create_multipart_upload(file_uri_);
       if (!create_result)
       {
         return jewels::unexpected(create_result.error());
@@ -165,10 +164,8 @@ S3ChunkWriter::~S3ChunkWriter()
     {
       const auto data_size = pending_buffer_.size();
       const auto start_time = jewels::time::SteadyClock::now();
-      if (const auto put_result = s3_put_object(
-            *s3_client_ptr_,
-            file_uri_,
-            std::pmr::vector<std::pmr::vector<std::byte>>{{std::move(pending_buffer_)}, memory_resource_});
+      if (const auto put_result = s3_utils_ptr_->put_object(
+            file_uri_, std::pmr::vector<std::pmr::vector<std::byte>>{{std::move(pending_buffer_)}, memory_resource_});
           !put_result)
       {
         return jewels::unexpected(put_result.error());
@@ -181,8 +178,7 @@ S3ChunkWriter::~S3ChunkWriter()
   }
   if (!upload_id_.empty())
   {
-    if (const auto complete_result =
-          s3_complete_multipart_upload(*s3_client_ptr_, file_uri_, upload_id_, completed_parts_);
+    if (const auto complete_result = s3_utils_ptr_->complete_multipart_upload(file_uri_, upload_id_, completed_parts_);
         !complete_result)
     {
       return jewels::unexpected(complete_result.error());
@@ -206,7 +202,7 @@ S3ChunkWriter::~S3ChunkWriter()
   pending_buffer_bytes_ = 0U;
   guard.unlock();
   const auto start_time = jewels::time::SteadyClock::now();
-  auto upload_result = s3_upload_part(*s3_client_ptr_, file_uri_, upload_id_, part_number, std::move(*buffers_ptr));
+  auto upload_result = s3_utils_ptr_->upload_part(file_uri_, upload_id_, part_number, std::move(*buffers_ptr));
   const auto end_time = jewels::time::SteadyClock::now();
   guard.lock();
   if (!upload_result)

@@ -4,25 +4,27 @@
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/logger.hh"
-#include "clockwork/logging/writers/logger_config.hh"
-#include "clockwork/logging/writers/logger_status.hh"
+#include "clockwork/logging/writers/logger_config_clk_cc.hh"
+#include "clockwork/logging/writers/logger_status_clk_cc.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/repr_iface.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/container/circular_buffer.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -39,7 +41,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -139,7 +140,7 @@ TEST_CASE("Log messages")
       }
     }
 
-    LoggerStatusTap test_logger_status;
+    clockwork::Tappy<LoggerStatus> test_logger_status;
     test_logger_ptr->get_logger_status_message(test_logger_status);
     REQUIRE(test_logger_status.get_state() == LogWriterState::logging);
     REQUIRE(test_logger_status.get_drop_count() == 0U);

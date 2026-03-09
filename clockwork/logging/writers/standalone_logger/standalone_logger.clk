@@ -1,9 +1,11 @@
+#![generate(cpp_exe)]
+
 use clockwork::logging::log_writer_config;
-use clockwork::logging::writers::channel_message_rates_config;
+use[cpp, proto, proto_conv] clockwork::logging::writers::channel_message_rates_config;
 use clockwork::logging::writers::logger;
-use clockwork::logging::writers::logger_channel_policies;
-use clockwork::logging::writers::logger_channels;
-use clockwork::logging::writers::logger_config;
+use[] clockwork::logging::writers::logger_channel_policies;
+use[] clockwork::logging::writers::logger_channels;
+use[cpp, proto, proto_conv] clockwork::logging::writers::logger_config;
 use clockwork::logging::writers::logger_status;
 use clockwork::tools::channel_spy::channel_spy_config;
 use clockwork::tools::channel_spy::channel_spy_config_init;
@@ -13,13 +15,13 @@ cpu_domain LocalHost;
 box StandaloneLogger
 {
   new spy_config_memory: HeapMemory(max_size=10'000'000);
-  new spy_config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/logging/writers/standalone_logger/standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon");
+  new spy_config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/logging/writers/standalone_logger/standalone_logger_sys.standalone_logger_sys.LocalHost_channel_spy_config.tachyon");
   new spy_config_init_cog: channel_spy_config_init::SpyConfigInitCog;
 
   connect spy_config_memory to spy_config_init_cog.memres;
   connect spy_config to spy_config_init_cog.spy_config;
 
-  new standalone_log_writer_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/logging/writers/standalone_logger/standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon");
+  new standalone_log_writer_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/logging/writers/standalone_logger/standalone_logger_sys.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon");
   new standalone_logger_config: SerializedDataFile(representation=Protobuf<logger_config::LoggerConfig>, path="clockwork/logging/writers/standalone_logger/resources/logger_config.pbtxt");
   new standalone_logger_channel_rates_config: SerializedDataFile(representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>, path="clockwork/logging/writers/standalone_logger/resources/channel_rates_config.pbtxt");
   new standalone_logger_init_cog: logger::LoggerInitCog;
@@ -39,28 +41,7 @@ box StandaloneLogger
 box StandaloneLoggerSystem
 {
   new box: StandaloneLogger;
-  new proc: Process(executable=standalone_logger_exe);
+  new proc: Process(executable=standalone_logger_clk_exe);
   apply HostProcess(process=proc) in box;
   apply HostCpuDomain(cpu_domain=LocalHost) to proc;
-}
-
-cpp_executable standalone_logger_exe
-{
-  casing
-  {
-    extern logger::LoggerCogState;
-    interface Tap<Tachyon<channel_spy_config::ChannelSpyConfig<>>>;
-    interface Tap<Tachyon<log_writer_config::LogWriterConfig<>>>;
-    interface Tap<Tachyon<logger_config::LoggerConfig>>;
-    representation Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>;
-    representation Protobuf<logger_config::LoggerConfig>;
-    cog channel_spy_config_init::SpyConfigInitCog;
-    cog logger::LoggerInitCog;
-    cog logger::LoggerStatusPublisherCog;
-  }
-}
-
-system_target standalone_logger_sys
-{
-  box: StandaloneLoggerSystem;
 }

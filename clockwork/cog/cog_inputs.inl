@@ -5,7 +5,7 @@
 
 #include "clockwork/cog/cog_passthrough_observer.hh"
 #include "clockwork/cog/input_view.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -17,13 +17,18 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace clockwork
 {
@@ -160,6 +165,14 @@ bool CogInputs<Policies...>::almost_overrun() const
 }
 
 template <typename... Policies>
+bool CogInputs<Policies...>::is_published_once_channel_invalid() const
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::apply(
+    [](auto&... subscriber) { return (subscriber->is_published_once_channel_invalid() || ...); }, subscribers_);
+}
+
+template <typename... Policies>
 CogInputs<Policies...>::SubscribersTuple& CogInputs<Policies...>::subscribers()
 {
   return subscribers_;
@@ -178,6 +191,45 @@ void CogInputs<Policies...>::set_infra_diagnostics(
      start_time - std::get<SubscriberType<Policies>>(subscribers_)->latest_message_time()))),
    ...);
   ((report.template set<safety_skip_ids>(std::get<SubscriberType<Policies>>(subscribers_)->did_safety_skip())), ...);
+}
+
+template <typename... Policies>
+template <size_t index, typename CogType>
+void CogInputs<Policies...>::set_unit_test_input(pinion::SubscriberHandle handle)
+{
+  std::get<index>(subscribers_) = std::make_shared<InputView<PolicyType<index>>>(
+    std::move(handle), CogType::event_metrics_batch_size, resource_, running_offline_);
+}
+
+template <typename... Policies>
+template <typename ConditionsType>
+[[nodiscard]] constexpr std::array<uint32_t, CogInputs<Policies...>::policy_count>
+CogInputs<Policies...>::get_default_unit_test_slot_counts()
+{
+  return []<std::size_t... input_index>(std::index_sequence<input_index...>)
+  {
+    constexpr auto get_default_unit_test_slots_from_conditions = []<typename PolicyType>()
+    {
+      return []<size_t... cond_index>(std::index_sequence<cond_index...>)
+      {
+        constexpr auto get_default_unit_test_slots_from_condition = []<typename ConditionType>()
+        {
+          return (ConditionType::endpoint_id == PolicyType::endpoint_id &&
+                  ConditionType::bounds_max != std::numeric_limits<uint32_t>::max())
+                   ? ConditionType::bounds_max
+                   : 1U;
+        };
+        return std::max(
+          {1U,
+           (get_default_unit_test_slots_from_condition
+              // .template operator()<std::tuple_element_t<cond_index, typename ConditionsType::PoliciesTuple>>())...});
+              .template operator()<typename ConditionsType::template PolicyType<cond_index>>())...});
+      }(std::make_index_sequence<ConditionsType::policy_count>{});
+    };
+    return std::array<uint32_t, policy_count>{std::max(
+      PolicyType<input_index>::max_view_size,
+      get_default_unit_test_slots_from_conditions.template operator()<PolicyType<input_index>>())...};
+  }(std::make_index_sequence<policy_count>{});
 }
 
 } // namespace clockwork

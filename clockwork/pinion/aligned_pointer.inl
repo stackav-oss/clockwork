@@ -9,112 +9,127 @@
 
 #include <cstddef>
 #include <iterator>
+#include <type_traits>
 
 namespace clockwork::pinion
 {
 
-template <size_t alignment>
-jewels::expected<AlignedPtr<alignment>, jewels::MonoError>
-AlignedPtr<alignment>::try_make(jewels::memory::ObjectPtr<std::byte> ptr) noexcept
+template <typename T, size_t alignment>
+jewels::expected<AlignedPtr<T, alignment>, jewels::MonoError>
+AlignedPtr<T, alignment>::try_make(jewels::memory::ObjectPtr<T> ptr) noexcept
 {
   constexpr auto mask{alignment - 1U};
   if ((jewels::memory::to_uintptr_t(ptr.get()) & mask) > 0UL)
   {
     return jewels::unexpected{jewels::MonoError{}};
   }
-  return AlignedPtr<alignment>{ptr.get()};
+  return AlignedPtr<T, alignment>{ptr.get()};
 }
 
-template <size_t alignment>
+template <typename T, size_t alignment>
 template <class Object>
-AlignedPtr<alignment> AlignedPtr<alignment>::from_ref(Object& object) noexcept
+AlignedPtr<T, alignment> AlignedPtr<T, alignment>::from_ref(Object& object) noexcept
 {
   static_assert(alignof(Object) >= alignment, "Invalid alignment.");
-  return AlignedPtr<alignment>(as_writable_bytes(jewels::as_single_item_span(object)).data());
+  if constexpr (std::is_const_v<T>)
+  {
+    return AlignedPtr<T, alignment>(as_bytes(jewels::as_single_item_span(object)).data());
+  }
+  else
+  {
+    return AlignedPtr<T, alignment>(as_writable_bytes(jewels::as_single_item_span(object)).data());
+  }
 }
 
-template <size_t alignment>
-std::byte* AlignedPtr<alignment>::get() const noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>::AlignedPtr(const AlignedPtr<std::remove_const_t<T>, alignment>& other) noexcept
+  requires std::is_const_v<T>
+  : ptr_(other.get())
+{
+}
+
+template <typename T, size_t alignment>
+T* AlignedPtr<T, alignment>::get() const noexcept
 {
   return ptr_;
 }
 
-template <size_t alignment>
-std::byte* AlignedPtr<alignment>::operator->() const noexcept
+template <typename T, size_t alignment>
+T* AlignedPtr<T, alignment>::operator->() const noexcept
 {
   return get();
 }
 
-template <size_t alignment>
-AlignedPtr<alignment>& AlignedPtr<alignment>::operator++() noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>& AlignedPtr<T, alignment>::operator++() noexcept
 {
   *this += 1L;
   return *this;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment>& AlignedPtr<alignment>::operator--() noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>& AlignedPtr<T, alignment>::operator--() noexcept
 {
   *this -= 1L;
   return *this;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment> AlignedPtr<alignment>::operator++(int) & noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment> AlignedPtr<T, alignment>::operator++(int) & noexcept
 {
-  AlignedPtr<alignment> copy{*this};
+  AlignedPtr<T, alignment> copy{*this};
   ++*this;
   return copy;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment> AlignedPtr<alignment>::operator--(int) & noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment> AlignedPtr<T, alignment>::operator--(int) & noexcept
 {
-  AlignedPtr<alignment> copy{*this};
+  AlignedPtr<T, alignment> copy{*this};
   --*this;
   return copy;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment> AlignedPtr<alignment>::operator+(std::ptrdiff_t offset) const noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment> AlignedPtr<T, alignment>::operator+(std::ptrdiff_t offset) const noexcept
 {
-  return AlignedPtr<alignment>(std::next(ptr_, offset * static_cast<std::ptrdiff_t>(alignment)));
+  return AlignedPtr<T, alignment>(std::next(ptr_, offset * static_cast<std::ptrdiff_t>(alignment)));
 }
 
-template <size_t alignment>
-AlignedPtr<alignment>& AlignedPtr<alignment>::operator+=(std::ptrdiff_t offset) noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>& AlignedPtr<T, alignment>::operator+=(std::ptrdiff_t offset) noexcept
 {
   *this = *this + offset;
   return *this;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment> AlignedPtr<alignment>::operator-(std::ptrdiff_t offset) const noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment> AlignedPtr<T, alignment>::operator-(std::ptrdiff_t offset) const noexcept
 {
   return *this + -offset;
 }
 
-template <size_t alignment>
-AlignedPtr<alignment>& AlignedPtr<alignment>::operator-=(std::ptrdiff_t offset) noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>& AlignedPtr<T, alignment>::operator-=(std::ptrdiff_t offset) noexcept
 {
   *this = *this - offset;
   return *this;
 }
 
-template <size_t alignment>
-bool AlignedPtr<alignment>::operator==(AlignedPtr<alignment> rhs) const noexcept
+template <typename T, size_t alignment>
+bool AlignedPtr<T, alignment>::operator==(AlignedPtr<T, alignment> rhs) const noexcept
 {
   return ptr_ == rhs.ptr_;
 }
 
-template <size_t alignment>
-bool AlignedPtr<alignment>::operator!=(AlignedPtr<alignment> rhs) const noexcept
+template <typename T, size_t alignment>
+bool AlignedPtr<T, alignment>::operator!=(AlignedPtr<T, alignment> rhs) const noexcept
 {
   return !(*this == rhs);
 }
 
-template <size_t alignment>
-AlignedPtr<alignment>::AlignedPtr(std::byte* ptr) noexcept
+template <typename T, size_t alignment>
+AlignedPtr<T, alignment>::AlignedPtr(T* ptr) noexcept
   : ptr_{ptr}
 {
 }

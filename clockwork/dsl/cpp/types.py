@@ -261,6 +261,33 @@ class CppNamedType:
 
 
 @dataclass
+class CppTemplateParam:
+    """A template parameter with a type and optional initial value."""
+
+    named_type: CppNamedType
+    default: CppValueExpr | CppType | CppTemplateType | None = None
+
+    @property
+    def includes(self) -> Iterable[Include]:
+        """Get includes for parameter type."""
+        yield from self.named_type.includes
+        if self.default:
+            yield from self.default.includes
+
+    def render(self, enclosing_namespace: str) -> str:
+        """Convert to c++.
+
+        Args:
+            enclosing_namespace: The namespace in which this template parameter is being used.
+        """
+        if self.default:
+            return " ".join(
+                (self.named_type.render(enclosing_namespace), "=", self.default.render(enclosing_namespace))
+            )
+        return self.named_type.render(enclosing_namespace)
+
+
+@dataclass
 class CppNamedValue:
     """A named value such as a variable or class member."""
 
@@ -427,14 +454,24 @@ class CppConstructor:
         for arg in self.arguments:
             yield from arg.includes
 
-    def render(self, parent_class: CppType | CppTemplateType, enclosing_namespace: str) -> CppModuleChunks:
+    def render(
+        self,
+        parent_class: CppType | CppTemplateType,
+        enclosing_namespace: str,
+        *,
+        constructor_name: str | None = None,
+    ) -> CppModuleChunks:
         """Convert to C++ with separate chunks for header / inline.
 
         Args:
             parent_class: The class in which this method is defined.
             enclosing_namespace: The namespace in which this type is being used.
+            constructor_name: Optional override for the constructor name. If None, extracted from parent_class.
         """
-        name = parent_class.type_name if isinstance(parent_class, CppType) else parent_class.template_name
+        if constructor_name is None:
+            name = parent_class.type_name if isinstance(parent_class, CppType) else parent_class.template_name
+        else:
+            name = constructor_name
         parent_fqn = parent_class.render(enclosing_namespace)
         args = ", ".join(arg.render(enclosing_namespace) for arg in self.arguments)
 
@@ -505,9 +542,9 @@ class MemberAccess(Enum):
     private = "private"
 
 
-CppMember: TypeAlias = CppNamedValue | CppMethod | CppConstructor | CppTypeAliasDef
+CppMember: TypeAlias = "CppNamedValue | CppMethod | CppConstructor | CppTypeAliasDef | CppStruct"
 
-CppMemberDict: TypeAlias = dict[MemberAccess, list[CppMember]]
+CppMemberDict: TypeAlias = "dict[MemberAccess, list[CppMember]]"
 
 
 @dataclass
@@ -534,9 +571,11 @@ class CppStruct:
     attributes: list[str] = field(default_factory=list)
     static_data_members: list[CppNamedValue] = field(default_factory=list)
     members: CppMemberDict = field(default_factory=dict)
-    template_param: list[CppNamedType] = field(default_factory=list)
+    template_param: list[CppTemplateParam] = field(default_factory=list)
     no_lints: list[str] | None = None
     leading_header_chunk: CppChunk | None = None
+    parent: CppStruct | None = None
+    base_classes: list[tuple[CppTypeExpr, MemberAccess]] = field(default_factory=list)
 
     @property
     def public(self) -> list[CppMember]:
@@ -553,39 +592,138 @@ class CppStruct:
         """Access the private members."""
         return self.members.setdefault(MemberAccess.private, [])
 
-    def render(self, namespace: str) -> CppModuleChunks:
-        """Render as Cpp code."""
-        cpp_mod = CppModuleChunks()
-        cpp_mod.header_chunk.context.add_includes(self.name.includes)
-        cpp_mod.header_chunk.append(comment_doc_string(self.doc))
-        if isinstance(self.name, CppTemplateType) or self.template_param:
-            params = ", ".join(param.render(namespace) for param in self.template_param)
-            cpp_mod.header_chunk.append(f"template <{params}>")
-        decl = ["struct", *self.attributes, self.name.render(namespace)]
+    def _render_template_params(self, namespace: str) -> str:
+        """Render template parameters as a string."""
+        return ", ".join(param.render(namespace) for param in self.template_param)
+
+    def _get_qualified_name(self, namespace: str) -> str:
+        """Get the fully-qualified name including parent struct names.
+
+        Args:
+            namespace: The enclosing namespace for rendering.
+
+        Returns:
+            The fully-qualified struct name chain (e.g., "Outer::Inner"), without namespace prefix.
+        """
+        if self.parent is None:
+            return self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
+        parent_fqn = self.parent._get_qualified_name(namespace)  # noqa: SLF001 - recursive call to same method
+        struct_name = self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
+        return f"{parent_fqn}::{struct_name}"
+
+    def _render_struct_declaration(self, namespace: str, *, is_nested: bool = False) -> list[str]:
+        """Render the struct declaration line.
+
+        Args:
+            namespace: The enclosing namespace.
+            is_nested: If True, renders only the simple struct name without namespace qualification.
+        """
+        if is_nested or self.parent is not None:
+            struct_name = self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
+        else:
+            struct_name = self.name.render(namespace)
+        decl = ["struct", *self.attributes, struct_name]
+
+        if self.base_classes:
+            base_list = []
+            for base_type, access in self.base_classes:
+                base_list.append(f"{access.value} {base_type.render(namespace)}")
+            decl.append(f": {', '.join(base_list)}")
+
         if self.no_lints:
             decl.append(f" // NOLINT({', '.join(self.no_lints)})")
-        cpp_mod.header_chunk.append([" ".join(decl), "{"])
+        return [" ".join(decl), "{"]
 
-        if self.leading_header_chunk:
-            cpp_mod.header_chunk.append(self.leading_header_chunk)
+    def _render_static_data_members(self, cpp_mod: CppModuleChunks, namespace: str) -> None:
+        """Render static data members into the cpp module."""
+        if not self.static_data_members:
+            return
+        cpp_mod.header_chunk.append("public:")
+        for member in self.static_data_members:
+            cpp_mod.header_chunk.context.add_includes(member.includes)
+            cpp_mod.header_chunk.append(member.render(namespace), indent=1)
 
-        if self.static_data_members:
-            cpp_mod.header_chunk.append("public:")
-            for member in self.static_data_members:
-                cpp_mod.header_chunk.context.add_includes(member.includes)
-                cpp_mod.header_chunk.append(member.render(namespace), indent=1)
+    def _render_method_member(self, member: CppMethod, cpp_mod: CppModuleChunks, namespace: str) -> None:
+        """Render a method member."""
+        member_chunks = member.render(self.name, namespace)
 
+        if self.parent is not None:
+            fqn_str = self._get_qualified_name(namespace)
+            if isinstance(self.name, CppType):
+                fqn_type = CppType(includes=self.name.includes, type_name=fqn_str, cpp_namespace=None)
+            else:
+                fqn_type = replace(self.name, template_name=fqn_str, cpp_namespace=None)
+            fqn_chunks = member.render(fqn_type, namespace)
+            member_chunks.inline_chunk = fqn_chunks.inline_chunk
+            member_chunks.implementation_chunk = fqn_chunks.implementation_chunk
+
+        if self.template_param and member_chunks.inline_chunk.produce:
+            params = self._render_template_params(namespace)
+            member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+        cpp_mod.append(member_chunks)
+
+    def _render_constructor_member(self, member: CppConstructor, cpp_mod: CppModuleChunks, namespace: str) -> None:
+        """Render a constructor member."""
+        if self.parent is None:
+            member_chunks = member.render(self.name, namespace)
+        else:
+            fqn_str = self._get_qualified_name(namespace)
+            simple_name = self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
+            if isinstance(self.name, CppType):
+                fqn_type = CppType(includes=self.name.includes, type_name=fqn_str, cpp_namespace=None)
+            else:
+                fqn_type = replace(self.name, template_name=fqn_str, cpp_namespace=None)
+            member_chunks = member.render(fqn_type, namespace, constructor_name=simple_name)
+
+        if self.template_param and member_chunks.inline_chunk.produce:
+            params = self._render_template_params(namespace)
+            member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+        cpp_mod.append(member_chunks)
+
+    def _render_member(self, member: CppMember, cpp_mod: CppModuleChunks, namespace: str) -> None:
+        """Render a single member into the cpp module."""
+        cpp_mod.header_chunk.context.add_includes(member.includes)
+        if isinstance(member, CppMethod):
+            self._render_method_member(member, cpp_mod, namespace)
+        elif isinstance(member, CppConstructor):
+            self._render_constructor_member(member, cpp_mod, namespace)
+        elif isinstance(member, CppStruct):
+            if member.parent is None:
+                member.parent = self
+            nested_chunks = member.render(namespace)
+            cpp_mod.header_chunk.append(nested_chunks.header_chunk, indent=1)
+            cpp_mod.inline_chunk.append(nested_chunks.inline_chunk)
+            cpp_mod.implementation_chunk.append(nested_chunks.implementation_chunk)
+        else:
+            cpp_mod.header_chunk.append(member.render(namespace), indent=1)
+
+    def _render_members_by_access(self, cpp_mod: CppModuleChunks, namespace: str) -> None:
+        """Render members grouped by access level."""
         for access in MemberAccess:
             members = self.members.get(access)
             if members is None:
                 continue
             cpp_mod.header_chunk.append(f"{access.value}:")
             for member in members:
-                cpp_mod.header_chunk.context.add_includes(member.includes)
-                if isinstance(member, CppMethod | CppConstructor):
-                    cpp_mod.append(member.render(self.name, namespace))
-                else:
-                    cpp_mod.header_chunk.append(member.render(namespace), indent=1)
+                self._render_member(member, cpp_mod, namespace)
+
+    def render(self, namespace: str) -> CppModuleChunks:
+        """Render as Cpp code."""
+        cpp_mod = CppModuleChunks()
+        cpp_mod.header_chunk.context.add_includes(self.name.includes)
+        cpp_mod.header_chunk.append(comment_doc_string(self.doc))
+
+        if isinstance(self.name, CppTemplateType) or self.template_param:
+            params = self._render_template_params(namespace)
+            cpp_mod.header_chunk.append(f"template <{params}>")
+
+        cpp_mod.header_chunk.append(self._render_struct_declaration(namespace))
+
+        if self.leading_header_chunk:
+            cpp_mod.header_chunk.append(self.leading_header_chunk)
+
+        self._render_static_data_members(cpp_mod, namespace)
+        self._render_members_by_access(cpp_mod, namespace)
 
         cpp_mod.header_chunk.append("};")
 
@@ -598,6 +736,9 @@ class CppStruct:
 
         for param in self.template_param:
             yield from param.includes
+
+        for base_type, _ in self.base_classes:
+            yield from base_type.includes
 
         for member in self.static_data_members:
             yield from member.includes
@@ -661,8 +802,6 @@ def render_value_expr(value: CppValueExpr | str, enclosing_namespace: str) -> st
 
 ALGORITHM_HEADER: Final = SystemHeader("algorithm")
 
-RANGES_HEADER: Final = Header(JEWELS_REPO, "jewels/std/ranges.hh")
-
 ITERATOR_HEADER: Final = SystemHeader("iterator")
 
 VOID: Final = CppType([], "void", None)
@@ -677,6 +816,8 @@ MOVE: Final = CppFn([SystemHeader("utility")], "std", "move")
 MEMORY_RESOURCE: Final = CppType(
     [Header(JEWELS_REPO, "jewels/memory/memory_resource.hh")], "MemoryResource", "jewels::memory"
 )
+
+BINARY_OUTCOME: Final = CppType([Header(JEWELS_REPO, "jewels/callsig/outcome.hh")], "BinaryOutcome", "jewels")
 
 CHAR: Final = CppType([], "char", None)
 
@@ -715,4 +856,34 @@ UUID: Final = CppTemplate(
     includes=[Header(JEWELS_REPO, "jewels/uuid/uuid.hh")],
     cpp_namespace="jewels",
     template_name="Uuid",
+)
+
+SYNC_TIME: Final = CppType(
+    includes=[Header(JEWELS_REPO, "jewels/time/sync_time.hh")],
+    type_name="SyncTime",
+    cpp_namespace="jewels::time",
+)
+
+NANOSECONDS = CppType(
+    includes=[SystemHeader("chrono")],
+    type_name="nanoseconds",
+    cpp_namespace="std::chrono",
+)
+
+MICROSECONDS = CppType(
+    includes=[SystemHeader("chrono")],
+    type_name="microseconds",
+    cpp_namespace="std::chrono",
+)
+
+MILLISECONDS = CppType(
+    includes=[SystemHeader("chrono")],
+    type_name="milliseconds",
+    cpp_namespace="std::chrono",
+)
+
+SECONDS = CppType(
+    includes=[SystemHeader("chrono")],
+    type_name="seconds",
+    cpp_namespace="std::chrono",
 )

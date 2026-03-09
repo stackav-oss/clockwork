@@ -1,15 +1,17 @@
+#![generate(py_exe)]
+
 use clockwork::logging::log_writer_config;
-use clockwork::logging::writers::channel_message_rates_config;
+use[cpp, proto, proto_conv] clockwork::logging::writers::channel_message_rates_config;
 use clockwork::logging::writers::logger;
-use clockwork::logging::writers::logger_channel_policies;
-use clockwork::logging::writers::logger_channels;
-use clockwork::logging::writers::logger_config;
+use[] clockwork::logging::writers::logger_channel_policies;
+use[] clockwork::logging::writers::logger_channels;
+use[cpp, proto, proto_conv] clockwork::logging::writers::logger_config;
 use clockwork::logging::writers::logger_status;
-use clockwork::python::example::example_channels;
-use clockwork::python::example::example_channel_policies;
-use clockwork::python::example::example_cog;
-use clockwork::python::python_state::PythonState;
-use clockwork::python::tests::support::test_config;
+use[] clockwork::python::example::example_channels;
+use[] clockwork::python::example::example_channel_policies;
+use[cpp, py_cog] clockwork::python::example::example_cog;
+use clockwork::python::python_state::{PythonState};
+use[cpp, proto, proto_conv] clockwork::python::tests::support::test_config;
 use clockwork::python::tests::support::test_input_message;
 use clockwork::python::tests::support::test_output_message;
 use clockwork::python::tests::support::test_state;
@@ -52,7 +54,7 @@ box ExampleBox
 box ExampleSpyBox
 {
   new spy_config_memory: HeapMemory(max_size=10'000'000);
-  new spy_config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/python/example/example.example_sys.LocalHost_channel_spy_config.tachyon");
+  new spy_config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/python/example/example_sys.example_sys.LocalHost_channel_spy_config.tachyon");
   new spy_config_init_cog: channel_spy_config_init::SpyConfigInitCog;
 
   connect spy_config_memory to spy_config_init_cog.memres;
@@ -61,7 +63,7 @@ box ExampleSpyBox
 
 box ExampleLoggerBox
 {
-  new telemetry_log_writer_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/python/example/example.example_sys.LocalHost_telemetry_logger_config.tachyon");
+  new telemetry_log_writer_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/python/example/example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon");
   new example_logger_config: SerializedDataFile(representation=Protobuf<logger_config::LoggerConfig>, path="clockwork/python/example/resources/logger_config.pbtxt");
   new logger_channel_rates_config: SerializedDataFile(representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>, path="clockwork/python/example/resources/channel_rates_config.pbtxt");
   new logger_init_cog: logger::LoggerInitCog;
@@ -83,24 +85,9 @@ box ExampleSystem
   new example_box: ExampleBox;
   new spy_box: ExampleSpyBox;
   new logger_box: ExampleLoggerBox;
-  new proc: Process(executable=example_exe);
+  new proc: Process(executable=example_clk_exe);
   apply HostProcess(process=proc) in example_box;
   apply HostProcess(process=proc) in spy_box;
   apply HostProcess(process=proc) in logger_box;
   apply HostCpuDomain(cpu_domain=LocalHost) to proc;
-}
-
-cpp_executable example_exe
-{
-  casing
-  {
-    box ExampleBox;
-    box ExampleLoggerBox;
-    box ExampleSpyBox;
-  }
-}
-
-system_target example_sys
-{
-  box: ExampleSystem;
 }

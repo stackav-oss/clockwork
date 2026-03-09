@@ -18,7 +18,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 #include <liburing.h>
 #include <liburing/io_uring.h>
 
@@ -238,6 +238,7 @@ template <typename Policy>
   }
   const auto io_vector = async_write_handle->get_io_vector();
   const auto write_size = async_write_handle->get_write_size();
+  const auto message_data_size = async_write_handle->get_message_data_size();
   if (const auto emplace_result = outstanding_async_write_queue_.emplace_back(async_write_handle); !emplace_result)
   {
     std::pmr::string status_string{"Failed to add async write to list of pending writes", runtime_memory_resource_};
@@ -266,6 +267,7 @@ template <typename Policy>
     guarded_state_->maybe_oldest_pending_data_timestamp.store(
       outstanding_async_write_queue_.begin()->value().try_get_oldest_data_timestamp(), std::memory_order_release);
   }
+  pending_message_data_bytes_ += message_data_size;
   io_uring_prep_writev(
     *sqe_result, *file_desc_, io_vector.data(), static_cast<uint32_t>(io_vector.size()), log_file_offset_);
   io_uring_sqe_set_data(*sqe_result, async_request_result->release());
@@ -316,6 +318,12 @@ template <typename Policy>
       guarded_state_->maybe_writer_error.load(std::memory_order_relaxed).value_or(LogError::failed)};
   }
   return pending_request_count_;
+}
+
+template <typename Policy>
+[[nodiscard]] size_t AsyncWriter<Policy>::get_pending_message_data_bytes() const
+{
+  return pending_message_data_bytes_;
 }
 
 template <typename Policy>
@@ -571,6 +579,7 @@ void AsyncWriter<Policy>::write_completion_callback_fn(
 template <typename Policy>
 void AsyncWriter<Policy>::write_completion_callback(int32_t result, AsyncRequestHandle& request_handle)
 {
+  pending_message_data_bytes_ -= request_handle.async_write_request_handle->get_message_data_size();
   if (
     outstanding_async_write_queue_.empty() ||
     *outstanding_async_write_queue_.begin() != request_handle.async_write_request_handle)

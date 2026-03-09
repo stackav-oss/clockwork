@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Run a C++ binary under a python wrapper to setup the environment for loading python modules."""
-# TODO(OI-3125): De-duplicate wrapper.
 
 import os
 import sys

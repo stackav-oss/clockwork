@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/io/network_var_packet.hh" // IWYU pragma: keep
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/io/network_var_packet_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/var_packet_clk_cc.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/tests/support/udp_payloads.hh"
 #include "jewels/filesystem/error_code.hh"

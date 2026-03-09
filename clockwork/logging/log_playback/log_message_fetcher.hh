@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/process_description.hh"
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_playback/tachyon_upgrader.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -48,7 +49,7 @@ public:
   /// @param converter_context The converter context to use.
   LogMessageFetcher(
     std::string_view log_uri,
-    jewels::memory::ObjectPtr<const ChannelPublisherConfigTap> channel_publisher_config,
+    jewels::memory::ObjectPtr<const clockwork::Tappy<ChannelPublisherConfig<>>> channel_publisher_config,
     std::optional<LogInterval> maybe_log_interval,
     jewels::memory::MemoryResource memory_resource);
 
@@ -63,6 +64,10 @@ public:
   /// @return jewels::expected<void, jewels::MonoError>
   jewels::expected<void, jewels::MonoError> initialize() override;
 
+  ///
+  /// Reset the fetcher to the beginning of the message stream.
+  jewels::BinaryOutcome reset() noexcept final;
+
 private:
   /// Attempt to get the end_of_log message, if it has not already been sent.
   [[nodiscard]] std::optional<clockwork::MultiMessageInfoData> get_end_of_log_message();
@@ -70,7 +75,7 @@ private:
   jewels::memory::MemoryResource memory_resource_;
 
   /// Configuration of the channels that need to be fetched.
-  jewels::memory::ObjectPtr<const ChannelPublisherConfigTap> channel_publisher_config_;
+  jewels::memory::ObjectPtr<const clockwork::Tappy<ChannelPublisherConfig<>>> channel_publisher_config_;
 
   /// Input log URI
   std::string log_uri_;

@@ -87,7 +87,7 @@ TEST_CASE("Slot test")
 {
   constexpr auto message_size{12U};
   support::SlotStorage<message_size> storage{};
-  auto maybe_aligned_pointer = AlignedPtr<Slot::slot_alignment>::try_make(
+  auto maybe_aligned_pointer = AlignedPtr<std::byte, Slot::slot_alignment>::try_make(
     jewels::memory::ObjectPtr<std::byte>{as_writable_bytes(jewels::as_single_item_span(storage)).data()});
   REQUIRE(maybe_aligned_pointer);
   Slot slot{*maybe_aligned_pointer, message_size};
@@ -108,6 +108,17 @@ TEST_CASE("Slot test")
   REQUIRE(static_cast<const void*>(header_bytes.data()) == static_cast<const void*>(&storage));
   REQUIRE(header_bytes.size() == Slot::message_offset);
   REQUIRE(header_bytes.size() + footer_bytes.size() == sizeof(storage) - sizeof(storage.message));
+
+  STATIC_CHECK(std::is_constructible_v<Slot, AlignedBytePtr<Slot::slot_alignment>, size_t>);
+  STATIC_CHECK(!std::is_constructible_v<Slot, ConstAlignedBytePtr<Slot::slot_alignment>, size_t>);
+  STATIC_CHECK(std::is_constructible_v<ConstSlot, AlignedBytePtr<Slot::slot_alignment>, size_t>);
+  STATIC_CHECK(std::is_constructible_v<ConstSlot, ConstAlignedBytePtr<Slot::slot_alignment>, size_t>);
+  STATIC_CHECK(std::is_constructible_v<Slot, Slot>);
+  STATIC_CHECK(!std::is_constructible_v<Slot, ConstSlot>);
+  STATIC_CHECK(std::is_constructible_v<ConstSlot, Slot>);
+  STATIC_CHECK(std::is_constructible_v<ConstSlot, ConstSlot>);
+  ConstSlot cslot = slot;
+  CHECK(cslot.bytes().data() == slot.bytes().data());
 }
 
 } // namespace clockwork::pinion

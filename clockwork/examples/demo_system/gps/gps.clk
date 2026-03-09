@@ -1,5 +1,8 @@
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::gps::gps_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::gps)]
+
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::gps::gps_channels;
 use clockwork::examples::demo_system::gps::gps_message;
 
 // Cog to simulate the GPS device sending raw GPS packets over UDP
@@ -32,20 +35,9 @@ cog GpsDriverCog
 
   execution
   {
-    condition new_raw_gps: new_message(raw_gps, min=1, max=1);
+    condition new_raw_gps: new_message(raw_gps, max=1);
     execute when: new_raw_gps;
   }
-}
-
-cpp_target gps_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::gps;
-  }
-
-  cog GpsDeviceCog;
-  cog GpsDriverCog;
 }
 
 box GpsBox
@@ -58,18 +50,10 @@ box GpsBox
   connect driver_cog.gps to gps_channels::GpsChannel;
 }
 
-cpp_executable gps_exe
-{
-  casing
-  {
-    box GpsBox;
-  }
-}
-
 box GpsExe
 {
   new gps_box: GpsBox;
-  new gps_proc: Process(executable=gps_exe);
+  new gps_proc: Process(executable=gps_clk_exe);
   apply HostProcess(process=gps_proc) in gps_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to gps_proc;
 }

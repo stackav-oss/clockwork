@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::diagnostics::report;
 
 // Common diagnostics bus

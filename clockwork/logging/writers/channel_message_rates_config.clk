@@ -1,3 +1,6 @@
+#![generate(cpp, proto, proto_conv)]
+#![cpp(namespace=clockwork_logging)]
+
 // Configuration for a channel message rate
 schema ChannelMessageRateConfig
 {
@@ -22,39 +25,4 @@ schema ChannelMessageRatesConfig
     // Number of seconds to average message rates
     #1 window_size_sec: UInt64 = 1;
   }
-}
-
-cpp_target channel_message_rates_config
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-
-  schema ChannelMessageRateConfig;
-  schema ChannelMessageRatesConfig;
-  representation Tachyon<ChannelMessageRateConfig>;
-  representation Tachyon<ChannelMessageRatesConfig>;
-  interface Tap<Tachyon<ChannelMessageRateConfig>>;
-  interface Tap<Tachyon<ChannelMessageRatesConfig>>;
-}
-
-proto_target channel_message_rates_config_proto
-{
-  options
-  {
-    package clockwork.writers.proto;
-  }
-  representation Protobuf<ChannelMessageRateConfig>;
-  representation Protobuf<ChannelMessageRatesConfig>;
-}
-
-cpp_target channel_message_rates_config_proto_conv
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  converter ProtobufToTap<Protobuf<ChannelMessageRateConfig>, Tap<Tachyon<ChannelMessageRateConfig>>>;
-  converter ProtobufToTap<Protobuf<ChannelMessageRatesConfig>, Tap<Tachyon<ChannelMessageRatesConfig>>>;
 }

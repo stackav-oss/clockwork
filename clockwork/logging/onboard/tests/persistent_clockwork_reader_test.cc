@@ -1,25 +1,25 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/path.hh"
@@ -43,7 +43,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <iterator>
 #include <list>
 #include <memory_resource>
@@ -144,6 +143,7 @@ TEST_CASE("Log persistent messages")
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
     .message_size = message_data_size,
+    .is_published_once = false,
   };
 
   clockwork::pinion::support::BufferStorage<pinion_layout> pinion_buffer_storage{};
@@ -210,7 +210,7 @@ TEST_CASE("Log persistent messages")
   slot0.header()->publish_timestamp = message_time0.get_nanoseconds();
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator0},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator0),
     log_time0));
 
   REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
@@ -226,7 +226,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator1),
     log_time1,
     time1));
 
@@ -241,7 +241,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator2),
     log_time2,
     time1));
 
@@ -256,7 +256,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator3},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator3),
     log_time3,
     time1));
 
@@ -273,7 +273,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator4},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator4),
     log_time4));
 
   REQUIRE(writer.resume_logging(time1));
@@ -289,7 +289,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator5},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator5),
     log_time5,
     time1));
 
@@ -304,7 +304,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator6},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator6),
     log_time6,
     time1));
 
@@ -321,7 +321,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name2,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator7},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator7),
     log_time7));
 
   REQUIRE(writer.resume_logging(time1));
@@ -337,7 +337,7 @@ TEST_CASE("Log persistent messages")
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
-    ClockworkMessageHandle{jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator8},
+    ::clockwork::pinion::SlotRef(jewels::memory::make_non_null_from_ref(pinion_buffer), buffer_iterator8),
     log_time8,
     time1));
 

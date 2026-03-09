@@ -12,7 +12,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdio>
-#include <filesystem>
 #include <memory_resource>
 #include <string>
 #include <string_view>
@@ -26,29 +25,25 @@ TEST_CASE("RedirectOutputHelper")
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
   jewels::filesystem::Filesystem fsys{memres};
   const jewels::testing::TmpDirectoryGuard tmp_dir;
-  auto log_dir = jewels::filesystem::Path{tmp_dir.get_path().string(), memres};
-  log_dir /= "foo";
+  const auto log_dir = tmp_dir.get_path() / "foo";
 
-  jewels::filesystem::Path log_path{memres};
-  {
-    // Note: The cout and cerr ostreams are still hanging on to a reference to
-    // the original stdio file descriptors after RedirectOutputHelper dups them,
-    // so their writes fall into the void until the redirector goes out of
-    // scope. So, we use stdout and stderr below instead.
+  // Note: The cout and cerr ostreams are still hanging on to a reference to
+  // the original stdio file descriptors after RedirectOutputHelper dups them,
+  // so their writes fall into the void until the redirector goes out of
+  // scope. So, we use stdout and stderr below instead.
 
-    // flush stdout and stderr so we don't get output from catch2 in the log
-    REQUIRE(fflush(stdout) == 0);
-    REQUIRE(fflush(stderr) == 0);
-    const auto redirector = RedirectOutputHelper::make(log_dir, fsys);
-    REQUIRE(redirector);
-    log_path = redirector->log_path();
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg) this is a test and the usage is straightforward
-    REQUIRE(fprintf(stdout, "foo\n") > 0);
-    REQUIRE(fflush(stdout) == 0);
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg) this is a test and the usage is straightforward
-    REQUIRE(fprintf(stderr, "bar\n") > 0);
-    REQUIRE(fflush(stderr) == 0);
-  }
+  // flush stdout and stderr so we don't get output from catch2 in the log
+  REQUIRE(fflush(stdout) == 0);
+  REQUIRE(fflush(stderr) == 0);
+  const auto redirector = RedirectOutputHelper::make(log_dir, fsys);
+  REQUIRE(redirector);
+  const auto log_path = redirector->log_path();
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg) this is a test and the usage is straightforward
+  REQUIRE(fprintf(stdout, "foo\n") > 0);
+  REQUIRE(fflush(stdout) == 0);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg) this is a test and the usage is straightforward
+  REQUIRE(fprintf(stderr, "bar\n") > 0);
+  REQUIRE(fflush(stderr) == 0);
 
   auto check_result = fsys.is_regular_file(log_path.string_view());
   REQUIRE(check_result);

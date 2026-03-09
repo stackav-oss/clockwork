@@ -5,44 +5,83 @@ This document describes the allowed changes to schemas and enums in Clockwork, a
 
 ## Core versioning concepts
 
-### The source code records a complete history of the schema
+### Logs store the schema definitions for their contents
 
-All versioning capabilities derive from the same basic architecture, which is that the schema definition in the Clockwork domain-specific language (DSL) captures the entire history of the schema.
-Fields can be marked removed in the schema, meaning they're no longer present in the current version, but they cannot be actually deleted from the DSL source code.
-This allows intelligent transformation of data from older schemas into the current version, tracking data type changes, field renames, and more.
-The core idea here is that information must never be lost from the source code–at least not without breaking backward compatibility.
+All versioning capabilities derive from the ability to use the logged channel metadata stored in each log to generate an upgrader that upgrades the logged messages to the current version.
+Fields can be added, deleted, renamed or modified so long as the schema version number is increased with each change.
+Deleted fields must also be recorded in the schema history to prevent the field number from being reused.
 
-This is accomplished with the `history` section of the schema definition syntax.
-Here is a brief example showing several history features simultaneously; below these features are explained in detail:
+The schema history is recorded in the `history` section of the schema definition syntax.
+Here is a brief example.
+
+This is the initial definition of the example schema.
+This schema does not have a history section, so the schema version number is implicitly defined to be the maximim field number contained in the schema, in this case the version is 1.
 
 ```clockwork
+// Initial schema definition (version is 1)
 schema SomeSchema
 {
  fields
  {
-   #6 boolean: Bool = true;
-   #4 integer: Int64;
-   #7 floating_point: Float64;
+   #0 boolean: Bool = true;
+   #1 obsolete: Int32;
+ }
+}
+```
+
+Next we add another field to the example schema without any extra boilerplate.
+We skipped field number 2 for some reason and that is allowed as long as the field number is greater than any other field numberss already in the schema.
+The version is still implicit, adding the new field increases the version from 1 to 3.
+
+```clockwork
+// After adding first field (version is 3)
+schema SomeSchema
+{
+ fields
+ {
+   #0 boolean: Bool = true;
+   #1 obsolete: Int32;
+   #3 integer: Int64;
+ }
+}
+```
+
+Renaming and modifying a field in the example schema requires adding a history section so we can increase the schema version number.
+The history section makes the version number explicit, so the version is no longer calculated from the field numbers.
+
+```clockwork
+// Renaming integer field to helpful_name and changing type to Int32 (version is 4)
+schema SomeSchema
+{
+ fields
+ {
+   #0 boolean: Bool = true;
+   #1 obsolete: Int32;
+   #3 helpful_name: Int32;
  }
  history
  {
-   versions: [2, 3, 7];
-   version_pseudofields: [3]
-   fields
-   {
-     #2 obsolete: Int32 -> removed #3;
-     #0 fp: Float32 -> became #5;
-     #1 boolean: Bool -> became #6;
-     #5 floating_point: Float32 -> became #7;
-   }
+    version: 4;
+ }
+}
+```
 
-   schema
-   {
-     name
-     {
-       #1 OldSchema;
-     }
-   }
+Deleted fields need to be recorded in the history section to ensure that the field number is never reused.
+The version number must increase with every change.
+
+```clockwork
+// Removed field 1 (version is 5)
+schema SomeSchema
+{
+ fields
+ {
+   #0 boolean: Bool = true;
+   #3 helpful_name: Int32;
+ }
+ history
+ {
+    version: 5;
+    removed: [1];
  }
 }
 ```
@@ -51,11 +90,10 @@ schema SomeSchema
 
 > [!TIP]
 > tl;dr: Every field (and parameter) in the schema has a number.
-> Every one of these numbers **is also a version number**.
-> When you add a field or parameter, that creates a new version number.
-> Some of these versions are intermediate and are never actually instantiated.
+> If the schema does not have a history section then the version number is implicitly defined as the maximum field number
+> in the schema.
 
-Every schema has a monotonically increasing logical version number, which is equal to the highest field number in the schema definition.
+Every schema has a monotonically increasing logical version number.
 This mechanism relies on the schema definition being maintained properly as described above.
 
 The logical version number identifies a particular version of a schema _non-recursively_.
@@ -70,30 +108,15 @@ But the logical version number cannot change without a change to the schema defi
 Both the logical version number and physical version hash can be introspected as needed to support different use cases.
 Unit tests can also be written that enforce for example no transitive changes (without updating the unit test).
 
-## The `versions` field
+## The `version` field
 
-The `versions` specification within the `history` block contains the logical version numbers which are supported by the schema.
-In this case, “supported” means any version you want to be able to read and convert to the current version; this should generally be any version that was ever released or which was used to record logs which still need to be read.
+The `version` specification within the `history` block contains the logical version number of the schema.
+If the schema does not have a history block, the version number is implicitly defined as the maximum field number in the schema.
+The `version` must be increased every time the schema is changed.
 
-Versions can be removed from this list if it is certain that no old data of that version still exists or needs to be available for conversion to the latest version.
+## The `deleted` field
 
-It is not required or recommended for every logical version to be present in this list.
-Many logical versions do not exist in any logs; for example, if in a single change two different fields are added, this creates two new logical versions, but only one of them will ever appear in a log.
-Only that one should be in this list.
-
-**The current schema version must always be in the versions list.**
-If no `history` block is present, the implicit specification is that only the current version is supported.
-
-### Version pseudofields
-
-> [!TIP]
-> See the [Remove fields](#remove-fields) section to understand why you'd use this feature.
-
-Logical version numbers and field/parameter numbers are directly connected in Clockwork; a new logical version is created any time a field or parameter is created; the version number is the field number.
-
-Sometimes it’s needed to create a new version without creating a new field or parameter, such as when removing a field without adding another one.
-To support this, we have `version_pseudofields`.
-Adding a field number to this list creates a new logical version and also reserves that number so that it cannot be used for fields or parameters.
+The `deleted` specification within the `history` block contains the field numbers that have been deleted from the schema.
 
 ## Allowed schema changes that change the version
 
@@ -138,11 +161,13 @@ You'd also be allowed to change `value_type` to `Int32`, because integer types a
 However, you would not be allowed to change `feature_type` to `SomeOtherEnum`, because enum types are not compatible with each other (at this time).
 Nor could you change `value_type` to `Float64` (because integer-to-float conversions are not currently allowed), nor could `value_type` change to something completely different like `String`.
 
+Changing parameters does not require increasing the schema version because schemas instantiated with different parameters are different types.
+
 ### Remove fields
 
-Fields can be marked removed, but can’t be actually deleted from the source code.
-Here we show a field `old_field` that was removed in version 2.
-Version 2 is itself a pseudofield version (no new field was added at that time).
+Fields can be removed as long as the history is updated to show they've been removed.
+Here we have a schema where field 0 has been renmoved.
+Removing the field also increased the version to 2.
 
 ```clockwork
 schema SomeSchema
@@ -154,27 +179,21 @@ schema SomeSchema
  }
  history
  {
-   versions: [1, 2];
-   version_pseudofields: [2];
-   fields
-   {
-     #0 old_field: Int32 -> removed #2;
-   }
+   version: 2;
+   removed: [0];
  }
 }
 ```
 
-Completed details of the old field are included in the `fields` block, so that no information is lost.
-Once a field is removed, its name can be reused in a new field, but the old field number must not be changed or reused.
-(The compiler will prohibit reuse of numbers.)
+Once a field is removed, its name can be reused in a new field, but the old field number must not be reused.
+(The compiler will prohibit reuse of numbers listed in the deleted field.)
 
 There is no relationship between fields with the same name in different versions.
 If a field is removed and then a new field with the same name is added, the new field is not considered to be a continuation of the old field.
 
 ### Rename fields
 
-Fields can be renamed but both the old and the new names must be retained in the schema definition.
-A field rename is like any other change and must be recorded in a new version.
+Fields can be renamed as long as the schema version is also increased.
 The previous name can be reused for a different field in any version on or after the rename version.
 In the example below, we have a single-field schema where the field was renamed:
 
@@ -183,15 +202,11 @@ schema SomeSchema
 {
  fields
  {
-   #1 new_name: Bool;
+   #0 new_name: Bool;
  }
  history
  {
-   versions: [0, 1];
-   fields
-   {
-     #0 old_name: Bool -> became #1;
-   }
+   version: 1;
  }
 }
 ```
@@ -201,23 +216,17 @@ schema SomeSchema
 Init values can be changed (including added or removed), but changing init values is a version change.
 
 Below we have a boolean field which started without an init value (implicitly it was `false`) and changed to `true` in version 1.
-Note that the syntax for init value changes is identical to the syntax for renaming; both just use `became`.
-In fact, `became` is the field change multi-tool; it can make any of the supported field changes, one at a time or all at once.
 
 ```clockwork
 schema SomeSchema
 {
  fields
  {
-   #1 some_field: Bool = true;
+   #0 some_field: Bool = true;
  }
  history
  {
-   versions: [0, 1];
-   fields
-   {
-     #0 some_field: Bool -> became #1;
-   }
+   version: 1;
  }
 }
 ```
@@ -226,9 +235,8 @@ schema SomeSchema
 
 The data type of a field may be changed so long as there is a conversion from the old type to the new type.
 
-The syntax for this also uses `became`, so we don’t really need to show it.
+The syntax for this also requires increasing the sequence number.
 The syntax is the same as for any other field change, such as rename or init value, shown above.
-You just copy the previous field definition to the `history` block, change the type, and use `became` to point to the new version of the field.
 
 #### Integer type changes
 
@@ -243,7 +251,7 @@ Integer types may also be converted to SyncTime and Duration, but not vice versa
 
 #### Container type changes
 
-Containers include `VarArray`, `FixedArray`, `Optional`, and `VarString`.
+Containers include `VarArray`, `FixedArray`, `VarSoa`, `FixedSoa`, `Optional`, and `VarString`.
 With the appropriate history annotation, the container type can change between any of these, and the size specification can also change.
 In this context `Optional` is treated as equivalent to a `VarArray` with max size of one; it either contains one element or none.
 `VarString` is treated as having an element type of `Byte` and is assumed to be UTF-8 encoded.
@@ -252,6 +260,18 @@ This can cause a runtime error if the new container type's size cannot hold the 
 In particular, if changing from `VarArray` to `Optional`, the array must have 0 or 1 element.
 More than one element will cause a runtime error.
 Changing the size of `FixedArray` is not allowed, so changing the type from `Optional` or `VarArray` to `FixedArray` has limited usefullness since the upgrade will fail at runtime unless the size of the `FixedArray` is correct for all instances in the log.
+
+#### Array-of-Structs to Struct-of-Arrays conversions
+
+Fields can be converted between Array-of-Structs containers (`VarArray`, `FixedArray`) and Struct-of-Arrays containers (`VarSoa`, `FixedSoa`) of the same element type.
+The upgrade system automatically transposes data between layouts.
+
+For example, `VarArray<Point3f, max_size=100>` can be changed to `VarSoa<Point3f, max_size=100>`, and vice versa.
+Similarly, `FixedArray<Point3f, size=10>` can be changed to `FixedSoa<Point3f, size=10>`.
+
+Conversions between fixed and variable-size containers (e.g., `FixedSoa` to `VarSoa`) follow the same rules as other container type changes.
+
+See the [SoA containers reference](soa.md) for more information on Struct-of-Arrays containers.
 
 #### Non-container to container type changes
 
@@ -271,31 +291,7 @@ If the `history` block is not yet present, it needs to be created, and `versions
 ### Rename schema
 
 The schema can be renamed, but the schema UUID must not be changed.
-
-```clockwork
-schema NewName
-{
- fields
- {
-   // Bool
-   #1 boolean: Bool = true;
- }
- history
- {
-   versions: [1, 2];
-   version_pseudofields: [2];
-   schema
-   {
-     name
-     {
-       #1 OldName;
-     }
-   }
- }
-}
-```
-
-This means that in version 1 (and earlier) the name was `OldName`, and in versions after that it is `NewName`.
+Renaming a schema does not require increasing the version number.
 
 ## Allowed schema changes that do not change the version
 
@@ -349,12 +345,9 @@ The `versions` list in the `history` block should be updated just as with schema
 > The Clockwork schema upgrade process will renumber values and adapt the type.
 
 Values may be removed.
-They must remain in the enum definition, just like for schemas, but they’re no longer available in C++ or Python.
-When values are removed from an enum with automatic underlying type and values, values will be renumbered and the underlying type might shrink if this is possible.
-
-There are two ways to remove values: `removed` or `became`.
+Just like with schemas, values can be removed as long as the history is updated to show they've been removed.
+The syntax is the same as for schemas.
 If a value is `removed` and it is present in old data, that data will fail to upgrade (runtime error when attempting to upgrade the log).
-If instead `became` is used, then the old value is replaced with the new value on upgrade.
 
 <!-- vale off -->
 
@@ -362,17 +355,15 @@ Our guidance therefore is to use `removed` for an enum value only if you are sur
 
 <!-- vale on -->
 
-The syntax is the same as for schemas.
-
 ### Rename values
 
 Existing values may be renamed.
-The old names remain in the enum definition but are no longer accessible in C++ or Python.
+When renaming a field the value number must not change and the enum version must be incremented.
 The syntax is the same as for schemas.
 
 > [!WARNING]
 > Renaming enum values may cause the underlying values to change!
-> The Clockwork schema upgrade process will renumber values if necessary.
+> The Clockwork log upgrade process will handle the mapping from the old to new values if necessary.
 
 ### Change bit_flags option
 
@@ -384,12 +375,29 @@ See next section for an example.
 ### Change underlying type and underlying values
 
 An enum without underlying type and values specified may add these, or existing specifications may be removed.
-In both cases, all fields must either have underlying values specified or none may have values specified, _in any version present in the versions list_.
-(Removed fields must not be changed however.)
 
 Existing underlying values may also be changed.
 
-This shows a complete example where the `bit_flags` option is being removed, the underlying type is changing, and the underlying value of one value is changing:
+This example shows a complete example where the `bit_flags` option is being removed, the underlying type is changing, and the underlying value of one value is changing.
+The schema before the change was this:
+
+```clockwork
+// Before  the change
+enum SomeEnum
+{
+ options
+ {
+   bit_flags;
+   underlying_type: UInt8;
+ }
+
+ #0 new_val default { underlying_value: 0; }
+ #1 val1 { underlying_value: 1; }
+ #2 val2 { underlying_value: 2; }
+ #3 val3 { underlying_value: 3; }
+```
+
+After the change the schema became:
 
 ```clockwork
 enum SomeEnum
@@ -402,32 +410,17 @@ enum SomeEnum
  #0 new_val default { underlying_value: 0; }
  #1 val1 { underlying_value: 1; }
  #2 val2 { underlying_value: 2; }
- #4 val3 { underlying_value: 3; }
+ #3 val3 { underlying_value: 4; }
 
  history
  {
-   versions: [3, 4];
-   values
-   {
-     #3 val3 { underlying_value: 4; } -> became #4;
-   }
-   enum
-   {
-     options
-     {
-       #3
-       {
-         bit_flags;
-         underlying_type: UInt8;
-       }
-     }
-   }
+   version: 4;
  }
 }
 ```
 
-The above means that in version 3 and earlier, the enum was bit flags with underlying type `UInt8`.
-After version 3, the current options (non-bit-flags, `UInt16`) are in effect.
+The above means that in version 3, the enum was a bit flag enum with underlying type `UInt8`.
+In version 4, the current options (non-bit-flags, `UInt16`) are in effect.
 There was also a change in the underlying value of `val3` from 4 to 3.
 
 > [!NOTE]
@@ -436,7 +429,7 @@ There was also a change in the underlying value of `val3` from 4 to 3.
 ### Change default value
 
 The value selected as a default may be changed.
-This would require changing both fields with `became`, but only one version would be added to the `versions` list.
+This would require increasing the version number, but we only need to increase it by one.
 
 ## Enum changes which do not change version
 

@@ -18,7 +18,6 @@
 #include <chrono>
 #include <cstddef>
 #include <fcntl.h>
-#include <list>
 #include <memory_resource>
 #include <mutex>
 #include <string>

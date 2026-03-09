@@ -1,7 +1,8 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/memory.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
@@ -32,7 +33,7 @@ TEST_CASE("memory")
 {
   jewels::memory::MonitorResource memory;
   const jewels::memory::MemoryResource resource(memory);
-  std::vector<common::MemoryResourceTap> configs;
+  std::vector<Tappy<common::MemoryResource<>>> configs;
 
   SECTION("empty")
   {
@@ -77,7 +78,7 @@ TEST_CASE("connect_memory_resources")
   const jewels::memory::MemoryResource memory_2_v{memres_map[memory_2_id].get()};
   const jewels::memory::MemoryResource memory_3_v{memres_map[memory_3_id].get()};
 
-  std::vector<common::MemoryResourceConnectionTap> configs;
+  std::vector<Tappy<common::MemoryResourceConnection>> configs;
   configs.emplace_back();
   configs.back().set_memory_resource_id(memory_1_id);
   configs.back().set_endpoint_id(endpoint_1_id);

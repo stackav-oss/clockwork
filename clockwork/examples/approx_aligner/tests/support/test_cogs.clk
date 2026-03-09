@@ -1,3 +1,6 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork)]
+
 use clockwork::dial::approx_aligner_config::{ApproxAlignerConfig, ApproxAlignerState};
 use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, AlignerFloatMsg, AlignerIntMsg};
 
@@ -44,16 +47,4 @@ cog AlignedMsgTester
     condition new_aligned: new_message(in_aligned);
     execute when: new_aligned;
   }
-}
-
-cpp_target test_cogs
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  cog IntMsgProducer;
-  cog FloatMsgProducer;
-  cog AlignedMsgTester;
 }

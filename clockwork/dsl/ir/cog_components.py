@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -28,6 +28,8 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+
+    from fltk.fegen.pyrt.terminalsrc import Span, TerminalSource
 
 
 @dataclass
@@ -159,10 +161,10 @@ class MessagesPresent(Condition, node.CstNode[cst.ConditionSpec]):
             value = expr.Expr.from_cst(arg.child_expr(), module)
 
             if name_str == "min":
-                typesys.unify(clkbuiltins.UINT64, value.type_info)
+                typesys.unify(clkbuiltins.INT64, value.type_info)
                 lower_bound = value
             elif name_str == "max":
-                typesys.unify(clkbuiltins.UINT64, value.type_info)
+                typesys.unify(clkbuiltins.INT64, value.type_info)
                 upper_bound = value
             elif name_str == "input":
                 input_name = get_span(arg.child_expr().child_identifier().child_value(), module.terminals)
@@ -191,7 +193,24 @@ class MessagesPresent(Condition, node.CstNode[cst.ConditionSpec]):
         ):
             return
 
-        lower_bound_int = 1 if self.lower_bound is None else self._decimal_to_int(self.lower_bound)
+        # Figure out lower bound.
+        default_lower_bound: int = 1
+        if self.lower_bound is None:
+            lower_bound_int = default_lower_bound
+        else:
+            lower_bound_int: int = self._decimal_to_int(self.lower_bound)
+            # If the user specifies a lower bound, it must not be the default value.
+            if lower_bound_int == default_lower_bound:
+                msg = self.lower_bound.append_error_line(
+                    f"Execution condition has 'min' explicitly set to the default ({default_lower_bound})."
+                    + f"\nTo prevent ambiguity, this is not allowed. Please remove 'min={lower_bound_int}' and trust the default."
+                )
+                raise ValueError(msg)
+            if lower_bound_int <= 0:
+                msg = self.lower_bound.append_error_line(
+                    f"Execution condition has invalid 'min' {lower_bound_int}. It must be at least 1",
+                )
+                raise ValueError(msg)
 
         upper_bound_int = None
         if self.upper_bound is not None:
@@ -216,7 +235,7 @@ class MessagesPresent(Condition, node.CstNode[cst.ConditionSpec]):
                 f"Expected a DecimalValue for parameter, but got {type(result)}",
             )
             raise TypeError(msg)
-        return primitive.unsigned_decimal_to_int(result)
+        return primitive.decimal_to_int(result)
 
 
 @dataclass
@@ -261,6 +280,9 @@ class ConditionDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.
         return result
 
 
+_DEFAULT_VIEW_MAX_MSGS = 1
+
+
 @dataclass
 class ViewParams(node.CstNode[cst.InputBlock]):
     """Parameters for input views."""
@@ -279,7 +301,7 @@ class ViewParams(node.CstNode[cst.InputBlock]):
         return ViewParams(
             module=module,
             cst_node=cst_node,
-            max_msgs=1,
+            max_msgs=_DEFAULT_VIEW_MAX_MSGS,
             manual_cursor=False,
             no_dial=False,
             skip_threshold=None,
@@ -299,6 +321,30 @@ class ViewParams(node.CstNode[cst.InputBlock]):
             result._handle_param(param_cst, seen_params)  # noqa: SLF001 (result is also a ViewParams)
         return result
 
+    def _validate_max_msgs_param(
+        self, user_specified_max_msgs: int, name_span: Span, terminals: TerminalSource
+    ) -> None:
+        """If the user specified max_msgs, validate it.
+
+        It must not be equal to the default (1) to prevent ambiguity.
+        It must be positive.
+        """
+        maybe_error = None
+        if user_specified_max_msgs == _DEFAULT_VIEW_MAX_MSGS:
+            maybe_error = (
+                f"Input view has 'max_msgs' explicitly set to the default ({_DEFAULT_VIEW_MAX_MSGS})."
+                + f"\nTo prevent ambiguity, this is not allowed. Please remove 'max_msgs: {_DEFAULT_VIEW_MAX_MSGS}' and trust the default."
+            )
+        elif user_specified_max_msgs <= 0:
+            maybe_error = f"Input view has invalid 'max_msgs' {user_specified_max_msgs}. It must be at least 1."
+        if maybe_error is not None:
+            msg = maybe_error + format_line_with_error(
+                name_span,
+                terminals,
+                self.module.module_id,
+            )
+            raise ValueError(msg)
+
     def _handle_param(self, cst_node: cst.InputBlockParam, seen_params: set[str]) -> None:  # noqa: PLR0911 A large
         # number of returns is reasonable because this is a factory type function.
         assert self.module.terminals is not None
@@ -315,6 +361,7 @@ class ViewParams(node.CstNode[cst.InputBlock]):
         if name == "max_msgs":
             typesys.unify(clkbuiltins.UINT32, value.type_info)
             self.max_msgs = value
+            self._validate_max_msgs_param(self._resolve_max_msgs(), name_span, self.module.terminals)
             return
         if name == "manual_cursor":
             typesys.unify(clkbuiltins.BOOL, value.type_info)
@@ -355,7 +402,7 @@ class ViewParams(node.CstNode[cst.InputBlock]):
         self._resolve_copy_inputs()
         self._resolve_is_optional()
 
-    def _resolve_max_msgs(self) -> None:
+    def _resolve_max_msgs(self) -> int:
         if isinstance(self.max_msgs, expr.Expr):
             result = self.max_msgs.evaluate()
             if not isinstance(result, primitive.DecimalValue):
@@ -364,6 +411,7 @@ class ViewParams(node.CstNode[cst.InputBlock]):
                 )
                 raise TypeError(msg)
             self.max_msgs = primitive.unsigned_decimal_to_int(result)
+        return self.max_msgs
 
     def _resolve_manual_cursor(self) -> None:
         if isinstance(self.manual_cursor, expr.Expr):

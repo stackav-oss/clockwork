@@ -4,6 +4,7 @@
 #include "clockwork/logging/offboard/log_metadata_file_helper.hh"
 
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/log_metadata_recovery_helper.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -32,7 +33,7 @@ LogMetadataFileHelper::LogMetadataFileHelper(jewels::memory::MemoryResource memo
 }
 
 [[nodiscard]] LogExpected<void>
-LogMetadataFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory& chunk_reader_factory)
+LogMetadataFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory<>& chunk_reader_factory)
 {
   const auto read_metadata_result =
     chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(metadata_file_uri.string());
@@ -78,7 +79,23 @@ LogMetadataFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWr
     jewels::log_cerr_error("Failed to list log files under {}: {}", log_uri_str, readdir_result.error());
     return jewels::unexpected(readdir_result.error());
   }
-  all_log_files_ = std::move(readdir_result).value();
+  for (const auto& log_file : readdir_result.value())
+  {
+    const auto uri_result = LogUri::try_make(log_file, memory_resource_);
+    if (!uri_result)
+    {
+      jewels::log_cerr_error("Invalid URI: {}", log_file);
+      return jewels::unexpected(LogError::invalid_log_uri);
+    }
+    const auto& log_file_uri = uri_result.value();
+    std::pmr::string log_file_name{log_file_uri.filename(), memory_resource_};
+    if (!log_file_metadata_map_.contains(log_file_name))
+    {
+      jewels::log_cerr_warn("File {} not found in the log metadata: ignoring", log_file_name);
+      continue;
+    }
+    all_log_files_.emplace_back(log_file);
+  }
   return {};
 }
 
@@ -159,7 +176,7 @@ LogMetadataFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWr
 [[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_metadata_file_helper(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& log_metadata_uri,
-  ChunkReaderWriterFactory& chunk_reader_factory)
+  ChunkReaderWriterFactory<>& chunk_reader_factory)
 {
   if (const auto exists_result = chunk_reader_factory.exists(log_metadata_uri.string());
       exists_result && exists_result.value())
@@ -174,8 +191,7 @@ LogMetadataFileHelper::initialize(const LogUri& metadata_file_uri, ChunkReaderWr
     }
     return {std::move(log_metadata_helper_ptr)};
   }
-  jewels::log_cerr_error("No log metadata file found at {}: not a log", log_metadata_uri.string());
-  return jewels::unexpected(LogError::not_a_log);
+  return make_log_metadata_recovery_helper(memory_resource, log_metadata_uri.parent_uri(), chunk_reader_factory);
 }
 
 } // namespace clockwork_logging::offboard

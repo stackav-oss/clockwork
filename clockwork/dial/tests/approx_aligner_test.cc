@@ -1,9 +1,9 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/dial/alignment_type.hh"
+#include "clockwork/dial/alignment_type_clk_cc.hh"
 #include "clockwork/dial/approx_aligner.hh"
-#include "clockwork/dial/approx_aligner_config.hh"
+#include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/dial/tests/support/approx_aligner_fixture.hh"
 #include "jewels/memory/memory_resource.hh"

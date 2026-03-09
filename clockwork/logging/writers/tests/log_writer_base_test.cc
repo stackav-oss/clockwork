@@ -1,33 +1,34 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
-#include "clockwork/logging/writers/channel_message_rates.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
 #include "clockwork/logging/writers/log_writer_base.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/repr_iface.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
+#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -48,7 +49,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -96,7 +96,7 @@ public:
   /// @param[in] max_log_file_duration Maximum duration a log file will span
   TestWriter(
     jewels::memory::MemoryResource memory_resource,
-    const LogWriterConfigTap& log_writer_config,
+    const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
     std::string_view pinion_shm_root,
     std::string_view pinion_namespc,
     size_t buffer_pool_size,
@@ -111,7 +111,7 @@ public:
   /// Received message handler
   /// @param[in] channel_name Channel name
   /// @param[in] message_handle Clockwork message handle
-  void message_handler(std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle);
+  void message_handler(std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle);
 
   /// Set is degraded flag
   /// @param[in] status_string Human readable status string
@@ -127,7 +127,7 @@ private:
 
 TestWriter::TestWriter(
   jewels::memory::MemoryResource memory_resource,
-  const LogWriterConfigTap& log_writer_config,
+  const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
   std::string_view pinion_shm_root,
   std::string_view pinion_namespc,
   size_t buffer_pool_size,
@@ -145,7 +145,7 @@ TestWriter::TestWriter(
 {
 }
 
-void TestWriter::message_handler(std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle)
+void TestWriter::message_handler(std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle)
 {
   const auto state = get_state();
   if (state == LogWriterState::logging || state == LogWriterState::degraded)
@@ -243,7 +243,7 @@ TEST_CASE("Empty log")
       test_publishers.emplace_back(std::move(open_result).value());
     }
 
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
 
     for (auto& publisher : test_publishers)
@@ -336,7 +336,7 @@ TEST_CASE("Log all messages")
       test_publishers.emplace_back(std::move(open_result).value());
     }
 
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
 
     for (auto& publisher : test_publishers)
@@ -457,7 +457,7 @@ TEST_CASE("Pause/resume logging")
       test_publishers.emplace_back(std::move(open_result).value());
     }
 
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
 
     for (auto& publisher : test_publishers)
@@ -603,7 +603,7 @@ TEST_CASE("Log onboard messages")
       max_log_file_duration);
     auto& test_writer = *test_writer_ptr;
 
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
 
     REQUIRE(test_writer.start_logging(test_log_path));
@@ -822,7 +822,7 @@ TEST_CASE("Writer only logs first message from buffer after subscribing when cha
       max_log_file_duration,
       /*save_persistent_messages=*/true);
     auto& test_writer = *test_writer_ptr;
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
     REQUIRE(test_writer.start_logging(test_log_path));
 
@@ -947,7 +947,7 @@ TEST_CASE("Detect drops on buffer overrun")
       test_publishers.emplace_back(std::move(open_result).value());
     }
 
-    REQUIRE(test_writer.initialize());
+    REQUIRE(test_writer.initialize(writer_config));
     test_writer.run_for(run_interval);
     REQUIRE(test_writer.start_logging(test_log_path));
 
@@ -1061,7 +1061,7 @@ TEST_CASE("Set state to failed")
     buffer_pool_size,
     max_log_file_duration);
   auto& test_writer = *test_writer_ptr;
-  REQUIRE(test_writer.initialize());
+  REQUIRE(test_writer.initialize(writer_config));
   test_writer.run_for(run_interval);
 
   for (auto& publisher : test_publishers)
@@ -1075,6 +1075,7 @@ TEST_CASE("Set state to failed")
   REQUIRE(test_writer.get_status().status_string.empty());
   test_writer.set_state_to_failed("Setting state to failed");
   REQUIRE(test_writer.get_state() == LogWriterState::failed);
+  REQUIRE(test_writer.get_status_string() == "Setting state to failed");
   REQUIRE(test_writer.get_status().status_string == "Setting state to failed");
   REQUIRE(test_writer.stop_logging() == jewels::unexpected(LogError::failed));
 }
@@ -1113,7 +1114,7 @@ TEST_CASE("Set is degraded")
     buffer_pool_size,
     max_log_file_duration);
   auto& test_writer = *test_writer_ptr;
-  REQUIRE(test_writer.initialize());
+  REQUIRE(test_writer.initialize(writer_config));
   test_writer.run_for(run_interval);
 
   for (auto& publisher : test_publishers)
@@ -1137,16 +1138,17 @@ TEST_CASE("Initialization throws if number of channels exceeds limit")
 
   const jewels::testing::TmpDirectoryGuard shm_dir;
 
-  auto log_writer_config_ptr = std::make_unique<LogWriterConfigTap>();
+  auto log_writer_config_ptr = std::make_unique<clockwork::Tappy<LogWriterConfig<>>>();
 
-  if (LogWriterConfigTap::max_num_channels <= ChannelMessageRatesTap::max_num_channels)
+  if (
+    clockwork::Tappy<LogWriterConfig<>>::max_num_channels <= clockwork::Tappy<ChannelMessageRates<>>::max_num_channels)
   {
     // Nothing to test in this case. The log writer config will never contain more channels than there are in channel
     // message rates.
     return;
   }
   // Set up the log writer config with too many channels
-  for (uint32_t i = 0; i < ChannelMessageRatesTap::max_num_channels + 1; ++i)
+  for (uint32_t i = 0; i < clockwork::Tappy<ChannelMessageRates<>>::max_num_channels + 1; ++i)
   {
     log_writer_config_ptr->get_underlying_channels().emplace_back();
   }
@@ -1158,7 +1160,7 @@ TEST_CASE("Initialization throws if number of channels exceeds limit")
     pinion_namespace,
     buffer_pool_size,
     max_log_file_duration);
-  REQUIRE_THROWS_AS(test_writer_ptr->initialize(), std::invalid_argument);
+  REQUIRE_THROWS_AS(test_writer_ptr->initialize(*log_writer_config_ptr), std::invalid_argument);
 }
 } // namespace
 } // namespace clockwork_logging::tests

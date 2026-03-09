@@ -8,7 +8,7 @@
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/tests/support/test_message.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 
 #include <cstdint>

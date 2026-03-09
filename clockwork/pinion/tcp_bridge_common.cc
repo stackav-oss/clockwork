@@ -6,6 +6,8 @@
 #include "jewels/container/tap/var_string.hh"
 
 #include <algorithm>
+#include <compare>
+#include <utility>
 
 namespace clockwork::pinion
 {
@@ -82,6 +84,108 @@ void store_client_server_counters(
     dest.set_max_compression_time(std::chrono::nanoseconds(0));
     dest.set_average_bridge_latency(std::chrono::nanoseconds(0));
     dest.set_max_bridge_latency(std::chrono::nanoseconds(0));
+  }
+}
+
+TcpBridgeDiagnosticsCounters TcpBridgeDiagnosticsState::get_and_reset_counters()
+{
+  std::lock_guard guard{mutex_};
+  TcpBridgeDiagnosticsCounters counters{};
+  std::swap(counters, counters_);
+  return counters;
+}
+
+void TcpBridgeDiagnosticsState::increment_drop_count(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.drop_count += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_failed_sends(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.failed_sends += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_closed_socket_count(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.closed_socket_count += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_failed_recvs(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.failed_recvs += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_failed_reservations(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.failed_reservations += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_malformed_messages(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.malformed_messages += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_failed_commits(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.failed_commits += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_failed_discards(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.failed_discards += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_client_socket_errors(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.client_socket_errors += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_progress_errors(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.progress_errors += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_epoll_errors(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.epoll_errors += count;
+}
+
+void TcpBridgeDiagnosticsState::increment_status_errors(size_t count)
+{
+  std::lock_guard guard{mutex_};
+  counters_.status_errors += count;
+}
+
+void TcpBridgeDiagnosticsState::update_max_bridge_latency(
+  std::chrono::nanoseconds latency, std::string_view channel_name)
+{
+  std::lock_guard guard{mutex_};
+  if (latency > counters_.max_bridge_latency)
+  {
+    counters_.max_bridge_latency = latency;
+    counters_.max_latency_channel_name = channel_name;
+  }
+}
+
+void TcpBridgeDiagnosticsState::update_max_bridge_bulk_data_latency(
+  std::chrono::nanoseconds latency, std::string_view channel_name)
+{
+  std::lock_guard guard{mutex_};
+  if (latency > counters_.max_bridge_bulk_data_latency)
+  {
+    counters_.max_bridge_bulk_data_latency = latency;
+    counters_.max_bulk_data_latency_channel_name = channel_name;
   }
 }
 

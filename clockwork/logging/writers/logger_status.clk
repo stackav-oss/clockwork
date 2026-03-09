@@ -1,5 +1,8 @@
-use clockwork::logging::log_uuid_tag::LogUuidTag;
-use clockwork::logging::writers::log_writer_state::LogWriterState;
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
+use clockwork::logging::log_uuid_tag::{LogUuidTag};
+use clockwork::logging::writers::log_writer_state::{LogWriterState};
 
 // Logger status message
 schema LoggerStatus
@@ -34,16 +37,4 @@ schema LoggerStatus
     // Name of a channel with a low message rate
     #8 low_rate_channel_name: VarString<max_size=300>;
   }
-}
-
-cpp_target logger_status
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  schema LoggerStatus;
-
-  representation Tachyon<LoggerStatus>;
-  interface LoggerStatusTap: Tap<Tachyon<LoggerStatus>>;
 }

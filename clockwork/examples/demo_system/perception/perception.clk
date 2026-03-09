@@ -1,12 +1,15 @@
-use clockwork::dial::approx_aligner_config;
-use clockwork::examples::demo_system::cpu_domain;
-use clockwork::examples::demo_system::camera::video_channels;
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::demo_system::perception)]
+
+use[cpp, proto, proto_conv] clockwork::dial::approx_aligner_config;
+use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::camera::video_channels;
 use clockwork::examples::demo_system::camera::video_message;
-use clockwork::examples::demo_system::lidar::lidar_channels;
+use[] clockwork::examples::demo_system::lidar::lidar_channels;
 use clockwork::examples::demo_system::lidar::lidar_message;
-use clockwork::examples::demo_system::perception::perception_channels;
+use[] clockwork::examples::demo_system::perception::perception_channels;
 use clockwork::examples::demo_system::perception::perception_message;
-use clockwork::examples::demo_system::localization::localization_channels;
+use[] clockwork::examples::demo_system::localization::localization_channels;
 use clockwork::examples::demo_system::localization::pose_message;
 
 // Perception init cog logs the approx aligner config to a persistent channel
@@ -77,21 +80,10 @@ cog PerceptionCog
 
   execution
   {
-    condition new_video: new_message(min=1, input=video);
-    condition new_lidar: new_message(min=1, input=lidar);
+    condition new_video: new_message(input=video);
+    condition new_lidar: new_message(input=lidar);
     execute when: new_video or new_lidar;
   }
-}
-
-cpp_target perception_cog
-{
-  options
-  {
-    namespace clockwork::demo_system::perception;
-  }
-
-  cog PerceptionInitCog;
-  cog PerceptionCog;
 }
 
 box PerceptionBox
@@ -115,18 +107,10 @@ box PerceptionBox
   connect percept_cog.debug to perception_channels::PerceptionDebugChannel;
 }
 
-cpp_executable perception_exe
-{
-  casing
-  {
-    box PerceptionBox;
-  }
-}
-
 box PerceptionExe
 {
   new perception_box: PerceptionBox;
-  new perception_proc: Process(executable=perception_exe);
+  new perception_proc: Process(executable=perception_clk_exe);
   apply HostProcess(process=perception_proc) in perception_box;
   apply HostCpuDomain(cpu_domain=cpu_domain::LocalHost) to perception_proc;
 }

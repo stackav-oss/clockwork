@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header
 from clockwork.dsl.ir import expr, node, typesys
@@ -57,6 +57,7 @@ class AudioSource(node.CstNode[cst.AudioSource], node.DocRequiredEntity, typesys
         *,
         cst_node: cst.NewStmt | None,
         module: node.Module,
+        source_module: node.Module | None = None,
         scope: node.Scope,
         name: str,
         doc: node.Doc | None,

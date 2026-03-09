@@ -3,9 +3,10 @@
 #include "clockwork/tools/channel_spy/tests/support/test_helper.hh"
 
 #include "clockwork/repr_iface.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_publisher.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_support.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <cstddef>
@@ -21,25 +22,25 @@ namespace clockwork::tools::tests::support
 template <typename MessageType>
   requires TappyType<MessageType>
 TestHelper<MessageType>::TestHelper(
-  std::string_view pinion_shm_root, std::string_view socket_ns, std::unique_ptr<ChannelSpyConfigTap> spy_config)
+  std::string_view pinion_shm_root, std::string_view socket_ns, std::unique_ptr<Tappy<ChannelSpyConfig<>>> spy_config)
   : pinion_shm_root_(pinion_shm_root), socket_ns_(socket_ns), spy_config_(std::move(spy_config))
 {
 }
 
 template <typename MessageType>
   requires TappyType<MessageType>
-std::shared_ptr<TestHelper<MessageType>>
-TestHelper<MessageType>::make_test_helper(std::string_view pinion_shm_root, std::string_view socket_ns)
+std::shared_ptr<TestHelper<MessageType>> TestHelper<MessageType>::make_test_helper(
+  std::string_view pinion_shm_root, std::string_view tmp_dir, std::string_view socket_ns)
 {
   auto config = gen_channel_spy_config<MessageType>();
-  write_channel_spy_config_file(pinion_shm_root, socket_ns, *config);
+  write_channel_spy_config_file(tmp_dir, socket_ns, *config);
   TestHelper<MessageType> test_helper{pinion_shm_root, socket_ns, std::move(config)};
   return std::make_shared<TestHelper<MessageType>>(std::move(test_helper));
 }
 
 template <typename MessageType>
   requires TappyType<MessageType>
-[[nodiscard]] const ChannelSpyConfigTap& TestHelper<MessageType>::spy_config() const
+[[nodiscard]] const Tappy<ChannelSpyConfig<>>& TestHelper<MessageType>::spy_config() const
 {
   return *spy_config_;
 }

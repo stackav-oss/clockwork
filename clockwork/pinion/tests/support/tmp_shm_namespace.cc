@@ -8,7 +8,6 @@
 #include "jewels/memory/memory_resource.hh"
 
 #include <cstdlib>
-#include <filesystem>
 #include <memory_resource>
 #include <random>
 #include <string_view>
@@ -26,7 +25,7 @@ TmpShmNamespace::TmpShmNamespace()
   return namespace_;
 }
 
-[[nodiscard]] const std::filesystem::path& TmpShmNamespace::get_full_path() const noexcept
+[[nodiscard]] const jewels::filesystem::Path& TmpShmNamespace::get_full_path() const noexcept
 {
   return directory_.get_path();
 }
@@ -35,7 +34,7 @@ ShmChannelFactory TmpShmNamespace::make_factory() const
 {
   return {
     jewels::memory::MemoryResource(std::pmr::get_default_resource()),
-    jewels::filesystem::Directory(get_full_path().native()),
+    jewels::filesystem::Directory(get_full_path()),
     get_namespace(),
     ShmChannel::ResumeBehavior::no_resume};
 }

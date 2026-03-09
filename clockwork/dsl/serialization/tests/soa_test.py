@@ -1,0 +1,383 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+# pyright: reportPrivateUsage=false
+
+"""Unit tests for SoA C++ code generation."""
+
+import os
+from pathlib import Path
+
+from clockwork.dsl.ir import clkbuiltins, compiler, importer, schema, typesys
+from clockwork.dsl.ir.module_id import ModuleID
+from clockwork.dsl.serialization import soa
+
+# We store our expected gencode in resource files under source control. These
+# can be tedious to update by hand, so during development set the following flag
+# to True and execute this test (with bazel run rather than bazel test, executed
+# from the @clockwork repo root), and the test will update its own expectation
+# files. But be sure to manually review the diff to be sure that the
+# expectations are correct!
+UPDATE_EXPECTATIONS = False
+
+
+def _get_workspace_root() -> Path:
+    """Get the workspace root directory.
+
+    This looks for BUILD_WORKSPACE_DIRECTORY environment variable set by bazel run,
+    or searches for MODULE.bazel file in parent directories.
+    """
+    # When running with bazel run, this env var is set
+    if "BUILD_WORKSPACE_DIRECTORY" in os.environ:
+        return Path(os.environ["BUILD_WORKSPACE_DIRECTORY"])
+
+    # Fallback: search for MODULE.bazel file in parent directories
+    path = Path(__file__).absolute()
+    while path != Path("/"):
+        if (path / "MODULE.bazel").is_file():
+            return path
+        path = path.parent
+
+    msg = "Could not find workspace root. Run with 'bazel run' to update expectation files."
+    raise RuntimeError(msg)
+
+
+# Path to test resources
+RESOURCES_DIR = Path(__file__).parent / "resources"
+
+
+def _load_expected(name: str) -> str:
+    """Load expected output from resource file."""
+    filepath = RESOURCES_DIR / f"{name}.txt"
+    return filepath.read_text().strip()
+
+
+def _write_expected(name: str, content: str) -> None:
+    """Write expected output to resource file in workspace."""
+    if not UPDATE_EXPECTATIONS:
+        return
+
+    # Get the workspace root to write files there, not in the sandbox
+    workspace_root = _get_workspace_root()
+    # Since we're inside platforms/clockwork already, just use clockwork/ path
+    resources_dir = workspace_root / "clockwork/dsl/serialization/tests/resources"
+    filepath = resources_dir / f"{name}.txt"
+
+    filepath.write_text(content.strip() + "\n")
+
+
+def test_should_generate_soa_when_enabled() -> None:
+    """Test that should_generate_soa returns True when soa_enabled is set."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // X coordinate
+        #0 x: Float32;
+        // Y coordinate
+        #1 y: Float32;
+        // Z coordinate
+        #2 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_inst = schema.InstantiatedSchema.from_typespec(point3f_schema.get_resolved())
+
+    assert soa.should_generate_soa(point3f_inst) is True
+
+
+def test_should_not_generate_soa_when_disabled() -> None:
+    """Test that should_generate_soa returns False when soa_enabled is not set."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Point3f
+    schema Point3f
+    {
+      fields
+      {
+        // X coordinate
+        #0 x: Float32;
+        // Y coordinate
+        #1 y: Float32;
+        // Z coordinate
+        #2 z: Float32;
+      }
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "point3f"), importer=fs_importer)
+    point3f_schema = module.inner_scope.lookup("Point3f")
+    assert isinstance(point3f_schema, schema.Schema)
+    point3f_inst = schema.InstantiatedSchema.from_typespec(point3f_schema.get_resolved())
+
+    assert soa.should_generate_soa(point3f_inst) is False
+
+
+# Expected generated code constants
+EXPECTED_COMPREHENSIVE_HEADER = _load_expected("expected_comprehensive_hh")
+EXPECTED_COMPREHENSIVE_INLINE = _load_expected("expected_comprehensive_inl")
+EXPECTED_COMPREHENSIVE_IMPLEMENTATION = _load_expected("expected_comprehensive_cc")
+
+EXPECTED_ALIGNMENT_HEADER = _load_expected("expected_alignment_hh")
+EXPECTED_ALIGNMENT_INLINE = _load_expected("expected_alignment_inl")
+EXPECTED_ALIGNMENT_IMPLEMENTATION = _load_expected("expected_alignment_cc")
+
+
+def test_comprehensive_field_types_codegen() -> None:
+    """Test code generation with all supported field types.
+
+    This is the main test that exercises the full feature set:
+    - Primitives of various sizes/alignments
+    - FixedArray with compile-time size
+    - VarArray with dynamic size
+    - VarString
+    - Optional fields
+    - Nested subschemas (if supported)
+
+    The golden files generated by this test serve as both documentation
+    and regression tests for the code generator.
+    """
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Nested subschema for testing
+    schema Point2D
+    {
+      fields
+      {
+        // X coordinate
+        #0 x: Float32;
+        // Y coordinate
+        #1 y: Float32;
+      }
+    }
+
+    // Comprehensive schema exercising all field types
+    schema ComprehensiveTest
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // Unsigned 32-bit identifier
+        #0 id: UInt32;
+        // 64-bit timestamp
+        #1 timestamp: Int64;
+        // Boolean flag
+        #2 flag: Bool;
+        // Floating point confidence value
+        #3 confidence: Float32;
+        // Fixed-size array of 3 floats
+        #4 position: FixedArray<Float32, 3>;
+        // Variable-size array of measurements
+        #5 measurements: VarArray<Float32, 10>;
+        // Variable-length string label
+        #6 label: VarString<32>;
+        // Optional score value
+        #7 optional_score: Optional<Float64>;
+        // Nested Point2D subschema
+        #8 center: Point2D;
+      }
+    }
+
+    cpp_target cpp_target
+    {
+      options
+      {
+        namespace test;
+      }
+      schema Point2D;
+      schema ComprehensiveTest;
+      representation Tachyon<Point2D>;
+      representation Tachyon<ComprehensiveTest>;
+      interface Point2DTap: Tap<Tachyon<Point2D>>;
+      interface ComprehensiveTestTap: Tap<Tachyon<ComprehensiveTest>>;
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "comprehensive"), importer=fs_importer)
+    test_schema = module.inner_scope.lookup("ComprehensiveTest")
+    assert isinstance(test_schema, schema.Schema)
+    test_inst = schema.InstantiatedSchema.from_typespec(test_schema.get_resolved())
+
+    cpp_mod = soa.render_soa_types(module.context, test_inst, "")
+
+    actual_header = cpp_mod.header_chunk.render_str(render_includes=False).strip()
+    actual_inline = cpp_mod.inline_chunk.render_str(render_includes=False).strip()
+    actual_implementation = cpp_mod.implementation_chunk.render_str(render_includes=False).strip()
+
+    _write_expected("expected_comprehensive_hh", actual_header)
+    _write_expected("expected_comprehensive_inl", actual_inline)
+    _write_expected("expected_comprehensive_cc", actual_implementation)
+
+    assert actual_header == EXPECTED_COMPREHENSIVE_HEADER
+    assert actual_inline == EXPECTED_COMPREHENSIVE_INLINE
+    assert actual_implementation == EXPECTED_COMPREHENSIVE_IMPLEMENTATION
+
+
+def test_field_alignment_ordering() -> None:
+    """Test that fields are ordered by descending alignment in generated SoA.
+
+    This test uses both targeted assertions (to verify ordering) and golden files
+    (to document the generated code). The alignment-based ordering is critical for
+    cache efficiency and is easy to miss in code review.
+    """
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    // Schema with deliberately mixed field order
+    schema AlignmentTest
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      fields
+      {
+        // 2-byte alignment field
+        #0 two_byte: UInt16;
+        // 8-byte alignment field (should be sorted first)
+        #1 eight_byte: Int64;
+        // 1-byte alignment field (should be sorted last)
+        #2 one_byte: UInt8;
+        // 4-byte alignment field
+        #3 four_byte: Int32;
+      }
+    }
+
+    cpp_target cpp_target
+    {
+      options
+      {
+        namespace test;
+      }
+      schema AlignmentTest;
+      representation Tachyon<AlignmentTest>;
+      interface AlignmentTestTap: Tap<Tachyon<AlignmentTest>>;
+    }
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "alignment"), importer=fs_importer)
+    alignment_schema = module.inner_scope.lookup("AlignmentTest")
+    assert isinstance(alignment_schema, schema.Schema)
+    alignment_inst = schema.InstantiatedSchema.from_typespec(alignment_schema.get_resolved())
+
+    cpp_mod = soa.render_soa_types(module.context, alignment_inst, "")
+
+    actual_header = cpp_mod.header_chunk.render_str(render_includes=False).strip()
+    actual_inline = cpp_mod.inline_chunk.render_str(render_includes=False).strip()
+    actual_implementation = cpp_mod.implementation_chunk.render_str(render_includes=False).strip()
+
+    _write_expected("expected_alignment_hh", actual_header)
+    _write_expected("expected_alignment_inl", actual_inline)
+    _write_expected("expected_alignment_cc", actual_implementation)
+
+    # Targeted assertions: verify field ordering in generated code
+    # Fields should appear in order: eight_byte (8), four_byte (4), two_byte (2), one_byte (1)
+    eight_byte_pos = actual_header.find("eight_byte_")
+    four_byte_pos = actual_header.find("four_byte_")
+    two_byte_pos = actual_header.find("two_byte_")
+    one_byte_pos = actual_header.find("one_byte_")
+
+    assert eight_byte_pos > 0, "eight_byte field not found"
+    assert four_byte_pos > 0, "four_byte field not found"
+    assert two_byte_pos > 0, "two_byte field not found"
+    assert one_byte_pos > 0, "one_byte field not found"
+
+    # Verify ordering: 8-byte, then 4-byte, then 2-byte, then 1-byte
+    assert eight_byte_pos < four_byte_pos, "8-byte field should come before 4-byte field"
+    assert four_byte_pos < two_byte_pos, "4-byte field should come before 2-byte field"
+    assert two_byte_pos < one_byte_pos, "2-byte field should come before 1-byte field"
+
+    # Golden file comparison
+    assert actual_header == EXPECTED_ALIGNMENT_HEADER
+    assert actual_inline == EXPECTED_ALIGNMENT_INLINE
+    assert actual_implementation == EXPECTED_ALIGNMENT_IMPLEMENTATION
+
+
+def test_generic_schema_with_type_parameter() -> None:
+    """Test SoA generation for generic schemas with type parameters."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = """
+    #![generate(cpp)]
+    #![cpp(namespace=test)]
+
+    // A generic schema where the field type is parameterized
+    schema GenericRecord
+    {
+      options
+      {
+        soa_enabled: true;
+      }
+      parameters
+      {
+        // Type parameter for the identifier field
+        #0 IdType: Type = UInt8;
+      }
+      fields
+      {
+        // The identifier field uses the type parameter
+        #1 id: IdType;
+        // A regular field
+        #2 value: Float32;
+      }
+    }
+
+    // Named instantiations
+    instantiate GenericRecordUInt8: GenericRecord<IdType=UInt8>;
+    instantiate GenericRecordUInt32: GenericRecord<IdType=UInt32>;
+    """
+    module = compiler.compile_source_text(source, ModuleID("test", "generic"), importer=fs_importer)
+
+    generic_schema = module.inner_scope.lookup("GenericRecord")
+    assert isinstance(generic_schema, schema.Schema)
+
+    uint8_inst = schema.InstantiatedSchema.from_typespec(
+        typesys.Instantiation(
+            type_info=clkbuiltins.TYPE_TYPE,
+            instantiates=generic_schema,
+            arguments={"IdType": clkbuiltins.UINT8},
+        )
+    )
+    uint32_inst = schema.InstantiatedSchema.from_typespec(
+        typesys.Instantiation(
+            type_info=clkbuiltins.TYPE_TYPE,
+            instantiates=generic_schema,
+            arguments={"IdType": clkbuiltins.UINT32},
+        )
+    )
+
+    cpp_mod_uint8 = soa.render_soa_types(module.context, uint8_inst, "")
+    cpp_mod_uint32 = soa.render_soa_types(module.context, uint32_inst, "")
+
+    header_uint8 = cpp_mod_uint8.header_chunk.render_str(render_includes=False).strip()
+    header_uint32 = cpp_mod_uint32.header_chunk.render_str(render_includes=False).strip()
+
+    assert "template <class SchemaType, size_t size> class GenericRecord_FixedSoaElementRef;" in header_uint8
+    assert "template <class SchemaType, size_t size> class GenericRecord_FixedSoaElementConstRef;" in header_uint8
+    assert "template <class SchemaType, size_t max_size> class GenericRecord_VarSoaElementRef;" in header_uint8
+    assert "template <class SchemaType, size_t max_size> class GenericRecord_VarSoaElementConstRef;" in header_uint8
+
+    assert "class GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint8_t>, size>" in header_uint8
+    assert "class GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint32_t>, size>" in header_uint32
+
+    assert "SoaTraits<::clockwork::FixedSoa<::test::GenericRecord<uint8_t>, size>>" in header_uint8
+    assert "SoaTraits<::clockwork::FixedSoa<::test::GenericRecord<uint32_t>, size>>" in header_uint32
+
+    assert (
+        "using ElementRef = ::test::GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint8_t>, size>;"
+        in header_uint8
+    )
+    assert (
+        "using ElementRef = ::test::GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint32_t>, size>;"
+        in header_uint32
+    )
+
+    assert "friend ::test::GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint8_t>, size>;" in header_uint8
+    assert "friend ::test::GenericRecord_FixedSoaElementRef<::test::GenericRecord<uint32_t>, size>;" in header_uint32

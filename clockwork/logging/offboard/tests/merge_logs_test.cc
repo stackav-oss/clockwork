@@ -1,11 +1,11 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/merge_logs.hh"
@@ -15,13 +15,16 @@
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -46,15 +49,25 @@ TEST_CASE("merge_logs")
 {
   constexpr auto source_log1_name = "source_log1";
   constexpr auto source_log2_name = "source_log2";
+  constexpr auto source_log3_name = "source_log3";
   constexpr auto dest_log_name = "dest_log";
+
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   const jewels::testing::TmpDirectoryGuard test_dir;
-  const auto source_log1_path = (test_dir.get_path() / source_log1_name).string();
-  const auto source_log2_path = (test_dir.get_path() / source_log2_name).string();
-  const auto dest_log_path = (test_dir.get_path() / dest_log_name).string();
+  const auto source_log1_path = test_dir.get_path() / source_log1_name;
+  const std::string source_log1_path_str{source_log1_path.c_str()};
+  const auto source_log2_path = test_dir.get_path() / source_log2_name;
+  const std::string source_log2_path_str{source_log2_path.c_str()};
+  const auto source_log3_path = test_dir.get_path() / source_log3_name;
+  const std::string source_log3_path_str{source_log3_path.c_str()};
+  const auto dest_path = test_dir.get_path() / dest_log_name;
+  const std::string dest_log_path{dest_path.string_view()};
   Writer writer1{memory_resource};
   Writer writer2{memory_resource};
+  Writer writer3{memory_resource};
 
   constexpr LogTimestamp time1{std::chrono::seconds(1)};
   constexpr LogTimestamp time2{std::chrono::seconds(2)};
@@ -93,7 +106,7 @@ TEST_CASE("merge_logs")
   std::vector<std::byte> data2(data2_size);
   onboard::tests::fill_with_random_bytes(data2);
 
-  REQUIRE(writer1.open(source_log1_path));
+  REQUIRE(writer1.open(source_log1_path_str));
   REQUIRE(writer1.create_channel(metadata1));
   REQUIRE(writer1.create_channel(metadata2));
 
@@ -153,7 +166,7 @@ TEST_CASE("merge_logs")
   std::vector<std::byte> data4(data4_size);
   onboard::tests::fill_with_random_bytes(data4);
 
-  REQUIRE(writer2.open(source_log2_path));
+  REQUIRE(writer2.open(source_log2_path_str));
   REQUIRE(writer2.create_channel(metadata3));
   REQUIRE(writer2.create_channel(metadata4));
 
@@ -181,7 +194,31 @@ TEST_CASE("merge_logs")
 
   REQUIRE(writer2.close());
 
-  std::vector<std::string_view> source_logs{source_log1_path, source_log2_path};
+  constexpr auto channel_name5 = "channel5";
+  constexpr auto metadata5 = LoggedChannelMetadata{
+    .channel_name = channel_name5,
+    .message_encoding = MessageEncoding::unspecified,
+    .channel_type = ChannelType::persistent,
+    .schema_name = "schema5",
+    .schema_encoding = SchemaEncoding::unspecified,
+    .schema_definition = "Schema definition 5",
+  };
+
+  REQUIRE(writer3.open(source_log3_path_str));
+  REQUIRE(writer3.create_channel(metadata5));
+  REQUIRE(writer3.close());
+
+  if (recover_metadata)
+  {
+    const auto log1_metadata_path = std::filesystem::path{source_log1_path_str} / "stack_log_metadata.pbtxt";
+    const auto log2_metadata_path = std::filesystem::path{source_log2_path_str} / "stack_log_metadata.pbtxt";
+    const auto log3_metadata_path = std::filesystem::path{source_log3_path_str} / "stack_log_metadata.pbtxt";
+    std::filesystem::remove(log1_metadata_path);
+    std::filesystem::remove(log2_metadata_path);
+    std::filesystem::remove(log3_metadata_path);
+  }
+
+  std::vector<std::string_view> source_logs{source_log1_path_str, source_log2_path_str, source_log3_path_str};
 
   SECTION("Merge entire log")
   {
@@ -298,6 +335,8 @@ TEST_CASE("merge_logs")
     REQUIRE((*metadata_result)->at(channel_name2) == metadata2);
     REQUIRE((*metadata_result)->at(channel_name3) == metadata3);
 
+    REQUIRE(reader.get_log_interval() == LogInterval{time2, time3});
+
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
     REQUIRE((*metrics_result)->message_count == 2U);
@@ -349,34 +388,40 @@ TEST_CASE("merge_logs")
     constexpr auto union_merge_name = "union_merge_log";
 
     const auto union1_path = test_dir.get_path() / union1_name;
-    const auto union1_path_str = union1_path.string();
+    const auto& union1_path_str = union1_path.string();
     const auto union2_path = test_dir.get_path() / union2_name;
-    const auto union2_path_str = union2_path.string();
+    const auto& union2_path_str = union2_path.string();
     const auto union_merge_path = test_dir.get_path() / union_merge_name;
     REQUIRE(write_merge_union(memory_resource, source_logs, union1_path.string()));
     REQUIRE(write_merge_union(memory_resource, source_logs, union2_path.string()));
 
     ChunkReaderWriterFactory chunk_reader_factory{memory_resource};
 
-    const auto union1_result = chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
-      (union1_path / log_union_filename).string());
+    const auto log_union1_path = union1_path / log_union_filename;
+    const auto union1_result =
+      chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union1_path.string());
     REQUIRE(union1_result);
     const auto& union1 = union1_result.value();
-    REQUIRE(union1.log_union_entry_size() == 2);
+    REQUIRE(union1.log_union_entry_size() == 3);
     REQUIRE(union1.log_union_entry(0).has_absolute_path());
-    REQUIRE(union1.log_union_entry(0).absolute_path() == source_log1_path);
+    REQUIRE(union1.log_union_entry(0).absolute_path() == source_log1_path_str);
     REQUIRE(union1.log_union_entry(1).has_absolute_path());
-    REQUIRE(union1.log_union_entry(1).absolute_path() == source_log2_path);
+    REQUIRE(union1.log_union_entry(1).absolute_path() == source_log2_path_str);
+    REQUIRE(union1.log_union_entry(2).has_absolute_path());
+    REQUIRE(union1.log_union_entry(2).absolute_path() == source_log3_path_str);
 
-    const auto union2_result = chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
-      (union2_path / log_union_filename).string());
+    const auto log_union2_path = union2_path / log_union_filename;
+    const auto union2_result =
+      chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union2_path.string());
     REQUIRE(union2_result);
     const auto& union2 = union2_result.value();
-    REQUIRE(union2.log_union_entry_size() == 2);
+    REQUIRE(union2.log_union_entry_size() == 3);
     REQUIRE(union2.log_union_entry(0).has_absolute_path());
-    REQUIRE(union2.log_union_entry(0).absolute_path() == source_log1_path);
+    REQUIRE(union2.log_union_entry(0).absolute_path() == source_log1_path_str);
     REQUIRE(union2.log_union_entry(1).has_absolute_path());
-    REQUIRE(union2.log_union_entry(1).absolute_path() == source_log2_path);
+    REQUIRE(union2.log_union_entry(1).absolute_path() == source_log2_path_str);
+    REQUIRE(union2.log_union_entry(2).has_absolute_path());
+    REQUIRE(union2.log_union_entry(2).absolute_path() == source_log3_path_str);
 
     std::vector<std::string_view> union_logs{union1_path_str, union2_path_str};
     REQUIRE(write_merge_union(memory_resource, union_logs, union_merge_path.string()));
@@ -385,21 +430,24 @@ TEST_CASE("merge_logs")
       (union_merge_path / log_union_filename).string());
     REQUIRE(union_merge_result);
     const auto& union_merge = union_merge_result.value();
-    REQUIRE(union_merge.log_union_entry_size() == 2);
+    REQUIRE(union_merge.log_union_entry_size() == 3);
     REQUIRE(union_merge.log_union_entry(0).has_absolute_path());
-    REQUIRE(union_merge.log_union_entry(0).absolute_path() == source_log1_path);
+    REQUIRE(union_merge.log_union_entry(0).absolute_path() == source_log1_path_str);
     REQUIRE(union_merge.log_union_entry(1).has_absolute_path());
-    REQUIRE(union_merge.log_union_entry(1).absolute_path() == source_log2_path);
+    REQUIRE(union_merge.log_union_entry(1).absolute_path() == source_log2_path_str);
+    REQUIRE(union_merge.log_union_entry(2).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(2).absolute_path() == source_log3_path_str);
 
     Reader reader{memory_resource, union_merge_path.string()};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
-    REQUIRE((*metadata_result)->size() == 4U);
+    REQUIRE((*metadata_result)->size() == 5U);
     REQUIRE((*metadata_result)->at(channel_name1) == metadata1);
     REQUIRE((*metadata_result)->at(channel_name2) == metadata2);
     REQUIRE((*metadata_result)->at(channel_name3) == metadata3);
     REQUIRE((*metadata_result)->at(channel_name4) == metadata4);
+    REQUIRE((*metadata_result)->at(channel_name5) == metadata5);
 
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);

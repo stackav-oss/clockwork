@@ -1,6 +1,7 @@
-use clockwork::dsl::tests::support::{hellocog, hellomsg};
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
-use clockwork::diagnostics::channels::DiagnosticsChannel;
+use clockwork::diagnostics::channels::{DiagnosticsChannel};
 
 // Channel for HelloMsg messages
 channel Chan1

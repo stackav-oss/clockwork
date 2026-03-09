@@ -29,6 +29,7 @@ from clockwork.dsl.ir import (
     primitive,
     pubsub,
     representation,
+    schema,
     schema_reg,
     typesys,
     udp,
@@ -125,6 +126,15 @@ def get_representation_size(
     raise RuntimeError(msg)
 
 
+def get_schema_size(compiler_context: compiler_context.CompilerContext, schema: schema.InstantiatedSchema) -> int:
+    """Get the size of a schema."""
+    constraint = tachyon_reg.constraint_for_type(compiler_context, schema)
+    if constraint is None:
+        msg = f"Could not determine size for schema {schema.schema_name}"
+        raise RuntimeError(msg)
+    return constraint.size
+
+
 @dataclass(slots=True, frozen=True)
 class Channel(DocRequiredEntity):
     """GraphIR Node representing a pub/sub channel."""
@@ -133,10 +143,13 @@ class Channel(DocRequiredEntity):
     message_repr: representation.ResolvedReprInstantiation
     message_size: int
     num_slots: int
+    is_published_once: bool
     is_multi_publisher: bool
     is_diagnostics: bool
     is_bridge_status: bool
+    is_c2c_bridge_status: bool
     enforce_backwards_compatibility: bool
+    is_bulk_data: bool
     ir_node: pubsub.Channel
 
     @override
@@ -161,10 +174,13 @@ class Channel(DocRequiredEntity):
             message_repr=ir_node.message_repr,
             message_size=int(ir_node.message_size.value),
             num_slots=int(ir_node.num_slots.value),
+            is_published_once=ir_node.is_published_once,
             is_multi_publisher=ir_node.publishers_option == pubsub.ChannelPublishersOption.multiple,
             is_diagnostics=ir_node.is_diagnostics,
             is_bridge_status=ir_node.is_bridge_status,
+            is_c2c_bridge_status=ir_node.is_c2c_bridge_status,
             enforce_backwards_compatibility=ir_node.enforce_backwards_compatibility,
+            is_bulk_data=ir_node.is_bulk_data,
             ir_node=ir_node,
         )
 
@@ -208,6 +224,14 @@ def diagnostics_channel(compiler_context: CompilerContext) -> Channel | None:
 def bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
     """Get the GraphIR bridge status channel for the IR bridge status channel."""
     ir_channel = pubsub.bridge_status_channel(compiler_context)
+    if not ir_channel:
+        return None
+    return lookup_channel(ir_channel, compiler_context)
+
+
+def c2c_bridge_status_channel(compiler_context: CompilerContext) -> Channel | None:
+    """Get the GraphIR C2C bridge status channel for the IR C2C bridge status channel."""
+    ir_channel = pubsub.c2c_bridge_status_channel(compiler_context)
     if not ir_channel:
         return None
     return lookup_channel(ir_channel, compiler_context)
@@ -313,7 +337,7 @@ class ChannelToDiagnosticsPublish(ChannelPublishConnection):
 class ConfigConnection:
     """A connection between a config file and a Cog config endpoint."""
 
-    config_instance: box.SerializedDataFileInstance
+    config_instance: box.FirstMessageInstance | box.SerializedDataFileInstance
     cog_instance_member: cog.CogInstanceMember[cog.ConfigDef]
 
     @override
@@ -348,12 +372,43 @@ class MemoryResourceConnection:
         return f"{type(self).__name__}(memory_resource={self.memory_resource}, cog_instance_member={self.cog_instance_member.member.fqn})"
 
 
+@dataclass(slots=True, frozen=True)
+class DataSourceFallbackConnection:
+    """A connection to a data source's fallback endpoint."""
+
+    data_source: box.FirstMessageInstance
+    fallback_data_source: box.FirstMessageInstance | box.SerializedDataFileInstance
+
+    @override
+    def __repr__(self) -> str:
+        """User-friendly printable representation."""
+        return (
+            f"{type(self).__name__}(data_source={self.data_source}, fallback_data_source={self.fallback_data_source})"
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class InitDataSourceConnection:
+    """A connection between a data source and a state or config instance."""
+
+    data_source: box.FirstMessageInstance | box.SerializedDataFileInstance
+    # For legacy reasons, there currently is no box.ConfigInstance; instead this will be a data source
+    target_instance: box.StateInstance | box.FirstMessageInstance | box.SerializedDataFileInstance
+
+    @override
+    def __repr__(self) -> str:
+        """User-friendly printable representation."""
+        return f"{type(self).__name__}(data_source={self.data_source}, target_instance={self.target_instance})"
+
+
 ConnectionType: TypeAlias = (
     ChannelSubscribeConnection
     | ChannelPublishConnection
     | ConfigConnection
-    | StateConnection
+    | DataSourceFallbackConnection
+    | InitDataSourceConnection
     | MemoryResourceConnection
+    | StateConnection
 )
 
 
@@ -362,7 +417,7 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
 ) -> ConnectionType:
     """Construct a GraphIR connection of the appropriate class from an IR Connection.
 
-    Parameters:
+    Args:
         ir_node: IR Connection to generate GraphIR from.
         compiler_context: Compiler context to use for looking up channels.
     """
@@ -453,14 +508,27 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
         return ChannelToUdpPublishConnection(
             channel=channel, socket_endpoint=ir_node.source.producer_endpoint, ir_node=ir_node
         )
-    if isinstance(ir_node.source, box.SerializedDataFileInstance):
+    if isinstance(ir_node.source, box.FirstMessageInstance | box.SerializedDataFileInstance):
+        if isinstance(ir_node.target, box.FallbackEndpoint):
+            fallback = ir_node.target.parent_data_source
+            return DataSourceFallbackConnection(
+                fallback_data_source=ir_node.source,
+                data_source=fallback,
+            )
+        if isinstance(ir_node.target, box.StateInstance | box.FirstMessageInstance | box.SerializedDataFileInstance):
+            return InitDataSourceConnection(
+                data_source=ir_node.source,
+                target_instance=ir_node.target,
+            )
+        # At this point we must be dealing with a config endpoint, which for
+        # legacy reasons is a FirstMessageInstance or SerializedDataFileInstance
         if not isinstance(ir_node.target, cog.CogInstanceMember) or not isinstance(
             ir_node.target.member, cog.ConfigDef
         ):
             target_name = (
                 ir_node.target.name if isinstance(ir_node.target, node.NamedEntity) else str(type(ir_node.target))
             )
-            msg = f"SerializedDataFile can only be connected to a config endpoint, not {target_name}"
+            msg = ir_node.append_error_line(f"Data source cannot be connected to endpoint {target_name}")
             raise TypeError(msg)
         # TODO(OI-2013): Validate config representation/type; blocked on Protobuf converters landing
         return ConfigConnection(config_instance=ir_node.source, cog_instance_member=ir_node.target)
@@ -469,7 +537,7 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
             target_name = (
                 ir_node.target.name if isinstance(ir_node.target, node.NamedEntity) else str(type(ir_node.target))
             )
-            msg = f"State can only be connected to a state endpoint, not {target_name}"
+            msg = ir_node.append_error_line(f"State can only be connected to a state endpoint, not {target_name}")
             raise TypeError(msg)
         return _validate_state_connection(ir_node, ir_node.source, ir_node.target)
     if isinstance(ir_node.source, box.MemoryResourceInstance):
@@ -479,7 +547,9 @@ def from_ir_connection(  # noqa: C901, PLR0911, PLR0912, PLR0915  TODO(OI-3057):
             target_name = (
                 ir_node.target.fqn if isinstance(ir_node.target, node.NamedEntity) else str(type(ir_node.target))
             )
-            msg = f"Memory resource can only be connected to a memory endpoint, not {target_name}"
+            msg = ir_node.append_error_line(
+                f"Memory resource can only be connected to a memory endpoint, not {target_name}"
+            )
             raise TypeError(msg)
         return MemoryResourceConnection(memory_resource=ir_node.source, cog_instance_member=ir_node.target)
     if isinstance(ir_node.source, diagnostics.DiagnosticsInstance):

@@ -1,0 +1,358 @@
+namespace test
+{
+
+template <class SchemaType, size_t size> class AlignmentTest_FixedSoaElementRef;
+template <class SchemaType, size_t size> class AlignmentTest_FixedSoaElementConstRef;
+template <class SchemaType, size_t max_size> class AlignmentTest_VarSoaElementRef;
+template <class SchemaType, size_t max_size> class AlignmentTest_VarSoaElementConstRef;
+
+/// Proxy reference to access a single AlignmentTest element in a SoA
+template <size_t size>
+class AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>
+{
+public:
+  friend class AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>;
+
+  AlignmentTest_FixedSoaElementRef(::clockwork::FixedSoa<::test::AlignmentTest, size>* soa, size_t index);
+  AlignmentTest_FixedSoaElementRef(const AlignmentTest_FixedSoaElementRef&) = default;
+  AlignmentTest_FixedSoaElementRef(AlignmentTest_FixedSoaElementRef&&) = default;
+  ~AlignmentTest_FixedSoaElementRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint16_t& get_two_byte() const;
+  [[nodiscard]] uint16_t& get_mutable_two_byte();
+  void set_two_byte(uint16_t new_value);
+  [[nodiscard]] const int64_t& get_eight_byte() const;
+  [[nodiscard]] int64_t& get_mutable_eight_byte();
+  void set_eight_byte(int64_t new_value);
+  [[nodiscard]] const uint8_t& get_one_byte() const;
+  [[nodiscard]] uint8_t& get_mutable_one_byte();
+  void set_one_byte(uint8_t new_value);
+  [[nodiscard]] const int32_t& get_four_byte() const;
+  [[nodiscard]] int32_t& get_mutable_four_byte();
+  void set_four_byte(int32_t new_value);
+
+  // Assignment operators
+  AlignmentTest_FixedSoaElementRef& operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap);
+  AlignmentTest_FixedSoaElementRef& operator=(const AlignmentTest_FixedSoaElementRef& other);
+  AlignmentTest_FixedSoaElementRef& operator=(AlignmentTest_FixedSoaElementRef&& other);
+  AlignmentTest_FixedSoaElementRef& operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init);
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const;
+
+  bool operator==(const AlignmentTest_FixedSoaElementRef& other) const;
+
+  // Swap for lvalue references (called by std::swap)
+  friend void swap(AlignmentTest_FixedSoaElementRef& ref_a, AlignmentTest_FixedSoaElementRef& ref_b) noexcept
+  {
+    const auto temp_two_byte = ref_a.get_two_byte();
+    const auto temp_eight_byte = ref_a.get_eight_byte();
+    const auto temp_one_byte = ref_a.get_one_byte();
+    const auto temp_four_byte = ref_a.get_four_byte();
+    ref_a.get_mutable_two_byte() = ref_b.get_two_byte();
+    ref_a.get_mutable_eight_byte() = ref_b.get_eight_byte();
+    ref_a.get_mutable_one_byte() = ref_b.get_one_byte();
+    ref_a.get_mutable_four_byte() = ref_b.get_four_byte();
+    ref_b.get_mutable_two_byte() = temp_two_byte;
+    ref_b.get_mutable_eight_byte() = temp_eight_byte;
+    ref_b.get_mutable_one_byte() = temp_one_byte;
+    ref_b.get_mutable_four_byte() = temp_four_byte;
+  }
+
+  // Swap for rvalue references (called by std::iter_swap via *it)
+  friend void swap(
+    AlignmentTest_FixedSoaElementRef&& ref_a,           // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+    AlignmentTest_FixedSoaElementRef&& ref_b) noexcept  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+  {
+    swap(ref_a, ref_b);
+  }
+
+private:
+  ::clockwork::FixedSoa<::test::AlignmentTest, size>* soa_;
+  size_t index_;
+};
+
+/// Proxy const reference to access a single AlignmentTest element in a SoA
+template <size_t size>
+class AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>
+{
+public:
+  AlignmentTest_FixedSoaElementConstRef(const ::clockwork::FixedSoa<::test::AlignmentTest, size>* soa, size_t index);
+  explicit AlignmentTest_FixedSoaElementConstRef(const AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>& ref);
+  AlignmentTest_FixedSoaElementConstRef(const AlignmentTest_FixedSoaElementConstRef&) = default;
+  AlignmentTest_FixedSoaElementConstRef(AlignmentTest_FixedSoaElementConstRef&&) = default;
+  ~AlignmentTest_FixedSoaElementConstRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint16_t& get_two_byte() const;
+  [[nodiscard]] const int64_t& get_eight_byte() const;
+  [[nodiscard]] const uint8_t& get_one_byte() const;
+  [[nodiscard]] const int32_t& get_four_byte() const;
+
+  // Assignment operators deleted
+  void operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>&) = delete;
+  void operator=(const AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>&) = delete;
+  void operator=(const AlignmentTest_FixedSoaElementConstRef&) = delete;
+  void operator=(AlignmentTest_FixedSoaElementConstRef&&) = delete;
+  void operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>&) = delete;
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const;
+
+  bool operator==(const AlignmentTest_FixedSoaElementConstRef& other) const;
+
+private:
+  const ::clockwork::FixedSoa<::test::AlignmentTest, size>* soa_;
+  size_t index_;
+};
+
+/// Proxy reference to access a single AlignmentTest element in a SoA
+template <size_t max_size>
+class AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>
+{
+public:
+  friend class AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>;
+
+  AlignmentTest_VarSoaElementRef(::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa, size_t index);
+  AlignmentTest_VarSoaElementRef(const AlignmentTest_VarSoaElementRef&) = default;
+  AlignmentTest_VarSoaElementRef(AlignmentTest_VarSoaElementRef&&) = default;
+  ~AlignmentTest_VarSoaElementRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint16_t& get_two_byte() const;
+  [[nodiscard]] uint16_t& get_mutable_two_byte();
+  void set_two_byte(uint16_t new_value);
+  [[nodiscard]] const int64_t& get_eight_byte() const;
+  [[nodiscard]] int64_t& get_mutable_eight_byte();
+  void set_eight_byte(int64_t new_value);
+  [[nodiscard]] const uint8_t& get_one_byte() const;
+  [[nodiscard]] uint8_t& get_mutable_one_byte();
+  void set_one_byte(uint8_t new_value);
+  [[nodiscard]] const int32_t& get_four_byte() const;
+  [[nodiscard]] int32_t& get_mutable_four_byte();
+  void set_four_byte(int32_t new_value);
+
+  // Assignment operators
+  AlignmentTest_VarSoaElementRef& operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap);
+  AlignmentTest_VarSoaElementRef& operator=(const AlignmentTest_VarSoaElementRef& other);
+  AlignmentTest_VarSoaElementRef& operator=(AlignmentTest_VarSoaElementRef&& other);
+  AlignmentTest_VarSoaElementRef& operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init);
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const;
+
+  bool operator==(const AlignmentTest_VarSoaElementRef& other) const;
+
+  // Swap for lvalue references (called by std::swap)
+  friend void swap(AlignmentTest_VarSoaElementRef& ref_a, AlignmentTest_VarSoaElementRef& ref_b) noexcept
+  {
+    const auto temp_two_byte = ref_a.get_two_byte();
+    const auto temp_eight_byte = ref_a.get_eight_byte();
+    const auto temp_one_byte = ref_a.get_one_byte();
+    const auto temp_four_byte = ref_a.get_four_byte();
+    ref_a.get_mutable_two_byte() = ref_b.get_two_byte();
+    ref_a.get_mutable_eight_byte() = ref_b.get_eight_byte();
+    ref_a.get_mutable_one_byte() = ref_b.get_one_byte();
+    ref_a.get_mutable_four_byte() = ref_b.get_four_byte();
+    ref_b.get_mutable_two_byte() = temp_two_byte;
+    ref_b.get_mutable_eight_byte() = temp_eight_byte;
+    ref_b.get_mutable_one_byte() = temp_one_byte;
+    ref_b.get_mutable_four_byte() = temp_four_byte;
+  }
+
+  // Swap for rvalue references (called by std::iter_swap via *it)
+  friend void swap(
+    AlignmentTest_VarSoaElementRef&& ref_a,           // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+    AlignmentTest_VarSoaElementRef&& ref_b) noexcept  // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
+  {
+    swap(ref_a, ref_b);
+  }
+
+private:
+  ::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa_;
+  size_t index_;
+};
+
+/// Proxy const reference to access a single AlignmentTest element in a SoA
+template <size_t max_size>
+class AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>
+{
+public:
+  AlignmentTest_VarSoaElementConstRef(const ::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa, size_t index);
+  explicit AlignmentTest_VarSoaElementConstRef(const AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>& ref);
+  AlignmentTest_VarSoaElementConstRef(const AlignmentTest_VarSoaElementConstRef&) = default;
+  AlignmentTest_VarSoaElementConstRef(AlignmentTest_VarSoaElementConstRef&&) = default;
+  ~AlignmentTest_VarSoaElementConstRef() = default;
+
+  // Field accessors
+  [[nodiscard]] const uint16_t& get_two_byte() const;
+  [[nodiscard]] const int64_t& get_eight_byte() const;
+  [[nodiscard]] const uint8_t& get_one_byte() const;
+  [[nodiscard]] const int32_t& get_four_byte() const;
+
+  // Assignment operators deleted
+  void operator=(const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>&) = delete;
+  void operator=(const AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>&) = delete;
+  void operator=(const AlignmentTest_VarSoaElementConstRef&) = delete;
+  void operator=(AlignmentTest_VarSoaElementConstRef&&) = delete;
+  void operator=(const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>&) = delete;
+
+  // Conversion to Tap<Tachyon<SoaTestSchema>>
+  explicit operator ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>() const;
+
+  bool operator==(const AlignmentTest_VarSoaElementConstRef& other) const;
+
+private:
+  const ::clockwork::VarSoa<::test::AlignmentTest, max_size>* soa_;
+  size_t index_;
+};
+
+} // namespace test
+
+// Specialize SoaTraits in jewels::tap namespace to break CRTP circular dependency
+namespace jewels::tap
+{
+
+template <size_t size>
+struct SoaTraits<::clockwork::FixedSoa<::test::AlignmentTest, size>>
+{
+  using ElementRef = ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>;
+  using ElementConstRef = ::test::AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>;
+};
+
+template <size_t max_size>
+struct SoaTraits<::clockwork::VarSoa<::test::AlignmentTest, max_size>>
+{
+  using ElementRef = ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>;
+  using ElementConstRef = ::test::AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>;
+};
+
+} // namespace jewels::tap
+
+namespace clockwork
+{
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpacked-non-pod"
+/// Fixed-size Struct-of-Arrays for AlignmentTest.
+template <size_t size>
+struct __attribute__((__packed__)) alignas(8)
+  FixedSoa<::test::AlignmentTest, size> : public ::jewels::tap::SoaInterface<::clockwork::FixedSoa<::test::AlignmentTest, size>, ::test::AlignmentTest, size, false>
+{
+public:
+  using Base = ::jewels::tap::SoaInterface<::clockwork::FixedSoa<::test::AlignmentTest, size>, ::test::AlignmentTest, size, false>;
+  using ElementRef = ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>;
+  using ElementConstRef = ::test::AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>;
+  friend Base;
+  friend ::test::AlignmentTest_FixedSoaElementRef<::test::AlignmentTest, size>;
+  friend ::test::AlignmentTest_FixedSoaElementConstRef<::test::AlignmentTest, size>;
+
+  FixedSoa() = default;
+
+  /// Return a span view of the 'two_byte' field array.
+  [[nodiscard]] inline ::std::span<uint16_t> view_two_byte();
+  /// Return a const span view of the 'two_byte' field array.
+  [[nodiscard]] inline ::std::span<const uint16_t> view_two_byte() const;
+  /// Return a span view of the 'eight_byte' field array.
+  [[nodiscard]] inline ::std::span<int64_t> view_eight_byte();
+  /// Return a const span view of the 'eight_byte' field array.
+  [[nodiscard]] inline ::std::span<const int64_t> view_eight_byte() const;
+  /// Return a span view of the 'one_byte' field array.
+  [[nodiscard]] inline ::std::span<uint8_t> view_one_byte();
+  /// Return a const span view of the 'one_byte' field array.
+  [[nodiscard]] inline ::std::span<const uint8_t> view_one_byte() const;
+  /// Return a span view of the 'four_byte' field array.
+  [[nodiscard]] inline ::std::span<int32_t> view_four_byte();
+  /// Return a const span view of the 'four_byte' field array.
+  [[nodiscard]] inline ::std::span<const int32_t> view_four_byte() const;
+
+  /// Compile-time layout verification (accesses private members for static_assert).
+  /// Only valid for size == 1.
+  static constexpr void verify_layout() noexcept requires (size == 1);
+
+private:
+  /// Array storage for field 'eight_byte': 8-byte alignment field (should be sorted first)
+  ::std::array<::jewels::memory::AlignedStorage<int64_t>, size> eight_byte_{};
+  /// Array storage for field 'four_byte': 4-byte alignment field
+  ::std::array<::jewels::memory::AlignedStorage<int32_t>, size> four_byte_{};
+  /// Array storage for field 'two_byte': 2-byte alignment field
+  ::std::array<::jewels::memory::AlignedStorage<uint16_t>, size> two_byte_{};
+  /// Array storage for field 'one_byte': 1-byte alignment field (should be sorted last)
+  ::std::array<::jewels::memory::AlignedStorage<uint8_t>, size> one_byte_{};
+
+  /// Compare field data (CRTP method for SoaInterface).
+  inline bool compare_fields(const ::clockwork::FixedSoa<::test::AlignmentTest, size>& other, size_t count) const;
+
+  void wipe_range(size_t begin, size_t end);
+  void construct_range(size_t begin, size_t end);
+  void construct_element(size_t index);
+  void construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap);
+  void construct_element(size_t index, const ElementRef& ref);
+  void construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init);
+};
+#pragma clang diagnostic pop
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpacked-non-pod"
+/// Variable-size Struct-of-Arrays for AlignmentTest.
+template <size_t max_size>
+struct __attribute__((__packed__)) alignas(8)
+  VarSoa<::test::AlignmentTest, max_size> : public ::jewels::tap::SoaInterface<::clockwork::VarSoa<::test::AlignmentTest, max_size>, ::test::AlignmentTest, max_size, true>
+{
+public:
+  using Base = ::jewels::tap::SoaInterface<::clockwork::VarSoa<::test::AlignmentTest, max_size>, ::test::AlignmentTest, max_size, true>;
+  using ElementRef = ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>;
+  using ElementConstRef = ::test::AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>;
+  friend Base;
+  friend ::test::AlignmentTest_VarSoaElementRef<::test::AlignmentTest, max_size>;
+  friend ::test::AlignmentTest_VarSoaElementConstRef<::test::AlignmentTest, max_size>;
+
+  VarSoa() = default;
+
+  /// Return a span view of the 'two_byte' field array.
+  [[nodiscard]] inline ::std::span<uint16_t> view_two_byte();
+  /// Return a const span view of the 'two_byte' field array.
+  [[nodiscard]] inline ::std::span<const uint16_t> view_two_byte() const;
+  /// Return a span view of the 'eight_byte' field array.
+  [[nodiscard]] inline ::std::span<int64_t> view_eight_byte();
+  /// Return a const span view of the 'eight_byte' field array.
+  [[nodiscard]] inline ::std::span<const int64_t> view_eight_byte() const;
+  /// Return a span view of the 'one_byte' field array.
+  [[nodiscard]] inline ::std::span<uint8_t> view_one_byte();
+  /// Return a const span view of the 'one_byte' field array.
+  [[nodiscard]] inline ::std::span<const uint8_t> view_one_byte() const;
+  /// Return a span view of the 'four_byte' field array.
+  [[nodiscard]] inline ::std::span<int32_t> view_four_byte();
+  /// Return a const span view of the 'four_byte' field array.
+  [[nodiscard]] inline ::std::span<const int32_t> view_four_byte() const;
+
+  /// Compile-time layout verification (accesses private members for static_assert).
+  /// Only valid for max_size == 1.
+  static constexpr void verify_layout() noexcept requires (max_size == 1);
+
+private:
+  /// Array storage for field 'eight_byte': 8-byte alignment field (should be sorted first)
+  ::std::array<::jewels::memory::AlignedStorage<int64_t>, max_size> eight_byte_{};
+  /// Array storage for field 'four_byte': 4-byte alignment field
+  ::std::array<::jewels::memory::AlignedStorage<int32_t>, max_size> four_byte_{};
+  /// Array storage for field 'two_byte': 2-byte alignment field
+  ::std::array<::jewels::memory::AlignedStorage<uint16_t>, max_size> two_byte_{};
+  /// Array storage for field 'one_byte': 1-byte alignment field (should be sorted last)
+  ::std::array<::jewels::memory::AlignedStorage<uint8_t>, max_size> one_byte_{};
+  /// Number of elements currently in the SoA.
+  ::jewels::tap::compact_size_t<max_size> size_{};
+
+  /// Compare field data (CRTP method for SoaInterface).
+  inline bool compare_fields(const ::clockwork::VarSoa<::test::AlignmentTest, max_size>& other, size_t count) const;
+
+  void wipe_range(size_t begin, size_t end);
+  void construct_range(size_t begin, size_t end);
+  void construct_element(size_t index);
+  void construct_element(size_t index, const ::clockwork::Tap<::clockwork::Tachyon<::test::AlignmentTest>>& tap);
+  void construct_element(size_t index, const ElementRef& ref);
+  void construct_element(size_t index, const ::clockwork::TapInit<::clockwork::Tachyon<::test::AlignmentTest>>& init);
+};
+#pragma clang diagnostic pop
+
+} // namespace clockwork

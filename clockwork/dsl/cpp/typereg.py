@@ -3,6 +3,7 @@
 
 """Provides facilities to convert Clockwork IR types to corresponding C++ types."""
 
+from dataclasses import replace
 from typing import Final
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
@@ -88,6 +89,16 @@ _CPP_OPTIONAL_TEMPLATE: Final = types.CppTemplate(
     cpp_namespace="jewels::tap",
     template_name="Optional",
 )
+_CPP_FIXED_SOA_TEMPLATE: Final = types.CppTemplate(
+    includes=[],  # Will be added dynamically during lookup
+    template_name="FixedSoa",
+    cpp_namespace="clockwork",
+)
+_CPP_VAR_SOA_TEMPLATE: Final = types.CppTemplate(
+    includes=[],  # Will be added dynamically during lookup
+    template_name="VarSoa",
+    cpp_namespace="clockwork",
+)
 
 
 class CppTypeRegistry(Context):
@@ -155,6 +166,8 @@ class CppTypeRegistryKey(ContextKey[CppTypeRegistry]):
         registry.cpp_template_registry[clkbuiltins.TAP_INIT.value_key()] = _CPP_TAP_INIT_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.UUID.value_key()] = types.UUID
         registry.cpp_template_registry[clkbuiltins.OPTIONAL.value_key()] = _CPP_OPTIONAL_TEMPLATE
+        registry.cpp_template_registry[clkbuiltins.FIXED_SOA.value_key()] = _CPP_FIXED_SOA_TEMPLATE
+        registry.cpp_template_registry[clkbuiltins.VAR_SOA.value_key()] = _CPP_VAR_SOA_TEMPLATE
 
         return registry
 
@@ -254,6 +267,9 @@ def get_cpp_type(context: CompilerContext, clk_type: typesys.Value) -> types.Cpp
     Raises:
         TypeError: If the Clockwork type cannot be mapped to a C++ type.
     """
+    if isinstance(clk_type, schema.InstantiateStmt):
+        assert isinstance(clk_type.typespec, typesys.Instantiation)
+        clk_type = schema.InstantiatedSchema.from_typespec(clk_type.typespec)
     if isinstance(clk_type, schema.InstantiatedSchema):
         clk_type = clk_type.as_instantiation_or_resolved_schema()
     if isinstance(clk_type, typesys.Instantiation):
@@ -274,6 +290,106 @@ def get_cpp_type(context: CompilerContext, clk_type: typesys.Value) -> types.Cpp
         raise TypeError(msg) from None
 
 
+def _unwrap_tap_tachyon_schema(type_arg: typesys.Value) -> schema.InstantiatedSchema:
+    """Unwrap Tap<Tachyon<Schema>> to extract the underlying schema.
+
+    Args:
+        type_arg: The type argument, expected to be Tap<Tachyon<Schema>>.
+
+    Returns:
+        The unwrapped InstantiatedSchema.
+
+    Raises:
+        TypeError: If the structure is not Tap<Tachyon<Schema>>.
+    """
+    # Validate it's an Instantiation
+    if not isinstance(type_arg, typesys.Instantiation) or not isinstance(type_arg.instantiates, typesys.TypeDef):
+        msg = f"SoA type argument must be Tap<Tachyon<Schema>>, got {type(type_arg)}"
+        raise TypeError(msg)
+
+    # Check it's Tap
+    if type_arg.instantiates.fqn != ".Tap":
+        msg = f"SoA type argument must be Tap<...>, got {type_arg.instantiates.fqn}"
+        raise TypeError(msg)
+
+    # Extract Tachyon<Schema> from Tap
+    repr_arg = type_arg.arguments.get("representation")
+    if not isinstance(repr_arg, typesys.Instantiation) or not isinstance(repr_arg.instantiates, typesys.TypeDef):
+        msg = f"Expected Tap<Tachyon<Schema>>, but representation is {type(repr_arg)}"
+        raise TypeError(msg)
+
+    # Check it's Tachyon
+    if repr_arg.instantiates.fqn != ".Tachyon":
+        fqn = repr_arg.instantiates.fqn
+        msg = f"Expected Tap<Tachyon<...>>, got Tap<{fqn}>"
+        raise TypeError(msg)
+
+    # Extract the schema from Tachyon
+    schema_arg = repr_arg.arguments.get("schema")
+    if not isinstance(schema_arg, schema.Schema | schema.ResolvedSchema | typesys.Instantiation):
+        msg = f"Expected Tachyon<Schema>, but schema is {type(schema_arg)}"
+        raise TypeError(msg)
+
+    # Convert to InstantiatedSchema
+    return schema.InstantiatedSchema.from_typespec(schema_arg)
+
+
+def _get_soa_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantiation) -> types.CppTemplateType:
+    """Handle SoA (FixedSoa/VarSoa) instantiation with dynamic header resolution.
+
+    Args:
+        context: Compiler context containing the type registry.
+        clk_type: The SoA instantiation (FixedSoa<T, N> or VarSoa<T, N>).
+
+    Returns:
+        The corresponding C++ template type with the correct header.
+
+    Raises:
+        TypeError: If the schema doesn't have soa_enabled or has no header.
+    """
+    # Extract and unwrap the schema argument from Tap<Tachyon<Schema>>
+    type_arg = clk_type.arguments["type"]
+    schema_ir = _unwrap_tap_tachyon_schema(type_arg)
+
+    # Validate that the schema has soa_enabled
+    if not schema_ir.options or not schema_ir.options.soa_enabled:
+        type_name = "FixedSoa" if clk_type.instantiates is clkbuiltins.FIXED_SOA else "VarSoa"
+        msg = (
+            f"Cannot use {type_name} with schema '{schema_ir.schema_name}': schema must have 'soa_enabled: true' option"
+        )
+        raise TypeError(msg)
+
+    # Get the header where this schema's SoA was generated
+    # (SoA is generated in the same header as the schema's Tap/Tachyon)
+    schema_cpp_type = get_cpp_type(context, schema_ir.as_instantiation_or_resolved_schema())
+    if not schema_cpp_type.includes:
+        msg = f"Schema {schema_ir.schema_name} has no header - cannot determine SoA header location"
+        raise TypeError(msg)
+
+    # Get the base SoA template and add the schema's header
+    base_template = get_cpp_template(context, clk_type.instantiates)
+    base_template_with_header = replace(base_template, includes=list(schema_cpp_type.includes))
+
+    # Build the template arguments: SoA<Schema, size>
+    # We use the unwrapped schema type (not Tap<Tachyon<Schema>>)
+    size_param_name = "size" if clk_type.instantiates is clkbuiltins.FIXED_SOA else "max_size"
+    size_arg = clk_type.arguments[size_param_name]
+
+    if isinstance(size_arg, primitive.DecimalValue):
+        size_cpp_arg = literal.decimal_value_to_cpp(size_arg)
+    elif isinstance(size_arg, ImmutableBinding):
+        if not isinstance(size_arg.value, primitive.DecimalValue):
+            msg = f"Unable to use argument of type {type(size_arg.value)} as size parameter."
+            raise NotImplementedError(msg)
+        size_cpp_arg = literal.decimal_value_to_cpp(size_arg.value)
+    else:
+        msg = f"Cannot construct size argument for {size_arg}"
+        raise NotImplementedError(msg)
+
+    arguments = [schema_cpp_type, size_cpp_arg]
+    return base_template_with_header.instantiate(arguments)
+
+
 def _get_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantiation) -> types.CppTemplateType:
     """Recursively resolve an instantiation to a CppTemplateType.
 
@@ -292,6 +408,12 @@ def _get_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantia
     if not clk_type.instantiates.generic_parameters():
         msg = f"Instantiation is not instantiating a generic type: {type(clk_type.instantiates)} {clk_type.value_key()}"
         raise ValueError(msg)
+
+    # Special handling for SoA types
+    if clk_type.instantiates in (clkbuiltins.FIXED_SOA, clkbuiltins.VAR_SOA):
+        return _get_soa_cpp_instantiation(context, clk_type)
+
+    # Regular template instantiation logic
     base_type = get_cpp_template(context, clk_type.instantiates)
 
     arguments: list[types.CppTypeExpr | types.CppValueExpr] = []

@@ -1,0 +1,47 @@
+use clockwork::tests::support::exec_time::{ExecState};
+use clockwork::tests::support::snapshot_test_messages::{SnapshotTestConfig};
+
+// Cog for testing state and config restoration
+// It just publishes its state and config
+cog RestoreTestCog
+{
+  configs
+  {
+    config: Tappy<SnapshotTestConfig>;
+  }
+
+  states
+  {
+    state: Tappy<ExecState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    dummy: Tappy<ExecState>;
+  }
+
+  outputs
+  {
+    pub_state: Tappy<ExecState>;
+    pub_config: Tappy<SnapshotTestConfig>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(1ms);
+    execute when: periodic;
+  }
+}
+
+cpp_target restore_test_cog
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  cog RestoreTestCog;
+}

@@ -35,3 +35,21 @@ cpp_target exec_time
   representation Tachyon<ExecState>;
   interface Tap<Tachyon<ExecState>>;
 }
+
+proto_target exec_time_proto
+{
+  options
+  {
+    package clockwork.testing.proto;
+  }
+  representation Protobuf<ExecState>;
+}
+
+cpp_target exec_time_proto_conv
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+  converter ProtobufToTap<Protobuf<ExecState>, Tap<Tachyon<ExecState>>>;
+}

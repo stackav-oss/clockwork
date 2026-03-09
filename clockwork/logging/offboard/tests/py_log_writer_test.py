@@ -24,8 +24,8 @@ from clockwork.logging.readers.nb_types import (
     LogReaderConfig,
     LogTimestamp,
 )
-from clockwork.logging.tests.support.py_test_message import TestMessage as PyTestMessage
 from clockwork.logging.tests.support.test_message_clk_nb import TestMessage as NbTestMessage
+from clockwork.logging.tests.support.test_message_clk_py import TestMessage as PyTestMessage
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 
 

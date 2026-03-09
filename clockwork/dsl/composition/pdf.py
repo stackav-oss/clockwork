@@ -35,16 +35,20 @@ NotConnectedEndpointType: Final[type[pdfproto.NotConnectedEndpointTypeEnum]] = t
     PD_MODULE.context, PD_MODULE, "NotConnectedEndpointType"
 )[0]
 
+DataSourceType: Final[type[pdfproto.DataSourceTypeEnum]] = tachyon_dyn.get_enum(
+    PD_MODULE.context, PD_MODULE, "DataSourceType"
+)[0]
+
 ProcessDescription: Final[type[pdfproto.ProcessDescription]] = tachyon_dyn.get_instantiation_dataclass(
     PD_MODULE.context,
     PD_MODULE,
     "ProcessDescription",
     max_instance_path_size=512,
     max_cog_instances=501,
-    max_endpoints_per_cog=55,
+    max_endpoints_per_cog=86,
     max_state_instances=267,
-    max_state_connections=509,
-    max_config_instances=234,
+    max_state_connections=612,
+    max_config_instances=334,
     max_config_connections=304,
     max_file_path_size=4096,
     max_init_cogs=202,
@@ -56,6 +60,8 @@ ProcessDescription: Final[type[pdfproto.ProcessDescription]] = tachyon_dyn.get_i
     max_io_connections=32,
     max_channel_name_len=300,
     max_not_connected_endpoints=1024,
+    max_snapshot_configs=512,
+    max_data_sources=256,
 )[0]
 
 
@@ -70,7 +76,7 @@ PubSubGraph: Final[type[pdfproto.PubSubGraph]] = tachyon_dyn.get_instantiation_d
 
 
 CogInstanceDescription: Final[type[pdfproto.CogInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(
-    PD_MODULE.context, PD_MODULE, "CogInstanceDescription", max_endpoints_per_cog=55, max_instance_path_size=512
+    PD_MODULE.context, PD_MODULE, "CogInstanceDescription", max_endpoints_per_cog=86, max_instance_path_size=512
 )[0]
 
 EndpointInstanceDescription: Final[type[pdfproto.EndpointInstanceDescription]] = tachyon_dyn.get_schema_dataclass(
@@ -95,7 +101,7 @@ StateGraph: Final[type[pdfproto.StateGraph]] = tachyon_dyn.get_instantiation_dat
     "StateGraph",
     max_state_instances=267,
     max_instance_path_size=512,
-    max_state_connections=509,
+    max_state_connections=612,
 )[0]
 
 StateInstanceDescription: Final[type[pdfproto.StateInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(
@@ -111,18 +117,26 @@ ConfigGraph: Final[type[pdfproto.ConfigGraph]] = tachyon_dyn.get_instantiation_d
     PD_MODULE,
     "ConfigGraph",
     max_instance_path_size=512,
-    max_config_instances=234,
+    max_config_instances=334,
     max_config_connections=304,
     max_file_path_size=4096,
 )[0]
 
 ConfigInstanceDescription: Final[type[pdfproto.ConfigInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(
-    PD_MODULE.context, PD_MODULE, "ConfigInstanceDescription", max_instance_path_size=512, max_file_path_size=4096
+    PD_MODULE.context, PD_MODULE, "ConfigInstanceDescription", max_instance_path_size=512
 )[0]
 
 ConfigConnection: Final[type[pdfproto.ConfigConnection]] = tachyon_dyn.get_schema_dataclass(
     PD_MODULE.context, PD_MODULE, "ConfigConnection"
 )[0]
+
+DataSource: Final[type[pdfproto.DataSource]] = tachyon_dyn.get_instantiation_dataclass(
+    PD_MODULE.context, PD_MODULE, "DataSource", max_file_path_size=4096
+)[0]
+
+DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL: Final = 65534
+
+NO_FALLBACK_DATA_SOURCE_SENTINEL: Final = 65535
 
 MemoryResource: Final[type[pdfproto.MemoryResource]] = tachyon_dyn.get_instantiation_dataclass(
     PD_MODULE.context, PD_MODULE, "MemoryResource", max_instance_path_size=512
@@ -153,4 +167,8 @@ IoConnectionInstanceDescription: Final[type[pdfproto.IoConnectionInstanceDescrip
 
 NotConnectedEndpoint: Final[type[pdfproto.NotConnectedEndpoint]] = tachyon_dyn.get_instantiation_dataclass(
     PD_MODULE.context, PD_MODULE, "NotConnectedEndpoint"
+)[0]
+
+SnapshotConfig: Final[type[pdfproto.SnapshotConfig]] = tachyon_dyn.get_schema_dataclass(
+    PD_MODULE.context, PD_MODULE, "SnapshotConfig"
 )[0]

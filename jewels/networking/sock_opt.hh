@@ -13,6 +13,7 @@
 #include <netinet/tcp.h>
 #include <string_view>
 #include <sys/socket.h>
+#include <variant>
 
 namespace jewels::networking
 {
@@ -29,8 +30,21 @@ WISE_ENUM_CLASS(
   (ip_multicast_if, IP_MULTICAST_IF),
   (ip_multicast_loop, IP_MULTICAST_LOOP))
 
+// A strongly typed string view representing an address.
+struct AddressView
+{
+  std::string_view address;
+};
+
+// A strongly typed string view representing an interface name.
+struct InterfaceNameView
+{
+  std::string_view name;
+};
+
 namespace detail
 {
+
 /// Type to map the socket option to the data type.
 /// @note This provides a default for most options, but also allows a
 /// customization point for other options.
@@ -58,7 +72,7 @@ struct OptionValue<SockOption::ip_multicast_if>
 template <>
 struct OptionValue<SockOption::so_bind_to_device>
 {
-  using Type = std::string_view;
+  using Type = std::variant<AddressView, InterfaceNameView>;
 };
 } // namespace detail
 

@@ -226,12 +226,13 @@ def test_as_cc_library_nothing_produced() -> None:
     name = "target"
     fake_package = Path("a/b/c")
     # Always add the deps, because the files are always produced.
-    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file"), True) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
         deps=[Label("//:a")],
         data=[Label("//path/to:file_clk")],
+        testonly=True,
     )
 
 
@@ -249,7 +250,7 @@ def test_as_cc_library() -> None:
 
     name = "target"
     fake_package = Path("a/b/c")
-    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file"), True) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
@@ -259,6 +260,7 @@ def test_as_cc_library() -> None:
             Label("//:c"),
         ],
         data=[Label("//path/to:file_clk")],
+        testonly=True,
     )
 
 
@@ -277,7 +279,7 @@ def test_as_cc_library_self_referencing() -> None:
     name = "target"
     fake_package = Path("a/b/c")
     cpp_mod.implementation_chunk.context.add_include(Header("repo", str(fake_package / (name + ".hh"))))
-    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file")) == CcLibrary(
+    assert as_cc_library(cpp_mod, name, fake_package, ModuleID("repo", "path/to/file"), True) == CcLibrary(
         name=name,
         hdrs=[Path(name + ".hh")],
         srcs=[Path(name + ".inl"), Path(name + ".cc")],
@@ -287,6 +289,7 @@ def test_as_cc_library_self_referencing() -> None:
             Label("//:c"),
         ],
         data=[Label("//path/to:file_clk")],
+        testonly=True,
     )
 
 

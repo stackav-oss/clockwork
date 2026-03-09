@@ -18,6 +18,7 @@ class ProtobufType:
     """Protocol buffer type representation."""
 
     type_name: str
+    go_dep_label: str | None
 
     def render(self) -> str:
         """Render the type."""
@@ -47,7 +48,7 @@ class DefinedProtobufType(ProtobufType):
     def render(self) -> str:
         """Render as string."""
         if self.package_name:
-            return f"{self.package_name}.{super().render()}"
+            return f".{self.package_name}.{super().render()}"
         return f"{super().render()}"
 
 
@@ -121,21 +122,48 @@ class ProtobufTypeRegistryKey(ContextKey[ProtobufTypeRegistry]):
         registry.forbidden_nested_types.add(clkbuiltins.OPTIONAL.value_key())
         registry.forbidden_nested_types.add(clkbuiltins.VAR_ARRAY.value_key())
         registry.forbidden_nested_types.add(clkbuiltins.FIXED_ARRAY.value_key())
+        registry.forbidden_nested_types.add(clkbuiltins.VAR_SOA.value_key())
+        registry.forbidden_nested_types.add(clkbuiltins.FIXED_SOA.value_key())
 
-        registry.protobuf_type_registry[clkbuiltins.BOOL.value_key()] = PrimitiveProtobufType(type_name="bool")
-        registry.protobuf_type_registry[clkbuiltins.FLOAT32.value_key()] = PrimitiveProtobufType(type_name="float")
-        registry.protobuf_type_registry[clkbuiltins.FLOAT64.value_key()] = PrimitiveProtobufType(type_name="double")
-        registry.protobuf_type_registry[clkbuiltins.INT8.value_key()] = PrimitiveProtobufType(type_name="sint32")
-        registry.protobuf_type_registry[clkbuiltins.INT16.value_key()] = PrimitiveProtobufType(type_name="sint32")
-        registry.protobuf_type_registry[clkbuiltins.INT32.value_key()] = PrimitiveProtobufType(type_name="sint32")
-        registry.protobuf_type_registry[clkbuiltins.INT64.value_key()] = PrimitiveProtobufType(type_name="sint64")
-        registry.protobuf_type_registry[clkbuiltins.UINT8.value_key()] = PrimitiveProtobufType(type_name="uint32")
-        registry.protobuf_type_registry[clkbuiltins.UINT16.value_key()] = PrimitiveProtobufType(type_name="uint32")
-        registry.protobuf_type_registry[clkbuiltins.UINT32.value_key()] = PrimitiveProtobufType(type_name="uint32")
-        registry.protobuf_type_registry[clkbuiltins.UINT64.value_key()] = PrimitiveProtobufType(type_name="uint64")
-        registry.protobuf_type_registry[clkbuiltins.BYTE.value_key()] = PrimitiveProtobufType(type_name="string")
+        registry.protobuf_type_registry[clkbuiltins.BOOL.value_key()] = PrimitiveProtobufType(
+            type_name="bool", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.FLOAT32.value_key()] = PrimitiveProtobufType(
+            type_name="float", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.FLOAT64.value_key()] = PrimitiveProtobufType(
+            type_name="double", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.INT8.value_key()] = PrimitiveProtobufType(
+            type_name="sint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.INT16.value_key()] = PrimitiveProtobufType(
+            type_name="sint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.INT32.value_key()] = PrimitiveProtobufType(
+            type_name="sint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.INT64.value_key()] = PrimitiveProtobufType(
+            type_name="sint64", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.UINT8.value_key()] = PrimitiveProtobufType(
+            type_name="uint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.UINT16.value_key()] = PrimitiveProtobufType(
+            type_name="uint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.UINT32.value_key()] = PrimitiveProtobufType(
+            type_name="uint32", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.UINT64.value_key()] = PrimitiveProtobufType(
+            type_name="uint64", go_dep_label=None
+        )
+        registry.protobuf_type_registry[clkbuiltins.BYTE.value_key()] = PrimitiveProtobufType(
+            type_name="string", go_dep_label=None
+        )
         registry.protobuf_type_registry[clkbuiltins.DURATION.value_key()] = DefinedProtobufType(
             type_name="Duration",
+            go_dep_label="@org_golang_google_protobuf//types/known/durationpb",
             module_id=module_id.ModuleID(repo="protobuf", name="google::protobuf::duration"),
             import_location="google/protobuf/duration.proto",
             package_name="google.protobuf",
@@ -143,6 +171,7 @@ class ProtobufTypeRegistryKey(ContextKey[ProtobufTypeRegistry]):
         )
         registry.protobuf_type_registry[clkbuiltins.SYNC_TIME.value_key()] = DefinedProtobufType(
             type_name="Timestamp",
+            go_dep_label="@org_golang_google_protobuf//types/known/timestamppb",
             module_id=module_id.ModuleID(repo="protobuf", name="google::protobuf::timestamp"),
             import_location="google/protobuf/timestamp.proto",
             package_name="google.protobuf",
@@ -207,10 +236,13 @@ def get_protobuf_type(clk_type: typesys.Value, compiler_context: CompilerContext
         TypeError: If the Clockwork type cannot be mapped to a Protobuf type.
     """
     if isinstance(clk_type, typesys.Instantiation) and (
-        (clk_type.instantiates == clkbuiltins.VAR_ARRAY) | (clk_type.instantiates == clkbuiltins.FIXED_ARRAY)
+        (clk_type.instantiates == clkbuiltins.VAR_ARRAY)
+        | (clk_type.instantiates == clkbuiltins.FIXED_ARRAY)
+        | (clk_type.instantiates == clkbuiltins.VAR_SOA)
+        | (clk_type.instantiates == clkbuiltins.FIXED_SOA)
     ):
         if clk_type.arguments["type"] == clkbuiltins.BYTE:
-            return PrimitiveProtobufType(type_name="string")
+            return PrimitiveProtobufType(type_name="string", go_dep_label=None)
 
         nested_type = clk_type.arguments["type"]
         value_type = get_protobuf_type(nested_type, compiler_context)
@@ -224,6 +256,7 @@ def get_protobuf_type(clk_type: typesys.Value, compiler_context: CompilerContext
         package_name = value_type.package_name if isinstance(value_type, DefinedProtobufType) else ""
         return ArrayProtobufType(
             type_name=value_type.type_name,
+            go_dep_label=value_type.go_dep_label,
             module_id=module_id,
             import_location=import_location,
             package_name=package_name,
@@ -242,6 +275,7 @@ def get_protobuf_type(clk_type: typesys.Value, compiler_context: CompilerContext
         package_name = value_type.package_name if isinstance(value_type, DefinedProtobufType) else ""
         return OptionalProtobufType(
             type_name=value_type.type_name,
+            go_dep_label=value_type.go_dep_label,
             module_id=module_id,
             import_location=import_location,
             package_name=package_name,
@@ -251,7 +285,7 @@ def get_protobuf_type(clk_type: typesys.Value, compiler_context: CompilerContext
     if isinstance(clk_type, typesys.Instantiation) and (
         (clk_type.instantiates == clkbuiltins.UUID) | (clk_type.instantiates == clkbuiltins.VAR_STRING)
     ):
-        return PrimitiveProtobufType(type_name="string")
+        return PrimitiveProtobufType(type_name="string", go_dep_label=None)
     return get_protobuf_type_from_registry(clk_type, compiler_context)
 
 

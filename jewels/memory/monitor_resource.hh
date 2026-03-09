@@ -21,8 +21,8 @@ namespace jewels::memory
 class MonitorResource : public std::pmr::memory_resource
 {
 public:
-  static constexpr size_t warn_delta = 1024ULL * 1024ULL;
-  static constexpr size_t max_name = 100;
+  static constexpr size_t warn_delta = 5 * 1024ULL * 1024ULL;
+  static constexpr size_t max_name = 512;
 
   ///
   /// Constructs the monitor resource using the default_resource for the backing memory

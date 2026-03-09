@@ -1,0 +1,61 @@
+// Test schema for SoA generation
+// Contains primitive, VarArray, and subschema fields
+
+#![generate(cpp)]
+#![cpp(namespace=clockwork::test)]
+
+// Subschema for testing nested structures
+schema Position
+{
+  uuid: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d;
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // X coordinate in meters
+    #0 x: Float64;
+    // Y coordinate in meters
+    #1 y: Float64;
+    // Z coordinate in meters
+    #2 z: Float64;
+  }
+}
+
+// Main test schema with SoA enabled
+schema SoaTestSchema
+{
+  uuid: 7f8e9d0c-1b2a-3f4e-5d6c-7b8a9f0e1d2c;
+  options
+  {
+    constructor: source_code_order;
+    soa_enabled: true;
+  }
+  fields
+  {
+    // Primitive field: identifier
+    #0 id: UInt32;
+
+    // VarArray field: velocity components
+    #1 velocities: VarArray<Float32, max_size=16>;
+
+    // Subschema field: position data
+    #2 position: Position;
+
+    // Strong primitive field: duration seen for
+    #3 seen_for: Duration;
+  }
+}
+
+// A container that generates a soa in Tap
+schema SoaTestContainer
+{
+  uuid: 1dc11dee-3ef6-4131-8543-0be570cc3b48;
+  fields
+  {
+    // VarSoa field with max 10 elements
+    #0 items: VarSoa<SoaTestSchema, max_size=10>;
+  }
+}

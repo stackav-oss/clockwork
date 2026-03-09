@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "jewels/container/tap/optional.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/meta/concepts.hh"
@@ -28,6 +29,12 @@ ConversionStatusExpected protobuf_to_tap(jewels::Uuid<Tag>& output, std::string_
 // Convert from a protobuf string to a Tap VarString
 template <size_t capacity>
 ConversionStatusExpected protobuf_to_tap(tap::VarString<capacity>& output, std::string_view input);
+
+// Convert from a protobuf string to an optional Tap VarString. Regardless of whether the input string is empty or not,
+// the optional will have a value after conversion.
+template <size_t capacity>
+ConversionStatusExpected
+protobuf_to_tap(jewels::tap::Optional<tap::VarString<capacity>>& output, std::string_view input);
 
 // Convert from a protobuf timestamp to SyncTime
 ConversionStatusExpected protobuf_to_tap(jewels::time::SyncTime& output, const google::protobuf::Timestamp& input);

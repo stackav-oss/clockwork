@@ -1,3 +1,6 @@
+#![generate(cpp, py, nanobind)]
+#![cpp(namespace=clockwork::tests)]
+
 // Broken schema version 1
 schema BrokenIntV1
 {
@@ -183,96 +186,4 @@ schema BrokenEnumRemovedV1
     // Enum field
     #1 enum_field: BrokenEnumRemovedTypeV1;
   }
-}
-
-py_target py_broken_schema_v1
-{
-  enum BrokenEnumNameTypeV1;
-  enum BrokenEnumValueTypeV1;
-  enum BrokenEnumRemovedTypeV1;
-
-  interface Tappy<BrokenIntV1>;
-  interface Tappy<BrokenOptionalV1>;
-  interface Tappy<BrokenArrayV1>;
-  interface Tappy<BrokenStringV1>;
-  interface Tappy<BrokenBuiltInV1>;
-  interface Tappy<BrokenNameV1>;
-  interface Tappy<BrokenRemovedV1>;
-  interface Tappy<BrokenStrongTypeV1>;
-  interface Tappy<BrokenEnumNameV1>;
-  interface Tappy<BrokenEnumValueV1>;
-  interface Tappy<BrokenEnumRemovedV1>;
-}
-
-nanobind_target broken_schema_v1_clk_nb
-{
-  binding BrokenEnumNameTypeV1;
-  binding BrokenEnumValueTypeV1;
-  binding BrokenEnumRemovedTypeV1;
-  binding Tappy<BrokenIntV1>;
-  binding Tappy<BrokenOptionalV1>;
-  binding Tappy<BrokenArrayV1>;
-  binding Tappy<BrokenStringV1>;
-  binding Tappy<BrokenBuiltInV1>;
-  binding Tappy<BrokenNameV1>;
-  binding Tappy<BrokenRemovedV1>;
-  binding Tappy<BrokenStrongTypeV1>;
-  binding Tappy<BrokenEnumNameV1>;
-  binding Tappy<BrokenEnumValueV1>;
-  binding Tappy<BrokenEnumRemovedV1>;
-}
-
-cpp_target broken_schema_v1
-{
-  options
-  {
-    namespace clockwork::tests;
-  }
-
-  schema BrokenIntV1;
-  representation Tachyon<BrokenIntV1>;
-  interface Tappy<BrokenIntV1>;
-
-  schema BrokenOptionalV1;
-  representation Tachyon<BrokenOptionalV1>;
-  interface Tappy<BrokenOptionalV1>;
-
-  schema BrokenArrayV1;
-  representation Tachyon<BrokenArrayV1>;
-  interface Tappy<BrokenArrayV1>;
-
-  schema BrokenStringV1;
-  representation Tachyon<BrokenStringV1>;
-  interface Tappy<BrokenStringV1>;
-
-  schema BrokenBuiltInV1;
-  representation Tachyon<BrokenBuiltInV1>;
-  interface Tappy<BrokenBuiltInV1>;
-
-  schema BrokenNameV1;
-  representation Tachyon<BrokenNameV1>;
-  interface Tappy<BrokenNameV1>;
-
-  schema BrokenRemovedV1;
-  representation Tachyon<BrokenRemovedV1>;
-  interface Tappy<BrokenRemovedV1>;
-
-  schema BrokenStrongTypeV1;
-  representation Tachyon<BrokenStrongTypeV1>;
-  interface Tappy<BrokenStrongTypeV1>;
-
-  enum BrokenEnumNameTypeV1;
-  schema BrokenEnumNameV1;
-  representation Tachyon<BrokenEnumNameV1>;
-  interface Tappy<BrokenEnumNameV1>;
-
-  enum BrokenEnumValueTypeV1;
-  schema BrokenEnumValueV1;
-  representation Tachyon<BrokenEnumValueV1>;
-  interface Tappy<BrokenEnumValueV1>;
-
-  enum BrokenEnumRemovedTypeV1;
-  schema BrokenEnumRemovedV1;
-  representation Tachyon<BrokenEnumRemovedV1>;
-  interface Tappy<BrokenEnumRemovedV1>;
 }

@@ -4,14 +4,12 @@
 #include "jewels/log_cerr/log_cerr.hh"
 
 #include "jewels/log_cerr/log_level.hh"
-#include "jewels/time/sync_time.hh"
+#include "jewels/log_cerr/log_time.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/format.h> // IWYU pragma: keep (needed for format_as to work)
+#include <fmt/base.h>
+#include <fmt/format.h> // IWYU pragma: keep (needed for format_as to work)
 
 #include <array>
-#include <chrono>
-#include <cstdint>
 #include <cstring>
 #include <experimental/source_location>
 #include <iostream>
@@ -99,26 +97,7 @@ constexpr std::string_view log_level_color_code(const LogLevel log_level) noexce
   return unspecified_level_color_code;
 }
 
-struct EpochTime
-{
-  int64_t seconds;
-  int64_t nanoseconds;
-};
-
-struct SyncTimePolicy
-{
-  static EpochTime now()
-  {
-    const int64_t now_ns =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(jewels::time::SyncClock::now().time_since_epoch()).count();
-    const int64_t seconds = now_ns / 1'000'000'000;
-    const int64_t nanoseconds = now_ns % 1'000'000'000;
-    return {.seconds = seconds, .nanoseconds = nanoseconds};
-  }
-};
-
-template <typename TimePolicy>
-[[nodiscard]] std::string_view log_message_to_buffer(
+[[nodiscard]] inline std::string_view log_message_to_buffer(
   std::array<char, log_message_buffer_size>& buffer,
   LogLevel log_level,
   const std::experimental::source_location& location,
@@ -127,7 +106,7 @@ template <typename TimePolicy>
 {
   static_assert(log_message_buffer_size > truncated_message_suffix.size());
 
-  const auto [seconds, nanoseconds] = TimePolicy::now();
+  const auto [seconds, nanoseconds] = get_log_time();
 
   auto untruncated_size = fmt::format_to_n(
                             buffer.data(),
@@ -174,7 +153,7 @@ void log_message_to_cerr(
   }
 
   std::array<char, log_message_buffer_size> buffer{};
-  const auto message = log_message_to_buffer<SyncTimePolicy>(buffer, log_level, location, msg_fmt, args);
+  const auto message = log_message_to_buffer(buffer, log_level, location, msg_fmt, args);
 
   if (should_print_in_color())
   {

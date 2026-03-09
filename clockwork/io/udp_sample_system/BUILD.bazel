@@ -2,10 +2,44 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
-load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
+load("//tools/rules:cc.bzl", "cc_library")
 
 package(default_visibility = ["//clockwork/demo/first_integration:__subpackages__"])
+
+simplelaunch_runner(
+    name = "udp_sample_system",
+    config = ":democpu.textproto",
+)
+
+clk(
+    name = "demo_udp_boxes_clk",
+    srcs = ["demo_udp_boxes.clk"],
+    outs = [
+        "demo_udp_boxes_clk_cc.cc",
+        "demo_udp_boxes_clk_cc.hh",
+        "demo_udp_boxes_clk_cc.inl",
+        "demo_udp_boxes_clk_exe.cc",
+        "demo_udp_boxes_clk_exe.hh",
+        "demo_udp_boxes_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":just_a_uint32_clk_cc",
+        ":ping_pong_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_exe",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":just_a_uint32_clk",
+        ":ping_pong_clk",
+        "//clockwork/io:var_packet_clk",
+    ],
+)
 
 clk(
     name = "demo_udp_system_clk",
@@ -16,64 +50,13 @@ clk(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_signal_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_simplelaunch_config.textproto",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.diagnostics_database_config.tachyon",
         "demo_udp_system.demo_udp_system.logged_channel_metadata.pbbin",
-        "demo_udp_system_exe.cc",
-        "demo_udp_system_exe.hh",
-        "demo_udp_system_exe.inl",
-        "demo_udp_system_lib.cc",
-        "demo_udp_system_lib.hh",
-        "demo_udp_system_lib.inl",
     ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":just_a_uint32_clk",
-        ":ping_pong_clk",
-        "//clockwork/io:var_packet_clk",
-    ],
-)
-
-cc_binary(
-    name = "demo_udp_system_exe",
-    srcs = [
-        "demo_udp_system_exe.cc",
-        "demo_udp_system_exe.hh",
-        "demo_udp_system_exe.inl",
-    ],
-    data = [":clockwork.clockwork.io.udp_sample_system.demo_udp_system.demo_udp_system.proc.tachyon"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":demo_udp_system_lib",
-        ":ping_pong_cog",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-    ],
-)
-
-cc_library(
-    name = "demo_udp_system_lib",
-    srcs = [
-        "demo_udp_system_lib.cc",
-        "demo_udp_system_lib.inl",
-    ],
-    hdrs = ["demo_udp_system_lib.hh"],
-    data = [":demo_udp_system_clk"],
-    deps = [
-        ":just_a_uint32",
-        "//clockwork:repr_iface",
-        "//clockwork/common:process_description",
-        "//clockwork/io:var_packet",
-        "//clockwork/pinion:incoming_udp",
-        "//clockwork/pinion:outgoing_udp",
-        "//jewels/memory:memory_resource",
-        "//jewels/networking:socket_endpoint",
-        "//jewels/std:expected",
-        "//jewels/uuid",
-    ],
+    deps = [":demo_udp_boxes_clk"],
 )
 
 merge_simplelaunch_config(
@@ -88,25 +71,11 @@ merge_simplelaunch_config(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_signal_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
-        ":demo_udp_system_exe",
+        "demo_udp_system.demo_udp_system.diagnostics_database_config.tachyon",
+        ":demo_udp_boxes_clk_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
-    ],
-)
-
-cc_library(
-    name = "just_a_uint32",
-    srcs = [
-        "just_a_uint32.cc",
-        "just_a_uint32.inl",
-    ],
-    hdrs = ["just_a_uint32.hh"],
-    data = [":just_a_uint32_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
     ],
 )
 
@@ -114,81 +83,47 @@ clk(
     name = "just_a_uint32_clk",
     srcs = ["just_a_uint32.clk"],
     outs = [
-        "just_a_uint32.cc",
-        "just_a_uint32.hh",
-        "just_a_uint32.inl",
+        "just_a_uint32_clk_cc.cc",
+        "just_a_uint32_clk_cc.hh",
+        "just_a_uint32_clk_cc.inl",
     ],
+    generate = ["cpp"],
 )
 
 clk(
     name = "ping_pong_clk",
     srcs = ["ping_pong.clk"],
     outs = [
-        "ping_pong_cog.cc",
-        "ping_pong_cog.hh",
-        "ping_pong_cog.inl",
-        "ping_pong_cog_dial.cc",
-        "ping_pong_cog_dial.hh",
-        "ping_pong_cog_dial.inl",
+        "ping_pong_clk_cc.cc",
+        "ping_pong_clk_cc.hh",
+        "ping_pong_clk_cc.inl",
+        "ping_pong_clk_cc_dial.cc",
+        "ping_pong_clk_cc_dial.hh",
+        "ping_pong_clk_cc_dial.inl",
+    ],
+    cpp_deps = [
+        ":just_a_uint32_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
     ],
     deps = [
         ":just_a_uint32_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/io:var_packet_clk",
     ],
 )
 
 cc_library(
-    name = "ping_pong_cog",
-    srcs = [
-        "ping_pong_cog.cc",
-        "ping_pong_cog.inl",
-    ],
-    hdrs = ["ping_pong_cog.hh"],
-    data = [":ping_pong_clk"],
+    name = "ping_pong_clk_cc_impl",
+    srcs = ["ping_pong_clk_cc_impl.cc"],
     deps = [
-        ":just_a_uint32",
-        ":ping_pong_cog_dial",
-        ":ping_pong_cog_impl",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//clockwork/io:var_packet",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
-cc_library(
-    name = "ping_pong_cog_dial",
-    srcs = [
-        "ping_pong_cog_dial.cc",
-        "ping_pong_cog_dial.inl",
-    ],
-    hdrs = ["ping_pong_cog_dial.hh"],
-    data = [":ping_pong_clk"],
-    deps = [
-        ":just_a_uint32",
-        "//clockwork/dial:include_common",
-        "//clockwork/io:var_packet",
-    ],
-)
-
-cc_library(
-    name = "ping_pong_cog_impl",
-    srcs = ["ping_pong_cog_impl.cc"],
-    deps = [
-        ":just_a_uint32",
-        ":ping_pong_cog_dial",
+        ":just_a_uint32_clk_cc",
+        ":ping_pong_clk_cc_dial",
         "//clockwork/dial:msg_input",
-        "//clockwork/io:var_packet",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/io:var_packet_clk_cc",
+        "//clockwork/pinion:publishable",
         "//jewels/container:circular_buffer",
         "//jewels/container/tap:var_array",
         "//jewels/memory:bits",

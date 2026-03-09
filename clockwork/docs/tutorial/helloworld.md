@@ -1,5 +1,10 @@
 # Hello, World! (but in Clockwork)
 
+> [!NOTE]
+> This tutorial uses Clockwork file format that is recommended for new development.
+> The original Clockwork language format is somewhat more verbose but it is also still fully supported.
+> See the [original tutorial](legacy_helloworld.md) to learn about the original language format.
+
 This tutorial walks you through creating a simple Clockwork system, step by step.
 It is _not_ a complete reference guide and does not show all Clockwork features.
 
@@ -7,10 +12,34 @@ It is _not_ a complete reference guide and does not show all Clockwork features.
 
 **In this tutorial, you will learn how to:**
 
+- Clockwork schema annotations
 - Define data models (schemas).
 - Create components (Cogs) that can produce and/or consume data.
 - Assemble the Cogs into a system.
 - Create an executable and run the system.
+
+## Clockwork Schema Attributes
+
+Clockwork uses attributes in the source to tell the compiler how to generate code from the source.
+Annotations are lines that start with either `#![` for inner attributes or `#[` for outer attributes.
+Inner attributes define settings that apply to the entire source file.
+Outer attributes define settings that only apply to the following statement.
+
+The first attribute defined in a Clockwork file must be a generate attribute, which tells the compiler what code to generate from the Clockwork source.
+The value of the generate attribute is a list of target names.
+Clockwork supports generating schema defininitions in C++ ("cpp"), python ("py"), protobuf ("proto"), and nanobind ("nanobind").
+For example, this next line tells the compiler to generate C++.
+
+```clockwork
+#![generate(cpp)]
+```
+
+Additional language specific attributes provide additional information needed to generate the code for each language.
+To generate C++ you need to provide the namespace to use for the generated code.
+
+```clockwork
+#![cpp(namespace=stack::demo)]
+```
 
 ## A simple schema
 
@@ -21,6 +50,9 @@ Put this in a file called `av/demo/schema.clk`:
 
 ```clockwork
 // Demo schemas
+#![generate(cpp)]
+#![cpp(namesapce=stack::demo)]
+
 
 // A simple multi-purpose schema
 //
@@ -34,24 +66,15 @@ schema SimpleSchema
         #0 a_field: Int64;
     }
 }
-
-cpp_target schema
-{
-    options
-    {
-        namespace stack::demo;
-    }
-
-    schema SimpleSchema;
-    representation Tachyon<SimpleSchema>;
-    interface Tappy<SimpleSchema>;
-}
 ```
 
 Let's walk through this.
 We start with what looks like a comment, but it's actually [documentation](../reference/common_syntax.md#documentation).
 A Clockwork source file (aka "module") may optionally have a documentation block at the beginning, but it is not required.
 If it appears, it must be at the top of the file.
+
+Then we get some inner attributes that tell the compiler to generate C++ using the stack::demo namespace.
+The compiler will put the code into files named "schema_clk_cc.cc", "schema_clk_cc.hh", and "schema_clk_cc.inl".
 
 Then we get another documentation block; this is for the schema.
 This one is required; if you don't have documentation for a schema the compilation will fail.
@@ -85,20 +108,6 @@ Every field has:
 You can have multiple fields, and fields with non-scalar data types.
 We're just keeping it simple for this example.
 
-### Instantiating schemas, representations, and interfaces
-
-To use a schema, for most purposes, you need to instantiate that schema in a `cpp_target`.
-A `cpp_target` block is what instructs the Clockwork compiler to generate a set of C++ code.
-Everything Clockwork generates will be in the namespace you provide here.
-In most cases, you'll want to do the three things we show here:
-
-- Instantiate the schema itself.
-- Instantiate a Tachyon representation.
-- Instantiate a Tap (Tappy) interface.
-
-You might also want a Protobuf representation, which would go in a `proto_target` block, or a python interface, which would go in `py_target`.
-Those are out of scope for this tutorial.
-
 ### Bazel rules
 
 You need a Bazel target, in `BUILD.bazel`:
@@ -109,14 +118,48 @@ load("@clockwork//clockwork:rules.bzl", "clk")
 clk(
     name = "schema_clk",
     srcs = ["schema.clk"],
+    outs = [
+        "schema_clk_cc.cc",
+        "schema_clk_cc.hh",
+        "schema_clk_cc.inl",
+    ],
+    generate = ["cpp"],
 )
 ```
 
-That's not a complete rule, but if you run `stack clk-deps //demo/...` some magic will happen.
-This will parse your clk file and automatically update your `BUILD.bazel` file with the correct `outs` and `deps`, if needed.
-This command will also generate a `cc_library` target for you that matches that `cpp_target`.
-What targets you need depends on what things are defined in each `.clk` file and it's quite complicated; fortunately this is automated for you.
-Note for this magic to work, you do need to manually add the `clk` target here, but once it's added, the tooling is able to update everything else automatically.
+That's the complete rule.
+Clockwork also comes with a gazelle plugin under `tools/gazelle/clk_plugin` that you can use to automate generating build files for you.
+
+### Generating other languages
+
+To generate other languages you just add the languages you want to the `generate` attribute and provide language specific attributes to tell the compiler what to do.
+For example, to generate python and protobuf from the above example, the attributes at the top of the file would change to this.
+
+```clockwork
+#![generate(cpp, py, proto)]
+#![cpp(namesapce=stack::demo)]
+#![proto(package=stack.demo.proto)]
+```
+
+The Bazel rule to generate C++, python, and protobuf would look like this.
+If you use gazelle this is all done for you so you don't have to think about it.
+
+```py
+load("@clockwork//clockwork:rules.bzl", "clk")
+
+clk(
+    name = "schema_clk",
+    srcs = ["schema.clk"],
+    outs = [
+        "schema_clk_cc.cc",
+        "schema_clk_cc.hh",
+        "schema_clk_cc.inl",
+        "schema_clk_proto.proto",
+        "schema_clk_py.py",
+    ],
+    generate = ["cpp", "proto", "py"],
+)
+```
 
 ### More information
 
@@ -131,6 +174,8 @@ Let's make `cogs.clk`:
 
 ```clockwork
 // Demo cogs
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=stack::demo)]
 
 use demo::schema;
 
@@ -153,16 +198,6 @@ cog ProducerCog
         execute when: my_periodic;
     }
 }
-
-cpp_target cogs
-{
-    options
-    {
-        namespace stack::demo;
-    }
-
-    cog ProducerCog;
-}
 ```
 
 First off, you don't actually _have_ to make this a separate file.
@@ -170,7 +205,7 @@ You could put this in the same source file as the schema.
 We're separating them because that's probably how you'll usually do this in practice.
 This then requires us to import the schema module from the Cogs module; that's what the `use` statement does.
 This makes anything defined in that module available in the `schema::` namespace.
-You can see the [full documentation on use statements](../reference/use.md) for details.
+You can see the [documentation on attributes and code generation](../reference/attributes.md) for details.
 
 Then we define the `ProducerCog` Cog.
 There are _many_ things that can go in a Cog definition.
@@ -183,13 +218,15 @@ You can create multiple execution `condition`s, but here we create just one: a c
 The `execute when` statement would allow us to combine multiple conditions in a condition expression, but we only have one condition, so we just name it here.
 The net effect is that this Cog will run at 2Hz (every 500ms).
 
-Like schemas, we need to generate C++ code for this Cog, so there's a `cpp_target`.
-The Cog itself is a function that _you_ write, which we'll show in a moment, but Clockwork also needs to generate a bunch of code that calls your function, and also a Dial structure, which is how your function gets access to its resources and endpoints, and that's what this `cpp_target` makes happen.
+Like schemas, we need to generate C++ code for this Cog, so there's a `cpp_cog` target in the generate attribute.
+The Cog itself is a function that you write, which we'll show in a moment, but Clockwork also needs to generate a bunch of code that calls your function, and also a Dial structure, which is how your function gets access to its resources and endpoints, and that's what this `generate(cpp_cog)` makes happen.
 
-So, how do you write your code? Make a file named `[cogname]_impl.cc`, and make it look a bit like this:
+So, how do you write your code? Make a file named `cogs_clk_cc_impl.cc`.
+The file name is the name of your source ("cogs.clk") with a `_clk_cc_impl.cc` added to the name.
+and make it look a bit like this:
 
 ```cpp
-#include "demo/cogs_dial.hh"
+#include "demo/cogs_clk_cc_dial.hh"
 
 #include <iostream>
 
@@ -219,16 +256,16 @@ The header file you include there is generated by the Clockwork compiler when yo
 It defines a struct called `ProducerCogDial` that contains all of the resources and endpoints you've declared in your Cog specification, plus some standard member functions like `get_start_time`.
 You can see the basics for our simple Cog above.
 
-The `stack clk-deps //demo/...` command generates build targets for code generated by the Clockwork compiler, but it does not generate the build target for the Cog implementation.
-It's up to you to provide a `cc_library` target named `[cogname]_impl` (where `cogname` is the name of the `cpp_target`) that contains your Cog code.
+Gazelle generates build targets for code generated by the Clockwork compiler, but it does not generate the build target for the Cog implementation.
+It's up to you to provide a `cc_library` target named `[stem]_clk_impl` (where `stem` is the stem of the Clockwork source file) that contains your Cog code.
 For this example, it should look something like this:
 
 ```py
 cc_library(
-    name = "cogs_impl",
-    srcs = ["cogs_impl.cc"],
+    name = "cogs_clk_cc_impl",
+    srcs = ["cogs_clk_cc_impl.cc"],
     deps = [
-        ":cogs_dial",
+        ":cogs_clk_cc_dial",
     ],
 )
 ```
@@ -240,31 +277,21 @@ But we can't actually execute it yet, because we haven't instantiated it in a sy
 ## Creating an executable
 
 Normally, you'd do system composition in a separate Clockwork module, but since we're making a single-Cog system here, we'll just add this to our existing `cogs.clk`:
+All you have to do is change the generate attribute to tell Clockwork to generate the C++ executable.
+The rest of the source file is the same.
 
 ```clockwork
-cpp_executable cogs_exe
-{
-    casing
-    {
-        interface Tappy<schema::SimpleSchema>;
-        cog ProducerCog;
-    }
-}
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=stack::demo)]
 ```
 
-This is going to cause a `main` function to be generated in `cogs_exe` (after you do the Bazel magic, it will create a `cc_binary` target for you).
-Inside the `casing` part of this, we tell Clockwork what sort of "things" we want this executable to be able to do; in other words, what code it needs to link into the executable.
-In our case, we need the schema that we produce as a message, and we need the Cog itself.
+This is going to cause a `main` function to be generated in `cogs_clk_exe` (after you do the Bazel magic, it will create a `cc_binary` target for you).
+The generated executable will be a binary that knows how to run all of the cogs defined in the file.
 Clockwork handles the magic of getting this all linked into an executable binary.
-However, we still haven't made a _system_, so this executable won't actually work.
+However, we still haven't made a `system`, so this executable won't actually work.
 The executable takes a command line argument which is the path to a _process description file_.
 This is a binary file that is also generated by Clockwork to define a process within a system.
 This two-step process allows the same executable to be used in multiple processes and multiple systems.
-
-> [!NOTE]
-> You can have _extra_ items in your casing that aren't used by a particular process.
-> This allows you to create more general-purpose executables which are then instantiated in different ways.
-> This is particularly useful for simulation and testing; a single executable can handle a wide variety of sim systems, if it has many things linked into its casing.
 
 ## Creating a system
 
@@ -297,11 +324,6 @@ box ProducerOnlySystem
     new demo_process: Process(executable=cogs_exe);
     apply HostProcess(process=demo_process) in producer_a;
     apply HostCpuDomain(cpu_domain=DemoCpu) to demo_process;
-}
-
-system_target single_producer
-{
-    box: ProducerOnlySystem;
 }
 ```
 
@@ -339,8 +361,21 @@ We specify which process the Cog runs in by _applying_ the `HostProcess` policy;
 Then, we apply `HostCpuDomain` to that process to specify which CPU it runs on.
 
 Lastly, we just need to name this Box in a `system_target`, and we have defined a system.
+The `system_target` needs to go into a different source file because Gazelle doesn't know how to generate build files for systems.
+The build rule for this system target file is managed by running `stack clk-deps //demo/...`.
 That `system_target` will generate a lot of data files, but no C++ code.
 It will generate a process description file, which the executable needs, plus logger configurations, network bridge configurations, and a set of SimpleLaunch configuration that will launch the whole system.
+
+Let's make `system.clk`:
+
+```clockwork
+use demo::cogs;
+
+system_target single_producer
+{
+  box: cogs::ProducerOnlySystem;
+}
+```
 
 You don't actually need the SimpleLaunch script or logger configuration to execute just your one process; you can run that executable passing the path to the generated process description file, and it will start working.
 (When you have multi-process systems, that's when you probably want to be using those SimpleLaunch configs.)
@@ -360,6 +395,8 @@ When you pass it to the executable, you need to reference it's location in the B
 
 Let's make our Cog run twice, producing on two different channels, sort of the way a camera driver might run once for each camera, publishing on different channels.
 To do this, we don't have to write any C++ code; this is just a DSL change.
+
+Add this to `cogs.clk`:
 
 ```clockwork
 // Add a second channel:
@@ -385,6 +422,12 @@ box TwoProducerSystem
     apply HostProcess(process=demo_process) in producer_b;
     apply HostCpuDomain(cpu_domain=DemoCpu) to demo_process;
 }
+```
+
+And then change the system.clk file to this:
+
+```clockwork
+use demo::cogs;
 
 system_target single_producer
 {
@@ -436,27 +479,6 @@ cog ConsumerCog
         condition any_b: any_message(input_b, min=2);
         condition timeout: time_since_last_exec(600ms);
         execute when: timeout or (any_a and any_b and (new_a or new_b));
-    }
-}
-
-cpp_target cogs
-{
-    options
-    {
-        namespace stack::demo;
-    }
-
-    cog ProducerCog;
-    cog ConsumerCog
-}
-
-cpp_executable cogs_exe
-{
-    casing
-    {
-        interface Tappy<schema::SimpleSchema>;
-        cog ProducerCog;
-        cog ConsumerCog;
     }
 }
 ```
@@ -536,7 +558,7 @@ Here we're retrieving only new messages, but there are other API options; see `p
 
 ## Connecting producers to consumers
 
-Now we need to modify our system to include the consumer:
+Now we need to modify our `cogs.clk` to include the consumer:
 
 ```clockwork
 // Rename and modify the system box:
@@ -560,11 +582,17 @@ box FullSystem
     apply HostProcess(process=demo_process) to consumer;
     apply HostCpuDomain(cpu_domain=DemoCpu) to demo_process;
 }
+```
+
+And then change our `system.clk` file to run the full system:
+
+```clockwork
+use demo::cogs;
 
 system_target single_producer
 {
     // Change the box name here too
-    box: FullSystem;
+    box: cogs::FullSystem;
 }
 ```
 

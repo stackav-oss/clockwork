@@ -90,7 +90,7 @@ def test_register_with_generic_parameters_raises(compiler_context: CompilerConte
             return "GenericTestType<T>"
 
     generic_type = GenericTestType(type_info=clkbuiltins.TYPE_TYPE)
-    with pytest.raises(RuntimeError, match="Attempt to register generic type"):
+    with pytest.raises(RuntimeError, match=r"Attempt to register generic type"):
         tachyon_layout_reg.register_structured_type(compiler_context, generic_type, layout)
 
 
@@ -110,7 +110,7 @@ def test_register_already_registered_raises(compiler_context: CompilerContext, t
         fields=[tachyon_layout.FieldSpan(field_num=1, offset=0, size=24)],
         gaps=[],
     )
-    with pytest.raises(RuntimeError, match="Attempt to register layout .* for type .* that is already registered"):
+    with pytest.raises(RuntimeError, match=r"Attempt to register layout .* for type .* that is already registered"):
         tachyon_layout_reg.register_structured_type(compiler_context, test_type, new_layout)
 
 
@@ -186,5 +186,5 @@ def test_layout_registry_import_conflict() -> None:
     registry2.layout_registry[test_type.value_key()] = layout2
 
     # Importing should raise an error
-    with pytest.raises(RuntimeError, match="Type .* has conflicting layouts"):
+    with pytest.raises(RuntimeError, match=r"Type .* has conflicting layouts"):
         registry1.import_from(registry2)

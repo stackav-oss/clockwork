@@ -38,5 +38,5 @@ TcpBridgeServerConfig: Final[type[tcp_bridge_config_proto.TcpBridgeServerConfig]
 
 
 TcpBridgeConfig: Final[type[tcp_bridge_config_proto.TcpBridgeConfig]] = tachyon_dyn.get_instantiation_dataclass(
-    _MODULE.context, _MODULE, "TcpBridgeConfig", max_bridge_clients=256, max_bridge_servers=256
+    _MODULE.context, _MODULE, "TcpBridgeConfig", max_bridge_clients=1024, max_bridge_servers=512
 )[0]

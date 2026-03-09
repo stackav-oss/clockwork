@@ -4,9 +4,9 @@
 #pragma once
 
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/common/process_description.hh" // IWYU pragma: keep
-#include "clockwork/io/network_var_packet.hh"      // IWYU pragma: keep
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/network_var_packet_clk_cc.hh"      // IWYU pragma: keep
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/pinion/incoming_udp.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"

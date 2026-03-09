@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from clockwork.dsl.composition import pdf, system
@@ -17,6 +17,7 @@ from clockwork.dsl.ir import (
     diagnostics,
     extern_type,
     node,
+    primitive,
     representation,
     schema_reg,
     typesys,
@@ -39,6 +40,7 @@ class _ProcessGraph:
     pdf: pdfproto.ProcessDescription
     cog_names: dict[UUID, str]
     init_cog_deps: dict[UUID, set[UUID]]
+    data_source_map: dict[UUID, int]  # data_source_uuid to index in pdf.data_sources
 
     @staticmethod
     def make(process_id: UUID) -> _ProcessGraph:
@@ -55,10 +57,55 @@ class _ProcessGraph:
                 log_cog=uuid4(),
                 io_connections=[],
                 not_connected_endpoints=[],
+                snapshot_configs=[],
+                data_sources=[],
             ),
             cog_names={},
             init_cog_deps={},
+            data_source_map={},
         )
+
+    def add_data_source(
+        self,
+        data_source_uuid: UUID,
+        data_source: box.FirstMessageInstance | box.SerializedDataFileInstance,
+        sys: system.LogicalSystem,
+    ) -> int:
+        """Add a data source to the process description if not already present, returning its index."""
+        if data_source_uuid in self.data_source_map:
+            return self.data_source_map[data_source_uuid]
+
+        fallback_index = pdf.NO_FALLBACK_DATA_SOURCE_SENTINEL
+        if data_source_uuid in sys.data_source_fallbacks:
+            fallback_uuid = sys.data_source_fallbacks[data_source_uuid]
+            fallback_index = self.add_data_source(fallback_uuid, sys.data_sources[fallback_uuid], sys)
+        elif isinstance(data_source, box.FirstMessageInstance):
+            if data_source.allow_default:
+                fallback_index = pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL
+
+        index = len(self.pdf.data_sources)
+        self.data_source_map[data_source_uuid] = index
+
+        if isinstance(data_source, box.SerializedDataFileInstance):
+            data_source_type = pdf.DataSourceType.file
+            source_path_or_name = str(data_source.file_path)
+            repr_id = lookup_uuid(data_source.module.context, data_source.repr_typespec)
+        else:  # FirstMessageInstance
+            data_source_type = pdf.DataSourceType.log_first_message
+            assert isinstance(data_source.channel.channel_name, primitive.StringValue)
+            source_path_or_name = str(data_source.channel.channel_name.value)
+            assert data_source.channel.message_repr is not None
+            repr_id = lookup_uuid(data_source.module.context, data_source.channel.message_repr.typespec)
+
+        self.pdf.data_sources.append(
+            pdf.DataSource(
+                representation_id=repr_id,
+                data_source_type=data_source_type,
+                source_path_or_name=source_path_or_name,
+                fallback_source=fallback_index,
+            )
+        )
+        return index
 
 
 def gen_pd_sys(sys: system.PhysicalSystem) -> dict[UUID, pdfproto.ProcessDescription]:
@@ -76,6 +123,7 @@ def gen_pd_sys(sys: system.PhysicalSystem) -> dict[UUID, pdfproto.ProcessDescrip
     _gen_memres_sys(sys, processes)
     _gen_pubsub_sys(sys, processes)
     _gen_non_connected_endpoints(sys, processes)
+    _gen_snapshot_configs(sys, processes)
     return {process_uuid: process.pdf for process_uuid, process in processes.items()}
 
 
@@ -154,6 +202,12 @@ def _gen_state_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGra
         process_graph = processes[process_uuid]
         process_desc = process_graph.pdf
         state_desc = gen_state_instance(state_instance.entity)
+        if uuid in sys.system.init_data_sources:
+            data_source_uuid = sys.system.init_data_sources[uuid]
+            index = process_graph.add_data_source(
+                data_source_uuid, sys.system.data_sources[data_source_uuid], sys.system
+            )
+            state_desc.init_data_source = index
         process_desc.state_graph.state_instances.append(state_desc)
         if state_instance.entity.init_cog_endpoint:
             init_cog_id = lookup_uuid(sys.system.module.context, state_instance.entity.init_cog_endpoint.cog_instance)
@@ -178,6 +232,14 @@ def _gen_config_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
         process_graph = processes[process_uuid]
         process_desc = process_graph.pdf
         config_desc = gen_config_instance(config_instance.entity)
+        config_desc.init_data_source = process_graph.add_data_source(uuid, config_instance.entity, sys.system)
+        # Set init_data_source if present
+        if uuid in sys.system.init_data_sources:
+            data_source_uuid = sys.system.init_data_sources[uuid]
+            index = process_graph.add_data_source(
+                data_source_uuid, sys.system.data_sources[data_source_uuid], sys.system
+            )
+            config_desc.init_data_source = index
         process_desc.config_graph.config_instances.append(config_desc)
         for ep_uuid, endpoint in config_instance.endpoints.items():
             if endpoint.process != process_uuid:
@@ -224,9 +286,8 @@ def _add_non_connected_endpoint(
         pdf.NotConnectedEndpoint(
             endpoint_id=uuid,
             endpoint_type=endpoint_type,
-            # The buffer will not be connected so it just needs one slot. We still need the message size so that a dummy
-            # channel or buffer can be properly setup.
-            buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=message_size),
+            # The buffer will not be connected so it just needs one slot
+            buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=message_size, is_published_once=False),
         )
     )
 
@@ -253,7 +314,43 @@ def _gen_non_connected_endpoints(sys: system.PhysicalSystem, processes: dict[UUI
                 if not isinstance(producer_entity, cog.CogInstanceMember):
                     msg = node.enrich_error_if_possible(producer_entity, "Non-cog producer endpoint cannot be ignored")
                     raise ValueError(msg)
-                _add_non_connected_endpoint(producer_entity, message_size=message_size, process_desc=process_desc)
+                if not isinstance(producer_entity.member, InputDef | OutputDef | MetricsOutputDef):
+                    msg = node.enrich_error_if_possible(
+                        producer_entity, "Only cog input/output/metrics endpoints can be ignored"
+                    )
+                    raise ValueError(msg)
+                _add_non_connected_endpoint(
+                    cast(
+                        "cog.CogInstanceMember[InputDef] | cog.CogInstanceMember[OutputDef] | cog.CogInstanceMember[MetricsOutputDef]",
+                        producer_entity,
+                    ),
+                    message_size=message_size,
+                    process_desc=process_desc,
+                )
+
+
+def _gen_snapshot_configs(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGraph]) -> None:
+    """Generate snapshot configurations from snapshot producers.
+
+    This function iterates over snapshot metadata in the logical system and
+    populates the snapshot_configs field in the process descriptions with the
+    information needed by the scaffolding layer to implement snapshot/restore.
+    """
+    for endpoint_uuid, snapshot_producer in sys.system.snapshot_metadata.items():
+        if endpoint_uuid not in sys.system.entity_to_process:
+            msg = f"Snapshot producer endpoint {endpoint_uuid} not assigned to any process"
+            raise ValueError(msg)
+
+        process_uuid = sys.system.entity_to_process[endpoint_uuid]
+        process_desc = processes[process_uuid].pdf
+
+        snapshot_cfg = pdf.SnapshotConfig(
+            endpoint_id=endpoint_uuid,
+            snapshot_publisher_id=endpoint_uuid,
+            interval=snapshot_producer.interval_ns,
+            cycles=snapshot_producer.cycles,
+        )
+        process_desc.snapshot_configs.append(snapshot_cfg)
 
 
 def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGraph]) -> None:
@@ -266,10 +363,13 @@ def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
                 process_id=sys.system.entity_to_process.get(buffer_uuid, UUID(int=0)),
                 publisher_id=buffer_uuid,
                 buffer_layout=pdf.PinionBufferLayout(
-                    num_slots=buffer.layout.num_slots, message_size=buffer.layout.message_size
+                    num_slots=buffer.layout.num_slots,
+                    message_size=buffer.layout.message_size,
+                    is_published_once=buffer.layout.is_published_once,
                 ),
                 num_subscribers=buffer.num_subscribers,
                 channel_name=buffer.channel.channel.channel_name,
+                is_bulk_data=buffer.channel.is_bulk_data(),
             )
             # We include this buffer's publish endpoint only if this process publishes it or subscribes to it.
             # If we subscribe but don't publish, that's handled below.
@@ -328,6 +428,7 @@ def gen_cog_endpoint(
         | cog.InputDef
         | cog.OutputDef
         | cog.MetricsOutputDef
+        | cog.ReportGroupDef
         | cog.ConditionDef
         | diagnostics.DiagnosticsDef
         | diagnostics.InfraDiagnosticsDef
@@ -352,22 +453,14 @@ def gen_cog_timers(cog_ir: cog.CogInstance) -> Iterable[pdfproto.TimerInstanceDe
             )
 
 
-def gen_config_instance(data_file: box.SerializedDataFileInstance) -> pdfproto.ConfigInstanceDescription:
+def gen_config_instance(
+    data_file: box.FirstMessageInstance | box.SerializedDataFileInstance,
+) -> pdfproto.ConfigInstanceDescription:
     """Generate a ConfigInstanceDescription for a TextProto file."""
-    config_typespec = data_file.repr_typespec
-    repr_ref = representation.RepresentationReference.from_typespec(config_typespec)
-    if isinstance(repr_ref, str):
-        msg = data_file.append_error_line(f"Unsupported representation {config_typespec.value_key()}")
-        raise ValueError(msg)  # noqa: TRY004 (ValueError is more appropriate here than TypeError)
-    config_repr = schema_reg.lookup_representation(data_file.module.context, repr_ref)
-    if config_repr is None:
-        msg = data_file.append_error_line(f"No representation registered for {config_typespec.value_key()}")
-        raise ValueError(msg)
     return pdf.ConfigInstanceDescription(
-        representation_id=lookup_uuid(data_file.module.context, config_typespec),
         config_instance_id=lookup_uuid(data_file.module.context, data_file),
         instance_path_name=data_file.value_key(),
-        config_file_path=str(data_file.file_path),
+        init_data_source=pdf.NO_FALLBACK_DATA_SOURCE_SENTINEL,  # to be filled in later
     )
 
 
@@ -403,8 +496,9 @@ def _gen_state_instance_schema(
         representation_id=lookup_uuid(state_instance.module.context, repr_typespec),
         state_instance_id=lookup_uuid(state_instance.module.context, state_instance),
         instance_path_name=state_instance.value_key(),
-        maybe_buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=layout.size),
+        maybe_buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=layout.size, is_published_once=False),
         maybe_memory_resource=None,
+        init_data_source=pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL,
     )
 
 
@@ -418,6 +512,7 @@ def _gen_state_instance_extern(
         instance_path_name=state_instance.value_key(),
         maybe_buffer_layout=None,
         maybe_memory_resource=lookup_uuid(state_instance.module.context, state_instance.memory_resource),
+        init_data_source=pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL,
     )
 
 

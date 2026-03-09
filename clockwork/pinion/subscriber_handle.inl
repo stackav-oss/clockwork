@@ -3,11 +3,9 @@
 
 #include "clockwork/pinion/subscriber_handle.hh"
 
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/std/expected.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
 
 #include <cstddef>
 #include <iterator>
@@ -18,6 +16,7 @@ namespace clockwork::pinion
 {
 
 template <class Message>
+template <typename Slot>
 Message& MessageCast<Message>::operator()(const Slot& slot) const noexcept
 {
   return *detail::marshal_as<Message>(std::span<const std::byte, sizeof(Message)>{slot.message()});
@@ -25,7 +24,7 @@ Message& MessageCast<Message>::operator()(const Slot& slot) const noexcept
 
 template <class Message>
 jewels::expected<MessageRange<Message>, jewels::MonoError>
-to_message_range(const std::ranges::subrange<BufferIterator>& buffer_range)
+to_message_range(const std::ranges::subrange<SlotRef>& buffer_range)
 {
   if (!std::ranges::empty(buffer_range) && buffer_range.front().message().size() != sizeof(Message))
   {
@@ -35,7 +34,8 @@ to_message_range(const std::ranges::subrange<BufferIterator>& buffer_range)
 }
 
 template <class Message>
-MessageSlot<Message> MessageSlotCast<Message>::operator()(const Slot& slot) const noexcept
+template <typename SlotT>
+MessageSlot<Message> MessageSlotCast<Message>::operator()(const SlotT& slot) const noexcept
 {
   return MessageSlot<Message>{
     .slot = slot, .msg = *detail::marshal_as<Message>(std::span<const std::byte, sizeof(Message)>{slot.message()})};
@@ -43,7 +43,7 @@ MessageSlot<Message> MessageSlotCast<Message>::operator()(const Slot& slot) cons
 
 template <class Message>
 jewels::expected<MessageSlotRange<Message>, jewels::MonoError>
-to_message_slot_range(const std::ranges::subrange<BufferIterator>& buffer_range)
+to_message_slot_range(const std::ranges::subrange<SlotRef>& buffer_range)
 {
   if (!std::ranges::empty(buffer_range) && buffer_range.front().message().size() != sizeof(Message))
   {

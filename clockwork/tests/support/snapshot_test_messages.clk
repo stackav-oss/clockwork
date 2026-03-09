@@ -1,0 +1,57 @@
+// Messages and schemas for snapshot testing
+
+// Message to update the stateful cog's counter
+schema StateUpdateMessage
+{
+  uuid: 8a4f5e1c-2b3d-4a5e-9f7c-1d8e2f3a4b5c;
+  fields
+  {
+    // Amount to increment the counter by
+    #0 increment: Int32;
+  }
+}
+
+// Config schema for snapshot testing
+schema SnapshotTestConfig
+{
+  uuid: 7b5d4e2c-1a3f-4b6e-8c9d-2e3f4a5b6c7d;
+  fields
+  {
+    // A multiplier value
+    #0 multiplier: Int32;
+  }
+}
+
+cpp_target snapshot_test_messages
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+
+  schema StateUpdateMessage;
+  representation Tachyon<StateUpdateMessage>;
+  interface Tappy<StateUpdateMessage>;
+
+  schema SnapshotTestConfig;
+  representation Tachyon<SnapshotTestConfig>;
+  interface Tappy<SnapshotTestConfig>;
+}
+
+proto_target snapshot_test_config_proto
+{
+  options
+  {
+    package clockwork.testing.proto;
+  }
+  representation Protobuf<SnapshotTestConfig>;
+}
+
+cpp_target snapshot_test_config_proto_conv
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+  converter ProtobufToTap<Protobuf<SnapshotTestConfig>, Tap<Tachyon<SnapshotTestConfig>>>;
+}

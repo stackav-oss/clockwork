@@ -30,6 +30,7 @@ enum class SignalId : uint8_t
   progress_errors,
   epoll_errors,
   status_errors,
+  max_bulk_data_latency_ms,
 };
 
 WISE_ENUM_CLASS((SignalGroupId, uint8_t), fault_injector_a, fault_injector_b, microphone_driver, tcp_bridge)

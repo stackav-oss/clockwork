@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -29,7 +30,7 @@ using MemResMap = std::pmr::unordered_map<
 /// @param descs list of objects describing the memory resources to create
 ///
 [[nodiscard]] jewels::expected<MemResMap, jewels::MonoError> setup_memory_resources(
-  std::span<const common::MemoryResourceTap> descs,
+  std::span<const Tappy<common::MemoryResource<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   jewels::memory::MemoryResource memres_meta);
 
@@ -37,7 +38,7 @@ using MemResMap = std::pmr::unordered_map<
 /// Invoke casing->try_connect_memory_resource for each of the specified connections
 ///
 [[nodiscard]] jewels::expected<void, jewels::MonoError> connect_memory_resources(
-  std::span<const common::MemoryResourceConnectionTap> connections,
+  std::span<const Tappy<common::MemoryResourceConnection>> connections,
   const MemResMap& memres_map,
   AbstractCasing& casing);
 

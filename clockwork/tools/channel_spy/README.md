@@ -34,7 +34,7 @@ The template parameter must by a 'Tap Tachyon' (aka 'Tappy') type.
 
 ```cpp
 stack::clockwork::tools::ChannelSpy channel_spy{};
-channel_spy.subscribe<example::ClassTap>(
+channel_spy.subscribe<Tappy<example::Class>>(
     [](uint64_t seqno, int64_t msg_time, const auto& message){ <PROCESS_MESSAGE>; });
 channel_spy.run();
 ```
@@ -48,7 +48,7 @@ Raw callbacks should be used with caution.
 
 ```cpp
 stack::clockwork::tools::ChannelSpy channel_spy{};
-channel_spy.subscribe<example::ClassTap>(
+channel_spy.subscribe<Tappy<example::Class>>(
     [](uint64_t seqno, int64_t msg_time, const message_data, const auto& overrun_check_fn){
         <DO_SOMETHING_WITH_MESSAGE>;
         if (!overrun_check_fn())
@@ -175,7 +175,7 @@ The following is an example of how to create a box that can be added to a system
 ```python
 use @clockwork::clockwork::tools::channel_spy::channel_spy_config::ChannelSpyConfig
 use @clockwork::clockwork::tools::channel_spy::channel_spy_config_init::SpyConfigInitCog
-use @clockwork::clockwork::tools::channel_spy::channel_spy_config_init::spy_config_init_exe
+use @clockwork::clockwork::tools::channel_spy::channel_spy_config_init::channel_spy_config_init_clk_exe
 use path::to::your::directory::cpu_domains
 
 box Cpu1SpyConfigInit
@@ -191,7 +191,7 @@ box Cpu1SpyConfigInit
 box DemoSpyConfigInit
 {
   new cpu1_spy_config_box: Cpu1SpyConfigInit;
-  new cpu1_spy_config_proc: Process(executable=spy_config_init_exe);
+  new cpu1_spy_config_proc: Process(executable=channel_spy_config_init_clk_exe);
   apply HostProcess(process=cpu1_spy_config_proc) in cpu1_spy_config_box;
   apply HostCpuDomain(cpu_domain=cpu_domains::Cpu1) to cpu1_spy_config_proc;
 }

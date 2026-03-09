@@ -1,0 +1,23 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::tools)]
+
+use clockwork::common::signal_metadata_config::{SignalMetadataConfig};
+
+// Cog that publishes the metrics channel metadata as a persistent message
+cog SignalMetadataInitCog
+{
+  configs
+  {
+    signal_metadata_config : Tappy<SignalMetadataConfig<>>;
+  }
+
+  outputs
+  {
+    signal_metadata : Tappy<SignalMetadataConfig<>>;
+  }
+
+  execution
+  {
+      execute when: init;
+  }
+}

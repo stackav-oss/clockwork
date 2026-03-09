@@ -1,18 +1,22 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -26,7 +30,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory_resource>
@@ -58,8 +61,11 @@ TEST_CASE("Reader")
 
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
+  const jewels::filesystem::Filesystem vfs{memory_resource};
   LiteCompressor lite_compressor{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
@@ -98,20 +104,37 @@ TEST_CASE("Reader")
   onboard::tests::fill_with_random_bytes(data2);
   const auto compressed_data2 = offboard::tests::lite_compress(data2, lite_compressor);
 
+  constexpr auto channel_name3 = "channel3";
+  constexpr auto metadata3 = LoggedChannelMetadata{
+    .channel_name = channel_name3,
+    .message_encoding = MessageEncoding::unspecified,
+    .channel_type = ChannelType::persistent,
+    .schema_name = "schema3",
+    .schema_encoding = SchemaEncoding::undefined,
+    .schema_definition = "Schema definition 3",
+  };
+
   SECTION("Empty log")
   {
     REQUIRE(writer.open(test_log_path.string(), writer_config_text));
     REQUIRE(writer.create_channel(metadata1));
     REQUIRE(writer.create_channel(metadata2));
+    REQUIRE(writer.create_channel(metadata3));
     REQUIRE(writer.close());
+
+    if (recover_metadata)
+    {
+      REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
+    }
 
     Reader reader{memory_resource, test_log_path.string()};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
-    REQUIRE((*metadata_result)->size() == 2U);
+    REQUIRE((*metadata_result)->size() == 3U);
     REQUIRE((*metadata_result)->at(channel_name1) == metadata1);
     REQUIRE((*metadata_result)->at(channel_name2) == metadata2);
+    REQUIRE((*metadata_result)->at(channel_name3) == metadata3);
 
     const auto channel1_metadata_result = reader.get_channel_metadata(channel_name1);
     REQUIRE(channel1_metadata_result);
@@ -125,15 +148,19 @@ TEST_CASE("Reader")
 
     const auto channels_result = reader.get_channels();
     REQUIRE(channels_result);
-    REQUIRE((*channels_result)->size() == 2U);
+    REQUIRE((*channels_result)->size() == 3U);
     REQUIRE((*channels_result)->contains(channel_name1));
     REQUIRE((*channels_result)->contains(channel_name2));
+    REQUIRE((*channels_result)->contains(channel_name3));
+
+    REQUIRE(reader.get_log_interval().value() == LogInterval{LogTimestamp{0}, LogTimestamp{0}});
 
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
     REQUIRE((*metrics_result)->message_count == 0U);
     REQUIRE((*metrics_result)->byte_count == 0U);
     REQUIRE((*metrics_result)->metrics_map.empty());
+    REQUIRE((*metrics_result)->transmit_time_interval == LogInterval{LogTimestamp{0}, LogTimestamp{0}});
 
     REQUIRE(reader.open());
     REQUIRE_FALSE(reader);
@@ -145,6 +172,7 @@ TEST_CASE("Reader")
     REQUIRE(writer.open(test_log_path.string(), writer_config_text));
     REQUIRE(writer.create_channel(metadata1));
     REQUIRE(writer.create_channel(metadata2));
+    REQUIRE(writer.create_channel(metadata3));
 
     const uint32_t message_count = 20000U;
     const LogTimestamp start_time{std::chrono::seconds{1'000'000}};
@@ -182,13 +210,19 @@ TEST_CASE("Reader")
 
     REQUIRE(writer.close());
 
+    if (recover_metadata)
+    {
+      REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
+    }
+
     Reader reader{memory_resource, test_log_path.string()};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
-    REQUIRE((*metadata_result)->size() == 2U);
+    REQUIRE((*metadata_result)->size() == 3U);
     REQUIRE((*metadata_result)->at(channel_name1) == metadata1);
     REQUIRE((*metadata_result)->at(channel_name2) == metadata2);
+    REQUIRE((*metadata_result)->at(channel_name3) == metadata3);
 
     const auto channel1_metadata_result = reader.get_channel_metadata(channel_name1);
     REQUIRE(channel1_metadata_result);
@@ -202,9 +236,12 @@ TEST_CASE("Reader")
 
     const auto channels_result = reader.get_channels();
     REQUIRE(channels_result);
-    REQUIRE((*channels_result)->size() == 2U);
+    REQUIRE((*channels_result)->size() == 3U);
     REQUIRE((*channels_result)->contains(channel_name1));
     REQUIRE((*channels_result)->contains(channel_name2));
+    REQUIRE((*channels_result)->contains(channel_name3));
+
+    REQUIRE(reader.get_log_interval().value() == LogInterval{start_time, end_time});
 
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
@@ -379,7 +416,7 @@ TEST_CASE("Reader")
 
     SECTION("No log file")
     {
-      std::filesystem::create_directories(test_log_path);
+      REQUIRE(vfs.create_directories(test_log_path).has_value());
       Reader reader{memory_resource, test_log_path.string()};
       REQUIRE_FALSE(reader);
       REQUIRE(reader.get_metadata() == jewels::unexpected(LogError::not_a_log));
@@ -398,8 +435,11 @@ TEST_CASE("Reader is deterministic")
 
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
+  const jewels::filesystem::Filesystem vfs{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
   Writer writer{memory_resource, message_chunk_index_format};
@@ -468,11 +508,22 @@ TEST_CASE("Reader is deterministic")
   std::vector<std::byte> data4(data4_size);
   onboard::tests::fill_with_random_bytes(data4);
 
+  constexpr auto channel_name5 = "channel5";
+  constexpr auto metadata5 = LoggedChannelMetadata{
+    .channel_name = channel_name5,
+    .message_encoding = MessageEncoding::unspecified,
+    .channel_type = ChannelType::persistent,
+    .schema_name = "schema5",
+    .schema_encoding = SchemaEncoding::undefined,
+    .schema_definition = "Schema definition 5",
+  };
+
   REQUIRE(writer.open(test_log_path.string()));
   REQUIRE(writer.create_channel(metadata1));
   REQUIRE(writer.create_channel(metadata2));
   REQUIRE(writer.create_channel(metadata3));
   REQUIRE(writer.create_channel(metadata4));
+  REQUIRE(writer.create_channel(metadata5));
 
   const uint32_t message_count = 2U;
   const LogTimestamp start_time{std::chrono::seconds{1'000'000}};
@@ -533,6 +584,11 @@ TEST_CASE("Reader is deterministic")
   const auto end_time = transmit_time + message_interval;
 
   REQUIRE(writer.close());
+
+  if (recover_metadata)
+  {
+    REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
+  }
 
   Reader reader{memory_resource, test_log_path.string()};
   REQUIRE(reader.open());
@@ -616,8 +672,11 @@ TEST_CASE("Duplicate messages are filtered")
 
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
+  const jewels::filesystem::Filesystem vfs{memory_resource};
   LiteCompressor lite_compressor{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
@@ -724,6 +783,11 @@ TEST_CASE("Duplicate messages are filtered")
   const auto end_time = transmit_time + message_interval;
 
   REQUIRE(writer.close());
+
+  if (recover_metadata)
+  {
+    REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
+  }
 
   Reader reader{memory_resource, test_log_path.string()};
 

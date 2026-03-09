@@ -5,7 +5,7 @@
 
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/tags.hh"
 #include "jewels/memory/memory_resource.hh"

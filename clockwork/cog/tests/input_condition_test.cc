@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/input_condition.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -53,7 +54,7 @@ struct InputConditionFixture // NOLINT(clang-analyzer-optin.performance.Padding)
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, Policy::max_view_size> channel;
+  InMemoryChannel<MsgType, Policy::max_view_size, false> channel;
   pinion::PublisherHandle publisher_handle;
   pinion::SubscriberHandle subscriber_handle;
   InputCondition<Policy> subscriber;

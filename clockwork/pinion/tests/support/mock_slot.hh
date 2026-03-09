@@ -5,8 +5,6 @@
 
 #include "clockwork/pinion/slot.hh"
 
-#include <boost/atomic/atomic_ref.hpp>
-
 #include <array>
 #include <cstddef>
 #include <iterator>

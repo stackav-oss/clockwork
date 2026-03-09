@@ -4,13 +4,17 @@
 #pragma once
 
 #include "clockwork/cog/interface.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/time/sync_time.hh"
 
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <memory_resource> // IWYU pragma: keep
 #include <optional>
@@ -45,7 +49,7 @@ struct CogStateDataImpl<Tap<Tachyon<SchemaType>>> : CogStateData
 {
   using StateType = Tap<Tachyon<SchemaType>>;
 
-  /// Creates the State Record using the publisher handle to allocate storage for the messagey state
+  /// Creates the State Record using the publisher handle to allocate storage for the message state
   explicit CogStateDataImpl(pinion::PublisherHandle publisher_in);
 
   // Since the pinion types refer to one another this can't be copied or moved
@@ -57,6 +61,11 @@ struct CogStateDataImpl<Tap<Tachyon<SchemaType>>> : CogStateData
 
   // Return a reference to the current state data
   jewels::memory::ObjectPtr<StateType> get_ptr() noexcept;
+
+  /// Set the state data from a byte span (override for schema-based states)
+  /// @param[in] data Byte span containing the state data to copy
+  /// @return Success if data was copied, failure otherwise
+  jewels::BinaryOutcome set_from_bytes(std::span<const std::byte> data) noexcept final;
 
   // The backing buffer handle
   pinion::PublisherHandle publisher;
@@ -90,6 +99,7 @@ public:
   using PolicyType = Policy;
   using StateType = typename Policy::StateType;
   using StatePtrType = jewels::memory::ObjectPtr<std::conditional_t<Policy::read_only, const StateType, StateType>>;
+  using MutableStatePtrType = jewels::memory::ObjectPtr<StateType>;
   using RecordType = CogStateDataImpl<StateType>;
   using RecordPtrType = std::shared_ptr<CogStateDataImpl<StateType>>;
 
@@ -119,9 +129,39 @@ public:
   /// @return Pointer to the state.
   [[nodiscard]] StatePtrType get_state();
 
+  /// Get the mutable state.
+  ///
+  /// This is used in unit test cogs where the test can change the
+  /// state even though the cog cannot change the state.
+  ///
+  /// @pre The lock has been acquired.
+  /// @return Pointer to the state.
+  [[nodiscard]] MutableStatePtrType get_mutable_state();
+
+  /// Get the record pointer
+  /// @return Pointer to the state record
+  [[nodiscard]] RecordPtrType get_record_ptr() const;
+
+  struct StateSnapshotInfo
+  {
+    pinion::PublisherHandle snapshot_publisher;
+    std::optional<std::chrono::nanoseconds> interval;
+    std::optional<uint32_t> cycles;
+    uint32_t execution_count = 0;
+    jewels::time::SyncTime last_snapshot_time{};
+  };
+
+  /// Get the snapshot info (nullptr if not set)
+  [[nodiscard]] StateSnapshotInfo* get_snapshot_info() noexcept;
+
+  /// Set the snapshot info
+  void set_snapshot_info(StateSnapshotInfo info);
+
 private:
   /// The state records
   RecordPtrType record_;
+
+  std::optional<StateSnapshotInfo> snapshot_info_;
 
   /// Flag indicating if the lock is acquired.
   bool locked_ = false;

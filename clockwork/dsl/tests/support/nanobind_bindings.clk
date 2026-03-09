@@ -1,6 +1,6 @@
-use jewels::units::clk::au::{MetersF, MetersD}
-use clockwork::dsl::tests::support::nanobind_bindings_dep
-use clockwork::dsl::tests::support::tapmsg::MyStrongType
+use jewels::units::clk::au::{MetersF, MetersD};
+use clockwork::dsl::tests::support::nanobind_bindings_dep;
+use clockwork::dsl::tests::support::tapmsg::{MyStrongType};
 
 some_int_constant: Int32 = 42;
 some_uint_constant: UInt32 = 43;

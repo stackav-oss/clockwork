@@ -11,14 +11,11 @@ from typing import Final
 from unittest.mock import MagicMock
 
 import pytest
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl import compiler_context
 from clockwork.dsl.ir import clkbuiltins, cog, compiler, expr, node, parse, primitive, typesys
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
-
-# These generated files must be imported on a separate line from the source file import above due to a pyright limitation:
-# https://github.com/microsoft/pyright/issues/3630
-from clockwork.dsl import cst  # isort: skip
 
 
 @pytest.fixture()
@@ -68,6 +65,8 @@ def test_invalid_messages_condition() -> None:
         cst_node=None,
         unresolved_imports=[],
         context=compiler_context.CompilerContext(),
+        generates=None,
+        inner_attrs=None,
     )
     lower_bound_expr = expr.SimpleExpr(
         value=MagicMock(spec=typesys.Value),
@@ -94,7 +93,7 @@ def test_invalid_messages_condition() -> None:
 def test_skip_threshold(fs_importer: FilesystemImporter) -> None:
     """Test skip threshold syntax."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SkipCog
 {
@@ -142,7 +141,7 @@ cog PlainCog
 def test_invalid_skip_threshold(fs_importer: FilesystemImporter) -> None:
     """Test skip threshold errors."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SkipCog
 {
@@ -160,11 +159,11 @@ cog SkipCog
     }
 }
 """
-    with pytest.raises(TypeError, match="Type inference failed: ::UInt64 != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 != ::String"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "skip_threshold_bad_type"), importer=fs_importer)
 
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SkipCog
 {
@@ -182,14 +181,14 @@ cog SkipCog
     }
 }
 """
-    with pytest.raises(TypeError, match="Attempt to unify NumericType.SIGNED_INTEGER"):
+    with pytest.raises(TypeError, match=r"Attempt to unify NumericType\.SIGNED_INTEGER"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "negative_skip_threshold"), importer=fs_importer)
 
 
 def test_copy_inputs(fs_importer: FilesystemImporter) -> None:
     """Test syntax for input copying."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog CopyCog
 {
@@ -259,7 +258,7 @@ cog PlainCog
 def test_optional_inputs_and_outputs(fs_importer: FilesystemImporter) -> None:
     """Test syntax for input copying."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog OptionalInputCog
 {
@@ -367,7 +366,7 @@ cog OptionalFalseCog
 def test_invalid_copy_inputs(fs_importer: FilesystemImporter) -> None:
     """Test skip threshold errors."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog CopyCog
 {
@@ -385,14 +384,14 @@ cog CopyCog
     }
 }
 """
-    with pytest.raises(TypeError, match="Type inference failed: ::Bool != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::Bool != ::String"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "copy_inputs_bad_type"), importer=fs_importer)
 
 
 def test_safety_margin(fs_importer: FilesystemImporter) -> None:
     """Test safety margin syntax."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SafeCog
 {
@@ -406,7 +405,7 @@ cog SafeCog
     execution
     {
         condition periodic: time_since_last_exec(100ms);
-        condition new_msg: new_message(min=1, max=1, input=message_in);
+        condition new_msg: new_message(max=1, input=message_in);
         execute when: periodic or new_msg;
     }
 }
@@ -421,7 +420,7 @@ cog DefaultCog
     execution
     {
         condition periodic: time_since_last_exec(100ms);
-        condition new_msg: new_message(min=1, max=1, input=message_in);
+        condition new_msg: new_message(max=1, input=message_in);
         execute when: periodic or new_msg;
     }
 }
@@ -461,10 +460,167 @@ cog PlainCog
     assert default_cog.inputs["message_in"].view_params.safety_margin == -1
 
 
+@pytest.mark.parametrize("maybe_min", [None, -2, -1, 0, 1, 2, 3])
+@pytest.mark.parametrize("maybe_max", [None, -2, -1, 0, 1, 2, 3])
+@pytest.mark.parametrize("condition_type", ["new_message", "any_message"])
+def test_illegal_execution_condition_values(
+    fs_importer: FilesystemImporter,
+    condition_type: str,
+    maybe_min: int | None,
+    maybe_max: int | None,
+) -> None:
+    """Test that the proper error message is raised for illegal execution conditions."""
+    cog_name = "MaybeIllegalCog"
+
+    maybe_min_str = f", min={maybe_min}" if maybe_min is not None else ""
+    maybe_max_str = f", max={maybe_max}" if maybe_max is not None else ""
+    condition = f"{condition_type}(message_in{maybe_min_str}{maybe_max_str})"  # e.g. 'new_message(message_in)' or 'new_message(message_in, min=22)'
+
+    source = f"""
+use clockwork::dsl::tests::support::hellomsg::{{HelloMsg}};
+// Doc.
+cog {cog_name}
+{{
+    inputs
+    {{
+        message_in: Tappy<HelloMsg>;
+    }}
+    execution
+    {{
+        condition msg_in: {condition};
+        execute when: msg_in;
+    }}
+}}
+"""
+
+    def compile_source_text() -> None:
+        """Compile the clockwork module."""
+        module = compiler.compile_source_text(
+            source, ModuleID(CLK_REPO, "illegal_execution_condition"), importer=fs_importer
+        )
+        my_cog = module.inner_scope.lookup(cog_name)
+        assert isinstance(my_cog, cog.Cog)
+        my_cog.resolve()
+        assert "message_in" in my_cog.inputs
+        assert my_cog.inputs["message_in"].view_params.max_msgs == 1
+
+    if maybe_min == 1:
+        # Expect an error that 1 is the default and you should omit it.
+        expected_error_msg = re.escape(f"""\
+Execution condition has 'min' explicitly set to the default (1).
+To prevent ambiguity, this is not allowed. Please remove 'min=1' and trust the default.
+In @clockwork: illegal_execution_condition.clk:12:55:
+        condition msg_in: {condition};
+                                                      ^
+""")
+        with pytest.raises(ValueError, match=expected_error_msg):
+            compile_source_text()
+    elif maybe_min is not None and maybe_min <= 0:
+        # Expect an error that 0 is not allowed.
+        expected_error_msg = re.escape(f"""\
+Execution condition has invalid 'min' {maybe_min}. It must be at least 1
+In @clockwork: illegal_execution_condition.clk:12:55:
+        condition msg_in: {condition};
+                                                      ^
+""")
+        with pytest.raises(ValueError, match=expected_error_msg):
+            compile_source_text()
+    elif maybe_max is not None:
+        min_msgs = 1 if maybe_min is None else maybe_min
+        max_msgs = maybe_max
+        if max_msgs >= min_msgs:
+            # Should compile without error.
+            compile_source_text()
+        else:
+            # Expect an error that max is less than min.
+            column = 55
+            if maybe_min is not None:
+                column += len(f", min={maybe_min}")
+            expected_error_msg = re.escape(f"""\
+Invalid bounds: max {max_msgs} is smaller than min {min_msgs}
+In @clockwork: illegal_execution_condition.clk:12:{column}:
+        condition msg_in: {condition};
+""")
+            with pytest.raises(ValueError, match=expected_error_msg):
+                compile_source_text()
+    else:
+        # Should compile without error.
+        compile_source_text()
+
+
+@pytest.mark.parametrize("maybe_max_msgs", [None, 0, 1, 2, 3])
+@pytest.mark.parametrize("condition_type", ["new_message", "any_message"])
+def test_illegal_input_view_max_msgs(
+    fs_importer: FilesystemImporter,
+    condition_type: str,
+    maybe_max_msgs: int | None,
+) -> None:
+    """Test that the proper error message is raised for illegal execution conditions."""
+    cog_name = "MaybeIllegalCog"
+
+    condition = f"{condition_type}(message_in)"  # e.g. 'new_message(message_in)' or 'new_message(message_in, min=22)'
+
+    maybe_max_msgs_str = f"max_msgs: {maybe_max_msgs};" if maybe_max_msgs is not None else ""
+    source = f"""
+use clockwork::dsl::tests::support::hellomsg::{{HelloMsg}};
+// Doc.
+cog {cog_name}
+{{
+    inputs
+    {{
+        message_in: Tappy<HelloMsg>
+        {{
+            {maybe_max_msgs_str}
+        }}
+    }}
+    execution
+    {{
+        condition msg_in: {condition};
+        execute when: msg_in;
+    }}
+}}
+"""
+
+    def compile_source_text() -> None:
+        """Compile the clockwork module."""
+        module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "illegal_max_msgs"), importer=fs_importer)
+        my_cog = module.inner_scope.lookup(cog_name)
+        assert isinstance(my_cog, cog.Cog)
+        my_cog.resolve()
+        assert "message_in" in my_cog.inputs
+        assert my_cog.inputs["message_in"].view_params.max_msgs == (maybe_max_msgs if maybe_max_msgs is not None else 1)
+
+    if maybe_max_msgs is not None and maybe_max_msgs <= 0:
+        expected_error_msg = re.escape(f"""\
+Input view has invalid 'max_msgs' {maybe_max_msgs}. It must be at least 1.
+In @clockwork: illegal_max_msgs.clk:10:13:
+            max_msgs: {maybe_max_msgs};
+            ^
+""")
+        with pytest.raises(ValueError, match=expected_error_msg):
+            compile_source_text()
+    elif maybe_max_msgs == 1:
+        # Expect an error that 1 is the default and you should omit it.
+        expected_error_msg = re.escape(
+            """\
+Input view has 'max_msgs' explicitly set to the default (1).
+To prevent ambiguity, this is not allowed. Please remove 'max_msgs: 1' and trust the default.
+In @clockwork: illegal_max_msgs.clk:10:13:
+            max_msgs: 1;
+            ^
+"""
+        )
+        with pytest.raises(ValueError, match=expected_error_msg):
+            compile_source_text()
+    else:
+        # Should compile without error.
+        compile_source_text()
+
+
 def test_invalid_safety_margin(fs_importer: FilesystemImporter) -> None:
     """Test safety margin errors."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SafeCog
 {
@@ -482,11 +638,11 @@ cog SafeCog
     }
 }
 """
-    with pytest.raises(TypeError, match="Type inference failed: ::UInt64 != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 != ::String"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "safety_margin_bad_type"), importer=fs_importer)
 
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog SafeCog
 {
@@ -506,7 +662,7 @@ cog SafeCog
 """
     with pytest.raises(
         ValueError,
-        match="Inputs may only specify a safety margin when associated with a new_message condition that uses the 'max' parameter",
+        match=r"Inputs may only specify a safety margin when associated with a new_message condition that uses the 'max' parameter",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "safety_margin_no_max"), importer=fs_importer)
 
@@ -514,7 +670,7 @@ cog SafeCog
 def test_rate_limit(fs_importer: FilesystemImporter) -> None:
     """Test rate limit syntax."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog RateLimitCog
 {
@@ -570,7 +726,7 @@ cog PlainCog
 def test_invalid_rate_limit(fs_importer: FilesystemImporter) -> None:
     """Test rate limit errors."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog RateLimitCog
 {
@@ -593,7 +749,7 @@ cog RateLimitCog
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_invalid_output"), importer=fs_importer)
 
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog RateLimitCog
 {
@@ -616,7 +772,7 @@ cog RateLimitCog
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_invalid_unit"), importer=fs_importer)
 
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog RateLimitCog
 {
@@ -634,12 +790,14 @@ cog RateLimitCog
 """
     with pytest.raises(
         TypeError,
-        match=re.escape("Expected time literal for rate limit period, but got <class 'clockwork.dsl.cst.Literal'>"),
+        match=re.escape(
+            "Expected time literal for rate limit period, but got <class 'clockwork.dsl.clockwork_cst.Literal'>"
+        ),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_bad_period_type"), importer=fs_importer)
 
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog RateLimitCog
 {
@@ -666,7 +824,7 @@ cog RateLimitCog
 def test_metrics_options(fs_importer: FilesystemImporter) -> None:
     """Test syntax for input copying."""
     source = """
-use clockwork::dsl::tests::support::hellomsg::HelloMsg;
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
 // Doc.
 cog MetricsCog
 {

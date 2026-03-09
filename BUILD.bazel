@@ -1,7 +1,6 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("@rules_python//python:py_library.bzl", "py_library")
 load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
 
 # Gazelle directives
@@ -38,14 +37,10 @@ load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest
 # gazelle:resolve py mypy_boto3_s3 @pyright_requirements//mypy_boto3_s3
 # gazelle:resolve py clockwork.dsl.tests.support.pytapmsg //clockwork/dsl/tests/support:pytapmsg
 # gazelle:resolve py root_repo_py @root_repo//:root_repo_py
+# gazelle:resolve py clockwork.dsl.clockwork_cst //clockwork/dsl:clockwork_cst
+# gazelle:resolve py clockwork.dsl //clockwork/dsl:clockwork_cst
+# gazelle:resolve py clockwork //clockwork/dsl:clockwork_cst
 # keep-sorted end
-
-# Top-level library to set module import path
-py_library(
-    name = "clockwork",
-    imports = ["."],
-    visibility = ["//visibility:public"],
-)
 
 filegroup(
     name = "buildifier_config",

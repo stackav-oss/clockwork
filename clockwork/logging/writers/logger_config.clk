@@ -1,3 +1,6 @@
+#![generate(cpp, proto, proto_conv)]
+#![cpp(namespace=clockwork_logging)]
+
 // Logger configuration
 schema LoggerConfig {
   uuid: c6456c0b-cb9e-450b-9a74-e70bc01177d5;
@@ -20,34 +23,4 @@ schema LoggerConfig {
     // Maximum log file duration in seconds
     #5 max_log_file_duration_sec: Int64;
   }
-}
-
-cpp_target logger_config
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-
-  schema LoggerConfig;
-  representation Tachyon<LoggerConfig>;
-  interface LoggerConfigTap: Tap<Tachyon<LoggerConfig>>;
-}
-
-proto_target logger_config_proto
-{
-  options
-  {
-    package clockwork.logging.writers.proto;
-  }
-  representation Protobuf<LoggerConfig>;
-}
-
-cpp_target logger_config_proto_conv
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  converter ProtobufToTap<Protobuf<LoggerConfig>, Tap<Tachyon<LoggerConfig>>>;
 }

@@ -68,6 +68,13 @@ class ProtobufMsgLayout:
                 )
 
     @property
+    def go_dep_labels(self) -> Iterable[str]:
+        """Get go label strings for any dependencies of this message."""
+        for field in self.fields:
+            if isinstance(field.type_info, DefinedProtobufType) and field.type_info.go_dep_label:
+                yield field.type_info.go_dep_label
+
+    @property
     def includes(self) -> Iterable[str]:
         """Get all dependencies of this message."""
         for field in self.fields:

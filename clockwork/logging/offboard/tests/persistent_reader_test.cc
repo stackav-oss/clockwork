@@ -1,16 +1,19 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -25,7 +28,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory_resource>
@@ -46,6 +48,9 @@ TEST_CASE("Log with persistent channels")
 {
   constexpr auto test_log_name = "test_log";
 
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
+
   // Configure writer to put each channel in a separate file
   constexpr auto writer_config_text = R"(
     # proto-file: clockwork/logging/offboard/v1/writer_config.proto
@@ -55,9 +60,10 @@ TEST_CASE("Log with persistent channels")
     }
   )";
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
+  const auto filesystem = jewels::filesystem::Filesystem{memory_resource};
   Writer writer{memory_resource};
 
   constexpr auto channel_name1 = "channel1";
@@ -92,7 +98,7 @@ TEST_CASE("Log with persistent channels")
   std::vector<std::byte> data2(data2_size);
   onboard::tests::fill_with_random_bytes(data2);
 
-  REQUIRE(writer.open(test_log_path.string(), writer_config_text));
+  REQUIRE(writer.open(test_log_path, writer_config_text));
   REQUIRE(writer.create_channel(metadata1));
   REQUIRE(writer.create_channel(metadata2));
 
@@ -137,7 +143,12 @@ TEST_CASE("Log with persistent channels")
   const auto end_time = transmit_time + message_interval;
   REQUIRE(writer.close());
 
-  Reader reader{memory_resource, test_log_path.string()};
+  if (recover_metadata)
+  {
+    REQUIRE(filesystem.remove(test_log_path / "stack_log_metadata.pbtxt"));
+  }
+
+  Reader reader{memory_resource, test_log_path};
 
   SECTION("Check metadata")
   {
@@ -365,6 +376,9 @@ TEST_CASE("Log with repeated persistent channels")
 {
   constexpr auto test_log_name = "test_log";
 
+  const auto recover_metadata = GENERATE(false, true);
+  CAPTURE(recover_metadata);
+
   // Configure writer to put each channel in a separate file
   constexpr auto writer_config_text = R"(
     # proto-file: clockwork/logging/offboard/v1/writer_config.proto
@@ -374,9 +388,10 @@ TEST_CASE("Log with repeated persistent channels")
     }
   )";
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto test_log_path = test_dir.get_path() / test_log_name;
+  const auto filesystem = jewels::filesystem::Filesystem{memory_resource};
   Writer writer{memory_resource};
 
   constexpr auto channel_name1 = "channel1";
@@ -459,6 +474,11 @@ TEST_CASE("Log with repeated persistent channels")
   }
   const auto end_time = transmit_time - message_interval;
   REQUIRE(writer.close());
+
+  if (recover_metadata)
+  {
+    REQUIRE(filesystem.remove(test_log_path / "stack_log_metadata.pbtxt"));
+  }
 
   Reader reader{memory_resource, test_log_path.string()};
 

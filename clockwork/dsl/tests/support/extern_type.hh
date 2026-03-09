@@ -14,21 +14,21 @@ namespace clockwork::external
 class ExternalStrongType;
 
 /// Factory function
-[[nodiscard]] ExternalStrongType make(uint32_t value);
+[[nodiscard]] inline ExternalStrongType make(uint32_t value);
 
 /// Strong type
 class ExternalStrongType
 {
 public:
   ExternalStrongType() = default;
-  [[nodiscard]] uint32_t get() const;
+  [[nodiscard]] inline uint32_t get() const;
 
   [[nodiscard]] bool operator==(const ExternalStrongType& other) const = default;
 
 private:
   friend ExternalStrongType make(uint32_t value);
   /// Keep constructor private to force use of the factory function.
-  explicit ExternalStrongType(uint32_t value);
+  explicit inline ExternalStrongType(uint32_t value);
   /// Underlying value.
   uint32_t value_{};
 };

@@ -7,6 +7,7 @@
 #include "clockwork/logging/offboard/log_metadata_file_helper.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -15,7 +16,6 @@
 #include <google/protobuf/text_format.h>
 
 #include <chrono>
-#include <filesystem>
 #include <functional>
 #include <memory_resource>
 #include <optional>

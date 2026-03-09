@@ -372,12 +372,8 @@ def test_enum_with_history(fs_importer: FilesystemImporter) -> None:
 
         history
         {
-            versions: [2, 3];
-            values
-            {
-                // old value
-                #2 old -> removed #3;
-            }
+            version: 3;
+            removed: [2];
         }
     }
     """
@@ -388,18 +384,8 @@ def test_enum_with_history(fs_importer: FilesystemImporter) -> None:
 
     # Check that history was parsed correctly
     assert enum_ir.history is not None
-    assert enum_ir.history.versions == [2, 3]
-    assert len(enum_ir.history.values) == 1
-    assert 2 in enum_ir.history.values
-
-    # Check resolved history
-    resolved = enum_ir.get_resolved()
-    assert resolved.history is not None
-    assert resolved.history.versions == [2, 3]
-    assert len(resolved.history.values) == 1
-    assert 2 in resolved.history.values
-    assert resolved.history.values[2].name == "old"
-    assert resolved.history.values[2].removed_in_version == 3
+    assert enum_ir.history.version == 3
+    assert enum_ir.history.removed == {2}
 
 
 def test_version_calculation(fs_importer: FilesystemImporter) -> None:

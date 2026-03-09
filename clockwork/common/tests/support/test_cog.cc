@@ -4,7 +4,7 @@
 #include "clockwork/common/tests/support/test_cog.hh"
 
 #include "clockwork/common/cog_envelope.hh"
-#include "clockwork/common/cog_execution_error.hh"
+#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 

@@ -114,6 +114,14 @@ class TapToProtoConverterRegistryKey(ContextKey[TapToProtoConverterRegistry]):
             _generate_array_conversion,
             [Header(JEWELS_REPO, "jewels/std/span.hh"), Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
         )
+        registry.type_conversion_map[clkbuiltins.VAR_SOA.value_key()] = ConversionInfo(
+            _generate_soa_conversion,
+            [Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
+        )
+        registry.type_conversion_map[clkbuiltins.FIXED_SOA.value_key()] = ConversionInfo(
+            _generate_soa_conversion,
+            [Header(JEWELS_REPO, "jewels/container/tap/tap_to_protobuf.hh")],
+        )
         registry.type_conversion_map[clkbuiltins.OPTIONAL.value_key()] = ConversionInfo(
             _generate_optional_conversion, []
         )
@@ -187,7 +195,7 @@ def _generate_enum_conversion(conversion_params: ConversionParams) -> list[str]:
 def _generate_schema_converter(conversion_params: ConversionParams, namespace: str) -> list[str]:
     """Generates a converter for a schema type. This will be calling another generated tap_to_protobuf function."""
     return [
-        f"{namespace}::tap_to_protobuf("
+        f"::{namespace}::tap_to_protobuf("
         + f"*{conversion_params.destination_name}.mutable_{conversion_params.proto_field_name}(), "
         + f"{conversion_params.source_name}.get_{conversion_params.field_name}());"
     ]
@@ -200,7 +208,7 @@ def _generate_complex_conversion(conversion_params: ConversionParams) -> list[st
     else:
         source_access = f"{conversion_params.source_name}.get_{conversion_params.field_name}()"
     return [
-        "jewels::tap_to_protobuf("
+        "::jewels::tap_to_protobuf("
         + f"*{conversion_params.destination_name}.mutable_{conversion_params.proto_field_name}(), "
         + f"{source_access});",
     ]
@@ -215,7 +223,7 @@ def _generate_optional_conversion(conversion_params: ConversionParams) -> list[s
     value_type = conversion_params.field_type.arguments["type"]
     if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_statement = [
-            f"{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::"
+            f"::{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::"
             + f"tap_to_protobuf(*{conversion_params.destination_name}.mutable_{conversion_params.proto_field_name}(), "
             + f"{conversion_params.source_name}.value_{conversion_params.field_name}());",
         ]
@@ -245,11 +253,11 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
     if in_converter_registry(value_type, conversion_params.compiler_context):
         conversion_lines = [
             f"{context.INDENT}auto element_{input_name} = {conversion_params.destination_name}.add_{conversion_params.proto_field_name}();",
-            f"{context.INDENT}{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
+            f"::{context.INDENT}{get_conversion_registration(value_type, conversion_params.compiler_context).namespace}::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
         ]
     elif value_type == clkbuiltins.BYTE:
         return [
-            "jewels::tap_to_protobuf("
+            "::jewels::tap_to_protobuf("
             + f"*{conversion_params.destination_name}.mutable_{conversion_params.proto_field_name}(), "
             + f"{conversion_params.source_name}.get_{conversion_params.field_name}());",
         ]
@@ -274,7 +282,7 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
         )
         conversion_lines = [
             f"{context.INDENT}const auto& strong_element = {input_name}[i];",
-            f"{context.INDENT}const auto element_bytes = std::as_bytes(jewels::as_single_item_span(strong_element));",
+            f"{context.INDENT}const auto element_bytes = std::as_bytes(::jewels::as_single_item_span(strong_element));",
             f"{context.INDENT}static_assert(sizeof({strong_cpp_type_str}) == sizeof({underlying_cpp_type_str}),"
             + f""" "Size mismatch for array elements in field '{conversion_params.field_name}': sizeof({strong_cpp_type_str}) != sizeof({underlying_cpp_type_str})");""",
             f"{context.INDENT}const auto* element_value_ptr = reinterpret_cast<const {underlying_cpp_type_str}*>(element_bytes.data());",
@@ -288,7 +296,7 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
         # Assuming complex type handled by jewels::tap_to_protobuf
         conversion_lines = [
             f"{context.INDENT}auto element_{input_name} = {conversion_params.destination_name}.add_{conversion_params.proto_field_name}();",
-            f"{context.INDENT}jewels::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
+            f"{context.INDENT}::jewels::tap_to_protobuf(*element_{input_name}, {input_name}[i]);",
         ]
 
     return [
@@ -297,6 +305,42 @@ def _generate_array_conversion(conversion_params: ConversionParams) -> list[str]
         f"for (size_t i = 0; i < {input_name}.size(); ++i)",
         "{",
         *conversion_lines,
+        "}",
+    ]
+
+
+def _generate_soa_conversion(conversion_params: ConversionParams) -> list[str]:
+    """Generate a converter for SoA (Struct-of-Arrays) container types.
+
+    SoA containers serialize to protobuf identically to arrays: as repeated messages.
+    Each SoA element proxy is converted to a Tap<Tachyon<T>> and then delegated to
+    the schema's tap_to_protobuf converter.
+    """
+    if not isinstance(conversion_params.field_type, typesys.Instantiation):
+        msg = f"expected an instantiation type for the SoA conversion, got {conversion_params.field_type}"
+        raise TypeError(msg)
+
+    input_name = f"{conversion_params.field_name}_input"
+    value_type = conversion_params.field_type.arguments["type"]
+
+    if not in_converter_registry(value_type, conversion_params.compiler_context):
+        msg = f"SoA element type {value_type} must have a registered converter"
+        raise TypeError(msg)
+
+    conversion_registration = get_conversion_registration(value_type, conversion_params.compiler_context)
+    tap_cpp_type = typereg.get_cpp_type(conversion_params.compiler_context, value_type)
+    tap_tachyon_type = (
+        f"::clockwork::Tap<::clockwork::Tachyon<{tap_cpp_type.render(conversion_params.enclosing_namespace)}>>"
+    )
+
+    return [
+        f"const auto& {input_name} = {conversion_params.source_name}.get_{conversion_params.field_name}();",
+        f"{conversion_params.destination_name}.clear_{conversion_params.proto_field_name}();",
+        f"for (size_t i = 0; i < {input_name}.size(); ++i)",
+        "{",
+        f"{context.INDENT}auto* element_{input_name} = {conversion_params.destination_name}.add_{conversion_params.proto_field_name}();",
+        f"{context.INDENT}auto tap_element = static_cast<{tap_tachyon_type}>({input_name}[i]);",
+        f"{context.INDENT}::{conversion_registration.namespace}::tap_to_protobuf(*element_{input_name}, tap_element);",
         "}",
     ]
 
@@ -318,7 +362,7 @@ def _generate_strong_type_conversion(conversion_params: ConversionParams) -> lis
     return [
         f"const auto& {strong_value_var} = {conversion_params.source_name}.{get_statement}{conversion_params.field_name}();",
         # Use as_single_item_span and as_bytes
-        f"const auto {byte_span_var} = std::as_bytes(jewels::as_single_item_span({strong_value_var}));",
+        f"const auto {byte_span_var} = std::as_bytes(::jewels::as_single_item_span({strong_value_var}));",
         # Size check
         f"static_assert(sizeof(decltype({strong_value_var})) == sizeof({cpp_type_rendered}),"
         + f' "Size mismatch between strong type and proto primitive type for field {conversion_params.field_name}");',

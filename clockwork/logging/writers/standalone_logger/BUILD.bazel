@@ -1,35 +1,34 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//clockwork:rules.bzl", "clk")
-load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
-load("//tools/rules:cc.bzl", "cc_binary")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
 
 package(
     default_testonly = True,
 )
 
-sh_binary(
+simplelaunch_runner(
     name = "standalone_logger",
-    srcs = ["standalone_logger.sh"],
-    data = [":standalone_logger_exe"],
+    config = ":localhost.textproto",
 )
 
 merge_simplelaunch_config(
     name = "localhost.textproto",
     srcs = [
-        "standalone_logger.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
         "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
     ],
     data = [
-        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
-        "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
-        ":standalone_logger_exe",
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.proc.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_allocations.csv",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_signal_metadata_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.diagnostics_database_config.tachyon",
+        ":standalone_logger_clk_exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
@@ -38,17 +37,30 @@ clk(
     name = "standalone_logger_clk",
     srcs = ["standalone_logger.clk"],
     outs = [
-        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_channel_allocations.csv",
-        "standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
-        "standalone_logger.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
-        "standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
-        "standalone_logger.standalone_logger_sys.logged_channel_metadata.pbbin",
-        "standalone_logger_exe.cc",
-        "standalone_logger_exe.hh",
-        "standalone_logger_exe.inl",
+        "standalone_logger_clk_exe.cc",
+        "standalone_logger_clk_exe.hh",
+        "standalone_logger_clk_exe.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/logging:log_writer_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_cc",
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_cc",
+        "//clockwork/logging/writers:logger_config_clk_proto_conv",
+        "//clockwork/logging/writers:logger_status_clk_cc",
+        "//clockwork/tools/channel_spy:channel_spy_config_clk_cc",
+        "//clockwork/tools/channel_spy:channel_spy_config_init_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    data = [
+        "//clockwork/logging/writers/standalone_logger/resources:channel_rates_config.pbtxt",
+        "//clockwork/logging/writers/standalone_logger/resources:logger_config.pbtxt",
+    ],
+    generate = ["cpp_exe"],
+    proto_deps = [
+        "//clockwork/logging/writers:channel_message_rates_config_clk_proto",
+        "//clockwork/logging/writers:logger_config_clk_proto",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -64,40 +76,21 @@ clk(
     ],
 )
 
-cc_binary(
-    name = "standalone_logger_exe",
-    srcs = [
-        "standalone_logger_exe.cc",
-        "standalone_logger_exe.hh",
-        "standalone_logger_exe.inl",
-    ],
-    data = [
-        ":clockwork.clockwork.logging.writers.standalone_logger.standalone_logger.standalone_logger_sys.proc.tachyon",
-        ":standalone_logger.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
-        ":standalone_logger.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
-        "//clockwork/logging/writers/standalone_logger/resources:channel_rates_config.pbtxt",
-        "//clockwork/logging/writers/standalone_logger/resources:logger_config.pbtxt",
+clk(
+    name = "standalone_logger_sys_clk",
+    srcs = ["standalone_logger_sys.clk"],
+    outs = [
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.proc.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_allocations.csv",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_signal_metadata_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.diagnostics_database_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.logged_channel_metadata.pbbin",
     ],
     visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/logging:log_writer_config",
-        "//clockwork/logging/writers:channel_message_rates_config",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_cc_library",
-        "//clockwork/logging/writers:channel_message_rates_config_proto_conv",
-        "//clockwork/logging/writers:logger_cog",
-        "//clockwork/logging/writers:logger_cog_state",
-        "//clockwork/logging/writers:logger_config",
-        "//clockwork/logging/writers:logger_config_proto_cc_library",
-        "//clockwork/logging/writers:logger_config_proto_conv",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//clockwork/tools/channel_spy:channel_spy_config",
-        "//clockwork/tools/channel_spy:channel_spy_config_init_cog",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/uuid",
-    ],
+    deps = [":standalone_logger_clk"],
 )

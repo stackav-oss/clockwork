@@ -1,0 +1,49 @@
+// Policies for configuring state and config snapshot/restore functionality
+
+#![generate()]
+
+// Schema for TakeSnapshots policy
+schema TakeSnapshotsSchema
+{
+    fields
+    {
+        // Channel to publish snapshots to (required)
+        #0 channel: Channel;
+
+        // Time interval between snapshots (optional)
+        // At least one of interval or cycles must be specified
+        #1 interval: Optional<Duration> = nullopt;
+
+        // Number of execution cycles between snapshots (optional)
+        // At least one of interval or cycles must be specified
+        #2 cycles: Optional<UInt32> = nullopt;
+    }
+}
+
+// Policy for configuring periodic state snapshots
+// Applied to a cog instance's state endpoint
+// Snapshots are taken after cog execution when interval or cycle count is reached
+def policy TakeSnapshots
+{
+    binds_to: CogInstanceStateEndpoint;
+    schema: TakeSnapshotsSchema;
+}
+
+// Schema for SnapshotOnce policy
+schema SnapshotOnceSchema
+{
+    fields
+    {
+        // Channel to publish snapshot to (required)
+        #0 channel: Channel;
+    }
+}
+
+// Policy for configuring one-time config snapshots at startup
+// Applied to a cog instance's config endpoint
+// Config is published to the configured channel on startup
+def policy SnapshotOnce
+{
+    binds_to: CogInstanceConfigEndpoint;
+    schema: SnapshotOnceSchema;
+}

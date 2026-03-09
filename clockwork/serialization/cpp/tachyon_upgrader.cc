@@ -8,7 +8,7 @@
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
 #include "jewels/memory/pointers.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -67,13 +67,13 @@ private:
   size_t src_size_;
 
   /// Source schema FQN
-  std::string_view src_fqn_;
+  std::string src_fqn_;
 
   /// Destination schema size
   size_t dest_size_;
 
   /// Destination schema FQN
-  std::string_view dest_fqn_;
+  std::string dest_fqn_;
 };
 
 TachyonCppUpgrader::TachyonCppUpgrader(
@@ -151,10 +151,10 @@ private:
   size_t schema_size_;
 
   /// Source schema FQN
-  std::string_view src_fqn_;
+  std::string src_fqn_;
 
   /// Destination schema FQN
-  std::string_view dest_fqn_;
+  std::string dest_fqn_;
 };
 
 TachyonMemcpyUpgrader::TachyonMemcpyUpgrader(size_t schema_size, std::string_view src_fqn, std::string_view dest_fqn)

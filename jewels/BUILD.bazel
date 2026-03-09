@@ -1,2 +1,23 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+# Top-level library
+py_library(
+    name = "jewels",
+    imports = [".."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/container:circular_buffer_state_clk_nb",
+        "//jewels/container/tap:py_var_array",
+        "//jewels/container/tap:value_serdes",
+        "//jewels/memory:py_bytes",
+        "//jewels/nanobind:nb_sync_time",
+        "//jewels/nanobind/clk_bindings/common:common_clk_nanobind_libraries",
+        "//jewels/nanobind/clk_bindings/common:common_py",
+        "//jewels/simplelaunch:client",
+        "//jewels/simplelaunch/v1:config_py_library",
+        "//jewels/simplelaunch/v1:service_py_library",
+    ],
+)

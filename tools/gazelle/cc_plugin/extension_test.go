@@ -18,7 +18,7 @@ import (
 // makeBasicWorkspace returns the minimum files necessary for the Gazelle extension to work.
 func makeBasicWorkspace() []testtools.FileSpec {
 	return []testtools.FileSpec{
-		{Path: "WORKSPACE"}, // Gazelle requires that a WORKSPACE file exists, even if it's empty.
+		{Path: "MODULE.bazel"}, // Gazelle requires that a MODULE.bazel file exists, even if it's empty.
 	}
 }
 

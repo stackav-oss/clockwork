@@ -16,7 +16,7 @@
 #include "jewels/log_cerr/log_cerr.hh" // IWYU pragma: keep
 #include "jewels/std/expected.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <mcap/errors.hpp>
 #include <mcap/types.hpp>
 #include <mcap/writer.hpp>

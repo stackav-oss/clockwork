@@ -16,16 +16,19 @@ from clockwork.dsl.bazel.simple_launch_targets import MergeSimplelaunchConfig, c
 from clockwork.dsl.bazel.targets import Label
 from clockwork.dsl.composition import (
     bridgegen,
+    diagnostics_config,
     gen_channel_allocation_report,
     gen_channel_spy_configs,
     gen_diagnostics_configs,
     gen_logger_configs,
     gen_metrics_channel_metadata_configs,
     gen_multi_subscriber_configs,
+    gen_signal_metadata_configs,
     genpd,
     launchgen,
     logger_config,
     pdf,
+    signal_metadata_config,
     system,
 )
 from clockwork.dsl.ir.module_id import CLK_REPO
@@ -35,7 +38,7 @@ from jewels.simplelaunch.v1.config_pb2 import Config
 from typing_extensions import override
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from clockwork.dsl.ir import system_target
     from clockwork.dsl.ir.hardware import CpuDomain
@@ -57,6 +60,7 @@ class GeneratedSystemFiles:
     diagnostics_database_config_files: list[Path]
     logged_channel_metadata_files: list[Path]
     metrics_channel_metadata_files: list[Path]
+    signal_metadata_files: list[Path]
 
     def all_files(self) -> Iterator[Path]:
         """Yield all files of all types."""
@@ -72,6 +76,7 @@ class GeneratedSystemFiles:
         yield from self.diagnostics_database_config_files
         yield from self.logged_channel_metadata_files
         yield from self.metrics_channel_metadata_files
+        yield from self.signal_metadata_files
 
 
 @dataclass
@@ -99,24 +104,68 @@ def make_filename_from_value_key(value_key: str) -> str:
 
 
 class PdfJsonEncoder(json.JSONEncoder):
-    """Encoder for non-JSON types in PDF."""
+    """Encoder for non-JSON types in PDF.
+
+    This encoder requires logger_entities and signal_metadata_entities to be
+    provided via the constructor. Use make_pdf_json_encoder_factory() to create
+    a factory function that can be passed to json.dump()/json.dumps() cls parameter.
+    """
+
+    def __init__(
+        self,
+        *args: object,
+        logger_entities: logger_config.Entities,
+        signal_metadata_entities: signal_metadata_config.Entities,
+        **kwargs: object,
+    ) -> None:
+        """Initialize the encoder with logger and signal metadata entities."""
+        super().__init__(*args, **kwargs)
+        self.logger_entities = logger_entities
+        self.signal_metadata_entities = signal_metadata_entities
 
     @override
     def default(self, o: Any) -> Any:
         """Default encoder."""
-        enum_types = (
+        # Build enum types list
+        enum_types: list[type] = [
+            pdf.DataSourceType,
             pdf.MemoryResourceType,
-            logger_config.MessageEncoding,
-            logger_config.SchemaEncoding,
-            logger_config.ChannelType,
             pdf.NotConnectedEndpointType,
-        )
+            self.logger_entities.message_encoding,
+            self.logger_entities.schema_encoding,
+            self.logger_entities.channel_type,
+            self.signal_metadata_entities.aggregation_type,
+            self.signal_metadata_entities.log_type,
+            self.signal_metadata_entities.report_group_type,
+        ]
+
         if isinstance(o, UUID):
             # if the obj is uuid, we simply return the value of uuid
             return o.hex
-        if isinstance(o, enum_types):
-            return o.value  # pyright: ignore[reportAttributeAccessIssue] False positive
+        if isinstance(o, tuple(enum_types)):
+            return o.value
         return json.JSONEncoder.default(self, o)
+
+
+def make_pdf_json_encoder_factory(
+    logger_entities: logger_config.Entities, signal_metadata_entities: signal_metadata_config.Entities
+) -> Callable[..., PdfJsonEncoder]:
+    """Create a factory function for PdfJsonEncoder with logger and signal metadata entities bound.
+
+    The json.dump/dumps functions accept any callable for the 'cls' parameter,
+    not just a class. This function returns a callable that will create properly
+    configured PdfJsonEncoder instances.
+
+    Args:
+        logger_entities: The logger config entities to use for encoding.
+        signal_metadata_entities: The signal metadata config entities to use for encoding.
+
+    Returns:
+        A callable that can be passed to json.dump/dumps as the cls parameter.
+    """
+    return lambda *args, **kwargs: PdfJsonEncoder(
+        *args, logger_entities=logger_entities, signal_metadata_entities=signal_metadata_entities, **kwargs
+    )
 
 
 def gen_system(
@@ -140,7 +189,7 @@ def gen_system(
 
 def _get_name_from_system_key(system_key: str, domain_name: str) -> str:
     """Generate a name for config files from system key and domain name."""
-    target_path, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    _target_path, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)
     return f"{target_prefix}.{target_name}.{domain_name}"
 
 
@@ -193,6 +242,7 @@ def _generate_process_descriptions(  # noqa: PLR0913 (mitigated by kwonly args)
 
         cpu_domain = logical_system.process_to_domain[process_uuid]
         phys_domain = logical_system.cpu_domains[cpu_domain]
+
         launchgen.gen_process_config(
             exe_fqn=process.executable.fqn,
             sys_fqn=system_fqn,
@@ -220,7 +270,15 @@ def _generate_process_descriptions(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = pd_path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(process_desc), json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(
+                        asdict(process_desc),
+                        json_file,
+                        indent=2,
+                        cls=make_pdf_json_encoder_factory(
+                            logger_config.get_entities(logical_system.module.context),
+                            signal_metadata_config.get_entities(logical_system.module.context),
+                        ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
 
     return result_paths
 
@@ -273,11 +331,25 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 event_json_path = event_path.with_suffix(".json")
                 with event_json_path.open("w", encoding="utf-8") as event_json_file:
-                    json.dump(asdict(obj=logger_configs.events_config), event_json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(
+                        asdict(obj=logger_configs.events_config),
+                        event_json_file,
+                        indent=2,
+                        cls=make_pdf_json_encoder_factory(
+                            logger_config.get_entities(physical_system.system.module.context),
+                            signal_metadata_config.get_entities(physical_system.system.module.context),
+                        ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
                 telemetry_json_path = telemetry_path.with_suffix(".json")
                 with telemetry_json_path.open("w", encoding="utf-8") as telemetry_json_file:
                     json.dump(
-                        asdict(obj=logger_configs.telemetry_config), telemetry_json_file, indent=2, cls=PdfJsonEncoder
+                        asdict(obj=logger_configs.telemetry_config),
+                        telemetry_json_file,
+                        indent=2,
+                        cls=make_pdf_json_encoder_factory(
+                            logger_config.get_entities(physical_system.system.module.context),
+                            signal_metadata_config.get_entities(physical_system.system.module.context),
+                        ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
                     )
 
     # Generate logged channel metadata
@@ -312,7 +384,15 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(obj=channel_publisher_config), json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(
+                        asdict(obj=channel_publisher_config),
+                        json_file,
+                        indent=2,
+                        cls=make_pdf_json_encoder_factory(
+                            logger_config.get_entities(physical_system.system.module.context),
+                            signal_metadata_config.get_entities(physical_system.system.module.context),
+                        ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
 
     return event_logger_files, telemetry_logger_files, log_reader_files, logged_channel_metadata_files
 
@@ -330,16 +410,20 @@ def _generate_bridge_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     write_json_files: bool,
 ) -> list[Path]:
     """Generate bridge configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
     bridge_files: list[Path] = []
 
-    for domain_uuid, bridge_config in bridgegen.gen_bridge_config(physical_system).items():
+    for domain_uuid, bridge_config in bridgegen.gen_tcp_bridge_config(physical_system).items():
         phys_domain = physical_system.cpu_domains[domain_uuid]
         name = _get_name_from_system_key(system_key, phys_domain.logical.name)
         file_name = Path(f"{name}_bridge_config.tachyon")
         local_path = include_dir / file_name
         path = root_dir / local_path
         bridge_files.append(path)
-        launchgen.gen_bridge_config(
+        launchgen.gen_tcp_bridge_config(
             sys_fqn=system_fqn,
             config_file=local_path.name,
             config=simplelaunch_configs[domain_uuid],
@@ -353,7 +437,7 @@ def _generate_bridge_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(obj=bridge_config), json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(asdict(obj=bridge_config), json_file, indent=2, cls=json_encoder_factory)  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
 
     return bridge_files
 
@@ -398,11 +482,15 @@ def _generate_multi_subscriber_configs(  # noqa: PLR0913 (mitigated by kwonly ar
     write_json_files: bool,
 ) -> list[Path]:
     """Generate multi-subscriber configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
     multi_subscriber_files: list[Path] = []
 
     for cpu_uuid, cpu_config in gen_multi_subscriber_configs.gen_multi_subscriber_configs(physical_system).items():
         cpu_name = physical_system.cpu_domains[cpu_uuid].logical.name
-        target_path, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        _target_path, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)
 
         for channel_name, multi_subscriber_config in cpu_config.items():
             name = f"{target_prefix}.{target_name}.{cpu_name}.{channel_name}"
@@ -418,7 +506,7 @@ def _generate_multi_subscriber_configs(  # noqa: PLR0913 (mitigated by kwonly ar
                 if write_json_files:
                     json_path = root_dir / include_dir / f"{name}_config.json"
                     with json_path.open("w", encoding="utf-8") as json_file:
-                        json.dump(asdict(obj=multi_subscriber_config), json_file, indent=2, cls=PdfJsonEncoder)
+                        json.dump(asdict(obj=multi_subscriber_config), json_file, indent=2, cls=json_encoder_factory)  # pyright: ignore[reportArgumentType] (complainging about factory type; type stub is wrong)
 
     return multi_subscriber_files
 
@@ -434,24 +522,28 @@ def _generate_diagnostics_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     write_json_files: bool,
 ) -> list[Path]:
     """Generate diagnostics configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
     diagnostics_files: list[Path] = []
 
     diagnostics_config = gen_diagnostics_configs.gen_diagnostics_configs(physical_system)
-    if diagnostics_config.reporters:
-        _, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)
-        name = f"{target_prefix}.{target_name}.diagnostics_database"
-        file_name = Path(f"{name}_config.tachyon")
-        local_path = include_dir / file_name
-        path = root_dir / local_path
-        diagnostics_files.append(path)
-        for cpu_uuid in physical_system.cpu_domains:
-            cast("list[Path | Label]", output_targets[cpu_uuid].simple_launch_config.data).append(file_name)
-        if write_files:
-            write_tachyon_to_file(obj=diagnostics_config, filename=path)
-            if write_json_files:
-                json_path = path.with_suffix(".json")
-                with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(diagnostics_config), json_file, indent=2, cls=PdfJsonEncoder)
+
+    _, target_prefix, target_name = make_filename_from_value_key(system_key).rsplit(".", 2)
+    name = f"{target_prefix}.{target_name}.diagnostics_database"
+    file_name = Path(f"{name}_config.tachyon")
+    local_path = include_dir / file_name
+    path = root_dir / local_path
+    diagnostics_files.append(path)
+    for cpu_uuid in physical_system.cpu_domains:
+        cast("list[Path | Label]", output_targets[cpu_uuid].simple_launch_config.data).append(file_name)
+    if write_files:
+        write_tachyon_to_file(obj=diagnostics_config, filename=path)
+        if write_json_files:
+            json_path = path.with_suffix(".json")
+            with json_path.open("w", encoding="utf-8") as json_file:
+                json.dump(asdict(diagnostics_config), json_file, indent=2, cls=json_encoder_factory)  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
 
     return diagnostics_files
 
@@ -468,6 +560,10 @@ def _generate_channel_spy_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     write_json_files: bool,
 ) -> list[Path]:
     """Generate channel spy configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(logical_system.module.context),
+        signal_metadata_config.get_entities(logical_system.module.context),
+    )
     channel_spy_files: list[Path] = []
 
     channel_spy_config_by_domain = gen_channel_spy_configs.gen_channel_spy_configs(
@@ -491,7 +587,7 @@ def _generate_channel_spy_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(obj=channel_spy_config), json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(asdict(obj=channel_spy_config), json_file, indent=2, cls=json_encoder_factory)  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
 
     return channel_spy_files
 
@@ -507,6 +603,10 @@ def _generate_metrics_channel_metadata_configs(  # noqa: PLR0913 (mitigated by k
     write_json_files: bool,
 ) -> list[Path]:
     """Generate channel spy configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
     metrics_channel_metadata_files: list[Path] = []
 
     metrics_channel_metadata_config_by_domain = (
@@ -530,9 +630,63 @@ def _generate_metrics_channel_metadata_configs(  # noqa: PLR0913 (mitigated by k
             if write_json_files:
                 json_path = path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
-                    json.dump(asdict(obj=metrics_channel_metadata_config), json_file, indent=2, cls=PdfJsonEncoder)
+                    json.dump(
+                        asdict(obj=metrics_channel_metadata_config),
+                        json_file,
+                        indent=2,
+                        cls=json_encoder_factory,  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
 
     return metrics_channel_metadata_files
+
+
+def _generate_signal_metadata_configs(  # noqa: PLR0913 (mitigated by kwonly args)
+    *,
+    include_dir: Path,
+    root_dir: Path,
+    physical_system: system.PhysicalSystem,
+    output_targets: OutputTargetsByDomain,
+    system_key: str,
+    write_files: bool,
+    write_json_files: bool,
+) -> list[Path]:
+    """Generate signal metadata configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
+    signal_metadata_files: list[Path] = []
+
+    # Generate signal metadata config (system-wide, not per-domain)
+    signal_metadata_cfg = gen_signal_metadata_configs.generate_signal_metadata_config(physical_system)
+
+    # Write the config file once per domain to include in simplelaunch data
+    for domain_uuid in physical_system.cpu_domains:
+        phys_domain = physical_system.cpu_domains[domain_uuid]
+        name = _get_name_from_system_key(system_key, phys_domain.logical.name)
+        file_name = Path(f"{name}_signal_metadata_config.tachyon")
+        local_path = include_dir / file_name
+        path = root_dir / local_path
+        signal_metadata_files.append(path)
+
+        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.data).append(file_name)
+
+        if write_files:
+            write_tachyon_to_file(
+                obj=signal_metadata_cfg,
+                filename=path,
+            )
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(
+                        asdict(obj=signal_metadata_cfg),
+                        json_file,
+                        indent=2,
+                        cls=json_encoder_factory,  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
+
+    return signal_metadata_files
 
 
 def _generate_channel_allocation_reports(  # noqa: PLR0913 (mitigated by kwonly args)
@@ -579,7 +733,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
     physical_system = system.make_physical_system(logical_system)
     system.add_metrics_logging_observers(physical_system)
     simplelaunch_configs: dict[UUID, Config] = {domain_uuid: Config() for domain_uuid in logical_system.cpu_domains}
-    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [], [], [])
+    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [], [], [], [])
     process_descs = genpd.gen_pd_sys(physical_system)
 
     # Initialize output targets
@@ -684,6 +838,16 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
 
     # Generate metrics channel metadata configurations
     result.metrics_channel_metadata_files = _generate_metrics_channel_metadata_configs(
+        include_dir=include_dir,
+        root_dir=root_dir,
+        physical_system=physical_system,
+        output_targets=output_targets,
+        system_key=system_key,
+        write_files=write_files,
+        write_json_files=write_json_files,
+    )
+
+    result.signal_metadata_files = _generate_signal_metadata_configs(
         include_dir=include_dir,
         root_dir=root_dir,
         physical_system=physical_system,

@@ -13,7 +13,7 @@
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/pointers.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
 #include <algorithm>
@@ -390,7 +390,7 @@ TachyonModel::from_proto(std::unique_ptr<metadata::TachyonMetadata> metadata_pro
 
 void TachyonModel::check_for_unexpected_schema_changes(TachyonModel& other)
 {
-  get_outer_type().check_for_unexpected_schema_changes(other.get_outer_type(), get_outer_type().get_fqn());
+  get_outer_type().check_for_unexpected_schema_changes(other.get_outer_type(), true, get_outer_type().get_fqn());
 }
 
 [[nodiscard]] bool validate_logged_channel_metadata(

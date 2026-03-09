@@ -91,6 +91,7 @@ jewels::expected<DeterministicRunnerConfig, jewels::MonoError> build_determinist
     .end_time = time_range.end,
     .channel_publisher = channel_publisher,
     .cog_to_gpu_id = cog_to_gpu_id,
+    .playback_speed = execution_params.playback_speed.value_or(0.0),
   };
 }
 } // namespace clockwork

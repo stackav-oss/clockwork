@@ -1,8 +1,8 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/common/process_description.hh" // IWYU pragma: keep
-#include "clockwork/io/var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/bidirectional_udp.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"

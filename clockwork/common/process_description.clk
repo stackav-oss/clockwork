@@ -1,3 +1,26 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::common)]
+
+MAX_CHANNEL_NAME_SIZE: UInt64 = 300;
+MAX_INSTANCE_PATH_SIZE: UInt64 = 512;
+MAX_COG_INSTANCES: UInt64 = 501;
+MAX_ENDPOINTS_PER_COG: UInt64 = 86;
+MAX_STATE_INSTANCES: UInt64 = 267;
+MAX_STATE_CONNECTIONS: UInt64 = 612;
+MAX_CONFIG_INSTANCES: UInt64 = 334;
+MAX_CONFIG_CONNECTIONS: UInt64 = 304;
+MAX_FILE_PATH_SIZE: UInt64 = 4096;
+MAX_INIT_COGS: UInt64 = 202;
+MAX_PUBLISHERS: UInt64 = 2048;
+MAX_PUBSUB_CONNECTIONS: UInt64 = 920;
+MAX_MEMORY_RESOURCES: UInt64 = 504;
+MAX_MEMORY_RESOURCE_CONNECTIONS: UInt64 = 488;
+MAX_TIMERS: UInt64 = 45;
+MAX_IO_CONNECTIONS: UInt64 = 32;
+MAX_NOT_CONNECTED_ENDPOINTS: UInt64 = 1024;
+MAX_SNAPSHOT_CONFIGS: UInt64 = 512;
+MAX_DATA_SOURCES: UInt64 = 256;
+
 // Id for a cog type
 tag CogClassId;
 // Id for a cog instance, i.e. a particular graph node
@@ -21,6 +44,34 @@ tag IoConnectionClassId;
 // Id of an io connection class instance
 tag IoConnectionInstanceId;
 
+// Configuration for snapshotting a state or config endpoint
+schema SnapshotConfig
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // The state or config endpoint to snapshot
+    #1 endpoint_id: Uuid<EndpointInstanceId>;
+
+    // Publisher ID for the snapshot channel
+    #2 snapshot_publisher_id: Uuid<EndpointInstanceId>;
+
+    // Time interval between snapshots in nanoseconds (optional)
+    // For state snapshots (TakeSnapshots), at least one of interval_ns or cycles must be set
+    // For config snapshots (SnapshotOnce), this will be nullopt
+    #3 interval: Optional<Duration>;
+
+    // Number of execution cycles between snapshots (optional)
+    // For state snapshots (TakeSnapshots), at least one of interval_ns or cycles must be set
+    // For config snapshots (SnapshotOnce), this will be nullopt
+    #4 cycles: Optional<UInt32>;
+  }
+}
+
 // Type of memory resource
 enum MemoryResourceType
 {
@@ -43,62 +94,70 @@ enum NotConnectedEndpointType
     #2 subscriber;
   }
 }
+
 // Describes the clockwork graph for a particular process
 schema ProcessDescription
 {
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
 
     // Max number of cog instances
-    #2 max_cog_instances: UInt64;
+    #2 max_cog_instances: UInt64 = MAX_COG_INSTANCES;
 
     // Max endpoints (pub + sub + config + etc) for a cog
-    #3 max_endpoints_per_cog: UInt64;
+    #3 max_endpoints_per_cog: UInt64 = MAX_ENDPOINTS_PER_COG;
 
     // Maximum number of states in the process
-    #4 max_state_instances: UInt64;
+    #4 max_state_instances: UInt64 = MAX_STATE_INSTANCES;
 
     // Maximum number of state-cog connections in the process
-    #5 max_state_connections: UInt64;
+    #5 max_state_connections: UInt64 = MAX_STATE_CONNECTIONS;
 
     // Maximum number of configs in the process
-    #6 max_config_instances: UInt64;
+    #6 max_config_instances: UInt64 = MAX_CONFIG_INSTANCES;
 
     // Maximum number of config-cog connections in the process
-    #7 max_config_connections: UInt64;
+    #7 max_config_connections: UInt64 = MAX_CONFIG_CONNECTIONS;
 
     // Maximum size of a path to a file
-    #8 max_file_path_size: UInt64;
+    #8 max_file_path_size: UInt64 = MAX_FILE_PATH_SIZE;
 
     // Maximum number of initialization cogs in the process
-    #9 max_init_cogs: UInt64;
+    #9 max_init_cogs: UInt64 = MAX_INIT_COGS;
 
     // Maximum number of publishers referenced by this process (includes both
     // local publishers and remote publishers that are subscribed to)
-    #10 max_publishers: UInt64;
+    #10 max_publishers: UInt64 = MAX_PUBLISHERS;
 
     // Maximum number of channel connections
-    #11 max_pubsub_connections: UInt64;
+    #11 max_pubsub_connections: UInt64 = MAX_PUBSUB_CONNECTIONS;
 
     // Maximum number of memory pools
-    #12 max_memory_resources: UInt64;
+    #12 max_memory_resources: UInt64 = MAX_MEMORY_RESOURCES;
 
     // Maximum number of memory pool to cog instance connections
-    #22 max_memory_resource_connections: UInt64;
+    #22 max_memory_resource_connections: UInt64 = MAX_MEMORY_RESOURCE_CONNECTIONS;
 
     // Maximum number of timers
-    #13 max_timers: UInt64;
+    #13 max_timers: UInt64 = MAX_TIMERS;
 
     // Maximum number of IO connections.
-    #23 max_io_connections: UInt64;
+    #23 max_io_connections: UInt64 = MAX_IO_CONNECTIONS;
 
     // Maximum channel name length
-    #27 max_channel_name_len: UInt64;
+    #27 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
 
     // Maximum number of not connected endpoints
-    #28 max_not_connected_endpoints: UInt64;
+    #28 max_not_connected_endpoints: UInt64 = MAX_NOT_CONNECTED_ENDPOINTS;
+
+    // Maximum number of snapshot configurations (state and config snapshots)
+    #30 max_snapshot_configs: UInt64 = MAX_SNAPSHOT_CONFIGS;
+
+    // Maximum number of data sources
+    // Should be at least as large as max_config_instances and < max_data_source_id
+    #32 max_data_sources: UInt64 = MAX_DATA_SOURCES;
   }
 
   fields
@@ -107,34 +166,42 @@ schema ProcessDescription
     #14 process_id: Uuid<ProcessInstanceId>;
 
     // Every Cog instance, including init Cogs
-    #15 cog_instances: VarArray<CogInstanceDescription<max_instance_path_size=max_instance_path_size, max_endpoints_per_cog=max_endpoints_per_cog>, max_size=max_cog_instances>;
+    #15 cog_instances: VarArray<CogInstanceDescription<>, max_size=max_cog_instances>;
 
     // State instances and connections
-    #16 state_graph: StateGraph<max_state_instances=max_state_instances, max_instance_path_size=max_instance_path_size, max_state_connections=max_state_connections>;
+    #16 state_graph: StateGraph<>;
 
     // Config instances and connections
-    #17 config_graph: ConfigGraph<max_instance_path_size=max_instance_path_size, max_config_instances=max_config_instances, max_config_connections=max_config_connections, max_file_path_size=max_file_path_size>;
+    #17 config_graph: ConfigGraph<>;
 
     // Publishers and connections
-    #18 pubsub_graph: PubSubGraph<max_publishers=max_publishers, max_pubsub_connections=max_pubsub_connections, max_channel_name_len=max_channel_name_len>;
+    #18 pubsub_graph: PubSubGraph<>;
 
     // Memory resources
-    #19 memory_resource_graph: MemoryResourceGraph<max_instance_path_size=max_instance_path_size, max_memory_resources=max_memory_resources, max_memory_resource_connections=max_memory_resource_connections>;
+    #19 memory_resource_graph: MemoryResourceGraph<>;
 
     // Timer instances
-    #20 timers: VarArray<TimerInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_timers>;
+    #20 timers: VarArray<TimerInstanceDescription<>, max_size=max_timers>;
 
     // Topologically sorted by config/state dependencies; execute in order
     #21 init_cogs: VarArray<Uuid<CogInstanceId>, max_size=max_init_cogs>;
 
     // IO Connections
-    #24 io_connections: VarArray<IoConnectionInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_io_connections>;
+    #24 io_connections: VarArray<IoConnectionInstanceDescription<>, max_size=max_io_connections>;
 
     // Log reader cog
     #26 log_cog: Uuid<CogInstanceId>;
 
     // Not Connected Endpoints
     #29 not_connected_endpoints: VarArray<NotConnectedEndpoint, max_size=max_not_connected_endpoints>;
+
+    // Snapshot configurations for state and config endpoints
+    #31 snapshot_configs: VarArray<SnapshotConfig, max_size=max_snapshot_configs>;
+
+    // Data sources
+    // NB: Data sources are identified by their index in this array.
+    // Must be less than default_construct_data_source_sentinel
+    #33 data_sources: VarArray<DataSource<>, max_size=max_data_sources>;
   }
 }
 
@@ -144,16 +211,17 @@ schema PubSubGraph
   parameters
   {
     // Maximum number of publishers referenced by this process
-    #1 max_publishers: UInt64;
+    #1 max_publishers: UInt64 = MAX_PUBLISHERS;
     // Maximum number of channel connections
-    #2 max_pubsub_connections: UInt64;
+    #2 max_pubsub_connections: UInt64 = MAX_PUBSUB_CONNECTIONS;
     // Maximum channel name length
-    #5 max_channel_name_len: UInt64;
+    #5 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
   }
+
   fields
   {
     // Sorted by publisher_id
-    #3 publish_endpoints: VarArray<PublishEndpoint<max_channel_name_len=max_channel_name_len>, max_size=max_publishers>;
+    #3 publish_endpoints: VarArray<PublishEndpoint<>, max_size=max_publishers>;
     // Sorted by subscriber_id
     #4 connections: VarArray<PubSubConnection, max_size=max_pubsub_connections>;
   }
@@ -165,9 +233,9 @@ schema CogInstanceDescription
   parameters
   {
     // Max endpoints (pub + sub + config + etc) for a cog
-    #1 max_endpoints_per_cog: UInt64;
+    #1 max_endpoints_per_cog: UInt64 = MAX_ENDPOINTS_PER_COG;
     // Max length of human readable id
-    #2 max_instance_path_size: UInt64;
+    #2 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
   }
 
   fields
@@ -212,10 +280,15 @@ schema EndpointInstanceDescription
 // and validate that it has the expected layout.
 schema PublishEndpoint
 {
+  options
+  {
+    constructor: source_code_order;
+  }
+
   parameters
   {
     // Maximum channel name length
-    #5 max_channel_name_len: UInt64;
+    #5 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
   }
 
   fields
@@ -235,6 +308,9 @@ schema PublishEndpoint
 
     // Channel name
     #6 channel_name: VarString<max_size=max_channel_name_len>;
+
+    // Does the channel contain bulk data?
+    #7 is_bulk_data: Bool;
   }
 }
 
@@ -266,12 +342,15 @@ schema PinionBufferLayout
   {
     constructor: source_code_order;
   }
+
   fields
   {
     // Number of slots (messages) in the buffer
     #1 num_slots: UInt64;
     // Size of each slot
     #2 message_size: UInt64;
+    // True if the buffer is only published once
+    #3 is_published_once: Bool;
   }
 }
 
@@ -296,26 +375,24 @@ schema StateGraph
   parameters
   {
     // Maximum number of states in the process
-    #1 max_state_instances: UInt64;
+    #1 max_state_instances: UInt64 = MAX_STATE_INSTANCES;
 
     // Max length of human readable id
-    #2 max_instance_path_size: UInt64;
+    #2 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
 
     // Maximum number of state-cog connections in the process
-    #3 max_state_connections: UInt64;
+    #3 max_state_connections: UInt64 = MAX_STATE_CONNECTIONS;
   }
 
   fields
   {
     // All of the state instances
-    #4 state_instances: VarArray<
-      StateInstanceDescription<max_instance_path_size=max_instance_path_size>, max_size=max_state_instances>;
+    #4 state_instances: VarArray<StateInstanceDescription<>, max_size=max_state_instances>;
 
     // Connections from state to Cogs
     #5 connections: VarArray<StateConnection, max_size=max_state_connections>;
   }
 }
-
 
 // Describes a specific instance of persistent state.
 schema StateInstanceDescription
@@ -323,7 +400,7 @@ schema StateInstanceDescription
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
   }
 
   fields
@@ -349,9 +426,12 @@ schema StateInstanceDescription
     // resource and this contains information about the associated memory buffer
     // used for allocating the state and its internal members.
     #8 maybe_memory_resource: Optional<Uuid<MemoryResourceId>>;
+
+    // Data source to use for initialization of this state.
+    // This can be default_construct_data_source_sentinel to indicate default construction.
+    #9 init_data_source: UInt16 = default_construct_data_source_sentinel;
   }
 }
-
 
 // A connection between a state instance and a state endpoint on a Cog.
 schema StateConnection
@@ -365,59 +445,111 @@ schema StateConnection
   }
 }
 
-
 // Describes Config instances and their connections to Cog instances
 schema ConfigGraph
 {
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
     // Maximum number of configs in the process
-    #2 max_config_instances: UInt64;
+    #2 max_config_instances: UInt64 = MAX_CONFIG_INSTANCES;
     // Maximum number of config-cog connections in the process
-    #3 max_config_connections: UInt64;
+    #3 max_config_connections: UInt64 = MAX_CONFIG_CONNECTIONS;
     // Maximum size of a path to a file
-    #4 max_file_path_size: UInt64;
+    #4 max_file_path_size: UInt64 = MAX_FILE_PATH_SIZE;
   }
 
   fields
   {
     // Instances of config schemas
-    #5 config_instances: VarArray<
-      ConfigInstanceDescription<max_instance_path_size=max_instance_path_size, max_file_path_size=max_file_path_size>,
-      max_size=max_config_instances>;
+    #5 config_instances: VarArray<ConfigInstanceDescription<>, max_size=max_config_instances>;
     // Connections from Config instances to Cog instances
     #6 connections: VarArray<ConfigConnection, max_size=max_config_connections>;
   }
 }
 
-
-// Describes a Config instances
-schema ConfigInstanceDescription
+// Type of data source
+enum DataSourceType
 {
+  values
+  {
+    // File data source
+    #1 file default;
+
+    // First message on a channel from a log
+    #2 log_first_message;
+  }
+}
+
+// Maximum valid data source ID; anything above this value is a psuedo data source
+max_data_source_id: UInt16 = 65533;
+// Pseudo data source indicating the data should be default-constructed
+default_construct_data_source_sentinel: UInt16 = 65534;
+// Pseudo data source indicating there is no fallback data source (i.e. failure to load is an error)
+no_fallback_data_source_sentinel: UInt16 = 65535;
+
+// Describes a data source
+schema DataSource
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+
   parameters
   {
-    // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
     // Maximum size of a path to a file
-    #2 max_file_path_size: UInt64;
+    #1 max_file_path_size: UInt64 = MAX_FILE_PATH_SIZE;
   }
 
   fields
   {
     // Representation class ID.  This matches something compiled into the Casing.
-    #3 representation_id: Uuid<RepresentationTag>;
+    #2 representation_id: Uuid<RepresentationTag>;
 
+    // Data source type
+    #3 data_source_type: DataSourceType;
+
+    // Path or channel name; interpretation depends on data_source_type
+    #4 source_path_or_name: VarString<max_size=max_file_path_size>;
+
+    // Fallback data source ID if this one is not available
+    //
+    // Data sources are identified by their index in the array of data sources.
+    // If this is set to default_construct_data_source_sentinel then use default construction as the fallback.
+    // If this is set to no_fallback_data_source_sentinel then there is no fallback and failure to load this
+    // data source should be treated as an error.
+    #5 fallback_source: UInt16;
+  }
+}
+
+// Describes a Config instance
+schema ConfigInstanceDescription
+{
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  parameters
+  {
+    // Max length of human readable id
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
+  }
+
+  fields
+  {
     // Instance ID for this instance.  This is not compiled-in but created
     // dynamically via the API.
-    #4 config_instance_id: Uuid<ConfigInstanceId>;
+    #2 config_instance_id: Uuid<ConfigInstanceId>;
 
     // Human-readable name for this config instance
-    #5 instance_path_name: VarString<max_size=max_instance_path_size>;
+    #3 instance_path_name: VarString<max_size=max_instance_path_size>;
 
-    // Path to the config file to load for this instance.
-    #6 config_file_path: VarString<max_size=max_file_path_size>;
+    // Data source to use for initialization of this config.
+    // This can be default_construct_data_source_sentinel to indicate default construction.
+    #4 init_data_source: UInt16;
   }
 }
 
@@ -441,8 +573,9 @@ schema MemoryResource
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
   }
+
   fields
   {
     // Unique ID; this is used elsewhere to refer to this instance.
@@ -478,18 +611,17 @@ schema MemoryResourceGraph
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
     // Maximum number of configs in the process
-    #2 max_memory_resources: UInt64;
+    #2 max_memory_resources: UInt64 = MAX_MEMORY_RESOURCES;
     // Maximum number of config-cog connections in the process
-    #3 max_memory_resource_connections: UInt64;
+    #3 max_memory_resource_connections: UInt64 = MAX_MEMORY_RESOURCE_CONNECTIONS;
   }
 
   fields
   {
     // Instances of memory resources
-    #4 memory_resources: VarArray<
-      MemoryResource<max_instance_path_size=max_instance_path_size>, max_size=max_memory_resources>;
+    #4 memory_resources: VarArray<MemoryResource<>, max_size=max_memory_resources>;
     // Connections from memory resource instances to Cog instance endpoints
     #5 connections: VarArray<MemoryResourceConnection, max_size=max_memory_resource_connections>;
   }
@@ -501,8 +633,9 @@ schema TimerInstanceDescription
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
   }
+
   fields
   {
     // Unique ID for timer instance.  This will correspond to something inside a CogInstanceDescription
@@ -519,8 +652,9 @@ schema IoConnectionInstanceDescription
   parameters
   {
     // Max length of human readable id
-    #1 max_instance_path_size: UInt64;
+    #1 max_instance_path_size: UInt64 = MAX_INSTANCE_PATH_SIZE;
   }
+
   fields
   {
     // Class ID
@@ -540,84 +674,16 @@ schema IoConnectionInstanceDescription
   }
 }
 
-cpp_target process_description
-{
-  options
-  {
-    namespace clockwork::common;
-  }
-
-  tag CogClassId;
-  tag CogInstanceId;
-  tag EndpointClassId;
-  tag EndpointInstanceId;
-  tag StateInstanceId;
-  tag ConfigInstanceId;
-  tag CasingClassId;
-  tag ProcessInstanceId;
-  tag MemoryResourceId;
-  tag IoConnectionClassId;
-  tag IoConnectionInstanceId;
-
-  schema ProcessDescription;
-  schema PubSubGraph;
-  schema CogInstanceDescription;
-  schema EndpointInstanceDescription;
-  schema PublishEndpoint;
-  schema PinionBufferLayout;
-  schema PubSubConnection;
-  schema StateGraph;
-  schema StateInstanceDescription;
-  schema StateConnection;
-  schema ConfigGraph;
-  schema ConfigInstanceDescription;
-  schema ConfigConnection;
-  schema MemoryResource;
-  schema MemoryResourceConnection;
-  schema MemoryResourceGraph;
-  schema TimerInstanceDescription;
-  schema IoConnectionInstanceDescription;
-  schema NotConnectedEndpoint;
-  enum MemoryResourceType;
-  enum NotConnectedEndpointType;
-
-  representation Tachyon<EndpointInstanceDescription>;
-  representation Tachyon<PinionBufferLayout>;
-  representation Tachyon<PublishEndpoint<max_channel_name_len=300>>;
-  representation Tachyon<PubSubConnection>;
-  representation Tachyon<PubSubGraph<max_publishers=2048, max_pubsub_connections=920, max_channel_name_len=300>>;
-  representation Tachyon<StateInstanceDescription<max_instance_path_size=512>>;
-  representation Tachyon<StateConnection>;
-  representation Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>;
-  representation Tachyon<ConfigConnection>;
-  representation Tachyon<MemoryResource<max_instance_path_size=512>>;
-  representation Tachyon<MemoryResourceConnection>;
-  representation Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>;
-  representation Tachyon<TimerInstanceDescription<max_instance_path_size=512>>;
-  representation Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>;
-  representation Tachyon<CogInstanceDescription<max_endpoints_per_cog=55,max_instance_path_size=512>>;
-  representation Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=509>>;
-  representation Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>;
-  representation Tachyon<NotConnectedEndpoint>;
-  representation Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=501, max_endpoints_per_cog=55, max_state_instances=267, max_state_connections=509, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=2048, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32, max_channel_name_len=300, max_not_connected_endpoints=1024>>;
-
-  interface EndpointInstanceDescriptionTap : Tap<Tachyon<EndpointInstanceDescription>>;
-  interface PinionBufferLayoutTap : Tap<Tachyon<PinionBufferLayout>>;
-  interface PublishEndpointTap : Tap<Tachyon<PublishEndpoint<max_channel_name_len=300>>>;
-  interface PubSubConnectionTap : Tap<Tachyon<PubSubConnection>>;
-  interface PubSubGraphTap : Tap<Tachyon<PubSubGraph<max_publishers=2048, max_pubsub_connections=920, max_channel_name_len=300>>>;
-  interface StateInstanceDescriptionTap : Tap<Tachyon<StateInstanceDescription<max_instance_path_size=512>>>;
-  interface StateConnectionTap : Tap<Tachyon<StateConnection>>;
-  interface ConfigInstanceDescriptionTap : Tap<Tachyon<ConfigInstanceDescription<max_instance_path_size=512, max_file_path_size=4096>>>;
-  interface ConfigConnectionTap : Tap<Tachyon<ConfigConnection>>;
-  interface MemoryResourceTap : Tap<Tachyon<MemoryResource<max_instance_path_size=512>>>;
-  interface MemoryResourceConnectionTap : Tap<Tachyon<MemoryResourceConnection>>;
-  interface MemoryResourceGraphTap : Tap<Tachyon<MemoryResourceGraph<max_instance_path_size=512, max_memory_resources=504, max_memory_resource_connections=488>>>;
-  interface TimerInstanceDescriptionTap : Tap<Tachyon<TimerInstanceDescription<max_instance_path_size=512>>>;
-  interface IoConnectionInstanceDescriptionTap : Tap<Tachyon<IoConnectionInstanceDescription<max_instance_path_size=512>>>;
-  interface CogInstanceDescriptionTap : Tap<Tachyon<CogInstanceDescription<max_endpoints_per_cog=55,max_instance_path_size=512>>>;
-  interface StateGraphTap : Tap<Tachyon<StateGraph<max_state_instances=267, max_instance_path_size=512, max_state_connections=509>>>;
-  interface ConfigGraphTap : Tap<Tachyon<ConfigGraph<max_instance_path_size=512, max_config_instances=234, max_config_connections=304, max_file_path_size=4096>>>;
-  interface NotConnectedEndpointTap : Tap<Tachyon<NotConnectedEndpoint>>;
-  interface ProcessDescriptionTap : Tap<Tachyon<ProcessDescription<max_instance_path_size=512, max_cog_instances=501, max_endpoints_per_cog=55, max_state_instances=267, max_state_connections=509, max_config_instances=234, max_config_connections=304, max_file_path_size=4096, max_init_cogs=202, max_publishers=2048, max_pubsub_connections=920, max_memory_resources=504, max_memory_resource_connections=488, max_timers=45, max_io_connections=32, max_channel_name_len=300, max_not_connected_endpoints=1024>>>;
-}
+instantiate PublishEndpoint<>;
+instantiate PubSubGraph<>;
+instantiate StateInstanceDescription<>;
+instantiate ConfigInstanceDescription<>;
+instantiate MemoryResource<>;
+instantiate MemoryResourceGraph<>;
+instantiate TimerInstanceDescription<>;
+instantiate IoConnectionInstanceDescription<>;
+instantiate CogInstanceDescription<>;
+instantiate StateGraph<>;
+instantiate ConfigGraph<>;
+instantiate DataSource<>;
+instantiate ProcessDescription<>;

@@ -285,10 +285,10 @@ def make_clang_targets(name):
         visibility = ["//visibility:public"],
     )
 
-    native_binary(
+    native.filegroup(
         name = "clangd",
-        out = "clangd",
-        src = "usr/lib/llvm-{}/bin/clangd".format(CLANG_VERSION),
+        srcs = ["usr/lib/llvm-{}/bin/clangd".format(CLANG_VERSION)],
+        data = [":llvm_dependencies"],
         visibility = ["//visibility:public"],
     )
 
@@ -315,8 +315,10 @@ def make_clang_targets(name):
         srcs = native.glob(
             [
                 "lib/x86_64-linux-gnu/libffi.so*",
+                "lib/x86_64-linux-gnu/libedit.so*",
                 "usr/lib/llvm-{}/lib/libclang-*.*".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libclang.*".format(CLANG_VERSION),
+                "usr/lib/llvm-{}/lib/libedit.so.2".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libffi.so.7".format(CLANG_VERSION),
                 "usr/lib/llvm-{}/lib/libLLVM*".format(CLANG_VERSION),
             ],
@@ -367,7 +369,7 @@ def make_clang_targets(name):
                 "@platforms//os:linux",
                 "@platforms//cpu:x86_64",
             ],
-            target_compatible_with = ["@platforms//cpu:" + arch, "@bazel_tools//tools/cpp:clang"],
+            target_compatible_with = ["@platforms//cpu:" + arch],
             toolchain = cc_toolchain_name,
             toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
             visibility = ["//visibility:public"],

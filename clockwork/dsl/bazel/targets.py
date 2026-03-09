@@ -87,6 +87,8 @@ class Target:
                     continue
                 value_str: list[str] | str = [str(i) for i in value]
             elif isinstance(value, bool):
+                if field.name == "testonly" and not value:
+                    continue  # Don't pollute the build files with 'testonly = False'
                 value_str = str(value)
             else:
                 value_str = f"'{value}'"

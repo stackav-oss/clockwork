@@ -1,0 +1,31 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# keep
+cc_library(
+    name = "otel",
+    srcs = ["libotel.so"],
+    hdrs = ["otel.hh"],
+    deps = ["@opentelemetry-cpp//api"],
+)
+
+# keep
+cc_binary(
+    name = "libotel.so",
+    srcs = [
+        "otel.cc",
+        "otel.hh",
+    ],
+    linkshared = True,
+    deps = [
+        "//jewels/log_cerr",
+        "@opentelemetry-cpp//api",
+        "@opentelemetry-cpp//exporters/ostream:ostream_span_exporter",
+        "@opentelemetry-cpp//exporters/otlp:otlp_grpc_exporter",
+        "@opentelemetry-cpp//sdk:headers",
+    ],
+)

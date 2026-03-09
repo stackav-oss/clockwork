@@ -3,10 +3,9 @@
 
 #include "clockwork/runners/channel_publisher.hh"
 
-#include "clockwork/logging/channel_publisher_config.hh"
+#include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/slot.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -15,6 +14,7 @@
 #include <cstring>
 #include <memory_resource>
 #include <span>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -22,7 +22,7 @@ namespace clockwork
 {
 ChannelPublisher::ChannelPublisher(
   jewels::memory::MemoryResource memory_resource,
-  jewels::memory::ObjectPtr<const clockwork_logging::ChannelPublisherConfigTap> channel_publisher_config,
+  jewels::memory::ObjectPtr<const Tappy<clockwork_logging::ChannelPublisherConfig<>>> channel_publisher_config,
   const jewels::memory::NonNullSharedPtr<MessageFetcher>& message_fetcher,
   ShmPublisherMap channels,
   bool suppress_schema_mismatch_errors)
@@ -33,7 +33,7 @@ ChannelPublisher::ChannelPublisher(
     channel_publishers_(memory_resource_),
     suppress_schema_mismatch_errors_(suppress_schema_mismatch_errors)
 {
-  mismatched_channels_logged_ = std::pmr::unordered_set<std::pmr::string>(memory_resource_);
+  ignored_channels_ = std::pmr::unordered_set<std::pmr::string>(memory_resource_);
 }
 
 jewels::expected<void, jewels::MonoError> ChannelPublisher::initialize()
@@ -44,12 +44,24 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::initialize()
 
     auto endpoint_uuid = jewels::Uuid<::clockwork::common::EndpointInstanceId>(channel_config.get_uuid().uuid);
 
+    // Skip channels with nil UUID - these are FirstMessage data sources that are consumed
+    // from the input log but not published during logsim playback
+    if (endpoint_uuid == jewels::Uuid<::clockwork::common::EndpointInstanceId>{})
+    {
+      ignored_channels_.insert(std::pmr::string{channel_name, memory_resource_});
+      continue;
+    }
+
     if (auto channel = channels_.find(endpoint_uuid); channel != channels_.end())
     {
       channel_publishers_.emplace(std::pmr::string(channel_name, memory_resource_), channel->second);
     }
     else
     {
+      jewels::log_cerr_error(
+        "ChannelPublisher::initialize: channel '{}' with UUID {} not found in channels map",
+        channel_name,
+        endpoint_uuid);
       return jewels::unexpected(jewels::MonoError{});
     }
   }
@@ -66,8 +78,8 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::publish_next_message
     return jewels::unexpected(jewels::MonoError{});
   }
 
-  // Exit early if this channel has a schema mismatch
-  if (mismatched_channels_logged_.contains(next_message_->channel))
+  // Exit early if this channel should be ignored (schema mismatch or FirstMessage-only)
+  if (ignored_channels_.contains(next_message_->channel))
   {
     // Move on to the next message
     next_message_ = get_next_message_info();
@@ -112,7 +124,7 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::publish_next_message
         slot.message().size());
 
       // We don't want to revisit this channel, mark it so that we can catch it up top.
-      mismatched_channels_logged_.insert(channel);
+      ignored_channels_.insert(channel);
 
       // Move on to the next message
       next_message_ = get_next_message_info();
@@ -133,7 +145,8 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::publish_next_message
 
     return {};
   }
-  jewels::log_cerr_error("Unable to find configured publisher channel for channel: {}", next_message_->channel);
+
+  jewels::log_cerr_error("Channel '{}' not found in publishers or ignored list", next_message_->channel);
   return jewels::unexpected(jewels::MonoError{});
 }
 

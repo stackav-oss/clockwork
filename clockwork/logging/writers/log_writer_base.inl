@@ -3,26 +3,26 @@
 
 #include "clockwork/logging/writers/log_writer_base.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/writers/channel_message_rates.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
+#include "clockwork/logging/writers/channel_message_rates_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
-#include "clockwork/logging/writers/rate_status.hh"
+#include "clockwork/logging/writers/rate_status_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/channel_observer.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_subscriber.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/epoll_manager.hh"
 #include "clockwork/scaffolding/channels.hh"
@@ -36,7 +36,7 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 #include <algorithm>
 #include <atomic>
@@ -67,8 +67,9 @@ namespace clockwork_logging
 template <typename Derived, typename BufferPoolT>
 LogWriterBase<Derived, BufferPoolT>::GuardedState::GuardedState(
   jewels::memory::MemoryResource memory_resource,
-  const LogWriterConfigTap& log_writer_config,
-  const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
+  const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+  const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config,
+  std::pmr::unordered_set<std::pmr::string>& channel_name_strings)
   : message_counts(memory_resource),
     logged_persistent_channels(memory_resource),
     message_rate_counter(memory_resource, channel_rates_config)
@@ -76,29 +77,32 @@ LogWriterBase<Derived, BufferPoolT>::GuardedState::GuardedState(
   const auto current_steady_time = jewels::time::SteadyClock::now();
   for (const auto& channel_config : log_writer_config.get_channels())
   {
-    message_rate_counter.add_channel(channel_config.get_channel_name(), current_steady_time);
+    const auto channel_name_iter =
+      // NOLINTNEXTLINE(modernize-use-emplace) Compiler doesn't accept emplace(channel_name, memory_resource_)
+      channel_name_strings.emplace(std::pmr::string{channel_config.get_channel_name(), memory_resource}).first;
+    message_rate_counter.add_channel(*channel_name_iter, current_steady_time);
   }
 }
 
 template <typename Derived, typename BufferPoolT>
 LogWriterBase<Derived, BufferPoolT>::LogWriterBase(
   jewels::memory::MemoryResource memory_resource,
-  const LogWriterConfigTap& log_writer_config,
+  const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
   std::string_view pinion_shm_root,
   std::string_view pinion_namespace,
   size_t buffer_pool_size,
   std::chrono::nanoseconds max_log_file_duration,
   const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
-  : guarded_state_(
+  : memory_resource_(std::move(memory_resource)),
+    channel_name_strings_(memory_resource_),
+    guarded_state_(
       jewels::memory::make_pmr_unique<GuardedState>(
-        memory_resource, memory_resource, log_writer_config, channel_rates_config)),
-    memory_resource_(std::move(memory_resource)),
-    log_writer_config_(log_writer_config),
+        memory_resource_, memory_resource_, log_writer_config, channel_rates_config, channel_name_strings_)),
     pinion_shm_root_(pinion_shm_root, memory_resource_),
     pinion_namespace_(pinion_namespace, memory_resource_),
     subscription_configs_(memory_resource_),
-    channel_observer_ptrs_(log_writer_config_.get_channels().size(), memory_resource_),
-    shm_subscriber_ptrs_(log_writer_config_.get_channels().size(), memory_resource_),
+    channel_observer_ptrs_(log_writer_config.get_channels().size(), memory_resource_),
+    shm_subscriber_ptrs_(log_writer_config.get_channels().size(), memory_resource_),
     pending_subscriptions_(memory_resource_),
     persistent_channels_(memory_resource_),
     buffer_pool_ptr_(
@@ -108,7 +112,7 @@ LogWriterBase<Derived, BufferPoolT>::LogWriterBase(
       memory_resource_, memory_resource_, buffer_pool_ptr_, max_log_file_duration, onboard::WriterEnvironment::normal),
     epoll_(memory_resource_)
 {
-  subscription_configs_.reserve(static_cast<size_t>(log_writer_config_.get_channels().size()));
+  subscription_configs_.reserve(static_cast<size_t>(log_writer_config.get_channels().size()));
   // Load the channel message rates to initialize the counters
   std::ignore = get_channel_message_rates();
 }
@@ -278,8 +282,7 @@ template <typename Derived, typename BufferPoolT>
 void LogWriterBase<Derived, BufferPoolT>::message_callback(
   jewels::time::SyncTime /*current_time*/,
   std::string_view channel_name,
-  jewels::memory::ObjectPtr<const clockwork::pinion::Buffer> buffer_ptr,
-  const clockwork::pinion::BufferIterator& buffer_iterator)
+  const ::clockwork::pinion::SlotRef& message_ref)
 {
   const auto now = jewels::time::SteadyClock::now();
   {
@@ -292,8 +295,7 @@ void LogWriterBase<Derived, BufferPoolT>::message_callback(
     update_max_write_backlog(now);
     last_writer_periodic_callback_time_ = now;
   }
-  static_cast<Derived*>(this)->message_handler(
-    channel_name, onboard::ClockworkMessageHandle{buffer_ptr, buffer_iterator});
+  static_cast<Derived*>(this)->message_handler(channel_name, message_ref);
 }
 
 template <typename Derived, typename BufferPoolT>
@@ -322,6 +324,13 @@ template <typename Derived, typename BufferPoolT>
     }
   }
   return state;
+}
+
+template <typename Derived, typename BufferPoolT>
+[[nodiscard]] std::pmr::string LogWriterBase<Derived, BufferPoolT>::get_status_string()
+{
+  const std::lock_guard guard(guarded_state_->mutex);
+  return guarded_state_->status_string;
 }
 
 template <typename Derived, typename BufferPoolT>
@@ -356,26 +365,30 @@ bool LogWriterBase<Derived, BufferPoolT>::get_is_degraded()
 }
 
 template <typename Derived, typename BufferPoolT>
-[[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::initialize()
+[[nodiscard]] LogExpected<void>
+LogWriterBase<Derived, BufferPoolT>::initialize(const clockwork::Tappy<LogWriterConfig<>>& log_writer_config)
 {
-  if (ChannelMessageRatesTap::max_num_channels < log_writer_config_.get_channels().size())
+  if (clockwork::Tappy<ChannelMessageRates<>>::max_num_channels < log_writer_config.get_channels().size())
   {
     std::pmr::string error_string{memory_resource_};
     fmt::format_to(
       std::back_inserter(error_string),
       "Number of logged channels ({}) exceeds max supported by ChannelMessageRates ({})",
-      log_writer_config_.get_channels().size(),
-      ChannelMessageRatesTap::max_num_channels);
+      log_writer_config.get_channels().size(),
+      clockwork::Tappy<ChannelMessageRates<>>::max_num_channels);
     throw std::invalid_argument(error_string.c_str());
   }
   if (is_initialized_)
   {
     return jewels::unexpected(LogError::already_initialized);
   }
-  for (const auto& channel_config : log_writer_config_.get_channels())
+  for (const auto& channel_config : log_writer_config.get_channels())
   {
+    const auto channel_name_iter =
+      // NOLINTNEXTLINE(modernize-use-emplace) Compiler doesn't accept emplace(channel_name, memory_resource_)
+      channel_name_strings_.emplace(std::pmr::string{channel_config.get_channel_name(), memory_resource_}).first;
     subscription_configs_.emplace_back(
-      channel_config.get_channel_name(),
+      *channel_name_iter,
       channel_config.get_uuid().to_string(memory_resource_),
       channel_config.get_num_slots(),
       channel_config.get_message_size(),
@@ -395,7 +408,7 @@ template <typename Derived, typename BufferPoolT>
     clockwork::pinion::ShmChannelFactory,
     std::pmr::polymorphic_allocator<clockwork::pinion::ShmChannelFactory>>(
     memory_resource_, std::move(shm_channel_factory_result).value());
-  if (const auto channel_result = add_channels(); !channel_result)
+  if (const auto channel_result = add_channels(log_writer_config); !channel_result)
   {
     return jewels::unexpected(channel_result.error());
   }
@@ -471,17 +484,21 @@ void LogWriterBase<Derived, BufferPoolT>::clear_message_counts()
 }
 
 template <typename Derived, typename BufferPoolT>
-[[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::add_channels()
+[[nodiscard]] LogExpected<void>
+LogWriterBase<Derived, BufferPoolT>::add_channels(const clockwork::Tappy<LogWriterConfig<>>& log_writer_config)
 {
-  for (const auto& channel : log_writer_config_.get_channels())
+  for (const auto& channel : log_writer_config.get_channels())
   {
+    const auto channel_name_iter =
+      // NOLINTNEXTLINE(modernize-use-emplace) Compiler doesn't accept emplace(channel_name, memory_resource_)
+      channel_name_strings_.emplace(std::pmr::string{channel.get_channel_name(), memory_resource_}).first;
     if (channel.get_channel_type() == ChannelType::persistent)
     {
-      persistent_channels_.emplace(channel.get_channel_name());
+      persistent_channels_.emplace(*channel_name_iter);
     }
     if (const auto channel_result = writer_.add_channel(
           onboard::LoggedChannelMetadata{
-            .channel_name = channel.get_channel_name(),
+            .channel_name = *channel_name_iter,
             .compression_type = CompressionType::none,
             .message_encoding = channel.get_message_encoding(),
             .channel_type = channel.get_channel_type(),
@@ -525,6 +542,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
       clockwork::pinion::BufferLayout{
         .num_slots = pending_subscription.num_slots,
         .message_size = pending_subscription.message_size_b,
+        .is_published_once = false,
       },
       1U);
     if (open_result == jewels::unexpected(clockwork::pinion::ShmChannel::Error::missing))
@@ -588,7 +606,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_subscriptions(std::chrono::millis
 template <typename Derived, typename BufferPoolT>
 [[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::log_message(
   std::string_view channel_name,
-  const onboard::ClockworkMessageHandle& message_handle,
+  const ::clockwork::pinion::SlotRef& message_handle,
   LogTimestamp log_time,
   jewels::time::SteadyTime current_steady_time)
 {
@@ -624,7 +642,7 @@ template <typename Derived, typename BufferPoolT>
 template <typename Derived, typename BufferPoolT>
 [[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::log_message_wait(
   std::string_view channel_name,
-  const onboard::ClockworkMessageHandle& message_handle,
+  const ::clockwork::pinion::SlotRef& message_handle,
   LogTimestamp log_time,
   jewels::time::SteadyTime current_steady_time)
 {
@@ -660,7 +678,7 @@ template <typename Derived, typename BufferPoolT>
 
 template <typename Derived, typename BufferPoolT>
 [[nodiscard]] LogExpected<void> LogWriterBase<Derived, BufferPoolT>::save_persistent_message(
-  std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle, LogTimestamp log_time)
+  std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle, LogTimestamp log_time)
 {
   if (!is_persistent_channel(channel_name))
   {

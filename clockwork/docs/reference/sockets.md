@@ -6,6 +6,8 @@ Each socket can then be connected to a channel inside a box in the same way cogs
 
 ## UDP sockets
 
+
+
 Clockwork provides a `udp_socket` type to either read `incoming` UDP packets from a socket and publish to a channel or subscribe to `outgoing` UDP packets and write them to a socket.
 The following sections describe how to instantiate a `udp_socket`, connect it to a channel, and set it up to run in a running process.
 
@@ -47,35 +49,19 @@ The payload of each packet will be serialized and deserialized directly from the
 Representing the UDP packet payload as a Tachyon type may not be useful in all cases, so Clockwork can also provide direct access to the UDP packet payloads.
 See the later section about the [VarPacket type](#special-varpacket-type) for more details.
 
-Finally, make sure to instantiate the `udp_socket` in the `cpp_target` to generate the corresponding c++ class.
+Finally, make sure to have a `cpp` target in the `generate` attribute for the Clockwork source file to generate the corresponding c++ class.
 This enables use of the `udp_socket` in a `box` and a `casing`.
-
-```clockwork
-cpp_target udp_example
-{
-    options
-    {
-        namespace clockwork::testing;
-    }
-
-    schema Payload;
-    representation Tachyon<Payload>;
-    interface Tap<Tachyon<Payload>>;
-
-    udp_socket IncomingUdp;
-}
-```
 
 ### Socket options
 
 You can set a small selection of socket options from `socket(7)` by filling in the `options` block in a `udp_socket` declaration.
 See the table below for a list of options you can set.
 
-| Option Name         | socket(7) Option  | Value Type           | Description                                                                                                                                        |
-| ------------------- | ----------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reuse_address`     | `SO_RESUSEADDR`   | Boolean              | If true, tell the kernel to allow reuse of the local address by other sockets.                                                                     |
-| `receive_buffer`    | `SO_RCVBUF`       | Unit literal (bytes) | Tell the kernel how many bytes to allocate for the socket's receive buffer.                                                                        |
-| `bind_to_interface` | `SO_BINDTODEVICE` | Boolean              | If true, tell the kernel not to route messages on egress, but instead to send them directly from the interface associated to the socket's address. |
+| Option Name         | socket(7) Option  | Value Type                     | Description                                                                                                                                                                                                                                                                                                                                              |
+| ------------------- | ----------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reuse_address`     | `SO_RESUSEADDR`   | Boolean                        | If true, tell the kernel to allow reuse of the local address by other sockets.                                                                                                                                                                                                                                                                           |
+| `receive_buffer`    | `SO_RCVBUF`       | Unit literal (bytes)           | Tell the kernel how many bytes to allocate for the socket's receive buffer.                                                                                                                                                                                                                                                                              |
+| `bind_to_interface` | `SO_BINDTODEVICE` | Boolean, IP address, or string | If true, tell the kernel not to route messages on egress, but instead to send them directly from the interface associated to the socket's address. The value can also be either the name of a network interface or an IP address. If set to the latter, Clockwork will lookup and bind to the interface associated with the provided address at runtime. |
 
 Consider the following example.
 It will create a bidirectional UDP socket with a receive buffer of 4096 bytes.
@@ -165,42 +151,6 @@ box Box
 {
     new udp_socket: IncomingUdp;
     connect udp_socket to Channel;
-}
-```
-
-Don't forget to also instantiate the `udp_socket` in a casing. (e.g. `DemoUdpCasing` below).
-
-The above example is for `incoming` UDP packets.
-The `udp_socket` type also supports `outgoing` for the `direction`.
-When using `outgoing`, the socket type subscribes to a channel and writes to the socket.
-To connect an `outgoing` socket, reverse the `connect` clause in the `box` similar to the order of a `cog` subscriber.
-
-Finally, the complete `cpp_target` would look like the following.
-
-```clockwork
-cpp_target udp_example
-{
-    options
-    {
-        namespace clockwork::testing;
-    }
-
-    schema Payload;
-    representation Tachyon<Payload>;
-    interface Tap<Tachyon<Payload>>;
-
-    udp_socket IncomingUdp;
-
-    casing DemoUdpCasing
-    {
-      udp_socket IncomingUdp;
-    }
-
-    process DemoUdpProc
-    {
-      casing DemoUdpCasing;
-      box Box;
-    }
 }
 ```
 

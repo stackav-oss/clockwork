@@ -70,6 +70,13 @@ public:
   [[nodiscard]] jewels::expected<Status, jewels::MonoError>
   update_last_exec_time(jewels::time::SyncTime last_exec_time, bool was_active);
 
+  /// Invoke notify if the current time has reached the expected next trigger time
+  ///
+  /// Used by unit test cogs with a dummy timer
+  ///
+  /// @param[in] now Current time
+  void notify_if_triggered(jewels::time::SyncTime now);
+
 private:
   /// Mutex for updating internal state, because we could be called from multiple threads
   /// Mutable so that const methods can still obtain a lock before reading.

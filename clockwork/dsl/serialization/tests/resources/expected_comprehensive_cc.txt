@@ -1,0 +1,4 @@
+// Trigger compile-time layout verification
+static_assert(((::clockwork::FixedSoa<::test::ComprehensiveTest, 1>::verify_layout()), true));
+// Total size for VarSoa<ComprehensiveTest, 1> = 144 bytes
+static_assert(((::clockwork::VarSoa<::test::ComprehensiveTest, 1>::verify_layout()), true));

@@ -4,13 +4,16 @@
 #include "clockwork/pinion/slot.hh"
 
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/aligned_pointer.hh"
 #include "jewels/math/power_of_two.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/meta/type_traits.hh"
 #include "jewels/std/expected.hh"
 
+#include <array>
 #include <cstddef>
 #include <span>
+#include <type_traits>
 
 namespace clockwork::pinion
 {
@@ -25,6 +28,48 @@ jewels::memory::ObjectPtr<Type> marshal_as(std::span<ByteMatchingConstnessOf<Typ
 }
 
 } // namespace detail
+
+template <typename T>
+BaseSlot<T>::BaseSlot(AlignedPtr<T, slot_alignment> ptr, size_t message_size) noexcept
+  : bytes_{std::span<T>{ptr.get(), slot_size(message_size)}}, message_size_{message_size}
+{
+}
+
+template <typename T>
+BaseSlot<T>::BaseSlot(const BaseSlot<std::remove_const_t<T>>& other) noexcept
+  requires std::is_const_v<T>
+  : bytes_(other.bytes_), message_size_(other.message_size_)
+{
+}
+
+template <typename T>
+jewels::memory::ObjectPtr<typename BaseSlot<T>::template MaybeConst<Header>> BaseSlot<T>::header() const noexcept
+{
+  return detail::marshal_as<MaybeConst<Header>>(bytes_.template subspan<header_offset, sizeof(Header)>());
+}
+
+template <typename T>
+std::span<T> BaseSlot<T>::message() const noexcept
+{
+  return bytes_.subspan(message_offset, message_size_);
+}
+
+template <typename T>
+std::span<T> BaseSlot<T>::bytes() const noexcept
+{
+  return bytes_;
+}
+
+template <typename T>
+std::array<std::span<T>, 2UL> BaseSlot<T>::headers_footers() const noexcept
+{
+  auto all_bytes = bytes();
+  // Everything before the message.
+  auto headers = all_bytes.subspan(0, message_offset);
+  // Everything after the message.
+  auto footers = all_bytes.subspan(message_offset + message_size_);
+  return std::array{headers, footers};
+}
 
 template <class Type>
 jewels::expected<jewels::memory::ObjectPtr<Type>, jewels::MonoError>

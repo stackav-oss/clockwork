@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.cpp import context, literal, typereg, types
 from clockwork.dsl.ir import clkbuiltins, expr, extern_type, node, primitive, strongtypes
 from clockwork.dsl.ir.cst_util import get_span
@@ -90,7 +90,7 @@ class CppExtern(node.CstNode[cst.CppExtern], node.DocableEntity):
 class CppExternType(node.CstNode[cst.CppExternType]):
     """An externed type."""
 
-    extern_type_expr: expr.Expr
+    extern_type_expr: expr.Expr | None
     subclass_handler: ExternTypeSubclassHandler | None = None
 
     @classmethod
@@ -118,6 +118,7 @@ class CppExternType(node.CstNode[cst.CppExternType]):
         # we ended up with this compromise where the type-related functions are encapsulated into their
         # own handler (as oppose a design where there is a complete subclass for each type)
         assert self.cst_node
+        assert self.extern_type_expr
         extern_t = self.extern_type_expr.evaluate()
         if isinstance(extern_t, strongtypes.StrongType):
             self.subclass_handler = StrongTypeHandler.make(extern_t, self.cst_node, self.module)
@@ -181,7 +182,7 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
 
     strong_type: strongtypes.StrongType
     factory: str | None
-    cst_node: cst.CppExternType
+    cst_node: cst.CppExternType | None
     module: node.Module
 
     @classmethod
@@ -204,6 +205,7 @@ class StrongTypeHandler(ExternTypeSubclassHandler):
             f"@{CLK_REPO}::jewels::units::clk::au",
             f"@{CLK_REPO}::cpp_extern_test",
             f"@{CLK_REPO}::clockwork::dsl::cog::ten_nanosecond",
+            f"@{CLK_REPO}::clockwork::dsl::tests::support::clk_hellomsg",
             f"@{CLK_REPO}::clockwork::dsl::tests::support::tapmsg",
             f"@{CLK_REPO}::clockwork::serialization::cpp::tests::support::test_schema_v1",
             f"@{CLK_REPO}::clockwork::serialization::cpp::tests::support::test_schema_v2",

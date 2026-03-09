@@ -204,7 +204,7 @@ def test_context_import_from_with_conflict() -> None:
     register_cpp_type(context1, MOCK_TYPE, MOCK_TYPE_CPP)
 
     # Import should fail with conflict error
-    with pytest.raises(ValueError, match="has conflicting registrations"):
+    with pytest.raises(ValueError, match=r"has conflicting registrations"):
         context1.import_from(context2)
 
 
@@ -228,19 +228,19 @@ def test_get_cpp_type_unbound_instantiation(context: CompilerContext) -> None:
     )
 
     register_cpp_template(context, incomplete_generic_type, MOCK_GENERIC_TYPE_CPP)
-    with pytest.raises(TypeError, match="Attempt to instantiate without fully-bound parameters: .*? missing T2"):
+    with pytest.raises(TypeError, match=r"Attempt to instantiate without fully-bound parameters: .*? missing T2"):
         get_cpp_type(context, incomplete_instantiated_type)
 
 
 def test_register_cpp_template_with_non_generic(context: CompilerContext) -> None:
     """Test that attempting to register non-generic as template raises error."""
-    with pytest.raises(ValueError, match="Type being registered as a template does not have generic parameters."):
+    with pytest.raises(ValueError, match=r"Type being registered as a template does not have generic parameters\."):
         register_cpp_template(context, MOCK_TYPE, MOCK_GENERIC_TYPE_CPP)
 
 
 def test_get_cpp_template_with_non_generic(context: CompilerContext) -> None:
     """Test that attempting to get template for non-generic raises error."""
-    with pytest.raises(ValueError, match="Cannot get a Cpp template for a type that is not generic."):
+    with pytest.raises(ValueError, match=r"Cannot get a Cpp template for a type that is not generic\."):
         get_cpp_template(context, MOCK_TYPE)
 
 

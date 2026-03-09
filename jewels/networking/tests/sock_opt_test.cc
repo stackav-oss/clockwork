@@ -69,8 +69,17 @@ TEST_CASE("Set Multicast Interface")
 TEST_CASE("Bind to Interface")
 {
   const jewels::filesystem::FileDescriptor file_desc{::socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK, 0)};
-  REQUIRE_FALSE(set_sock_opt<SockOption::so_bind_to_device>(*file_desc, "eth9999"));
-  REQUIRE(set_sock_opt<SockOption::so_bind_to_device>(*file_desc, "lo"));
+  SECTION("Bind by interface name")
+  {
+    REQUIRE_FALSE(
+      set_sock_opt<SockOption::so_bind_to_device>(*file_desc, jewels::networking::InterfaceNameView{"eth9999"}));
+    REQUIRE(set_sock_opt<SockOption::so_bind_to_device>(*file_desc, jewels::networking::InterfaceNameView{"lo"}));
+  }
+  SECTION("Bind by address")
+  {
+    REQUIRE_FALSE(set_sock_opt<SockOption::so_bind_to_device>(*file_desc, jewels::networking::AddressView{"8.8.8.8"}));
+    REQUIRE(set_sock_opt<SockOption::so_bind_to_device>(*file_desc, jewels::networking::AddressView{"127.0.0.1"}));
+  }
   auto get_result = get_sock_opt<SockOption::so_bind_to_device>(*file_desc);
   REQUIRE_FALSE(get_result);
   REQUIRE(get_result.error().value() == ENOPROTOOPT);

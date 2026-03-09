@@ -21,6 +21,7 @@ from clockwork.dsl.proto.proto_typereg import (
 MOCK_TYPE: Final = typesys.TypeDef(name="MockType", scope=MagicMock(), type_info=clkbuiltins.TYPE_TYPE)
 MOCK_TYPE_PROTO: Final = ProtobufType(
     type_name="MockType",
+    go_dep_label=None,
 )
 
 

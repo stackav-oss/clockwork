@@ -7,6 +7,7 @@
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -14,8 +15,6 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -150,7 +149,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
   // Determine the end of the view taking into account the max new messages to be added.
 
   auto bounded_last_viewed =
-    (is_sentinel_iterator(last_viewed_) || last_viewed_ < available.begin()) ? available.begin() : last_viewed_;
+    (last_viewed_.is_sentinel() || last_viewed_ < available.begin()) ? available.begin() : last_viewed_;
   auto new_msg_count = std::distance(bounded_last_viewed, available.end());
   auto end = std::next(bounded_last_viewed, std::min(max_new_msgs, new_msg_count));
 
@@ -177,7 +176,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
 
   // Skip to the latest three messages on the first execution.
 
-  if (!running_offline_ && is_sentinel_iterator(last_viewed_))
+  if (!running_offline_ && last_viewed_.is_sentinel())
   {
     end = available.end();
     begin = std::prev(end, std::min<PinionDifferenceType>(max_view_size, bounded_available_size));
@@ -193,7 +192,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
   auto num_skipped = apply_skip_threshold(available, begin, end);
   skipped_count_ = num_skipped.value_or(0UL);
 
-  auto range = pinion::to_message_range<const MsgType>(std::ranges::subrange<pinion::BufferIterator>(begin, end));
+  auto range = pinion::to_message_range<const MsgType>(std::ranges::subrange<pinion::SlotRef>(begin, end));
   if (!range)
   {
     return jewels::unexpected{pinion::ProgressError{}};
@@ -226,7 +225,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
   // Ensure the cursor is in the view.
 
   ViewIteratorType input_cursor_it;
-  if (input_cursor_ < begin)
+  if (input_cursor_.is_sentinel() || input_cursor_ < begin)
   {
     input_cursor_it = view.begin();
   }
@@ -242,7 +241,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
   // Determine the first new message iterator
 
   ViewIteratorType first_new_it;
-  if (last_viewed_ < begin)
+  if (last_viewed_.is_sentinel() || last_viewed_ < begin)
   {
     first_new_it = view.begin();
   }
@@ -272,8 +271,7 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
 }
 
 template <typename Policy>
-bool InputView<Policy>::apply_safety_margin(
-  const auto& available, pinion::BufferIterator& begin, pinion::BufferIterator& end) const
+bool InputView<Policy>::apply_safety_margin(const auto& available, pinion::SlotRef& begin, pinion::SlotRef& end) const
 {
   if constexpr (!safety_margin)
   {
@@ -284,13 +282,13 @@ bool InputView<Policy>::apply_safety_margin(
     return false;
   }
   // Don't apply this policy on first exec or when running offline.
-  if (is_sentinel_iterator(last_viewed_) || running_offline_)
+  if (last_viewed_.is_sentinel() || running_offline_)
   {
     return false;
   }
 
   // Haven't executed yet.
-  if (is_sentinel_iterator(begin))
+  if (begin.is_sentinel())
   {
     return false;
   }
@@ -319,8 +317,8 @@ bool InputView<Policy>::apply_safety_margin(
 }
 
 template <typename Policy>
-std::optional<size_t> InputView<Policy>::apply_skip_threshold(
-  const auto& available, pinion::BufferIterator& begin, pinion::BufferIterator& end) const
+std::optional<size_t>
+InputView<Policy>::apply_skip_threshold(const auto& available, pinion::SlotRef& begin, pinion::SlotRef& end) const
 {
   if constexpr (!skip_threshold)
   {
@@ -328,7 +326,7 @@ std::optional<size_t> InputView<Policy>::apply_skip_threshold(
   }
 
   // Don't apply this policy on first exec.
-  if (is_sentinel_iterator(last_viewed_))
+  if (last_viewed_.is_sentinel())
   {
     return {0U};
   }
@@ -384,7 +382,7 @@ bool InputView<Policy>::is_overrun() const
     return false;
   }
 
-  if (is_sentinel_iterator(saved_begin_) || !subscriber_)
+  if (saved_begin_.is_sentinel() || !subscriber_)
   {
     return false;
   }
@@ -409,7 +407,7 @@ bool InputView<Policy>::almost_overrun() const
     return false;
   }
 
-  if (is_sentinel_iterator(saved_begin_) || !subscriber_)
+  if (saved_begin_.is_sentinel() || !subscriber_ || subscriber_->buffer().is_published_once())
   {
     return false;
   }
@@ -456,6 +454,12 @@ bool InputView<Policy>::almost_overrun() const
     return true;
   }
   return false;
+}
+
+template <typename Policy>
+bool InputView<Policy>::is_published_once_channel_invalid() const
+{
+  return subscriber_ && subscriber_->buffer().is_published_once() && subscriber_->buffer().get_publish_count() > 1U;
 }
 
 template <typename Policy>

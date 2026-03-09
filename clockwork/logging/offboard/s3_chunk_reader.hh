@@ -6,10 +6,9 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/chunk_reader.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
+#include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
-
-#include <aws/s3/S3Client.h>
 
 #include <cstddef>
 #include <string_view>
@@ -25,11 +24,11 @@ public:
   /// Don't call constructor directly, use make_shared to create an instance
   /// @param[in] memory_resource Memory resource
   /// @param[in] file_uri Log file URI
-  /// @param[in] s3_client_ptr S3 client pointer
+  /// @param[in] s3_utils_ptr S3 utils pointer
   S3ChunkReader(
     jewels::memory::MemoryResource memory_resource,
     LogUri file_uri,
-    const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr);
+    const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr);
 
   ~S3ChunkReader() override = default;
 
@@ -41,12 +40,12 @@ public:
   /// Create a shared pointer to a file chunk reader
   /// @param[in] memory_resource Memory resource
   /// @param[in] file_uri Log file URI
-  /// @param[in] s3_client_ptr S3 client pointer
+  /// @param[in] s3_utils_ptr S3 utils pointer
   /// Pointer to the file chunk reader or LogError on failure
   [[nodiscard]] static LogExpected<jewels::memory::NonNullSharedPtr<S3ChunkReader>> make_shared(
     const jewels::memory::MemoryResource& memory_resource,
     std::string_view file_uri,
-    const jewels::memory::NonNullSharedPtr<Aws::S3::S3Client>& s3_client_ptr);
+    const jewels::memory::NonNullSharedPtr<S3UtilsInterface>& s3_utils_ptr);
 
   /// @see ChunkReader::file_uri
   [[nodiscard]] const LogUri& file_uri() const noexcept override;
@@ -70,8 +69,8 @@ private:
   /// S3 file URI
   LogUri file_uri_;
 
-  /// S3 client pointer
-  jewels::memory::NonNullSharedPtr<Aws::S3::S3Client> s3_client_ptr_;
+  /// S3 utils pointer
+  jewels::memory::NonNullSharedPtr<S3UtilsInterface> s3_utils_ptr_;
 
   /// Flag set when the reader has been opened
   bool is_open_{false};

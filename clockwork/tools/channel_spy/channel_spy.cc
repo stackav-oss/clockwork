@@ -3,13 +3,14 @@
 
 #include "clockwork/tools/channel_spy/channel_spy.hh"
 
+#include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <map>
@@ -25,16 +26,19 @@
 namespace clockwork::tools
 {
 
-ChannelSpy::ChannelSpy(std::string_view shm_root_dir, std::string_view socket_ns)
-  : memory_resource_(std::pmr::new_delete_resource()), shm_root_dir_(shm_root_dir), socket_ns_(socket_ns)
+ChannelSpy::ChannelSpy(std::string_view shm_root_dir, std::string_view tmp_dir, std::string_view socket_ns)
+  : memory_resource_(std::pmr::new_delete_resource()),
+    shm_root_dir_(shm_root_dir),
+    tmp_dir_(tmp_dir),
+    socket_ns_(socket_ns)
 {
 }
 
-[[nodiscard]] std::vector<SpyChannelMetadata> ChannelSpy::channels()
+[[nodiscard]] std::vector<SpyChannelMetadata> ChannelSpy::channels() const
 {
-  read_channel_spy_config();
+  const auto config_ptr = read_channel_spy_config();
   std::map<std::string, SpyChannelMetadata> channel_map{};
-  for (const auto& channel_metadata : config_ptr_->get_channels())
+  for (const auto& channel_metadata : config_ptr->get_channels())
   {
     channel_map.emplace(
       channel_metadata.get_channel_name(),
@@ -54,17 +58,11 @@ ChannelSpy::ChannelSpy(std::string_view shm_root_dir, std::string_view socket_ns
   return channels;
 }
 
-[[nodiscard]] const ChannelSpyConfigTap& ChannelSpy::spy_config()
-{
-  read_channel_spy_config();
-  return *config_ptr_;
-}
-
 void ChannelSpy::subscribe(std::string_view channel_name, const RawMessageCallback& callback_fn)
 {
-  read_channel_spy_config();
+  const auto config_ptr = read_channel_spy_config();
   bool subscribed = false;
-  for (const auto& channel : config_ptr_->get_channels())
+  for (const auto& channel : config_ptr->get_channels())
   {
     if (channel.get_channel_name() == channel_name)
     {
@@ -90,9 +88,9 @@ void ChannelSpy::subscribe(std::string_view channel_name, const RawMessageCallba
 
 void ChannelSpy::subscribe(std::string_view channel_name, const PythonCallback& callback_fn)
 {
-  read_channel_spy_config();
+  const auto config_ptr = read_channel_spy_config();
   bool subscribed = false;
-  for (const auto& channel : config_ptr_->get_channels())
+  for (const auto& channel : config_ptr->get_channels())
   {
     if (channel.get_channel_name() == channel_name)
     {
@@ -133,15 +131,11 @@ void ChannelSpy::run_once()
   }
 }
 
-void ChannelSpy::read_channel_spy_config()
+[[nodiscard]] std::unique_ptr<Tappy<ChannelSpyConfig<>>> ChannelSpy::read_channel_spy_config() const
 {
-  if (config_ptr_)
-  {
-    return;
-  }
   const auto config_path = socket_ns_.empty()
-                             ? fmt::format(default_channel_spy_config_path_format, shm_root_dir_)
-                             : fmt::format(namespace_channel_spy_config_path_format, shm_root_dir_, socket_ns_);
+                             ? fmt::format(default_channel_spy_config_path_format, tmp_dir_)
+                             : fmt::format(namespace_channel_spy_config_path_format, tmp_dir_, socket_ns_);
   jewels::filesystem::File config_file{config_path};
   const auto read_result = config_file.read_all(memory_resource_);
   if (!read_result)
@@ -150,15 +144,15 @@ void ChannelSpy::read_channel_spy_config()
     jewels::log_cerr_error("{}", msg);
     throw std::runtime_error(msg);
   }
-  if (read_result->size() != sizeof(ChannelSpyConfigTap))
+  if (read_result->size() != sizeof(Tappy<ChannelSpyConfig<>>))
   {
     const auto msg = fmt::format("Spy configuration file has invalid size: {}", read_result->size());
     jewels::log_cerr_error("{}", msg);
     throw std::runtime_error(msg);
   }
-  config_ptr_ =
+  return std::make_unique<Tappy<ChannelSpyConfig<>>>(
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Cast to deserialize channel spy configuration
-    std::make_unique<ChannelSpyConfigTap>(*reinterpret_cast<const ChannelSpyConfigTap*>(read_result->data()));
+    *reinterpret_cast<const Tappy<ChannelSpyConfig<>>*>(read_result->data()));
 }
 
 } // namespace clockwork::tools

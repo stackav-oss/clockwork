@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "clockwork/common/process_description.hh" // IWYU pragma: keep
-#include "clockwork/io/network_var_packet.hh"
+#include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
+#include "clockwork/io/network_var_packet_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
@@ -76,7 +76,7 @@ private:
   /// Helper function to write a specific range of messages to the socket.
   /// @param subscriber Take in a handle explicitly to avoid another optional check.
   /// @param available The range of messages to write.
-  void write(pinion::SubscriberHandle& subscriber, std::ranges::subrange<BufferIterator> available, int socket_fd);
+  void write(std::ranges::subrange<SlotRef> available, int socket_fd);
 
   // Class ID for the subscriber endpoint.
   jewels::Uuid<common::EndpointClassId> subscriber_id_;
@@ -89,7 +89,7 @@ private:
   /// A temporary buffer to copy into and write from.
   jewels::memory::pmr_unique_ptr<Msg> holding_buffer_;
   /// Current read cursor.
-  pinion::BufferIterator next_to_consume_;
+  pinion::SlotRef next_to_consume_;
 };
 
 /// A class to read messages from a pinion subscriber and write to a UDP socket, with ability to be registed with

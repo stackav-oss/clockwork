@@ -3,7 +3,7 @@
 
 #include "clockwork/logging/log_playback/tachyon_upgrader.hh"
 
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 #include "jewels/memory/pointers.hh"
 
@@ -15,7 +15,7 @@ namespace clockwork_logging
 
 TachyonUpgrader::TachyonUpgrader(
   jewels::memory::MemoryResource memory_resource,
-  const ChannelPublisherConfigTap& publisher_config,
+  const clockwork::Tappy<ChannelPublisherConfig<>>& publisher_config,
   std::span<const TopicMetadata> metadata)
   : memory_resource_(std::move(memory_resource)), upgrader_map_(memory_resource_), channel_strings_(memory_resource_)
 {

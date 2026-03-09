@@ -1,3 +1,6 @@
+#![generate(cpp, nanobind)]
+#![cpp(namespace=clockwork::pinion)]
+
 // TCP bridge client/server counters
 schema BridgeClientServerCounters
 {
@@ -46,11 +49,8 @@ schema BridgeClientServerCounters
   }
   history
   {
-    versions: [15, 16];
-    fields
-    {
-      #1 channel_name: VarString<max_size=127> -> became #16;
-    }
+    version: 16;
+    legacy_became: [1->16];
   }
 }
 
@@ -102,6 +102,12 @@ schema BridgeStatusDiagnosticsCounters
 
     // Max latency channel name
     #14 max_latency_channel_name: VarString<300>;
+
+    // Max bridge bulk data latency
+    #15 max_bridge_bulk_data_latency: Duration;
+
+    // Max bulk data latency channel name
+    #16 max_bulk_data_latency_channel_name: VarString<300>;
   }
 }
 
@@ -126,33 +132,6 @@ schema BridgeStatus
   }
   history
   {
-    versions: [3, 4];
+    version: 4;
   }
-}
-
-cpp_target bridge_status
-{
-  options
-  {
-    namespace clockwork::pinion;
-  }
-
-  schema BridgeClientServerCounters;
-  representation Tachyon<BridgeClientServerCounters>;
-  interface BridgeClientServerCountersTap: Tappy<BridgeClientServerCounters>;
-
-  schema BridgeStatusDiagnosticsCounters;
-  representation Tachyon<BridgeStatusDiagnosticsCounters>;
-  interface BridgeStatusDiagnosticsCountersTap: Tappy<BridgeStatusDiagnosticsCounters>;
-
-  schema BridgeStatus;
-  representation Tachyon<BridgeStatus>;
-  interface BridgeStatusTap: Tappy<BridgeStatus>;
-}
-
-nanobind_target bridge_status_clk_nb
-{
-  binding Tappy<BridgeClientServerCounters>;
-  binding Tappy<BridgeStatusDiagnosticsCounters>;
-  binding Tappy<BridgeStatus>;
 }

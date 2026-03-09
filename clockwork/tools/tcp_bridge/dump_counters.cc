@@ -5,12 +5,12 @@
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/readers/log_processor.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/pinion/bridge_status.hh"
+#include "clockwork/pinion/bridge_status_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/chrono.h> // IWYU pragma: keep
+#include <fmt/base.h>
+#include <fmt/chrono.h> // IWYU pragma: keep
 #include <tclap/CmdLine.h>
 #include <tclap/UnlabeledValueArg.h>
 

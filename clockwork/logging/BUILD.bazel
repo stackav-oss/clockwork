@@ -18,66 +18,56 @@ exports_files([
 clk(
     name = "channel_policy_clk",
     srcs = ["channel_policy.clk"],
+    generate = ["none"],
     deps = [":channel_type_clk"],
-)
-
-cc_library(
-    name = "channel_publisher_config",
-    srcs = [
-        "channel_publisher_config.cc",
-        "channel_publisher_config.inl",
-    ],
-    hdrs = ["channel_publisher_config.hh"],
-    data = [":channel_publisher_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":log_uuid_tag",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "channel_publisher_config_clk",
     srcs = ["channel_publisher_config.clk"],
     outs = [
-        "channel_publisher_config.cc",
-        "channel_publisher_config.hh",
-        "channel_publisher_config.inl",
+        "channel_publisher_config_clk_cc.cc",
+        "channel_publisher_config_clk_cc.hh",
+        "channel_publisher_config_clk_cc.inl",
     ],
+    cpp_deps = [":log_uuid_tag_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
-    deps = [":log_uuid_tag_clk"],
-)
-
-cc_library(
-    name = "channel_type",
-    srcs = [
-        "channel_type.cc",
-        "channel_type.inl",
+    deps = [
+        ":log_uuid_tag_clk",
+        "//clockwork/common:constants_clk",
     ],
-    hdrs = ["channel_type.hh"],
-    data = [":channel_type_clk"],
-    deps = ["@wise_enum"],
 )
 
 clk(
     name = "channel_type_clk",
     srcs = ["channel_type.clk"],
     outs = [
-        "channel_type.cc",
-        "channel_type.hh",
-        "channel_type.inl",
+        "channel_type_clk_cc.cc",
+        "channel_type_clk_cc.hh",
+        "channel_type_clk_cc.inl",
     ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 cc_library(
     name = "compression_type",
     srcs = ["compression_type.inl"],
     hdrs = ["compression_type.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "cpp_message_encoding",
+    hdrs = ["cpp_message_encoding.hh"],
+    deps = ["@wise_enum"],
+)
+
+cc_library(
+    name = "cpp_schema_encoding",
+    hdrs = ["cpp_schema_encoding.hh"],
     deps = ["@wise_enum"],
 )
 
@@ -113,8 +103,10 @@ cc_library(
         ":xxh3_checksum",
         "//jewels/aligner",
         "//jewels/callsig:outparam",
+        "//jewels/math:constants",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "@wise_enum",
         "@xxhash",
     ],
 )
@@ -127,6 +119,7 @@ cc_library(
         "//jewels/callsig:outcome",
         "//jewels/filesystem:error_code",
         "//jewels/std:expected",
+        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
         "@wise_enum",
     ],
 )
@@ -152,89 +145,59 @@ cc_library(
     name = "log_uuid",
     hdrs = ["log_uuid.hh"],
     deps = [
-        ":log_uuid_tag",
+        ":log_uuid_tag_clk_cc",
         "//jewels/uuid",
         "//jewels/uuid:uuid_hasher",
     ],
-)
-
-cc_library(
-    name = "log_uuid_tag",
-    srcs = [
-        "log_uuid_tag.cc",
-        "log_uuid_tag.inl",
-    ],
-    hdrs = ["log_uuid_tag.hh"],
-    data = [":log_uuid_tag_clk"],
 )
 
 clk(
     name = "log_uuid_tag_clk",
     srcs = ["log_uuid_tag.clk"],
     outs = [
-        "log_uuid_tag.cc",
-        "log_uuid_tag.hh",
-        "log_uuid_tag.inl",
+        "log_uuid_tag_clk_cc.cc",
+        "log_uuid_tag_clk_cc.hh",
+        "log_uuid_tag_clk_cc.inl",
     ],
-)
-
-cc_library(
-    name = "log_writer_config",
-    srcs = [
-        "log_writer_config.cc",
-        "log_writer_config.inl",
-    ],
-    hdrs = ["log_writer_config.hh"],
-    data = [":log_writer_config_clk"],
-    deps = [
-        ":channel_type",
-        ":log_uuid_tag",
-        ":message_encoding",
-        ":schema_encoding",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 clk(
     name = "log_writer_config_clk",
     srcs = ["log_writer_config.clk"],
     outs = [
-        "log_writer_config.cc",
-        "log_writer_config.hh",
-        "log_writer_config.inl",
+        "log_writer_config_clk_cc.cc",
+        "log_writer_config_clk_cc.hh",
+        "log_writer_config_clk_cc.inl",
     ],
+    cpp_deps = [
+        ":channel_type_clk_cc",
+        ":log_uuid_tag_clk_cc",
+        ":message_encoding_clk_cc",
+        ":schema_encoding_clk_cc",
+    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     deps = [
         ":channel_type_clk",
         ":log_uuid_tag_clk",
         ":message_encoding_clk",
         ":schema_encoding_clk",
+        "//clockwork/common:constants_clk",
     ],
-)
-
-cc_library(
-    name = "message_encoding",
-    srcs = [
-        "message_encoding.cc",
-        "message_encoding.inl",
-    ],
-    hdrs = ["message_encoding.hh"],
-    data = [":message_encoding_clk"],
-    deps = ["@wise_enum"],
 )
 
 clk(
     name = "message_encoding_clk",
     srcs = ["message_encoding.clk"],
     outs = [
-        "message_encoding.cc",
-        "message_encoding.hh",
-        "message_encoding.inl",
+        "message_encoding_clk_cc.cc",
+        "message_encoding_clk_cc.hh",
+        "message_encoding_clk_cc.inl",
     ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 cc_library(
@@ -248,25 +211,16 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "schema_encoding",
-    srcs = [
-        "schema_encoding.cc",
-        "schema_encoding.inl",
-    ],
-    hdrs = ["schema_encoding.hh"],
-    data = [":schema_encoding_clk"],
-    deps = ["@wise_enum"],
-)
-
 clk(
     name = "schema_encoding_clk",
     srcs = ["schema_encoding.clk"],
     outs = [
-        "schema_encoding.cc",
-        "schema_encoding.hh",
-        "schema_encoding.inl",
+        "schema_encoding_clk_cc.cc",
+        "schema_encoding_clk_cc.hh",
+        "schema_encoding_clk_cc.inl",
     ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 cc_library(

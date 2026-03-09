@@ -1,7 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Facilities for generating C++ Dial structs."""
+"""Facilities for generating the C++ cogs to run python cogs."""
 
 from dataclasses import dataclass
 
@@ -296,7 +296,7 @@ class CppPythonCog:
             ]
         )
 
-        enclosing_namespace = self.cpp_namespace if self.cpp_namespace else ""
+        enclosing_namespace = self.cpp_namespace or ""
 
         execute_cog = CppMethod(
             name="execute_cog",

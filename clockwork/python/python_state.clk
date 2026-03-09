@@ -1,19 +1,6 @@
-// Telemetry writer cog state
-extern_type PythonState;
+#![generate(cpp)]
+#![cpp(namespace=clockwork::python)]
 
-cpp_target python_state_extern
-{
-  options
-  {
-    namespace clockwork::python;
-  }
-  extern
-  {
-    header_file: "clockwork/python/python_state.hh";
-    namespace: clockwork::python;
-    type
-    {
-        name: PythonState;
-    }
-  }
-}
+// Python cog state dictionary
+#[cpp(type_namespace=clockwork::python, type_header="clockwork/python/python_state.hh")]
+extern_type PythonState;

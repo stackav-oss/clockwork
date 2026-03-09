@@ -3,7 +3,7 @@
 
 #include "clockwork/scaffolding/io_connection.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -23,7 +23,7 @@ namespace clockwork::scaffolding
 {
 
 jewels::expected<std::pmr::vector<jewels::memory::NonNullSharedPtr<EPollable>>, jewels::MonoError> setup_io_connections(
-  std::span<const common::IoConnectionInstanceDescriptionTap> descs,
+  std::span<const Tappy<common::IoConnectionInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   AbstractCasing& casing)
 {

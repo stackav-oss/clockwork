@@ -4,7 +4,7 @@
 #pragma once
 
 #include "clockwork/repr_iface.hh"
-#include "clockwork/tools/channel_spy/channel_spy_config.hh"
+#include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/tests/support/test_publisher.hh"
 
 #include <cstddef>
@@ -26,7 +26,9 @@ private:
   /// @param[in] socket_ns Pinion socket namespace
   /// @param[in] config Channel spy configuration
   TestHelper(
-    std::string_view pinion_shm_root, std::string_view socket_ns, std::unique_ptr<ChannelSpyConfigTap> spy_config);
+    std::string_view pinion_shm_root,
+    std::string_view socket_ns,
+    std::unique_ptr<Tappy<ChannelSpyConfig<>>> spy_config);
 
 public:
   ~TestHelper() = default;
@@ -38,15 +40,16 @@ public:
 
   /// Make a test helper
   /// @param[in] pinion_shm_root Pinion shared memory root directory
+  /// @param[in] tmp_dir Temoporary directory
   /// @param[in] socket_ns Pinion socket namespace
   /// @return Test helper instance
   /// @throws runtime_error on failure
   [[nodiscard]] static std::shared_ptr<TestHelper>
-  make_test_helper(std::string_view pinion_shm_root, std::string_view socket_ns);
+  make_test_helper(std::string_view pinion_shm_root, std::string_view tmp_dir, std::string_view socket_ns);
 
   /// Channel spy onfiguration accessor
   /// @return Channel spy config
-  [[nodiscard]] const ChannelSpyConfigTap& spy_config() const;
+  [[nodiscard]] const Tappy<ChannelSpyConfig<>>& spy_config() const;
 
   /// Channel name accessor
   /// @param[in] channel_index Channel configuration index
@@ -68,7 +71,7 @@ private:
   std::string socket_ns_;
 
   /// Channel spy configuration
-  std::unique_ptr<ChannelSpyConfigTap> spy_config_;
+  std::unique_ptr<Tappy<ChannelSpyConfig<>>> spy_config_;
 };
 
 } // namespace clockwork::tools::tests::support

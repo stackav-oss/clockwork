@@ -32,6 +32,7 @@ cc_library(
     hdrs = ["protobuf_to_tap.hh"],
     visibility = ["//visibility:public"],
     deps = [
+        ":optional",
         ":var_array",
         ":var_string",
         "//jewels/container:at",
@@ -53,6 +54,18 @@ py_library(
         ":value_serdes",
         "//jewels/memory:py_bytes",
         "@clockwork_pip//typing_extensions",
+    ],
+)
+
+cc_library(
+    name = "soa",
+    srcs = ["soa.inl"],
+    hdrs = ["soa.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "@boost//:iterator",
     ],
 )
 

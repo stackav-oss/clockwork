@@ -1,7 +1,7 @@
 # Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Create an empty repository with just BUILD / WORKSPACE files."""
+"""Create an empty repository with just a BUILD file."""
 
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "workspace_and_buildfile")
 
@@ -28,18 +28,6 @@ empty_repository = repository_rule(
                 "The content for the BUILD file for this repository. " +
                 "Either build_file or build_file_content can be specified, but " +
                 "not both.",
-        ),
-        "workspace_file": attr.label(
-            doc =
-                "The file to use as the `WORKSPACE` file for this repository. " +
-                "Either `workspace_file` or `workspace_file_content` can be " +
-                "specified, or neither, but not both.",
-        ),
-        "workspace_file_content": attr.string(
-            doc =
-                "The content for the WORKSPACE file for this repository. " +
-                "Either `workspace_file` or `workspace_file_content` can be " +
-                "specified, or neither, but not both.",
         ),
     },
 )

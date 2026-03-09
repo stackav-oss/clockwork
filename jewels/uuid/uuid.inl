@@ -4,20 +4,25 @@
 #include "jewels/uuid/uuid.hh"
 
 #include "jewels/container/at.hh"
+#include "jewels/memory/fields.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/std/span.hh"
 
-#include <fmt10/base.h>
-#include <fmt10/format.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <iterator>
-#include <limits>
 #include <memory_resource>
+#include <mutex>
 #include <random>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -130,6 +135,44 @@ check_for_dash(const std::string_view str, const bool expect_dashes)
   }
 
   return str;
+}
+
+/// Generator for seeds to initialize the random number generator
+struct SeedGenerator
+{
+  using result_type = uint32_t;
+
+  /// Generate a sequence of seeds to initialize the random number generator
+  /// @tparam IterType Iterator type
+  /// @param[in] begin Iterator to the beginning of the range
+  /// @param[in] end Iterator to the end of the range
+  template <typename IterType>
+  void generate(IterType begin, IterType end) noexcept;
+};
+
+template <typename IterType>
+void SeedGenerator::generate(IterType begin, IterType end) noexcept
+{
+  std::random_device random_dev{};
+  for (auto iter = begin; iter < end; ++iter)
+  {
+    *iter = random_dev();
+  }
+}
+
+/// Fill a span of bytes with random data
+/// @param[in,out] data Data to fill
+inline void fill_with_random_bytes(std::span<std::byte> data) noexcept
+{
+  static detail::SeedGenerator seed_gen;
+  static std::ranlux48 gen{seed_gen};
+  static std::uniform_int_distribution<uint8_t> distrib{};
+  static std::mutex mutex;
+  const std::lock_guard guard{mutex};
+  for (auto& element : data)
+  {
+    element = static_cast<std::byte>(distrib(gen));
+  }
 }
 } // namespace detail
 
@@ -277,31 +320,32 @@ Uuid<TagType>::from_string(std::string_view str)
 template <typename TagType>
 [[nodiscard]] Uuid<TagType> Uuid<TagType>::random_uuid() noexcept
 {
-  thread_local std::random_device random_device;
-  thread_local std::mt19937 gen(random_device());
-  thread_local std::uniform_int_distribution<uint8_t> distrib(
-    std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
+  // Conforming to RFC 9652 section 5.7 (UUIDv7)
   Uuid uuid{};
-  for (std::ptrdiff_t i = 0; std::cmp_less(i, uuid_size_bytes); ++i)
-  {
-    jewels::at(uuid.uuid, i) = distrib(gen);
-  }
 
-  // Conforming to RFC 4122
-  const uint8_t time_hi_and_version_high_byte_index = 6U;
-  const uint8_t time_hi_and_version_high_byte_mask = 0x0FU;
-  const uint8_t uuid_version = 4U; // Version 4 means (pseudo-)randomly generated
-  const uint8_t uuid_version_shift = 4U;
-  uuid.uuid[time_hi_and_version_high_byte_index] =
-    static_cast<uint8_t>(uuid.uuid[time_hi_and_version_high_byte_index] & time_hi_and_version_high_byte_mask) |
-    static_cast<uint8_t>(uuid_version << uuid_version_shift);
+  // 48 bits of big-endian time since epoch in milliseconds
+  const auto big_endian_ms = memory::ToBigEndian{}(static_cast<uint64_t>(
+    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+      .count()));
+  const auto time_span = std::as_bytes(jewels::as_single_item_span(big_endian_ms)).last(time_size_bytes);
+  std::ranges::copy(time_span, std::as_writable_bytes(std::span(uuid.uuid).first(time_size_bytes)).begin());
 
-  const uint8_t clock_seq_hi_and_reserved_byte_index = 8U;
-  const uint8_t clock_seq_hi_and_reserved_byte_mask = 0x3FU;
-  const uint8_t reserved_bits = 0x80U;
-  uuid.uuid[clock_seq_hi_and_reserved_byte_index] =
-    static_cast<uint8_t>(uuid.uuid[clock_seq_hi_and_reserved_byte_index] & clock_seq_hi_and_reserved_byte_mask) |
-    reserved_bits;
+  // 80 bits of pseudo-random data
+  detail::fill_with_random_bytes(std::as_writable_bytes(std::span(uuid.uuid).subspan(time_size_bytes)));
+
+  // Fill in UUID version (7)
+  constexpr uint8_t version_byte_index = 6U;
+  constexpr uint8_t version_byte_mask = 0x0FU;
+  constexpr uint8_t version = 7U; // UUID version 7
+  constexpr uint8_t version_shift = 4U;
+  uuid.uuid[version_byte_index] = static_cast<uint8_t>(uuid.uuid[version_byte_index] & version_byte_mask) |
+                                  static_cast<uint8_t>(version << version_shift);
+
+  // Fill in UUID variant (b10)
+  constexpr uint8_t var_byte_index = 8U;
+  constexpr uint8_t var_byte_mask = 0x3FU;
+  constexpr uint8_t var_bits = 0x80U;
+  uuid.uuid[var_byte_index] = static_cast<uint8_t>(uuid.uuid[var_byte_index] & var_byte_mask) | var_bits;
 
   return uuid;
 }

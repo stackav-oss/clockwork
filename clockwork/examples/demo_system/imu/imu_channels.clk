@@ -1,3 +1,5 @@
+#![generate()]
+
 use clockwork::examples::demo_system::imu::imu_message;
 
 // Raw IMU packet channel

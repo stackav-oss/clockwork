@@ -1,0 +1,197 @@
+// Copyright 2025 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+//
+// DFL Trait Definitions
+//
+// This module defines the core traits used by DFL for operator type checking.
+// Traits declare what operations types support and what the result types are.
+// This enables DSL-level type checking while deferring actual implementation to C++.
+
+#![generate()]
+
+// a + b
+trait Add<Rhs = Self> {
+    type Output;
+}
+
+// a - b
+trait Sub<Rhs = Self> {
+    type Output;
+}
+
+// a * b
+trait Mul<Rhs = Self> {
+    type Output;
+}
+
+// a / b
+trait Div<Rhs = Self> {
+    type Output;
+}
+
+// a % b
+trait Rem<Rhs = Self> {
+    type Output;
+}
+
+// -a
+trait Neg {
+    type Output;
+}
+
+// +a
+trait Pos {
+    type Output;
+}
+
+// |a|
+trait Abs {
+    type Output;
+}
+
+// Logical not
+trait Not {
+    type Output;
+}
+
+// Logical and
+trait And<Rhs = Self> {
+    type Output;
+}
+
+// Logical or
+trait Or<Rhs = Self> {
+    type Output;
+}
+
+// Ordering comparison
+trait Ord<Rhs = Self> {
+    type Output;
+}
+
+// Equality comparison
+trait Eq<Rhs = Self> {
+    type Output;
+}
+
+impl Add for Int8 { type Output = Int8; }
+impl Sub for Int8 { type Output = Int8; }
+impl Mul for Int8 { type Output = Int8; }
+impl Div for Int8 { type Output = Int8; }
+impl Rem for Int8 { type Output = Int8; }
+impl Neg for Int8 { type Output = Int8; }
+impl Pos for Int8 { type Output = Int8; }
+impl Abs for Int8 { type Output = Int8; }
+impl Ord for Int8 { type Output = Bool; }
+impl Eq for Int8 { type Output = Bool; }
+
+impl Add for Int16 { type Output = Int16; }
+impl Sub for Int16 { type Output = Int16; }
+impl Mul for Int16 { type Output = Int16; }
+impl Div for Int16 { type Output = Int16; }
+impl Rem for Int16 { type Output = Int16; }
+impl Neg for Int16 { type Output = Int16; }
+impl Pos for Int16 { type Output = Int16; }
+impl Abs for Int16 { type Output = Int16; }
+impl Ord for Int16 { type Output = Bool; }
+impl Eq for Int16 { type Output = Bool; }
+
+impl Add for Int32 { type Output = Int32; }
+impl Sub for Int32 { type Output = Int32; }
+impl Mul for Int32 { type Output = Int32; }
+impl Div for Int32 { type Output = Int32; }
+impl Rem for Int32 { type Output = Int32; }
+impl Neg for Int32 { type Output = Int32; }
+impl Pos for Int32 { type Output = Int32; }
+impl Abs for Int32 { type Output = Int32; }
+impl Ord for Int32 { type Output = Bool; }
+impl Eq for Int32 { type Output = Bool; }
+
+impl Add for Int64 { type Output = Int64; }
+impl Sub for Int64 { type Output = Int64; }
+impl Mul for Int64 { type Output = Int64; }
+impl Div for Int64 { type Output = Int64; }
+impl Rem for Int64 { type Output = Int64; }
+impl Neg for Int64 { type Output = Int64; }
+impl Pos for Int64 { type Output = Int64; }
+impl Abs for Int64 { type Output = Int64; }
+impl Ord for Int64 { type Output = Bool; }
+impl Eq for Int64 { type Output = Bool; }
+
+impl Add for UInt8 { type Output = UInt8; }
+impl Sub for UInt8 { type Output = UInt8; }
+impl Mul for UInt8 { type Output = UInt8; }
+impl Div for UInt8 { type Output = UInt8; }
+impl Rem for UInt8 { type Output = UInt8; }
+impl Abs for UInt8 { type Output = UInt8; }
+impl Ord for UInt8 { type Output = Bool; }
+impl Eq for UInt8 { type Output = Bool; }
+
+impl Add for UInt16 { type Output = UInt16; }
+impl Sub for UInt16 { type Output = UInt16; }
+impl Mul for UInt16 { type Output = UInt16; }
+impl Div for UInt16 { type Output = UInt16; }
+impl Rem for UInt16 { type Output = UInt16; }
+impl Abs for UInt16 { type Output = UInt16; }
+impl Ord for UInt16 { type Output = Bool; }
+impl Eq for UInt16 { type Output = Bool; }
+
+impl Add for UInt32 { type Output = UInt32; }
+impl Sub for UInt32 { type Output = UInt32; }
+impl Mul for UInt32 { type Output = UInt32; }
+impl Div for UInt32 { type Output = UInt32; }
+impl Rem for UInt32 { type Output = UInt32; }
+impl Abs for UInt32 { type Output = UInt32; }
+impl Ord for UInt32 { type Output = Bool; }
+impl Eq for UInt32 { type Output = Bool; }
+
+impl Add for UInt64 { type Output = UInt64; }
+impl Sub for UInt64 { type Output = UInt64; }
+impl Mul for UInt64 { type Output = UInt64; }
+impl Div for UInt64 { type Output = UInt64; }
+impl Rem for UInt64 { type Output = UInt64; }
+impl Abs for UInt64 { type Output = UInt64; }
+impl Ord for UInt64 { type Output = Bool; }
+impl Eq for UInt64 { type Output = Bool; }
+
+impl Add for Float32 { type Output = Float32; }
+impl Sub for Float32 { type Output = Float32; }
+impl Mul for Float32 { type Output = Float32; }
+impl Div for Float32 { type Output = Float32; }
+impl Neg for Float32 { type Output = Float32; }
+impl Pos for Float32 { type Output = Float32; }
+impl Abs for Float32 { type Output = Float32; }
+impl Ord for Float32 { type Output = Bool; }
+impl Eq for Float32 { type Output = Bool; }
+
+impl Add for Float64 { type Output = Float64; }
+impl Sub for Float64 { type Output = Float64; }
+impl Mul for Float64 { type Output = Float64; }
+impl Div for Float64 { type Output = Float64; }
+impl Neg for Float64 { type Output = Float64; }
+impl Pos for Float64 { type Output = Float64; }
+impl Abs for Float64 { type Output = Float64; }
+impl Ord for Float64 { type Output = Bool; }
+impl Eq for Float64 { type Output = Bool; }
+
+impl Not for Bool { type Output = Bool; }
+impl And for Bool { type Output = Bool; }
+impl Or for Bool { type Output = Bool; }
+impl Eq for Bool { type Output = Bool; }
+
+impl Add for Duration { type Output = Duration; }
+impl Sub for Duration { type Output = Duration; }
+impl Neg for Duration { type Output = Duration; }
+impl Pos for Duration { type Output = Duration; }
+impl Abs for Duration { type Output = Duration; }
+impl Ord for Duration { type Output = Bool; }
+impl Eq for Duration { type Output = Bool; }
+impl Mul<Float64> for Duration { type Output = Duration; }
+impl Div<Float64> for Duration { type Output = Duration; }
+impl Div<Duration> for Duration { type Output = Float64; }
+
+impl Ord for SyncTime { type Output = Bool; }
+impl Eq for SyncTime { type Output = Bool; }
+impl Sub<SyncTime> for SyncTime { type Output = Duration; }
+impl Add<Duration> for SyncTime { type Output = SyncTime; }
+impl Sub<Duration> for SyncTime { type Output = SyncTime; }

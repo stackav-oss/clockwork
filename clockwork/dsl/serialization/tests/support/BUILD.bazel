@@ -1,0 +1,24 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "soa_test_schema.clk",
+])
+
+clk(
+    name = "soa_test_schema_clk",
+    srcs = ["soa_test_schema.clk"],
+    outs = [
+        "soa_test_schema_clk_cc.cc",
+        "soa_test_schema_clk_cc.hh",
+        "soa_test_schema_clk_cc.inl",
+    ],
+    generate = ["cpp"],
+)

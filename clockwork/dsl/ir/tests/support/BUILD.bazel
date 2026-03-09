@@ -1,0 +1,84 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "report_group_defs",
+    srcs = [
+        "report_group_defs.cc",
+        "report_group_defs.inl",
+    ],
+    hdrs = ["report_group_defs.hh"],
+    data = [":report_group_defs_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":report_group_defs_dial",
+        ":report_group_defs_impl",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "@wise_enum",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "report_group_defs_clk",
+    srcs = ["report_group_defs.clk"],
+    outs = [
+        "report_group_defs.cc",
+        "report_group_defs.hh",
+        "report_group_defs.inl",
+        "report_group_defs_dial.cc",
+        "report_group_defs_dial.hh",
+        "report_group_defs_dial.inl",
+    ],
+    deps = [
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "report_group_defs_dial",
+    srcs = [
+        "report_group_defs_dial.cc",
+        "report_group_defs_dial.inl",
+    ],
+    hdrs = ["report_group_defs_dial.hh"],
+    data = [":report_group_defs_clk"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork:tags",
+        "//clockwork/dial:include_common",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:soa",
+        "//jewels/memory:aligned_storage",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "report_group_defs_impl",
+    srcs = ["report_group_defs_impl.cc"],
+    deps = [":report_group_defs_dial"],
+)
+
+clk(
+    name = "user_traits_test_clk",
+    srcs = ["user_traits_test.clk"],
+    generate = ["none"],
+    deps = ["//std:traits_clk"],
+)

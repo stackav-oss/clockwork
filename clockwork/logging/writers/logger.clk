@@ -1,10 +1,14 @@
-use clockwork::logging::writers::channel_message_rates::ChannelMessageRates;
-use clockwork::logging::log_writer_config::LogWriterConfig;
-use clockwork::logging::writers::logger_status::LoggerStatus;
-use clockwork::logging::writers::logger_config::LoggerConfig;
-use clockwork::logging::writers::channel_message_rates_config::ChannelMessageRatesConfig;
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork_logging)]
+
+use clockwork::logging::writers::channel_message_rates::{ChannelMessageRates};
+use clockwork::logging::log_writer_config::{LogWriterConfig};
+use clockwork::logging::writers::logger_status::{LoggerStatus};
+use clockwork::logging::writers::logger_config::{LoggerConfig};
+use clockwork::logging::writers::channel_message_rates_config::{ChannelMessageRatesConfig};
 
 // Logger cog state
+#[cpp(type_header="clockwork/logging/writers/logger_cog_state.hh", type_namespace=clockwork_logging)]
 extern_type LoggerCogState;
 
 // Logger init cog
@@ -58,25 +62,4 @@ cog LoggerStatusPublisherCog
     condition periodic_100ms: time_since_last_exec(100ms);
     execute when: periodic_100ms;
   }
-}
-
-cpp_target logger_cog
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-
-  extern
-  {
-    header_file: "clockwork/logging/writers/logger_cog_state.hh";
-    namespace: clockwork_logging;
-    type
-    {
-        name: LoggerCogState;
-    }
-  }
-
-  cog LoggerInitCog;
-  cog LoggerStatusPublisherCog;
 }

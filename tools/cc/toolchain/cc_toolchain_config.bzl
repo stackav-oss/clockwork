@@ -16,6 +16,7 @@ load(
     "variable_with_value",
     "with_feature_set",
 )
+load("@rules_cc//cc:defs.bzl", "CcToolchainConfigInfo")
 load("//tools/cc:flags.bzl", "CLANG_CXX_WARNING_FLAGS", "CLANG_C_WARNING_FLAGS", "CLANG_MISC_FLAGS")
 
 all_c_compile_actions = [
@@ -533,6 +534,7 @@ def _cc_toolchain_config_impl(ctx):
                 # Needed due to clang AST issues, such as in
                 # clang/AST/Redeclarable.h line 199.
                 "-fno-sanitize=vptr",
+                "-Wno-nullability-extension",  # Required for absl
             ])],
         )],
     )
@@ -542,7 +544,10 @@ def _cc_toolchain_config_impl(ctx):
         implies = ["sanitizer_common_flags"],
         flag_sets = [flag_set(
             actions = ALL_CC_COMPILE_ACTION_NAMES + ALL_CC_LINK_ACTION_NAMES,
-            flag_groups = [flag_group(flags = ["-fsanitize=thread"])],
+            flag_groups = [flag_group(flags = [
+                "-fsanitize=thread",
+                "-Wno-nullability-extension",  # Required for absl
+            ])],
         )],
     )
 

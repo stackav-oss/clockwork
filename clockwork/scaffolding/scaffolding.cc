@@ -13,10 +13,13 @@
 #include "clockwork/scaffolding/channels.hh"
 #include "clockwork/scaffolding/cog.hh"
 #include "clockwork/scaffolding/config.hh"
+#include "clockwork/scaffolding/data_source_loader.hh"
 #include "clockwork/scaffolding/io_connection.hh"
 #include "clockwork/scaffolding/memory.hh"
+#include "clockwork/scaffolding/snapshots.hh"
 #include "clockwork/scaffolding/state.hh"
 #include "clockwork/scaffolding/timer.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -42,10 +45,12 @@
 namespace clockwork::scaffolding
 {
 
+using jewels::fails;
+
 // TODO(OI-2892): Refactor to reduce complexity
 // NOLINTNEXTLINE(readability-function-size, readability-function-cognitive-complexity)
 int run(
-  const common::ProcessDescriptionTap& desc,
+  const Tappy<common::ProcessDescription<>>& desc,
   AbstractCasing& casing,
   pinion::ShmChannelFactory& channel_factory,
   jewels::cli::ExitCondition& exit,
@@ -73,14 +78,28 @@ int run(
     return EXIT_FAILURE;
   }
 
+  FirstMessageCache first_message_cache{memres};
+
   auto states = setup_states(
-    desc.get_state_graph().get_state_instances(), memres_scratch, *memory_resources, channel_factory, casing);
+    desc.get_state_graph().get_state_instances(),
+    memres_scratch,
+    *memory_resources,
+    channel_factory,
+    casing,
+    desc.get_data_sources(),
+    first_message_cache);
   if (!states)
   {
     return EXIT_FAILURE;
   }
 
-  if (!setup_configs(desc.get_config_graph().get_config_instances(), memres, memres_config, casing))
+  if (!setup_configs(
+        desc.get_config_graph().get_config_instances(),
+        desc.get_data_sources(),
+        memres,
+        memres_config,
+        first_message_cache,
+        casing))
   {
     return EXIT_FAILURE;
   }
@@ -128,6 +147,12 @@ int run(
   }
 
   if (!connect_publishers(desc.get_pubsub_graph().get_publish_endpoints(), *channels, desc.get_process_id(), casing))
+  {
+    return EXIT_FAILURE;
+  }
+
+  // Snapshots must be configured after configs and states are connected
+  if (fails(setup_snapshot_configs(desc.get_snapshot_configs(), casing)))
   {
     return EXIT_FAILURE;
   }

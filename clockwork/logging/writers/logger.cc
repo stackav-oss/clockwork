@@ -4,12 +4,12 @@
 #include "clockwork/logging/writers/logger.hh"
 
 #include "clockwork/logging/log_error.hh"
-#include "clockwork/logging/log_writer_config.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/writers/channel_message_rates.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
-#include "clockwork/logging/writers/logger_status.hh"
+#include "clockwork/logging/writers/channel_message_rates_clk_cc.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
+#include "clockwork/logging/writers/logger_status_clk_cc.hh"
 #include "clockwork/logging/writers/message_writer.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
@@ -17,7 +17,7 @@
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
 
 #include <compare>
 #include <cstddef>
@@ -34,8 +34,8 @@ namespace clockwork_logging
 
 Logger::Logger(
   jewels::memory::MemoryResource memory_resource,
-  const LogWriterConfigTap& log_writer_config,
-  const LoggerConfigTap& logger_config,
+  const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+  const clockwork::Tappy<LoggerConfig>& logger_config,
   const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config)
   : memory_resource_(std::move(memory_resource)),
     log_directory_name_(memory_resource_),
@@ -43,7 +43,7 @@ Logger::Logger(
 {
   fmt::format_to(
     std::back_inserter(log_directory_name_), "{}", jewels::time::SyncClock::now().time_since_epoch().count());
-  if (const auto init_result = message_writer_.initialize(); !init_result)
+  if (const auto init_result = message_writer_.initialize(log_writer_config); !init_result)
   {
     jewels::log_cerr_error("Failed to initialize the message writer: {}", init_result.error());
     return;
@@ -65,7 +65,7 @@ Logger::~Logger()
   return log_directory_name_;
 }
 
-void Logger::get_logger_status_message(LoggerStatusTap& message)
+void Logger::get_logger_status_message(clockwork::Tappy<LoggerStatus>& message)
 {
   const auto state = message_writer_.get_state();
   const auto writer_status = message_writer_.get_status();
@@ -83,7 +83,7 @@ void Logger::get_logger_status_message(LoggerStatusTap& message)
   message.get_underlying_low_rate_channel_name().set_truncate(message_writer_.get_low_rate_channel_name());
 }
 
-[[nodiscard]] bool Logger::get_channel_rates_message(ChannelMessageRatesTap& message)
+[[nodiscard]] bool Logger::get_channel_rates_message(clockwork::Tappy<ChannelMessageRates<>>& message)
 {
   const auto current_time = jewels::time::SyncClock::now();
   if (last_channel_rates_publish_time_ + channel_rates_publish_interval > current_time)

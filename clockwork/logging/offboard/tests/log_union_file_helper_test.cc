@@ -8,6 +8,7 @@
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/v1/log_union.pb.h"
+#include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -122,10 +123,10 @@ TEST_CASE("LogMetadataFileHelper")
   const auto log3_path = test_dir.get_path() / "log3";
   const auto union_path = test_dir.get_path() / "union";
 
-  std::filesystem::create_directory(log1_path);
-  std::filesystem::create_directory(log2_path);
-  std::filesystem::create_directory(log3_path);
-  std::filesystem::create_directory(union_path);
+  std::filesystem::create_directory(log1_path.c_str());
+  std::filesystem::create_directory(log2_path.c_str());
+  std::filesystem::create_directory(log3_path.c_str());
+  std::filesystem::create_directory(union_path.c_str());
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   ChunkReaderWriterFactory chunk_reader_writer_factory{memory_resource};

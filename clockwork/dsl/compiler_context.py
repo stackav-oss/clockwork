@@ -21,7 +21,7 @@ class Context(Protocol):
 ContextType = TypeVar("ContextType", bound=Context)
 
 
-class ContextKey(Generic[ContextType], ABC):
+class ContextKey(ABC, Generic[ContextType]):
     """Sentinel values for CPU context.
 
     These are meant to serve as unique keys in the CPU context.  The name is for

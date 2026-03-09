@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeAlias, TypeVar, cast
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, strongtypes, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, statement, strongtypes, typesys
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 from clockwork.serialization.metadata import tachyon_model
@@ -37,6 +37,7 @@ class ScopeLookup:
 
     name: str
     module: node.Module | None
+    arguments: dict[str, typesys.Value | float | ScopeLookup] | None = None
 
 
 @dataclass(eq=True, frozen=True)
@@ -254,6 +255,8 @@ class TachyonDynRegistryKey(ContextKey[TachyonDynRegistry]):
         registry.generic_type_registry[clkbuiltins.OPTIONAL.value_key()] = _optional_factory
         registry.generic_type_registry[clkbuiltins.VAR_ARRAY.value_key()] = _var_array_factory
         registry.generic_type_registry[clkbuiltins.VAR_STRING.value_key()] = _var_string_factory
+        registry.generic_type_registry[clkbuiltins.FIXED_SOA.value_key()] = _fixed_soa_factory
+        registry.generic_type_registry[clkbuiltins.VAR_SOA.value_key()] = _var_soa_factory
         return registry
 
 
@@ -515,7 +518,7 @@ def _fixed_array_factory(compiler_context: CompilerContext, typ: typesys.Instant
         raise RuntimeError(msg)
     element_type = typ.arguments["type"]
     size_arg = typ.arguments["size"]
-    underlying_type, size, serdes, constraint = _array_type_checker(compiler_context, typ, element_type, size_arg)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    underlying_type, size, _serdes, constraint = _array_type_checker(compiler_context, typ, element_type, size_arg)
     return FixedArraySerDes(compiler_context, size, underlying_type, constraint).make_serdes()
 
 
@@ -526,7 +529,7 @@ def _var_array_factory(compiler_context: CompilerContext, typ: typesys.Instantia
         raise RuntimeError(msg)
     element_type = typ.arguments["type"]
     size_arg = typ.arguments["max_size"]
-    underlying_type, max_size, serdes, constraint = _array_type_checker(compiler_context, typ, element_type, size_arg)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    underlying_type, max_size, _serdes, constraint = _array_type_checker(compiler_context, typ, element_type, size_arg)
     return VarArraySerDes(compiler_context, max_size, underlying_type, constraint).make_serdes()
 
 
@@ -536,7 +539,7 @@ def _var_string_factory(compiler_context: CompilerContext, typ: typesys.Instanti
         msg = f"Expected VarString but got {typ.instantiates}"
         raise RuntimeError(msg)
     size_arg = typ.arguments["max_size"]
-    underlying_type, max_size, serdes, constraint = _array_type_checker(  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    underlying_type, max_size, _serdes, constraint = _array_type_checker(
         compiler_context, typ, clkbuiltins.BYTE, size_arg
     )
     array_serdes = cast(
@@ -552,6 +555,199 @@ def _var_string_factory(compiler_context: CompilerContext, typ: typesys.Instanti
     return SerDes(
         str, _get_constraint(compiler_context, typ), _serialize, _deserialize, clk_type=clkbuiltins.VAR_STRING
     )
+
+
+class SoaSerDes(Generic[T]):
+    """SerDes for Struct-of-Arrays (SoA) types (both FixedSoa and VarSoa).
+
+    SoA layout stores fields as separate contiguous arrays rather than array of structs.
+    For example, FixedSoa<Point3f, 100> stores:
+        x: [x0, x1, ..., x99]
+        y: [y0, y1, ..., y99]
+        z: [z0, z1, ..., z99]
+
+    The Python representation is a dataclass with lists for each field.
+    """
+
+    def __init__(
+        self,
+        compiler_context: CompilerContext,
+        schema_ir: schema.InstantiatedSchema,
+        max_size: int,
+        constraint: tachyon_reg.FieldConstraint,
+        *,
+        is_var: bool = False,
+    ) -> None:
+        """Create a SerDes for SoA types.
+
+        Args:
+            compiler_context: The compiler context.
+            schema_ir: The instantiated schema for the element type.
+            max_size: Maximum number of elements (size for FixedSoa, max_size for VarSoa).
+            constraint: Field constraint for the SoA type.
+            is_var: True for VarSoa, False for FixedSoa.
+        """
+        self.compiler_context = compiler_context
+        self.schema_ir = schema_ir
+        self.max_size = max_size
+        self.constraint = constraint
+        self.is_var = is_var
+
+        self.layout_info = tachyon_reg.compute_soa_layout(
+            compiler_context, schema_ir, max_size, include_size_field=is_var
+        )
+        assert self.constraint == tachyon_reg.FieldConstraint(
+            size=self.layout_info.total_size, alignment=self.layout_info.max_alignment
+        )  # Sanity check
+
+        # Build field serializers: [(field_num, field_name, offset, element_serdes)]
+        self.field_serializers: list[tuple[int, str, int, SerDes[Any]]] = []
+        self.size_offset: int = 0
+        self.size_field_size: int = 0
+        self.size_serdes: SerDes[int] | None = None
+
+        for field_layout in self.layout_info.field_layouts:
+            if field_layout.field_num == tachyon_reg.SIZE_FIELD_NUM:
+                self.size_offset = field_layout.offset
+                self.size_field_size = field_layout.size
+            else:
+                field_def = schema_ir.fields[field_layout.field_num]
+                element_serdes = serdes_for_type(compiler_context, field_def.type_info)
+                self.field_serializers.append(
+                    (
+                        field_layout.field_num,
+                        field_def.cur_name,
+                        field_layout.offset,
+                        element_serdes,
+                    )
+                )
+
+        if is_var:
+            size_type, _size_constraint = tachyon_reg.get_compact_size_type_info(max_size)
+            self.size_serdes = cast("SerDes[int]", serdes_for_type(compiler_context, size_type))
+
+        self.py_class = self._create_dataclass()
+
+    def _create_dataclass(self) -> type[Any]:
+        """Create a dataclass with field arrays for this SoA type."""
+        class_name = f"{'Var' if self.is_var else 'Fixed'}Soa_{self.schema_ir.schema_name}_{self.max_size}"
+
+        dataclass_fields: list[tuple[str, Any, Any] | tuple[str, Any]] = []
+        for field_num, field_name, _offset, element_serdes in self.field_serializers:
+            element_type = element_serdes.type_
+
+            if self.is_var:
+                # VarSoa: default to empty list
+                dataclass_fields.append(
+                    (
+                        field_name,
+                        list[element_type],
+                        field(default_factory=list),
+                    )
+                )
+            else:
+                # FixedSoa: default to list of default values
+                # Use _get_default_for_field to respect init_value declarations
+                field_def = self.schema_ir.fields[field_num]
+                has_default, element_default = _get_default_for_field(
+                    self.compiler_context, self.schema_ir, field_def, element_type
+                )
+
+                if has_default:
+
+                    def _make_default_factory(
+                        default_val: object = element_default, size: int = self.max_size
+                    ) -> Callable[[], list[object]]:
+                        return lambda: [default_val for _ in range(size)]
+
+                    dataclass_fields.append(
+                        (
+                            field_name,
+                            list[element_type],
+                            field(default_factory=_make_default_factory()),
+                        )
+                    )
+                else:
+                    dataclass_fields.append(
+                        (
+                            field_name,
+                            list[element_type],
+                        )
+                    )
+
+        return dataclasses.make_dataclass(class_name, fields=dataclass_fields, kw_only=True, slots=True, eq=True)
+
+    def serialize(self, obj: object, buffer: memoryview) -> None:
+        """Serialize SoA dataclass to buffer.
+
+        Args:
+            obj: SoA dataclass with field arrays (lists)
+            buffer: Target buffer
+        """
+        if self.field_serializers:
+            _, first_field_name, _, _ = self.field_serializers[0]
+            actual_size = len(getattr(obj, first_field_name))
+        else:
+            actual_size = 0
+
+        if self.is_var:
+            if actual_size > self.max_size:
+                msg = f"SoA size {actual_size} exceeds max_size {self.max_size}"
+                raise ValueError(msg)
+        elif actual_size != self.max_size:
+            msg = f"FixedSoa field array has wrong size {actual_size}, expected {self.max_size}"
+            raise ValueError(msg)
+
+        for _field_num, field_name, offset, element_serdes in self.field_serializers:
+            field_array = getattr(obj, field_name)
+            if len(field_array) != actual_size:
+                msg = f"All SoA field arrays must have same size, but {field_name} has {len(field_array)}, expected {actual_size}"
+                raise ValueError(msg)
+
+            element_size = element_serdes.constraint.size
+            for i in range(actual_size):
+                element_offset = offset + i * element_size
+                element_serdes.serializer(field_array[i], buffer[element_offset : element_offset + element_size])
+
+        if self.is_var and self.size_serdes is not None:
+            self.size_serdes.serializer(actual_size, buffer[self.size_offset : self.size_offset + self.size_field_size])
+
+    def deserialize(self, buffer: memoryview) -> object:
+        """Deserialize buffer to SoA dataclass.
+
+        Args:
+            buffer: Source buffer
+
+        Returns:
+            SoA dataclass with lists for each field
+        """
+        if self.is_var and self.size_serdes is not None:
+            actual_size = self.size_serdes.deserializer(
+                buffer[self.size_offset : self.size_offset + self.size_field_size]
+            )
+        else:
+            actual_size = self.max_size
+
+        field_values = {}
+        for _field_num, field_name, offset, element_serdes in self.field_serializers:
+            field_array: list[Any] = [cast("Any", None)] * actual_size
+            element_size = element_serdes.constraint.size
+            for i in range(actual_size):
+                element_offset = offset + i * element_size
+                field_array[i] = element_serdes.deserializer(buffer[element_offset : element_offset + element_size])
+            field_values[field_name] = field_array
+
+        return self.py_class(**field_values)
+
+    def make_serdes(self) -> SerDes[T]:
+        """Create a SerDes for the registry."""
+        return SerDes(
+            type_=self.py_class,
+            constraint=self.constraint,
+            serializer=self.serialize,
+            deserializer=self.deserialize,
+            clk_type=clkbuiltins.VAR_SOA if self.is_var else clkbuiltins.FIXED_SOA,
+        )
 
 
 class OptionalSerDes(Generic[T]):
@@ -611,6 +807,52 @@ def _optional_factory(compiler_context: CompilerContext, typ: typesys.Instantiat
         raise TypeError(msg)
     serdes = serdes_for_type(compiler_context, value_type)
     return OptionalSerDes(compiler_context, _get_constraint(compiler_context, typ), value_type, serdes).make_serdes()
+
+
+def _fixed_soa_factory(compiler_context: CompilerContext, typ: typesys.Instantiation) -> SerDes[Any] | None:
+    """SerDes factory for FixedSoa."""
+    if typ.instantiates is not clkbuiltins.FIXED_SOA:
+        msg = f"Expected FixedSoa but got {typ.instantiates}"
+        raise RuntimeError(msg)
+
+    element_type = typ.arguments["type"]
+    size_arg = typ.arguments["size"]
+
+    if not isinstance(element_type, schema.InstantiatedSchema):
+        msg = f"FixedSoa element type must be a schema, got {element_type.value_key()}"
+        raise TypeError(msg)
+
+    if not isinstance(size_arg, primitive.DecimalValue):
+        msg = f"Invalid size parameter: {size_arg}"
+        raise TypeError(msg)
+
+    size = int(size_arg.value)
+    constraint = _get_constraint(compiler_context, typ)
+
+    return SoaSerDes(compiler_context, element_type, size, constraint, is_var=False).make_serdes()
+
+
+def _var_soa_factory(compiler_context: CompilerContext, typ: typesys.Instantiation) -> SerDes[list[Any]] | None:
+    """SerDes factory for VarSoa."""
+    if typ.instantiates is not clkbuiltins.VAR_SOA:
+        msg = f"Expected VarSoa but got {typ.instantiates}"
+        raise RuntimeError(msg)
+
+    element_type = typ.arguments["type"]
+    max_size_arg = typ.arguments["max_size"]
+
+    if not isinstance(element_type, schema.InstantiatedSchema):
+        msg = f"VarSoa element type must be a schema, got {element_type.value_key()}"
+        raise TypeError(msg)
+
+    if not isinstance(max_size_arg, primitive.DecimalValue):
+        msg = f"Invalid max_size parameter: {max_size_arg}"
+        raise TypeError(msg)
+
+    max_size = int(max_size_arg.value)
+    constraint = _get_constraint(compiler_context, typ)
+
+    return SoaSerDes(compiler_context, element_type, max_size, constraint, is_var=True).make_serdes()
 
 
 @dataclass
@@ -750,7 +992,7 @@ class SchemaSerDes(Generic[T]):
         layout = tachyon_layout_reg.layout_for_type(compiler_context, schema_ir)
         constraint = tachyon_reg.constraint_for_type(compiler_context, schema_ir)
         if layout is None or constraint is None:
-            msg = f"No known Tachyon representation for {schema_ir.value_key()}; did you forget a `representation` instantiation? {layout} {constraint}"
+            msg = f"No known Tachyon representation for {schema_ir.value_key()}; did you forget an instantiation? {layout} {constraint}"
             raise ValueError(msg)
 
         field_serdeses, dataclass_fields = cls._process_fields(compiler_context, schema_ir, layout)
@@ -818,6 +1060,9 @@ def _convert_init_value_to_python(  # noqa: PLR0911, C901
         return False
     if isinstance(init_value, clkbuiltins.Nullopt):
         return None
+
+    if isinstance(init_value, statement.ImmutableBinding):
+        return _convert_init_value_to_python(compiler_context, schema_ir, init_value.get_resolved(), py_type)
 
     msg = f"Unsupported init_value type: {type(init_value)} for Python type {py_type}"
     raise TypeError(msg)
@@ -890,7 +1135,7 @@ def _get_default_for_container(
         size_arg = type_info.arguments["size"]
         assert isinstance(size_arg, primitive.DecimalValue)
         size = int(size_arg.value)
-        has_default, element_default = _get_default_for_type(compiler_context, element_type)  # pyright: ignore[reportUnusedVariable] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        _has_default, element_default = _get_default_for_type(compiler_context, element_type)
         return (True, [element_default] * size)
 
     if type_info.instantiates is clkbuiltins.VAR_ARRAY:
@@ -904,6 +1149,10 @@ def _get_default_for_container(
 
     if type_info.instantiates is clkbuiltins.UUID:
         return (False, None)
+
+    if type_info.instantiates in (clkbuiltins.FIXED_SOA, clkbuiltins.VAR_SOA):
+        soa_serdes = serdes_for_type(compiler_context, type_info)
+        return (True, soa_serdes.type_())
 
     msg = f"Unsupported container type {type_info.instantiates}"
     raise TypeError(msg)
@@ -1004,18 +1253,23 @@ def get_instantiation_dataclass(
             if not isinstance(entity, typesys.Value):
                 msg = f"Entity {val.name} is not a typesys.Value"
                 raise TypeError(msg)
+            if val.arguments:
+                val_args = {}
+                for name, value in val.arguments.items():
+                    val_args[name] = _make_value(value)
+                assert isinstance(entity, schema.Schema)
+                return typesys.Instantiation(type_info=clkbuiltins.TYPE_TYPE, instantiates=entity, arguments=val_args)
             return entity
         type_info = clkbuiltins.INT64 if isinstance(val, int) else clkbuiltins.FLOAT64
         return primitive.DecimalValue(type_info, Decimal(val))
 
     instantiation: schema.Schema | typesys.Instantiation
-    if args:
-        arguments = {name: _make_value(val) for name, val in args.items()}
-        instantiation = typesys.Instantiation(
-            type_info=clkbuiltins.TYPE_TYPE, instantiates=schema_ir, arguments=arguments
-        )
-    else:
-        instantiation = schema_ir
+    arguments = {name: _make_value(val) for name, val in args.items()} if args else None
+    instantiation = (
+        typesys.Instantiation(type_info=clkbuiltins.TYPE_TYPE, instantiates=schema_ir, arguments=arguments)
+        if arguments
+        else schema_ir
+    )
     return serdes_for_type(compiler_context, instantiation).type_, instantiation
 
 
@@ -1274,9 +1528,14 @@ def _create_type_converter(  # noqa: PLR0913 (too many params mitigated by kwonl
         _handle_schema_to_schema_conversion,
         _handle_type_to_container_conversion,
         _handle_array_to_array_conversion,
+        _handle_soa_to_soa_conversion,
+        _handle_array_to_soa_conversion,
+        _handle_soa_to_array_conversion,
         _handle_optional_to_array_conversion,
+        _handle_optional_to_soa_conversion,
         _handle_optional_to_varstring_conversion,
         _handle_array_to_optional_conversion,
+        _handle_soa_to_optional_conversion,
         _handle_array_to_string_conversion,
         _handle_string_to_array_conversion,
         _handle_uuid_to_uuid_conversion,
@@ -1328,7 +1587,35 @@ def _handle_uuid_to_uuid_conversion(  # noqa: PLR0913 (too many params mitigated
     return False, None
 
 
-def _handle_primitive_to_primitive_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+def _create_int_to_float_converter() -> Callable[[int], float]:
+    """Create a converter function from int to float.
+
+    Returns:
+        A function that converts int to float.
+    """
+
+    def converter(old_value: int) -> float:
+        return float(old_value)
+
+    return converter
+
+
+def _create_float_to_int_converter() -> Callable[[float], int]:
+    """Create a converter function from float to int.
+
+    Returns:
+        A function that converts float to int.
+    """
+
+    def converter(old_value: float) -> int:
+        return int(old_value)
+
+    return converter
+
+
+# PLR0913 (too many params) is mitigated by kwonly arg.
+# PLR0911 (too many returns) is suppressed because we need to handle all these cases.
+def _handle_primitive_to_primitive_conversion(  # noqa: PLR0913, PLR0911 (see above)
     *,
     compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
     old_type_id: int,
@@ -1357,10 +1644,27 @@ def _handle_primitive_to_primitive_conversion(  # noqa: PLR0913 (too many params
     ) and isinstance(new_type_info, clkbuiltins.IntegerPrimitiveType):
         return True, None
 
+    if old_type.fqn in (
+        clkbuiltins.INT8.fqn,
+        clkbuiltins.INT16.fqn,
+        clkbuiltins.INT32.fqn,
+        clkbuiltins.INT64.fqn,
+        clkbuiltins.UINT8.fqn,
+        clkbuiltins.UINT16.fqn,
+        clkbuiltins.UINT32.fqn,
+        clkbuiltins.UINT64.fqn,
+    ) and (new_type_info in (clkbuiltins.FLOAT32, clkbuiltins.FLOAT64)):
+        return True, _create_int_to_float_converter()
+
     if old_type.fqn in (clkbuiltins.FLOAT32.fqn, clkbuiltins.FLOAT64.fqn) and (
         new_type_info in (clkbuiltins.FLOAT32, clkbuiltins.FLOAT64)
     ):
         return True, None
+
+    if old_type.fqn in (clkbuiltins.FLOAT32.fqn, clkbuiltins.FLOAT64.fqn) and isinstance(
+        new_type_info, clkbuiltins.IntegerPrimitiveType
+    ):
+        return True, _create_float_to_int_converter()
 
     # Integer to Duration/SyncTime conversions
     if old_type.fqn in (
@@ -1443,7 +1747,6 @@ def _create_primitive_to_enum_converter(
 
     Args:
         compiler_context: Compiler context containing serializers registry
-        old_enum: The source enum version
         new_enum: The target enum version
         error_node: CST node used to generate error messages
 
@@ -1487,43 +1790,46 @@ def _handle_enum_to_enum_conversion(  # noqa: PLR0913 (too many params mitigated
     if old_type.enum_uuid != new_type_info.uuid:
         return False, None
 
-    if old_type.version == new_type_info.cur_version():
-        return True, None
-
     try:
-        old_enum_version = new_type_info.get_enum_at_version(old_type.version)
-        return True, _create_enum_to_enum_converter(compiler_context, old_enum_version, new_type_info)
+        return True, _create_enum_to_enum_converter(compiler_context, old_type, new_type_info)
     except ValueError as e:
         msg = f"Failed to convert enum {old_type.fqn} from version {old_type.version} to {new_type_info.cur_version()}: {e}"
         raise ValueError(msg) from e
 
 
 def _create_enum_to_enum_converter(
-    compiler_context: CompilerContext, old_enum: clkenum.ResolvedEnum, new_enum: clkenum.ResolvedEnum
+    compiler_context: CompilerContext, old_type: tachyon_model.ClkEnumType, new_enum: clkenum.ResolvedEnum
 ) -> Callable[[enum.Enum], enum.Enum]:
     """Create a converter function between two versions of the same enum.
 
     Args:
         compiler_context: Compiler context containing serializers registry
-        old_enum: The source enum version
-        new_enum: The target enum version
+        old_type: The source enum schema
+        new_enum: The target enum definition
 
     Returns:
         A function that converts enum values from old version to new version
     """
+    new_enum.validate_version(old_type.version)
     new_enum_serdes = serdes_for_type(compiler_context, new_enum)
 
     conversion_map: dict[int, enum.Enum] = {}
     removed_values: set[int] = set()
 
-    for old_field_num, old_value_def in old_enum.values.items():
-        final_field_num, _ = _trace_enum_value_forward(new_enum.history, old_field_num)
-        if final_field_num is None:
-            removed_values.add(old_value_def.integer_value)
+    for old_value in old_type.values:
+        final_value_num, _ = _trace_enum_value_forward(new_enum.history, old_value.num)
+        if final_value_num is None:
+            removed_values.add(old_value.value)
         else:
-            new_value_def = new_enum.values[final_field_num]
+            if final_value_num not in new_enum.values:
+                msg = new_enum.append_error_line(
+                    f"Value #{final_value_num} not found in enum {new_enum.name} nor is it removed"
+                )
+                raise ValueError(msg)
+
+            new_value_def = new_enum.values[final_value_num]
             new_py_value = new_enum_serdes.type_(new_value_def.integer_value)
-            conversion_map[old_value_def.integer_value] = new_py_value
+            conversion_map[old_value.value] = new_py_value
 
     def converter(old_value: enum.Enum) -> enum.Enum:
         if old_value.value in removed_values:
@@ -1540,7 +1846,7 @@ def _create_enum_to_enum_converter(
 
 
 def _trace_enum_value_forward(
-    enum_history: clkenum.ResolvedEnumHistory,
+    enum_history: clkenum.EnumHistory,
     field_num: int,
 ) -> tuple[int | None, list[int]]:
     """Trace an enum value's evolution forward through enum history.
@@ -1557,18 +1863,13 @@ def _trace_enum_value_forward(
     path = [field_num]
     current = field_num
 
-    # Continue tracing forward as long as this field has history
-    while current in enum_history.values:
-        hist_value = enum_history.values[current]
+    while current in enum_history.legacy_became:
+        current = enum_history.legacy_became[current]
+        path.append(current)
 
-        if hist_value.removed_in_version is not None:
-            return (None, path)
+    if current in enum_history.removed:
+        return (None, path)
 
-        if hist_value.became_field_num is not None:
-            current = hist_value.became_field_num
-            path.append(current)
-        else:
-            break
     return (current, path)
 
 
@@ -1945,6 +2246,567 @@ def _handle_string_to_array_conversion(  # noqa: PLR0913 (too many params mitiga
     return False, None
 
 
+def _build_soa_field_converters(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    old_element_type: tachyon_model.SchemaType,
+    new_element_schema: schema.InstantiatedSchema,
+    old_types: Sequence[tachyon_model.ClkType],
+    compiler_context: CompilerContext,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> list[tuple[str, str, Callable[[Any], Any] | None]]:
+    """Build field converters for SoA-to-SoA conversion.
+
+    Returns:
+        List of (old_name, new_name, converter) tuples.
+    """
+    field_converters: list[tuple[str, str, Callable[[Any], Any] | None]] = []
+
+    for old_field in old_element_type.fields:
+        final_field_num, _ = _trace_field_forward(new_element_schema.history, old_field.num)
+
+        if final_field_num is None:
+            continue
+
+        if final_field_num not in new_element_schema.fields:
+            msg = error_node.append_error_line(
+                f"Field #{final_field_num} not found in schema {new_element_schema.schema_name}"
+            )
+            raise ValueError(msg)
+
+        new_field = new_element_schema.fields[final_field_num]
+
+        can_convert, field_converter = _create_type_converter(
+            compiler_context=compiler_context,
+            old_type_id=old_field.type_id,
+            old_types=old_types,
+            new_type_info=new_field.type_info,
+            upgraders=upgraders,
+            error_node=error_node,
+        )
+
+        if not can_convert:
+            msg = error_node.append_error_line(
+                f"Cannot convert field {old_field.name} from type_id {old_field.type_id} to {new_field.type_info}"
+            )
+            raise ValueError(msg)
+
+        field_converters.append((old_field.name, new_field.cur_name, field_converter))
+
+    return field_converters
+
+
+def _get_soa_new_field_defaults(
+    new_element_schema: schema.InstantiatedSchema,
+    field_converters: list[tuple[str, str, Callable[[Any], Any] | None]],
+    compiler_context: CompilerContext,
+) -> dict[str, Any]:
+    """Get default values for newly added fields in SoA conversion.
+
+    Returns:
+        Dictionary mapping field names to their default values.
+    """
+    new_field_defaults: dict[str, Any] = {}
+
+    for new_field in new_element_schema.fields.values():
+        if not any(new_name == new_field.cur_name for _, new_name, _ in field_converters):
+            new_field_serdes = serdes_for_type(compiler_context, new_field.type_info)
+            py_type = new_field_serdes.type_
+
+            has_default, default_val = _get_default_for_field(compiler_context, new_element_schema, new_field, py_type)
+
+            if not has_default:
+                msg = f"New field {new_field.cur_name} has no default value"
+                raise ValueError(msg)
+
+            new_field_defaults[new_field.cur_name] = default_val
+
+    return new_field_defaults
+
+
+def _create_soa_to_soa_converter(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    old_element_type: tachyon_model.SchemaType,
+    new_element_schema: schema.InstantiatedSchema,
+    new_type_info: typesys.Instantiation,
+    old_types: Sequence[tachyon_model.ClkType],
+    compiler_context: CompilerContext,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> Callable[[Any], Any] | None:
+    """Create a converter for SoA→SoA that applies field-wise conversions.
+
+    Input: SoA dataclass with field arrays (old schema fields)
+    Output: SoA dataclass with field arrays (new schema fields)
+
+    Handles field renames, removals, and type changes.
+    """
+    field_converters = _build_soa_field_converters(
+        old_element_type=old_element_type,
+        new_element_schema=new_element_schema,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    new_soa_serdes = serdes_for_type(compiler_context, new_type_info)
+    new_soa_class = new_soa_serdes.type_
+
+    new_field_defaults = _get_soa_new_field_defaults(new_element_schema, field_converters, compiler_context)
+
+    def soa_to_soa_converter(old_soa: Tachyon[Any]) -> Tachyon[Any]:
+        """Convert SoA to SoA with field-wise type conversions and field mapping."""
+        new_field_arrays = {}
+
+        array_length = 0
+        if field_converters:
+            first_old_name = field_converters[0][0]
+            array_length = len(getattr(old_soa, first_old_name))
+
+        for old_name, new_name, field_conv in field_converters:
+            old_array = getattr(old_soa, old_name)
+
+            if field_conv is not None:
+                new_field_arrays[new_name] = [field_conv(elem) for elem in old_array]
+            else:
+                new_field_arrays[new_name] = list(old_array)
+
+        for new_field_name, default_val in new_field_defaults.items():
+            new_field_arrays[new_field_name] = [default_val] * array_length
+
+        return new_soa_class(**new_field_arrays)
+
+    return soa_to_soa_converter
+
+
+def _create_aos_to_soa_converter(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    new_element_schema: schema.InstantiatedSchema,
+    new_type_info: typesys.Instantiation,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    compiler_context: CompilerContext,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> Callable[[Any], Any]:
+    """Create a converter for AoS→SoA (transpose from list of structs to struct of lists).
+
+    Input: list[OldSchema] - array of old schema instances
+    Output: SoA dataclass with field arrays for new schema
+
+    Strategy:
+    1. Convert each old instance to new instance using element converter
+    2. Extract each field from the new instance into the corresponding field array
+    3. Construct the SoA dataclass with the field arrays
+    """
+    # Get converter for old element → new element
+    old_element_type = old_types[old_type_id]
+    can_convert, element_converter = _create_type_converter(
+        compiler_context=compiler_context,
+        old_type_id=old_type_id,
+        old_types=old_types,
+        new_type_info=new_element_schema,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    if not can_convert:
+        msg = error_node.append_error_line(f"Cannot convert {old_element_type} to {new_element_schema}")
+        raise ValueError(msg)
+
+    # Get the new SoA type to construct
+    new_soa_serdes = serdes_for_type(compiler_context, new_type_info)
+    new_soa_class = new_soa_serdes.type_
+
+    def aos_to_soa_converter(old_list: list[Tachyon[Any]]) -> Tachyon[Any]:
+        """Transpose list of old structs to SoA with new field arrays."""
+        field_arrays: dict[str, list[Any]] = {field.cur_name: [] for field in new_element_schema.fields.values()}
+
+        for old_instance in old_list:
+            new_instance = element_converter(old_instance) if element_converter else old_instance
+
+            for field_name, field_array in field_arrays.items():
+                field_array.append(getattr(new_instance, field_name))
+
+        return new_soa_class(**field_arrays)
+
+    return aos_to_soa_converter
+
+
+def _create_soa_to_aos_converter(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    old_element_type: tachyon_model.SchemaType,
+    new_element_schema: schema.InstantiatedSchema,
+    old_types: Sequence[tachyon_model.ClkType],
+    compiler_context: CompilerContext,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> Callable[[Any], Any]:
+    """Create a converter for SoA→AoS (un-transpose struct of arrays to array of structs).
+
+    Input: SoA dataclass with field arrays (old schema fields)
+    Output: list[NewSchema] (array of new schema instances)
+
+    Handles field renames, removals, and type changes.
+    """
+    field_converters: list[tuple[str, str, Callable[[Any], Any] | None]] = []  # [(old_name, new_name, converter)]
+
+    for old_field in old_element_type.fields:
+        final_field_num, _ = _trace_field_forward(new_element_schema.history, old_field.num)
+
+        if final_field_num is None:
+            continue
+
+        if final_field_num not in new_element_schema.fields:
+            msg = error_node.append_error_line(
+                f"Field #{final_field_num} not found in schema {new_element_schema.schema_name}"
+            )
+            raise ValueError(msg)
+
+        new_field = new_element_schema.fields[final_field_num]
+
+        can_convert, field_converter = _create_type_converter(
+            compiler_context=compiler_context,
+            old_type_id=old_field.type_id,
+            old_types=old_types,
+            new_type_info=new_field.type_info,
+            upgraders=upgraders,
+            error_node=error_node,
+        )
+
+        if not can_convert:
+            msg = error_node.append_error_line(
+                f"Cannot convert field {old_field.name} from type_id {old_field.type_id} to {new_field.type_info}"
+            )
+            raise ValueError(msg)
+
+        field_converters.append((old_field.name, new_field.cur_name, field_converter))
+
+    new_aos_serdes = serdes_for_type(compiler_context, new_element_schema)
+    new_aos_class = new_aos_serdes.type_
+
+    def soa_to_aos_converter(soa: Tachyon[Any]) -> list[Tachyon[Any]]:
+        """Un-transpose struct of arrays to array of structs."""
+        if not field_converters:
+            return []
+
+        first_old_name = field_converters[0][0]
+        field_array = getattr(soa, first_old_name)
+        array_length = len(field_array)
+
+        result = []
+        for i in range(array_length):
+            field_values = {}
+
+            for old_name, new_name, field_conv in field_converters:
+                val = getattr(soa, old_name)[i]
+                field_values[new_name] = field_conv(val) if field_conv is not None else val
+
+            # Newly added fields will use their dataclass defaults
+            result.append(new_aos_class(**field_values))
+
+        return result
+
+    return soa_to_aos_converter
+
+
+def _extract_soa_info(
+    old_type: tachyon_model.ClkType,
+    old_types: Sequence[tachyon_model.ClkType],
+    error_node: node.CstNode[Any],
+) -> tuple[tachyon_model.SchemaType, bool, int] | None:
+    """Extract SoA information from a type and validate it.
+
+    Returns:
+        Tuple of (element_schema, is_fixed, size) if old_type is a SoaType, None otherwise
+
+    Raises:
+        TypeError: If the SoA element type is not a SchemaType
+    """
+    if not isinstance(old_type, tachyon_model.SoaType):
+        return None
+
+    old_element_type = old_types[old_type.schema_type_id]
+    if not isinstance(old_element_type, tachyon_model.SchemaType):
+        msg = error_node.append_error_line(f"SoA element must be a schema, got: {old_element_type}")
+        raise TypeError(msg)
+
+    is_fixed = old_type.size_field_offset is None
+    return old_element_type, is_fixed, old_type.container_size
+
+
+def _handle_soa_to_soa_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion between SoA types (VarSoa/FixedSoa)."""
+    old_type = old_types[old_type_id]
+
+    soa_info = _extract_soa_info(old_type, old_types, error_node)
+    if soa_info is None:
+        return False, None
+
+    old_element_type, old_is_fixed, old_size = soa_info
+
+    if not (
+        isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates in (clkbuiltins.VAR_SOA, clkbuiltins.FIXED_SOA)
+    ):
+        return False, None
+
+    new_element_type = new_type_info.arguments["type"]
+    if not isinstance(new_element_type, schema.InstantiatedSchema):
+        msg = error_node.append_error_line(f"SoA element must be a schema, got: {new_element_type}")
+        raise TypeError(msg)
+
+    # FixedSoa cannot change size
+    new_is_fixed = new_type_info.instantiates is clkbuiltins.FIXED_SOA
+    if old_is_fixed and new_is_fixed:
+        assert old_size is not None
+        new_size_arg = new_type_info.arguments["size"]
+        assert isinstance(new_size_arg, primitive.DecimalLiteral)
+        new_size = int(new_size_arg.value)
+        if old_size != new_size:
+            return False, None
+
+    converter = _create_soa_to_soa_converter(
+        old_element_type=old_element_type,
+        new_element_schema=new_element_type,
+        new_type_info=new_type_info,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    return True, converter
+
+
+def _handle_array_to_soa_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from array types (VarArray/FixedArray) to SoA types (VarSoa/FixedSoa)."""
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn in (clkbuiltins.VAR_ARRAY.fqn, clkbuiltins.FIXED_ARRAY.fqn)
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates in (clkbuiltins.VAR_SOA, clkbuiltins.FIXED_SOA)
+    ):
+        return False, None
+
+    if len(old_type.arguments) < 1 or not isinstance(old_type.arguments[0], int):
+        msg = error_node.append_error_line(f"Invalid array type arguments: {old_type}")
+        raise ValueError(msg)
+
+    old_element_type_id = int(old_type.arguments[0])
+    old_element_type = old_types[old_element_type_id]
+
+    if not isinstance(old_element_type, tachyon_model.SchemaType):
+        msg = error_node.append_error_line(f"Array→SoA element must be a schema, got: {old_element_type}")
+        raise TypeError(msg)
+
+    new_element_type = new_type_info.arguments["type"]
+    if not isinstance(new_element_type, schema.InstantiatedSchema):
+        msg = error_node.append_error_line(f"Array→SoA element must be a schema, got: {new_element_type}")
+        raise TypeError(msg)
+
+    # FixedArray/Soa cannot change size
+    old_is_fixed = old_type.fqn == clkbuiltins.FIXED_ARRAY.fqn
+    new_is_fixed = new_type_info.instantiates is clkbuiltins.FIXED_SOA
+    if old_is_fixed and new_is_fixed:
+        old_size = int(old_type.arguments[1])
+        new_size_arg = new_type_info.arguments["size"]
+        assert isinstance(new_size_arg, primitive.DecimalLiteral)
+        new_size = int(new_size_arg.value)
+        if old_size != new_size:
+            return False, None
+
+    converter = _create_aos_to_soa_converter(
+        new_element_schema=new_element_type,
+        new_type_info=new_type_info,
+        old_type_id=old_element_type_id,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    return True, converter
+
+
+def _handle_soa_to_array_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from SoA types (VarSoa/FixedSoa) to array types (VarArray/FixedArray)."""
+    old_type = old_types[old_type_id]
+
+    soa_info = _extract_soa_info(old_type, old_types, error_node)
+    if soa_info is None:
+        return False, None
+
+    old_element_type, old_is_fixed, old_size = soa_info
+
+    if not (
+        isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates in (clkbuiltins.VAR_ARRAY, clkbuiltins.FIXED_ARRAY)
+    ):
+        return False, None
+
+    new_element_type = new_type_info.arguments["type"]
+    if not isinstance(new_element_type, schema.InstantiatedSchema):
+        msg = error_node.append_error_line(f"SoA→Array element must be a schema, got: {new_element_type}")
+        raise TypeError(msg)
+
+    # FixedArray/Soa cannot change size
+    new_is_fixed = new_type_info.instantiates is clkbuiltins.FIXED_ARRAY
+    if old_is_fixed and new_is_fixed:
+        assert old_size is not None
+        new_size_arg = new_type_info.arguments["size"]
+        assert isinstance(new_size_arg, primitive.DecimalLiteral)
+        new_size = int(new_size_arg.value)
+        if old_size != new_size:
+            return False, None
+
+    converter = _create_soa_to_aos_converter(
+        old_element_type=old_element_type,
+        new_element_schema=new_element_type,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    return True, converter
+
+
+def _handle_optional_to_soa_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from Optional[Schema] to SoA types (VarSoa/FixedSoa)."""
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn == clkbuiltins.OPTIONAL.fqn
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates in (clkbuiltins.VAR_SOA, clkbuiltins.FIXED_SOA)
+    ):
+        return False, None
+
+    if len(old_type.arguments) != 1 or not isinstance(old_type.arguments[0], int):
+        msg = error_node.append_error_line(f"Invalid Optional type arguments: {old_type}")
+        raise ValueError(msg)
+
+    inner_old_type_id = int(old_type.arguments[0])
+    inner_old_type = old_types[inner_old_type_id]
+
+    if not isinstance(inner_old_type, tachyon_model.SchemaType):
+        msg = error_node.append_error_line(f"Optional→SoA element must be a schema, got: {inner_old_type}")
+        raise TypeError(msg)
+
+    new_element_type = new_type_info.arguments["type"]
+    if not isinstance(new_element_type, schema.InstantiatedSchema):
+        msg = error_node.append_error_line(f"Optional→SoA element must be a schema, got: {new_element_type}")
+        raise TypeError(msg)
+
+    aos_to_soa = _create_aos_to_soa_converter(
+        new_element_schema=new_element_type,
+        new_type_info=new_type_info,
+        old_type_id=inner_old_type_id,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    def optional_to_soa(val: Any | None) -> Any:  # noqa: ANN401
+        """Convert Optional[Schema] to SoA."""
+        if val is None:
+            # None → empty SoA
+            aos_list: list[Any] = []
+        else:
+            # Single value → single-element SoA
+            aos_list = [val]
+        return aos_to_soa(aos_list)
+
+    return True, optional_to_soa
+
+
+def _handle_soa_to_optional_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from SoA types (VarSoa/FixedSoa) to Optional[Schema]."""
+    old_type = old_types[old_type_id]
+
+    soa_info = _extract_soa_info(old_type, old_types, error_node)
+    if soa_info is None:
+        return False, None
+
+    old_element_type, _old_is_fixed, _old_size = soa_info
+
+    if not (isinstance(new_type_info, typesys.Instantiation) and new_type_info.instantiates is clkbuiltins.OPTIONAL):
+        return False, None
+
+    new_inner_type = new_type_info.arguments["type"]
+    if not isinstance(new_inner_type, schema.InstantiatedSchema):
+        msg = error_node.append_error_line(f"SoA→Optional element must be a schema, got: {new_inner_type}")
+        raise TypeError(msg)
+
+    soa_to_aos = _create_soa_to_aos_converter(
+        old_element_type=old_element_type,
+        new_element_schema=new_inner_type,
+        old_types=old_types,
+        compiler_context=compiler_context,
+        upgraders=upgraders,
+        error_node=error_node,
+    )
+
+    def soa_to_optional(soa_val: Any) -> Any | None:  # noqa: ANN401
+        """Convert SoA to Optional[Schema]."""
+        aos_list = soa_to_aos(soa_val)
+
+        if not aos_list:
+            return None  # Empty SoA → None
+
+        if len(aos_list) > 1:
+            msg = f"Cannot convert multi-element SoA to Optional: SoA has {len(aos_list)} elements"
+            raise ValueError(msg)
+
+        return aos_list[0]  # Single element → value
+
+    return True, soa_to_optional
+
+
 def _handle_varstring_to_varstring_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
     *,
     compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
@@ -2059,7 +2921,7 @@ def _handle_optional_to_optional_conversion(  # noqa: PLR0913 (too many params m
 
 
 def _trace_field_forward(
-    schema_history: schema.InstantiatedSchemaHistory,
+    schema_history: schema.SchemaHistory,
     field_num: int,
 ) -> tuple[int | None, list[int]]:
     """Trace a field's evolution forward through schema history.
@@ -2076,18 +2938,12 @@ def _trace_field_forward(
     path = [field_num]
     current = field_num
 
-    # Continue tracing forward as long as this field became another field
-    while current in schema_history.fields:
-        hist_field = schema_history.fields[current]
-
-        # If field was removed, it doesn't exist in current schema
-        if hist_field.removed_in_version is not None:
-            return (None, path)
-
-        # If field became another field, continue tracing
-        assert hist_field.became_field_num is not None
-        current = hist_field.became_field_num
+    while current in schema_history.legacy_became:
+        current = schema_history.legacy_became[current]
         path.append(current)
+
+    if current in schema_history.removed:
+        return (None, path)
 
     return (current, path)
 
@@ -2185,8 +3041,10 @@ def process_schema(
             upgraders[old_type.fqn] = None
             return None
 
-    if old_type.version not in schema_ir.history.versions:
-        msg = schema_ir.schema.append_error_line(f"Version {old_type.version} of {old_type.fqn} not in history")
+    if old_type.version > schema_ir.history.version:
+        msg = schema_ir.schema.append_error_line(
+            f"Version {old_type.version} of {old_type.fqn} greater than current_version {schema_ir.history.version}"
+        )
         raise ValueError(msg)
 
     field_upgrades = []

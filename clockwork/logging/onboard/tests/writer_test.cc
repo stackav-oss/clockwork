@@ -1,11 +1,11 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/log_format.hh"
@@ -14,8 +14,9 @@
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -34,7 +35,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <memory_resource>
 #include <span>
@@ -100,7 +100,7 @@ struct TestWriterPolicy
   static constexpr size_t min_zero_copy_message_size = 4U * jewels::math::constants::bytes_per_kib<size_t>;
 
   /// Maximum log file size
-  static constexpr size_t max_log_file_size = 256U * jewels::math::constants::bytes_per_kib<size_t>;
+  static constexpr size_t max_log_file_size = 2U * jewels::math::constants::bytes_per_mib<size_t>;
 
   /// Message handle type
   using MessageHandleType = TestMessageHandleType;
@@ -247,8 +247,10 @@ TEST_CASE("Log metadata")
     REQUIRE(writer.add_channel(channel_metadata1, time1));
     schema_id_map[schema_name1] = 1U;
     channel_id_map[channel_name1] = 1U;
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -295,8 +297,10 @@ TEST_CASE("Log metadata")
     REQUIRE(writer.add_channel(channel_metadata4, time1));
     channel_id_map[channel_name4] = 4U;
 
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -354,8 +358,10 @@ TEST_CASE("Log metadata")
     channel_id_map[channel_name4] = 4U;
 
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -456,7 +462,7 @@ TEST_CASE("Log metadata")
 TEST_CASE("Log messages")
 {
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
-  static constexpr size_t max_write_mib_per_sec = 100U;
+  static constexpr size_t max_write_mib_per_sec = 1U;
   static constexpr auto max_log_file_duration = std::chrono::seconds{0};
   static constexpr size_t message_buffer_count = 100U;
   const auto* log_file_prefix = "log_file_";
@@ -500,6 +506,7 @@ TEST_CASE("Log messages")
       memory_resource, memory_resource, max_write_mib_per_sec, max_log_file_duration, WriterEnvironment::normal};
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
     REQUIRE(writer.add_channel(channel_metadata1, time1));
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const size_t header_size1 = 14U;
     const std::vector<std::byte> header1(header_size1, std::byte{'A'});
@@ -523,9 +530,13 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time1));
+    REQUIRE(
+      writer.get_pending_message_data_bytes() ==
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size);
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     SECTION("Continue writing into existing log")
     {
@@ -558,9 +569,13 @@ TEST_CASE("Log messages")
       };
 
       REQUIRE(writer2.log_message(logged_message2, TestMessageHandleType{message_buffer2}, time2));
+      REQUIRE(
+        writer2.get_pending_message_data_bytes() ==
+        message_record_header_size + header_size2 + message_size2 + record_trailer_size);
 
       REQUIRE(writer2.close_log(time2));
       REQUIRE(writer2.drain_async_operations());
+      REQUIRE(writer2.get_pending_message_data_bytes() == 0U);
 
       const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000001.olog").string());
       REQUIRE(maybe_file_data);
@@ -650,6 +665,7 @@ TEST_CASE("Log messages")
     message_handle1.set_is_valid(false);
     REQUIRE(
       writer.log_message(logged_message1, message_handle1, time1) == jewels::unexpected(LogError::message_dropped));
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
   }
 
   SECTION("Aligned zero copy message")
@@ -681,10 +697,14 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time1));
+    REQUIRE(
+      writer.get_pending_message_data_bytes() ==
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size);
     REQUIRE(message_buffer1.get_reference_count() == 2U);
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
     REQUIRE(message_buffer1.get_reference_count() == 1U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
@@ -746,10 +766,14 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time1));
+    REQUIRE(
+      writer.get_pending_message_data_bytes() ==
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size);
     REQUIRE(message_buffer1.get_reference_count() == 2U);
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -809,10 +833,14 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time1));
+    REQUIRE(
+      writer.get_pending_message_data_bytes() ==
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size);
     REQUIRE(message_buffer1.get_reference_count() == 1U);
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -878,6 +906,9 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time2));
+    const auto expected_message_data_bytes =
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size;
+    REQUIRE(writer.get_pending_message_data_bytes() == expected_message_data_bytes);
 
     const jewels::time::SteadyTime time3 = time2 + std::chrono::nanoseconds(1);
     const uint32_t sequence_number2 = 2U;
@@ -894,12 +925,14 @@ TEST_CASE("Log messages")
     REQUIRE(
       writer.log_message(logged_message2, TestMessageHandleType{message_buffer1}, time3) ==
       jewels::unexpected(LogError::message_dropped));
+    REQUIRE(writer.get_pending_message_data_bytes() == expected_message_data_bytes);
     REQUIRE(writer.get_state() == WriterState::logging);
     REQUIRE(writer.get_and_reset_drop_count() == 1U);
 
     const jewels::time::SteadyTime time4 = time3 + std::chrono::seconds(1);
     writer.periodic_callback(time4);
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const uint32_t sequence_number3 = 3U;
 
@@ -913,9 +946,11 @@ TEST_CASE("Log messages")
     };
 
     REQUIRE(writer.log_message(logged_message3, TestMessageHandleType{message_buffer1}, time4));
+    REQUIRE(writer.get_pending_message_data_bytes() == expected_message_data_bytes);
 
     REQUIRE(writer.close_log(time4));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file_data);
@@ -945,10 +980,131 @@ TEST_CASE("Log messages")
     REQUIRE(validate_result == file_data.size());
   }
 
-  SECTION("Split files when max size is reached")
+  SECTION("Write rate exceeded")
   {
     Writer<TestWriterPolicy> writer{
       memory_resource, memory_resource, max_write_mib_per_sec, max_log_file_duration, WriterEnvironment::normal};
+    REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
+    REQUIRE(writer.add_channel(channel_metadata1, time1));
+
+    const size_t header_size1 = 14U;
+    const std::vector<std::byte> header1(header_size1, std::byte{'A'});
+    const size_t message_size1 = 127U;
+    auto message_result = message_buffer_pool.get_shared_buffer();
+    REQUIRE(message_result);
+    auto message_buffer1 = std::move(message_result).value();
+    std::memset(message_buffer1->data(), 'B', message_size1);
+    const std::span<std::byte> message1{message_buffer1->data(), message_size1};
+    const LogTimestamp log_time1{std::chrono::nanoseconds(100)};
+    const LogTimestamp log_time2{std::chrono::nanoseconds(200)};
+    const LogTimestamp log_time3{std::chrono::nanoseconds(300)};
+    const LogTimestamp message_time1{std::chrono::nanoseconds(1000)};
+    const LogTimestamp message_time2{std::chrono::nanoseconds(2000)};
+    const LogTimestamp message_time3{std::chrono::nanoseconds(3000)};
+
+    const jewels::time::SteadyTime time2 = time1 + TestWriterPolicy::max_write_backlog;
+    const uint32_t sequence_number1 = 1U;
+
+    const Message logged_message1{
+      .channel_name = channel_name1,
+      .sequence_number = sequence_number1,
+      .log_time = log_time1,
+      .message_time = message_time1,
+      .header = {header1},
+      .data = message1,
+    };
+
+    size_t expected_message_data_bytes = 0U;
+    size_t message_count = 0U;
+
+    while (expected_message_data_bytes < max_write_mib_per_sec * jewels::math::constants::bytes_per_mib<size_t>)
+    {
+      REQUIRE(writer.log_message(logged_message1, TestMessageHandleType{message_buffer1}, time2));
+      expected_message_data_bytes += message_record_header_size + header_size1 + message_size1 + record_trailer_size;
+      REQUIRE(writer.get_pending_message_data_bytes() == expected_message_data_bytes);
+      ++message_count;
+    }
+
+    const jewels::time::SteadyTime time3 = time2 + std::chrono::nanoseconds(1);
+    const uint32_t sequence_number2 = 2U;
+
+    const Message logged_message2{
+      .channel_name = channel_name1,
+      .sequence_number = sequence_number2,
+      .log_time = log_time2,
+      .message_time = message_time2,
+      .header = {header1},
+      .data = message1,
+    };
+
+    REQUIRE(
+      writer.log_message(logged_message2, TestMessageHandleType{message_buffer1}, time3) ==
+      jewels::unexpected(LogError::message_dropped));
+    REQUIRE(writer.get_pending_message_data_bytes() == expected_message_data_bytes);
+    REQUIRE(writer.get_state() == WriterState::logging);
+    REQUIRE(writer.get_and_reset_drop_count() == 1U);
+
+    const jewels::time::SteadyTime time4 = time3 + std::chrono::seconds(1);
+    writer.periodic_callback(time4);
+    REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
+
+    const uint32_t sequence_number3 = 3U;
+
+    const Message logged_message3{
+      .channel_name = channel_name1,
+      .sequence_number = sequence_number3,
+      .log_time = log_time3,
+      .message_time = message_time3,
+      .header = {header1},
+      .data = message1,
+    };
+
+    REQUIRE(writer.log_message(logged_message3, TestMessageHandleType{message_buffer1}, time4));
+    REQUIRE(
+      writer.get_pending_message_data_bytes() ==
+      message_record_header_size + header_size1 + message_size1 + record_trailer_size);
+
+    REQUIRE(writer.close_log(time4));
+    REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
+
+    const auto maybe_file_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
+    REQUIRE(maybe_file_data);
+    const auto file_data = std::span{maybe_file_data->data(), maybe_file_data->size()};
+    auto validate_result = tests::try_validate_log_header(file_data);
+    REQUIRE(validate_result);
+    validate_result = tests::try_validate_schema_record(file_data, *validate_result, channel_metadata1, schema_id_map);
+    REQUIRE(validate_result);
+    validate_result =
+      tests::try_validate_channel_record(file_data, *validate_result, channel_metadata1, schema_id_map, channel_id_map);
+    REQUIRE(validate_result);
+    for (size_t i = 0U; i < message_count; ++i)
+    {
+      validate_result =
+        tests::try_validate_message_record(file_data, *validate_result, logged_message1, channel_id_map);
+      REQUIRE(validate_result);
+    }
+    validate_result = tests::try_validate_pad_bytes(
+      file_data, *validate_result, jewels::Aligner<TestWriterPolicy::alignment>::aligned_remainder(*validate_result));
+    REQUIRE(validate_result);
+    validate_result = tests::try_validate_message_record(file_data, *validate_result, logged_message3, channel_id_map);
+    REQUIRE(validate_result);
+    validate_result = tests::try_validate_pad_bytes(
+      file_data,
+      *validate_result,
+      jewels::Aligner<TestWriterPolicy::alignment>::aligned_remainder(
+        *validate_result + end_log_file_record_header_size + record_trailer_size));
+    REQUIRE(validate_result);
+    validate_result = tests::try_validate_end_log_file_record(
+      file_data, *validate_result, true, log_time1, log_time3, message_time1, message_time3);
+    REQUIRE(validate_result == file_data.size());
+  }
+
+  SECTION("Split files when max size is reached")
+  {
+    Writer<TestWriterPolicy> writer{
+      memory_resource, memory_resource, max_write_mib_per_sec * 4U, max_log_file_duration, WriterEnvironment::normal};
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
     REQUIRE(writer.add_channel(channel_metadata1, time1));
 
@@ -964,7 +1120,7 @@ TEST_CASE("Log messages")
 
     std::vector<Message> logged_messages;
 
-    const uint32_t messages_per_file = 16U;
+    const uint32_t messages_per_file = 128U;
     for (uint32_t sequence_number = 1U; sequence_number <= messages_per_file; ++sequence_number)
     {
       logged_messages.emplace_back(
@@ -993,6 +1149,7 @@ TEST_CASE("Log messages")
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file1_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file1_data);
@@ -1107,6 +1264,7 @@ TEST_CASE("Log messages")
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file1_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file1_data);
@@ -1230,6 +1388,7 @@ TEST_CASE("Log messages")
 
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file1_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file1_data);
@@ -1336,6 +1495,7 @@ TEST_CASE("Log messages")
 
     REQUIRE(writer.pause_logging(time1));
     REQUIRE(writer.drain_async_operations());
+    REQUIRE(writer.get_pending_message_data_bytes() == 0U);
 
     const auto maybe_file1_data = tests::try_read_file((log_dir / "log_file_000000.olog").string());
     REQUIRE(maybe_file1_data);

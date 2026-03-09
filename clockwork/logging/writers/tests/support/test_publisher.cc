@@ -9,7 +9,6 @@
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/slot.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -49,6 +48,7 @@ TestPublisher::TestPublisher(
     clockwork::pinion::BufferLayout{
       .num_slots = num_slots,
       .message_size = message_size_b,
+      .is_published_once = false,
     },
     1U);
   if (!publisher_result)

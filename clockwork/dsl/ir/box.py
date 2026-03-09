@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+## Copyright 2025 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Box IR nodes."""
@@ -6,11 +6,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     audio,
     clkbuiltins,
@@ -25,15 +26,19 @@ from clockwork.dsl.ir import (
     pubsub,
     schema,
     schema_reg,
+    signal_registry,
     statement,
     typesys,
     udp,
 )
 from clockwork.dsl.ir.cst_util import get_span
+from clockwork.dsl.ir.signal import SignalInstanceSpec
 from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from clockwork.dsl.compiler_context import CompilerContext
 
 
 @dataclass
@@ -96,6 +101,7 @@ class BoxTemplate(
         *,
         cst_node: cst.NewStmt | None,
         module: node.Module,
+        source_module: node.Module | None = None,
         scope: node.Scope,
         name: str,
         doc: node.Doc | None,
@@ -117,13 +123,20 @@ class BoxTemplate(
         # pass won't have done anything.  We need to do a separate name
         # resolution pass manually here, after we've processed the CST.
         node.resolve_names(result, self.scope)
-        result.resolve()
+        result.resolve(source_module or module)
         return result
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
     @override
     def produce_casing_entities(self) -> cpp_executable.CasingEntities:
         """Produce a set of casing entities."""
-        instance = self.make_instance(cst_node=None, module=self.module, scope=self.scope, name="__auto__", doc=None)
+        instance = self.make_instance(
+            cst_node=None, module=self.module, scope=self.scope, name="__casing__" + self.name, doc=None
+        )
+        instance.get_resolved().validate_use_targets()
         return instance.get_resolved().produce_casing_entities()
 
 
@@ -131,24 +144,25 @@ class BoxTemplate(
 class ResolvedBox(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typesys.MembershipEntity):
     """IR Node representing a resolved box declaration."""
 
+    source_module: node.Module
     instances: Sequence[node.NamedEntity]
     connections: list[Connection]
     source: Box | None
 
-    # We must disable C901 here (function complexity) because
+    # We must disable C901/PLR0912 here (function complexity, # branches) because
     # we inherently have many branches, one for each type of module-level entity.
     # However, they're handled in a uniform way that isn't difficult to understand.
     # We could in principle make a data-driven table of handlers instead of explicit
     # branches, but it would be awkward and would not decouple the code in a
     # meaningful way.
-    def produce_casing_entities(self) -> cpp_executable.CasingEntities:  # noqa: C901 (see above)
+    def produce_casing_entities(self) -> cpp_executable.CasingEntities:  # noqa: C901, PLR0912 # see above
         """Produce a set of casing entities."""
         result = cpp_executable.CasingEntities()
         for instance in self.instances:
             if isinstance(instance, Box):
                 result = result.merged_with(instance.get_resolved().produce_casing_entities())
             elif isinstance(instance, cog.CogInstance):
-                cpp_cog = cpp_executable.CppCog(cog_ir=instance.cog_class, dial_header=None)
+                cpp_cog = cpp_executable.CppCog(cog_ir=instance.cog_class, dial_header=None, cog_header=None)
                 result.cogs[instance.cog_class.value_key()] = cpp_cog
                 _add_casing_cog_members(result, instance)
                 if instance.cog_class.python_options:
@@ -161,6 +175,9 @@ class ResolvedBox(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttrib
                     result.add_representation(self.module.context, instance.repr_typespec, self)
                 else:
                     result.externs[instance.repr_typespec.value_key()] = instance.repr_typespec
+            elif isinstance(instance, FirstMessageInstance):
+                assert instance.channel.message_repr is not None
+                result.add_representation(self.module.context, instance.channel.message_repr.typespec, self)
             elif isinstance(instance, udp.UdpSocketInstance):
                 cpp_udp_socket = cpp_executable.CppUdpSocket(udp_socket_ir=instance.socket, options=None)
                 if instance.socket.options:
@@ -181,6 +198,83 @@ class ResolvedBox(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttrib
                 raise NotImplementedError(msg)
         return result
 
+    # We must disable C901/PLR0912 here (function complexity, # branches) because
+    # we inherently have many branches, one for each type of module-level entity.
+    # However, they're handled in a uniform way that isn't difficult to understand.
+    # We could in principle make a data-driven table of handlers instead of explicit
+    # branches, but it would be awkward and would not decouple the code in a
+    # meaningful way.
+    def validate_use_targets(self) -> None:  # noqa: C901, PLR0912 # see above
+        """Validate that the instances declared in the box have valid use targets."""
+        if self.module.generates is None:
+            return
+        for instance in self.instances:
+            if isinstance(instance, Box):
+                self.source_module.validate_use_targets(
+                    self, instance.name, instance.get_resolved().source_module.module_id, {node.GenerateTarget.cpp}
+                )
+                instance.get_resolved().validate_use_targets()
+            elif isinstance(instance, cog.CogInstance):
+                if instance.cog_class.python_options:
+                    self.source_module.validate_use_targets(
+                        self,
+                        instance.cog_class.name,
+                        instance.cog_class.module.module_id,
+                        {node.GenerateTarget.cpp, node.GenerateTarget.py_cog},
+                    )
+                else:
+                    self.source_module.validate_use_targets(
+                        self, instance.name, instance.cog_class.module.module_id, {node.GenerateTarget.cpp}
+                    )
+            elif isinstance(instance, SerializedDataFileInstance | StateInstance):
+                if isinstance(instance.repr_typespec, typesys.Instantiation):
+                    schema_ir = instance.repr_typespec.arguments["schema"]
+                    if isinstance(schema_ir, typesys.Instantiation):
+                        schema_ir = schema_ir.instantiates
+                    assert isinstance(schema_ir, schema.Schema)
+                    typedef = instance.repr_typespec.instantiates
+                    assert typedef is clkbuiltins.PROTOBUF or typedef is clkbuiltins.TACHYON
+                    if typedef is clkbuiltins.PROTOBUF:
+                        self.source_module.validate_use_targets(
+                            self,
+                            schema_ir.name,
+                            schema_ir.module.module_id,
+                            {node.GenerateTarget.cpp, node.GenerateTarget.proto, node.GenerateTarget.proto_conv},
+                        )
+                    else:
+                        self.source_module.validate_use_targets(
+                            self, schema_ir.name, schema_ir.module.module_id, {node.GenerateTarget.cpp}
+                        )
+                else:
+                    self.source_module.validate_use_targets(
+                        self,
+                        instance.repr_typespec.name,
+                        instance.repr_typespec.module.module_id,
+                        {node.GenerateTarget.cpp},
+                    )
+            elif isinstance(instance, FirstMessageInstance):
+                assert instance.channel.message_repr
+                self.source_module.validate_use_targets(
+                    self,
+                    instance.channel.message_repr.schema_ir.schema_name,
+                    instance.channel.message_repr.module.module_id,
+                    {node.GenerateTarget.cpp},
+                )
+            elif isinstance(instance, udp.UdpSocketInstance):
+                self.source_module.validate_use_targets(
+                    self, instance.socket.name, instance.socket.module.module_id, {node.GenerateTarget.cpp}
+                )
+            elif isinstance(instance, audio.AudioSourceInstance):
+                self.source_module.validate_use_targets(
+                    self, instance.source.name, instance.source.module.module_id, {node.GenerateTarget.cpp}
+                )
+            elif isinstance(instance, MemoryResourceInstance | ProcessInstance):
+                # These do not require any use targets
+                pass
+            else:
+                msg = f"Unrecognized box entity type {type(instance)}"
+                raise NotImplementedError(msg)
+
 
 def _add_casing_cog_members(entities: cpp_executable.CasingEntities, instance: cog.CogInstance) -> None:
     for member in instance.members:
@@ -190,7 +284,7 @@ def _add_casing_cog_members(entities: cpp_executable.CasingEntities, instance: c
                 entities.interfaces[iface_info] = iface_info
             else:
                 entities.externs[iface_info.value_key()] = iface_info
-        elif isinstance(member.member, cog.InputDef | cog.OutputDef | cog.MetricsOutputDef):
+        elif isinstance(member.member, cog.InputDef | cog.OutputDef | cog.MetricsOutputDef | cog.ReportGroupDef):
             iface_info = member.member.get_interface_info()
             entities.interfaces[iface_info] = iface_info
         elif isinstance(
@@ -267,7 +361,10 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
             resolved=None,
         )
 
-    def resolve(self) -> None:
+    # The complexity here is due to handling the various box elements. The branches consist of for loops and if instance checks.
+    # The could be broken out into separate functions, but because of the relatively simple nature of what's being done here
+    # it wouldn't enhance readability significantly, and would just add indirection.
+    def resolve(self, source_module: node.Module) -> None:  # noqa: C901
         """Perform finalization of the IR."""
         if self.resolved:
             msg = "Attempt to resolve already-resolved object."
@@ -282,6 +379,7 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
             new_instance = instance.typespec.make_instance(
                 cst_node=instance.cst_node,
                 module=self.module,
+                source_module=instance.typespec.get_module(),
                 scope=self.inner_scope,
                 name=instance.name,
                 doc=instance.doc,
@@ -306,6 +404,8 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
                         target=instance.init_cog_endpoint,
                     )
                 )
+            if isinstance(instance, cog.CogInstance):
+                _register_signal_instances(instance.module.context, instance)
         for policy_stmt in self.policy_stmts:
             policy_apply = policy_stmt.resolve()
             if policy_apply.is_recursive:
@@ -324,6 +424,7 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
             doc=self.doc,
             module=self.module,
             cst_node=self.cst_node,
+            source_module=source_module,
             instances=self.instances,
             connections=self.connections,
             source=self,
@@ -338,7 +439,14 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
 
     def _apply_policy_single(self, policy_apply: PolicyApplication) -> None:
         if not isinstance(
-            policy_apply.target, cog.CogInstance | StateInstance | SerializedDataFileInstance | ProcessInstance
+            policy_apply.target,
+            cog.CogInstance
+            | cog.CogInstanceMember
+            | FirstMessageInstance
+            | ProcessInstance
+            | SerializedDataFileInstance
+            | StateInstance
+            | SignalInstanceSpec,
         ):
             msg = policy_apply.append_error_line(
                 f"In-box policy applications can only apply to instance types, not {type(policy_apply.target)}"
@@ -366,6 +474,25 @@ class Box(node.CstNode[cst.Box], node.DocableEntity, typesys.NamedAttribute, typ
             assert isinstance(member, typesys.Value)
             return member
         return None
+
+
+def _register_signal_instances(
+    context: CompilerContext,
+    cog_instance: cog.CogInstance,
+) -> None:
+    """Register signal instances for all signal members of a cog instance.
+
+    Note: Signal definitions (both module-level and cog-private) are registered
+    during cog resolution in compiler.py. This function only registers the instances.
+    """
+    for rg_instance in cog_instance.report_group_instances:
+        for entry in rg_instance.entries.values():
+            signal_registry.register_signal_instance(
+                context,
+                signal_ir=entry.signal,
+                instance_name=entry.instance_name,
+                cog_instance=cog_instance,
+            )
 
 
 @dataclass
@@ -405,6 +532,20 @@ class Connection(node.CstNode[cst.ConnectStmt], node.DocableEntity):
 
             _validate_emergency_margin(self.target, self.source)
             _validate_skip_threshold(self.target, self.source)
+
+        if (
+            isinstance(self.source, cog.CogInstanceMember)
+            and not self.source.cog_instance.cog_class.is_init()
+            and isinstance(self.source.member, cog.OutputDef)
+            and isinstance(self.target, pubsub.Channel)
+            and self.target.is_published_once
+        ):
+            msg = node.append_error_line(
+                self.source.cog_instance.cog_class,
+                self.module,
+                f"Channel {self.target.name} is published once but is an output of a non-initialization cog.",
+            )
+            raise ValueError(msg)
 
 
 def _input_needs_safety_margin(target: cog.CogInstanceMember[cog.InputDef]) -> bool:
@@ -461,6 +602,9 @@ def _validate_safety_margin(
 
 def _validate_emergency_margin(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> None:
     """Raises a ValueError if the emergency margin requested by a user is unsatisfiable for the given channel."""
+    if channel.is_published_once:
+        return
+
     view_params = target.member.view_params
     assert isinstance(view_params.max_msgs, int)
 
@@ -477,7 +621,7 @@ def _validate_emergency_margin(target: cog.CogInstanceMember[cog.InputDef], chan
 def _validate_skip_threshold(target: cog.CogInstanceMember[cog.InputDef], channel: pubsub.Channel) -> None:
     """Raises a ValueError if the preemptive skip threshold requested by a user is too large for the given channel."""
     view_params = target.member.view_params
-    if not isinstance(view_params.skip_threshold, int):
+    if not isinstance(view_params.skip_threshold, int) or channel.is_published_once:
         return
 
     assert isinstance(view_params.max_msgs, int)
@@ -552,12 +696,20 @@ class PolicyApplicationStmt(node.CstNode[cst.PolicyApplyStmt], node.DocableEntit
 class SerializedDataFile(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     """An instantiatable reference to a specific data file."""
 
+    module: node.Module
     repr_typespec: typesys.Instantiation
     file_path: Path
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> node.NamedEntity:
         """Create an instance of the entity."""
         return SerializedDataFileInstance(
@@ -570,6 +722,10 @@ class SerializedDataFile(typesys.InstantiatableEntity, typesys.ObjectIdentityVal
             repr_typespec=self.repr_typespec,
             file_path=self.file_path,
         )
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
 
 @dataclass
@@ -585,8 +741,9 @@ class SerializedDataFileFactory(node.NamedEntity, typesys.CallableEntity, typesy
     """A factory supporting DSL Call syntax for creating textproto file references."""
 
     @override
-    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
+    def evaluate_call(
         self,
+        *,
         ir_node: node.CstNode[cst.Expr] | None,
         module: node.Module,
         args: Sequence[tuple[str | None, typesys.Value]],
@@ -596,27 +753,27 @@ class SerializedDataFileFactory(node.NamedEntity, typesys.CallableEntity, typesy
         try:
             kw_args = typesys.extract_kwargs(expected, args)
         except ValueError as e:
-            msg = node.append_error_line(ir_node, module, str(e))
+            msg = node.enrich_error_if_possible(ir_node, str(e))
             raise ValueError(msg) from e
         for param in expected:
             if param not in kw_args:
-                msg = node.append_error_line(ir_node, module, f"Missing parameter {kw_args}")
+                msg = node.enrich_error_if_possible(ir_node, f'Missing parameter "{param}"')
                 raise ValueError(msg)
         repr_typespec = kw_args["representation"]
         if not isinstance(repr_typespec, typesys.Instantiation) or repr_typespec.instantiates not in (
             clkbuiltins.PROTOBUF,
             clkbuiltins.TACHYON,
         ):
-            msg = node.append_error_line(
-                ir_node, module, f"Representation must be a Protobuf or Tachyon instantiation, not {repr_typespec}"
+            msg = node.enrich_error_if_possible(
+                ir_node, f"Representation must be a Protobuf or Tachyon instantiation, not {repr_typespec}"
             )
             raise TypeError(msg)
         pathname = kw_args["path"]
         if not isinstance(pathname, primitive.StringValue):
-            msg = node.append_error_line(ir_node, module, f"path must be a string value, not {pathname}")
+            msg = node.enrich_error_if_possible(ir_node, f"path must be a string value, not {pathname}")
             raise TypeError(msg)
         return SerializedDataFile(
-            type_info=clkbuiltins.TYPE_TYPE, repr_typespec=repr_typespec, file_path=Path(pathname.value)
+            type_info=clkbuiltins.TYPE_TYPE, module=module, repr_typespec=repr_typespec, file_path=Path(pathname.value)
         )
 
 
@@ -628,16 +785,133 @@ clkbuiltins.BUILTINS_SCOPE.define(
 
 
 @dataclass
+class FallbackEndpoint(typesys.ObjectIdentityValue):
+    """Represents the `.fallback` endpoint on a data source."""
+
+    parent_data_source: FirstMessageInstance
+
+
+FALLBACK_ENDPOINT_TYPE: Final = typesys.TypeDef(
+    scope=clkbuiltins.BUILTINS_SCOPE, name="FallbackEndpoint", type_info=clkbuiltins.TYPE_TYPE
+)
+DATA_SOURCE_TYPE: Final = typesys.TypeDef(
+    scope=clkbuiltins.BUILTINS_SCOPE, name="DataSource", type_info=clkbuiltins.TYPE_TYPE
+)
+
+
+@dataclass
+class FirstMessage(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
+    """An instantiatable reference to a first message from a channel."""
+
+    module: node.Module
+    channel: pubsub.Channel
+    allow_default: bool = False
+
+    @override
+    def make_instance(
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
+    ) -> node.NamedEntity:
+        """Create an instance of the entity."""
+        return FirstMessageInstance(
+            name=name,
+            scope=scope,
+            type_info=DATA_SOURCE_TYPE,
+            doc=doc,
+            module=module,
+            cst_node=cst_node,
+            channel=self.channel,
+            allow_default=self.allow_default,
+        )
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
+
+
+@dataclass
+class FirstMessageInstance(
+    node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAttribute, typesys.MembershipEntity
+):
+    """An instance of a first message data source."""
+
+    channel: pubsub.Channel
+    allow_default: bool = False
+    fallback_endpoint: FallbackEndpoint | None = None
+
+    @override
+    def attribute(self, name: str) -> typesys.Value | None:
+        if name == "fallback":
+            if self.fallback_endpoint is None:
+                self.fallback_endpoint = FallbackEndpoint(type_info=FALLBACK_ENDPOINT_TYPE, parent_data_source=self)
+            return self.fallback_endpoint
+        return None
+
+
+@dataclass
+class FirstMessageFactory(node.NamedEntity, typesys.CallableEntity, typesys.ObjectIdentityValue):
+    """A factory supporting DSL Call syntax for creating first message references."""
+
+    @override
+    def evaluate_call(  # pyright: ignore[reportIncompatibleMethodOverride] # TODO(DX-2384): Fix incompatible override errors
+        self,
+        ir_node: node.CstNode[cst.Expr] | None,
+        module: node.Module,
+        args: Sequence[tuple[str | None, typesys.Value]],
+    ) -> FirstMessage:
+        """Apply the Call operation."""
+        expected = ("channel", "allow_default")
+        try:
+            kw_args = typesys.extract_kwargs(expected, args)
+        except ValueError as e:
+            msg = node.enrich_error_if_possible(ir_node, str(e))
+            raise ValueError(msg) from e
+        channel = kw_args.get("channel")
+        if channel is None:
+            msg = node.enrich_error_if_possible(ir_node, 'Missing parameter "channel"')
+            raise ValueError(msg)
+        if not isinstance(channel, pubsub.Channel):
+            msg = node.enrich_error_if_possible(ir_node, f"channel must be a Channel, not {type(channel)}")
+            raise TypeError(msg)
+        allow_default_value = kw_args.get("allow_default")
+        allow_default = primitive.value_to_bool(allow_default_value) if allow_default_value is not None else False
+        return FirstMessage(
+            type_info=clkbuiltins.TYPE_TYPE, module=module, channel=channel, allow_default=allow_default
+        )
+
+
+clkbuiltins.BUILTINS_SCOPE.define(
+    "FirstMessage",
+    FirstMessageFactory(type_info=clkbuiltins.TYPE_TYPE, name="FirstMessage", scope=clkbuiltins.BUILTINS_SCOPE),
+    None,
+)
+
+
+@dataclass
 class State(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     """An instantiatable reference to a specific state instance."""
 
+    module: node.Module
     repr_typespec: typesys.Instantiation | extern_type.ExternType
     init_cog_endpoint: cog.CogInstanceMember[cog.StateDef] | None
     memory_resource: MemoryResourceInstance | None
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> node.NamedEntity:
         """Create an instance of the entity."""
         return StateInstance(
@@ -651,6 +925,10 @@ class State(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
             init_cog_endpoint=self.init_cog_endpoint,
             memory_resource=self.memory_resource,
         )
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
 
 @dataclass
@@ -726,6 +1004,7 @@ class StateFactory(node.NamedEntity, typesys.CallableEntity, typesys.ObjectIdent
         assert isinstance(repr_typespec, typesys.Instantiation | extern_type.ExternType)
         return State(
             type_info=clkbuiltins.TYPE_TYPE,
+            module=module,
             repr_typespec=repr_typespec,
             init_cog_endpoint=init_cog_endpoint,
             memory_resource=memres,
@@ -749,12 +1028,20 @@ class MemResourceType(Enum):
 class MemoryResource(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     """An instantiatable reference to a specific memory resource."""
 
+    module: node.Module
     resource_type: MemResourceType
     max_size: int
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> node.NamedEntity:
         """Create an instance of the entity."""
         return MemoryResourceInstance(
@@ -767,6 +1054,10 @@ class MemoryResource(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
             resource_type=self.resource_type,
             max_size=self.max_size,
         )
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
 
 @dataclass
@@ -809,7 +1100,9 @@ class MemoryResourceFactory(node.NamedEntity, typesys.CallableEntity, typesys.Ob
         if max_size_int != max_size.value:
             msg = node.append_error_line(ir_node, module, "Max size must be an integer, not {max_size.value}")
             raise ValueError(msg)
-        return MemoryResource(type_info=clkbuiltins.TYPE_TYPE, resource_type=self.resource_type, max_size=max_size_int)
+        return MemoryResource(
+            type_info=clkbuiltins.TYPE_TYPE, module=module, resource_type=self.resource_type, max_size=max_size_int
+        )
 
 
 clkbuiltins.BUILTINS_SCOPE.define(
@@ -828,11 +1121,19 @@ clkbuiltins.BUILTINS_SCOPE.define(
 class Process(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
     """An instantiatable reference to a specific process."""
 
+    module: node.Module
     executable: cpp_executable.CppExecutable
 
     @override
     def make_instance(
-        self, *, cst_node: cst.NewStmt | None, module: node.Module, scope: node.Scope, name: str, doc: node.Doc | None
+        self,
+        *,
+        cst_node: cst.NewStmt | None,
+        module: node.Module,
+        source_module: node.Module | None = None,
+        scope: node.Scope,
+        name: str,
+        doc: node.Doc | None,
     ) -> node.NamedEntity:
         """Create an instance of the entity."""
         return ProcessInstance(
@@ -844,6 +1145,10 @@ class Process(typesys.InstantiatableEntity, typesys.ObjectIdentityValue):
             cst_node=cst_node,
             executable=self.executable,
         )
+
+    @override
+    def get_module(self) -> node.Module:
+        return self.module
 
 
 @dataclass
@@ -881,7 +1186,7 @@ class ProcessFactory(typesys.CallableEntity, typesys.TypeDef):
                 ir_node, module, f"executable must be a cpp_executable, not {type(executable)}"
             )
             raise TypeError(msg)
-        return Process(type_info=clkbuiltins.TYPE_TYPE, executable=executable)
+        return Process(type_info=clkbuiltins.TYPE_TYPE, module=module, executable=executable)
 
 
 clkbuiltins.BUILTINS_SCOPE.define(
@@ -925,6 +1230,7 @@ HOST_PROCESS_POLICY: Final = policy.PolicyClass(
         clkbuiltins.STATE_INSTANCE_TYPE,
         clkbuiltins.UDP_SOCKET_INSTANCE_TYPE,
         clkbuiltins.AUDIO_SOURCE_INSTANCE_TYPE,
+        DATA_SOURCE_TYPE,
     ),
     schema=HOST_PROCESS_POLICY_SCHEMA,
     source=None,

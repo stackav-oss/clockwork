@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
 load("//tools/rules:python.bzl", "py_test")
 
 package(default_testonly = True)
@@ -12,12 +13,39 @@ py_pytest_main(
 )
 
 py_test(
+    name = "data_source_test",
+    srcs = [
+        "data_source_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_logger_configs",
+        "//clockwork/dsl/composition:genpd",
+        "//clockwork/dsl/composition:pdf",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:system_target",
+        "//clockwork/dsl/serialization:tachyon_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
     name = "gen_channel_spy_config_test",
     srcs = [
         "gen_channel_spy_config_test.py",
         ":__test__",
     ],
-    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
@@ -41,6 +69,7 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
         "//clockwork/dsl/tests/support:test_logging_policy_clk",
     ],
@@ -54,6 +83,7 @@ py_test(
         "//clockwork/dsl/ir:box",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:pubsub",
         "//clockwork/serialization/metadata:tachyon",
@@ -68,10 +98,14 @@ py_test(
         "gen_metrics_channel_metadata_config_test.py",
         ":__test__",
     ],
-    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/dsl/composition:constants",
         "//clockwork/dsl/composition:gen_metrics_channel_metadata_configs",
         "//clockwork/dsl/composition:metrics_channel_metadata_config",
         "//clockwork/dsl/composition:metrics_channel_metadata_config_proto",
@@ -92,6 +126,7 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
         "//clockwork/dsl/tests/support:test_logging_policy_clk",
     ],
@@ -112,12 +147,33 @@ py_test(
 )
 
 py_test(
+    name = "gen_signal_metadata_configs_test",
+    srcs = [
+        "gen_signal_metadata_configs_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:signals_test_system_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_signal_metadata_configs",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
     name = "genpd_test",
     srcs = [
         "genpd_test.py",
         ":__test__",
     ],
     data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
         "//clockwork/dsl/tests/support:hellomod_clk",
     ],
@@ -191,7 +247,11 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/composition:logger_config",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
     ],
 )
 
@@ -211,6 +271,21 @@ py_test(
     ],
 )
 
+cc_test(
+    name = "signals_system_startup_test",
+    srcs = ["signals_system_startup_test.cc"],
+    data = ["//clockwork/dsl/composition/tests/support:signals_test_system_target_clk"],
+    deps = [
+        "//clockwork/dsl/composition/tests/support:signals_test_system_lib",  #keep
+        "//clockwork/scaffolding:offline_scaffolding",  #keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
 py_test(
     name = "system_test",
     srcs = [
@@ -218,6 +293,7 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/dsl/composition/tests/support:signals_test_system_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
         "//clockwork/dsl/tests/support:hellomod_clk",
     ],
@@ -231,6 +307,7 @@ py_test(
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:path_resolver",
         "//clockwork/dsl/ir:system_target",
         "//clockwork/dsl/ir:uuid_reg",
@@ -244,12 +321,17 @@ py_test(
         "systemgen_test.py",
         ":__test__",
     ],
-    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    data = [
+        "//clockwork/dsl/composition/tests/support:signals_test_system.clk",
+        "//clockwork/dsl/composition/tests/support:signals_test_system_target.clk",
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
         "//clockwork/dsl/bazel:simple_launch_targets",
         "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/composition:system",
         "//clockwork/dsl/composition:systemgen",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",

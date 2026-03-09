@@ -3,13 +3,13 @@
 
 #include "clockwork/logging/writers/deterministic_log_writer.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/offboard/types.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
@@ -25,8 +25,9 @@ namespace clockwork_logging
 
 LogMessageWriter::LogMessageWriter(
   jewels::memory::MemoryResource memory_resource,
-  jewels::memory::ObjectPtr<const LogWriterConfigTap> log_writer_config,
-  std::shared_ptr<const clockwork::tools::MetricsChannelMetadataConfigTap> metrics_channel_metadata_config,
+  jewels::memory::ObjectPtr<const clockwork::Tappy<LogWriterConfig<>>> log_writer_config,
+  std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
+    metrics_channel_metadata_config,
   ChannelMap channels,
   std::string_view log_uri,
   jewels::time::SyncTime init_time)
@@ -106,7 +107,7 @@ jewels::expected<void, jewels::MonoError> LogMessageWriter::write_metrics_channe
     jewels::log_cerr_error("Error initializing metrics metadata channel: {}", writer_status.error());
     return jewels::unexpected(jewels::MonoError{});
   }
-  auto report = std::make_unique<clockwork::tools::MetricsChannelMetadataReportTap>();
+  auto report = std::make_unique<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>();
   report->get_underlying_metrics_channels() = metrics_channel_metadata_config_->get_underlying_metrics_channels();
   auto logged_msg = offboard::LoggedMessage{
     .channel_name = metrics_channel_metadata_channel_name,

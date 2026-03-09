@@ -1,4 +1,6 @@
-use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
+#![generate()]
+
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
 use clockwork::python::example::example_channels;
 
 policy ChannelLoggingPolicy for example_channels::Input1Channel

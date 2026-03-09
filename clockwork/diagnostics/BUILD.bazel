@@ -14,64 +14,34 @@ exports_files([
 clk(
     name = "channels_clk",
     srcs = ["channels.clk"],
+    generate = ["none"],
     deps = [":report_clk"],
-)
-
-cc_library(
-    name = "database_config",
-    srcs = [
-        "database_config.cc",
-        "database_config.inl",
-    ],
-    hdrs = ["database_config.hh"],
-    data = [":database_config_clk"],
-    deps = [
-        ":report",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "database_config_clk",
     srcs = ["database_config.clk"],
     outs = [
-        "database_config.cc",
-        "database_config.hh",
-        "database_config.inl",
+        "database_config_clk_cc.cc",
+        "database_config_clk_cc.hh",
+        "database_config_clk_cc.inl",
     ],
+    cpp_deps = [":report_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     deps = [":report_clk"],
-)
-
-cc_library(
-    name = "report",
-    srcs = [
-        "report.cc",
-        "report.inl",
-    ],
-    hdrs = ["report.hh"],
-    data = [":report_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "report_clk",
     srcs = ["report.clk"],
     outs = [
-        "report.cc",
-        "report.hh",
-        "report.inl",
+        "report_clk_cc.cc",
+        "report_clk_cc.hh",
+        "report_clk_cc.inl",
     ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 cc_library(

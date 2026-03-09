@@ -298,7 +298,7 @@ TEST_CASE("Real-world usage patterns")
     auto step2 = []() -> BinaryOutcome { return success; };
     auto step3 = []() -> BinaryOutcome { return failure; };
 
-    auto multi_step_process = [&]() -> BinaryOutcome
+    auto multi_step_process = [&step1, &step2, &step3]() -> BinaryOutcome
     {
       if (fails(step1()))
       {

@@ -3,7 +3,7 @@
 
 #include "clockwork/logging/offboard/index_chunk_reader.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/nolint_helper.hh"

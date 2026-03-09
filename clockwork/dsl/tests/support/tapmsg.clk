@@ -31,14 +31,9 @@ enum SomeEnum
   }
   history
   {
-    versions: [2, 4];
-    values
-    {
-      // Original value
-      #1 original_value default -> became #3;
-      // Removed value
-      #2 removed_value -> removed #4;
-    }
+    version: 4;
+    legacy_became: [1->3];
+    removed: [2];
   }
 }
 
@@ -67,14 +62,9 @@ enum SomeFlags
   }
   history
   {
-    versions: [0, 6];
-    values
-    {
-      // Renamed flag1
-      #1 renamed_flag1 { underlying_value: 1; } -> became #3;
-      // Removed flag23
-      #2 flag23 { underlying_value: 6; } -> removed #6;
-    }
+    version: 6;
+    legacy_became: [1->3];
+    removed: [2];
   }
 }
 
@@ -85,7 +75,7 @@ schema SubMsg
   fields
   {
     // Docs
-    #1 field: Int64;
+    #1 field: Int64 = 99;
   }
 }
 
@@ -132,10 +122,10 @@ schema GenericMsg
   parameters
   {
     // Some value parameter
-    #1 value_par: UInt64;
+    #1 value_par: UInt64 = 3;
 
     // Some type parameter
-    #2 TypePar: Type;
+    #2 TypePar: Type = TapMsg<>;
   }
 
   fields
@@ -242,12 +232,9 @@ schema TapMsg
   }
   history
   {
-    versions: [21, 23, 24];
-    fields
-    {
-      #19 var_string: VarString<max_size=1> -> became #23;
-      #22 removed_var_string: VarString<max_size=2> -> removed #23;
-    }
+    version: 24;
+    legacy_became: [19->23];
+    removed: [22];
   }
 }
 
@@ -408,11 +395,12 @@ cpp_target tapmsg
 
   representation Tachyon<PaddedMsg>;
   representation Tachyon<SubMsg>;
+  representation Tachyon<TapMsg<>>;
   representation Tachyon<GenericSubMsg<3, Bool>>;
+  representation Tachyon<GenericMsg<>>;
   representation Tachyon<GenericMsg<3, Bool>>;
   representation Tachyon<GenericMsg<3, SubMsg>>;
   representation Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>;
-  representation Tachyon<TapMsg<>>;
   representation Tachyon<TapMsg2>;
   representation Tachyon<OutOfOrderFields>;
   representation Tachyon<ConstructorContainer>;
@@ -422,12 +410,13 @@ cpp_target tapmsg
   representation Tachyon<ParamAsField<PaddedMsg>>;
   interface Tap<Tachyon<PaddedMsg>>;
   interface Tappy<SubMsg>;
+  interface TapMsgAlias: Tap<Tachyon<TapMsg<>>>;
   interface Tap<Tachyon<GenericSubMsg<3, Bool>>>;
+  interface Tap<Tachyon<GenericMsg<>>>;
   interface Tap<Tachyon<GenericMsg<3, Bool>>>;
   interface Tap<Tachyon<GenericMsg<3, SubMsg>>>;
   interface Tap<Tachyon<ParamAsField<PaddedMsg>>>;
   interface GenericTapMsgAlias: Tap<Tachyon<GenericMsg<3, GenericSubMsg<3, Bool>>>>;
-  interface TapMsgAlias: Tap<Tachyon<TapMsg<>>>;
   interface Tappy<TapMsg2>;
   interface Tappy<OutOfOrderFields>;
   interface Tappy<ConstructorContainer>;

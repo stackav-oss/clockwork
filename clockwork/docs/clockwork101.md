@@ -152,6 +152,11 @@ In future versions of Clockwork, we will likely relax this requirement, so that 
 Use state to store all data in non-global, non-static ways that are friendly to multiple instantiation.
 By extension, this means that **singleton classes should not be used in user code**, as these are inherently global and will interfere with concurrency and also determinism and reproducibility.
 
+#### What about unit tests for cogs?
+
+Clockwork optionally generates a test wrapper for each cog that provides an API for manipulating the configuration and state, sending messages to the cog's input channels and receiving messages published on the cog's output channels.
+See the [cog unit tests reference](./reference/cog_unit_tests.md) for more details.
+
 ### Data
 
 In the section above on Cogs, we already mentioned indirectly most of what you need to know about data.

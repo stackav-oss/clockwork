@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::demo)]
+
 // A test schema for sockets that isn't the special io::VarPacket
 schema JustAUInt32
 {
@@ -7,18 +10,4 @@ schema JustAUInt32
     // The UInt32
     #0 value: UInt32;
   }
-}
-
-
-cpp_target just_a_uint32
-{
-    options
-    {
-        namespace clockwork::demo;
-    }
-
-    schema JustAUInt32;
-
-    representation Tachyon<JustAUInt32>;
-    interface Tap<Tachyon<JustAUInt32>>;
 }

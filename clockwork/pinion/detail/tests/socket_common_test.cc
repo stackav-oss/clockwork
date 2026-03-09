@@ -4,6 +4,7 @@
 #include "clockwork/pinion/detail/socket_common.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
+#include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/expected.hh"
@@ -16,7 +17,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
-#include <iterator>
 #include <mutex>
 #include <string>
 #include <sys/socket.h>

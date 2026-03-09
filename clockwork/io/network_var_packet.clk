@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::io)]
+
 // Variable sized packet of unstructured bytes.
 schema NetworkVarPacket
 {
@@ -5,8 +8,9 @@ schema NetworkVarPacket
   parameters
   {
     // Max size of the packet.
-    #0 max_size_bytes: UInt64;
+    #0 max_size_bytes: UInt64 = 1400;
   }
+
   fields
   {
     // Payload
@@ -26,18 +30,5 @@ schema NetworkVarPacket
   }
 }
 
-cpp_target network_var_packet
-{
-  options
-  {
-    namespace clockwork::io;
-  }
-
-  schema NetworkVarPacket;
-
-  representation Tachyon<NetworkVarPacket<max_size_bytes=4>>;
-  interface Tap<Tachyon<NetworkVarPacket<max_size_bytes=4>>>;
-
-  representation Tachyon<NetworkVarPacket<max_size_bytes=1400>>;
-  interface Tap<Tachyon<NetworkVarPacket<max_size_bytes=1400>>>;
-}
+instantiate NetworkVarPacket4: NetworkVarPacket<max_size_bytes=4>;
+instantiate NetworkVarPacket1400: NetworkVarPacket<max_size_bytes=1400>;

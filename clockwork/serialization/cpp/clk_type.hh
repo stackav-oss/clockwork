@@ -10,8 +10,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -77,6 +79,10 @@ WISE_ENUM_CLASS(
   var_string,
   // Optional
   optional,
+  // Fixed SoA (Struct-of-Arrays)
+  fixed_soa,
+  // Variable SoA (Struct-of-Arrays)
+  var_soa,
   // Enum
   clk_enum,
   // Schema
@@ -327,9 +333,19 @@ public:
 
   /// Check for unexpected schema changes between this type and the source type
   /// @param[in] src_type Type to compare against
+  /// @param[in] allow_changes Allow type changes
   /// @param[in] name Name to use in exception strings
   /// @throws runtime_error if an unexpected schema change is found
-  virtual void check_for_unexpected_schema_changes(const ClkType& src_type, std::string_view name) = 0;
+  virtual void check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name) = 0;
+
+  /// Get the lowest underlying type
+  /// @return Lowest underlying type
+  [[nodiscard]] virtual ClkType& get_lowest_underlying_type();
+
+  /// Test this type is the same type as the source type
+  /// @param[in] src_type Type to compare against
+  /// @return True if the source type is the same type as this type
+  [[nodiscard]] virtual bool is_same_type(const ClkType& src_type) const;
 
 protected:
   /// @return The map from source type index to upgrader for this type
@@ -421,5 +437,21 @@ private:
   /// Representations for the types in the protobuf schema
   std::vector<std::unique_ptr<ClkType>> types_;
 };
+
+/// Check for unexpected history changes
+/// @param[in] src_became Map of field renumbering in source schema
+/// @param[in] src_removed Fields removed from the source schema
+/// @param[in] dst_became Map of field renumbering in destination schema
+/// @param[in] dst_removed Fields removed from the destination schema
+/// @param[in] allow_changes True to allow changes in the schema history
+/// @param[in] name Name used in error messages
+/// @throws runtime_error if unexpected changes are found
+void check_for_unexpected_history_changes(
+  const std::map<int32_t, int32_t>& src_became,
+  const std::set<int32_t>& src_removed,
+  const std::map<int32_t, int32_t>& dst_became,
+  const std::set<int32_t>& dst_removed,
+  bool allow_changes,
+  std::string_view name);
 
 } // namespace clockwork::serialization

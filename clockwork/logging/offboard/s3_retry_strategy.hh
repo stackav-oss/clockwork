@@ -17,9 +17,27 @@ namespace clockwork_logging::offboard
 {
 
 /// S3 retry strategy for offboard logs
+/// @tparam S3UtilsType S3 utility helper type
+template <typename S3UtilsType>
 class S3RetryStrategy : public Aws::Client::RetryStrategy
 {
 public:
+  /// S3 errors that we retry indefinitely
+  static constexpr std::array inifinite_retry_errors{
+    Aws::Client::CoreErrors::THROTTLING,
+    Aws::Client::CoreErrors::SLOW_DOWN,
+    Aws::Client::CoreErrors::NETWORK_CONNECTION,
+  };
+
+  /// Default number of retries for retriable errors
+  static constexpr int64_t default_max_retries = 20;
+
+  /// Initial retry delay in milliseconds
+  static constexpr int64_t initial_retry_delay_ms = 100;
+
+  /// Maximum retry delay multiplier
+  static constexpr int64_t max_retry_delay_multiplier = 25;
+
   explicit S3RetryStrategy(jewels::memory::MemoryResource memory_resource);
 
   ~S3RetryStrategy() override = default;
@@ -49,3 +67,5 @@ private:
 };
 
 } // namespace clockwork_logging::offboard
+
+#include "clockwork/logging/offboard/s3_retry_strategy.inl"

@@ -244,7 +244,7 @@ def test_optional_msg() -> None:
     foo.optional_msg = None
     assert foo.optional_msg is None
     # try to mutate value that's None and check that it fails and doesn't change state
-    with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'int_field'"):
+    with pytest.raises(AttributeError, match=r"'NoneType' object has no attribute 'int_field'"):
         foo.optional_msg.int_field = 2  # pyright: ignore[reportAttributeAccessIssue]
     assert foo.optional_msg is None
 
@@ -324,7 +324,7 @@ def test_var_string() -> None:
     # setting to capacity fails (because you need null termination)
     with pytest.raises(
         ValueError,
-        match="Capacity is insufficient to convert a python string with length 20 to a VarString<20>.",
+        match=r"Capacity is insufficient to convert a python string with length 20 to a VarString<20>\.",
     ):
         foo.var_string = "b" * 20
 

@@ -1,5 +1,5 @@
-use clockwork::test_tools::tests::support::addition_tester_cog::AdditionTesterCog;
-use clockwork::test_tools::tests::support::addition_cogs::AdditionCog;
+use clockwork::test_tools::tests::support::addition_tester_cog::{AdditionTesterCog};
+use clockwork::test_tools::tests::support::addition_cogs::{AdditionCog};
 use clockwork::test_tools::tests::support::messages::{AdditionMessage, SumMessage};
 
 // Channel for publishing the addition message

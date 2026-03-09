@@ -13,8 +13,9 @@
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/log_cerr/log_cerr.hh" // IWYU pragma: keep
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
 
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <filesystem>
 #include <functional>
@@ -55,11 +56,11 @@ namespace
 /// @param[in] writer_config_pbtxt Offboard writer configuration text protobuf string
 /// @return Offboard log writer
 /// @throws runtime_error on failure
-[[nodiscard]] std::unique_ptr<offboard::Writer>
+[[nodiscard]] std::unique_ptr<offboard::Writer<>>
 open_offboard_writer(std::string_view offboard_path, std::string_view writer_config_pbtxt)
 {
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
-  auto writer = std::make_unique<offboard::Writer>(memory_resource);
+  auto writer = std::make_unique<offboard::Writer<>>(memory_resource);
   auto log_path = std::filesystem::path{std::string{offboard_path}};
   if (const auto open_result = writer->open(log_path.string(), writer_config_pbtxt); !open_result)
   {
@@ -77,7 +78,7 @@ open_offboard_writer(std::string_view offboard_path, std::string_view writer_con
 void create_offboard_log_channel(
   const std::string& channel_name,
   const std::unordered_map<std::string, TopicMetadata>& metadata_map,
-  offboard::Writer& writer)
+  offboard::Writer<>& writer)
 {
   const auto metadata_iter = metadata_map.find(channel_name);
   if (metadata_iter == metadata_map.end())

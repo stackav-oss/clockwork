@@ -22,8 +22,8 @@ class TestChannelSpyClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        spy = channel_spy.ChannelSpy(shm_root_dir, socket_ns)
+        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        spy = channel_spy.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         publisher = helper.open_publisher(0)
 
@@ -69,8 +69,8 @@ class TestChannelSpyClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        spy = channel_spy.ChannelSpy(shm_root_dir, socket_ns)
+        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        spy = channel_spy.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         publisher = helper.open_publisher(0)
 
@@ -115,8 +115,8 @@ class TestChannelSpyClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        spy = channel_spy.ChannelSpy(shm_root_dir, socket_ns)
+        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        spy = channel_spy.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         publisher = helper.open_publisher(0)
 

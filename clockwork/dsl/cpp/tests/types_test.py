@@ -304,13 +304,40 @@ def test_cpp_struct_template_with_args() -> None:
         doc="Some doc.",
     )
     cpp_type.template_param = [
-        types.CppTypeArg("SomeArg"),
-        types.CppNamedType(types.CppType([], "uint64_t", None), "some_value"),
+        types.CppTemplateParam(types.CppTypeArg("SomeArg"), None),
+        types.CppTemplateParam(types.CppNamedType(types.CppType([], "uint64_t", None), "some_value"), None),
     ]
     rendered = cpp_type.render("a")
     expected_header = """
 /// Some doc.
 template <class SomeArg, uint64_t some_value>
+struct SomeType
+{
+};
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+    assert rendered.inline_chunk.render_str(render_includes=False).strip() == ""
+    assert rendered.implementation_chunk.render_str(render_includes=False).strip() == ""
+
+
+def test_cpp_struct_template_with_default_args() -> None:
+    header_a = Header("repo", "a.hh")
+    cpp_type = types.CppStruct(
+        name=types.CppType([header_a], "SomeType", "a"),
+        doc="Some doc.",
+    )
+    cpp_type.template_param = [
+        types.CppTemplateParam(
+            types.CppNamedType(types.CppType([], "int32_t", None), "some_value"), types.CppValue(None, "0")
+        ),
+        types.CppTemplateParam(
+            types.CppNamedType(types.CppType([], "uint64_t", None), "another_value"), types.CppValue(None, "1")
+        ),
+    ]
+    rendered = cpp_type.render("a")
+    expected_header = """
+/// Some doc.
+template <int32_t some_value = 0, uint64_t another_value = 1>
 struct SomeType
 {
 };
@@ -366,3 +393,406 @@ def test_cpp_fn_call() -> None:
     )
     assert invocation.render(types.GLOBAL_NAMESPACE) == "::a::func(::b::Type{value})"
     assert list(invocation.includes) == [header_a, header_b]
+
+
+def test_cpp_struct_nested_simple() -> None:
+    """Test nested struct with various members, methods, and constructors."""
+    header_a = Header("repo", "a.hh")
+    header_b = Header("repo", "b.hh")
+
+    outer = types.CppStruct(
+        name=types.CppType([header_a], "Outer", "ns"),
+        doc="Outer struct.",
+    )
+
+    inner = types.CppStruct(
+        name=types.CppType([], "Inner", "ns::Outer"),
+        doc="Inner struct.",
+    )
+
+    # Add constructor
+    ctor_body = CppChunk()
+    ctor_body.append("// Initialize")
+    inner.public.append(
+        types.CppConstructor(
+            doc="Constructor.",
+            arguments=[types.CppNamedType(types.CppType([], "int", None), "val")],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            member_init_list=[("value_", "val")],
+            body=ctor_body,
+        )
+    )
+
+    # Add regular method
+    method_body = CppChunk()
+    method_body.append("return value_;")
+    inner.public.append(
+        types.CppMethod(
+            name="get_value",
+            doc="Get value method.",
+            return_type=types.CppType([], "int", None),
+            arguments=[],
+            leading_qualifiers=[],
+            trailing_qualifiers=["const"],
+            body=method_body,
+            no_discard=False,
+        )
+    )
+
+    # Add inline method
+    inline_method_body = CppChunk()
+    inline_method_body.append("value_ = val;")
+    inner.public.append(
+        types.CppMethod(
+            name="set_value",
+            doc="Set value method.",
+            return_type=types.CppType([], "void", None),
+            arguments=[types.CppNamedType(types.CppType([], "int", None), "val")],
+            leading_qualifiers=["inline"],
+            trailing_qualifiers=[],
+            body=inline_method_body,
+            no_discard=False,
+        )
+    )
+
+    # Add data member
+    inner.public.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([header_b], "int32_t", None), "extra"),
+            types.CppValue(None, "0"),
+            doc="Extra value.",
+        )
+    )
+
+    # Add private member
+    inner.private.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([], "int", None), "value_"),
+            types.CppValue(None, "0"),
+            doc="Value member.",
+        )
+    )
+
+    outer.public.append(inner)
+
+    rendered = outer.render("ns")
+    expected_header = """
+/// Outer struct.
+struct Outer
+{
+public:
+    /// Inner struct.
+    struct Inner
+    {
+    public:
+        /// Constructor.
+        explicit Inner(int val);
+        /// Get value method.
+        int get_value() const;
+        /// Set value method.
+        inline void set_value(int val);
+        /// Extra value.
+        int32_t extra{0};
+    private:
+        /// Value member.
+        int value_{0};
+    };
+};
+    """.strip()
+    expected_inline = """
+inline auto Outer::Inner::set_value(int val) -> void
+{
+    value_ = val;
+}
+    """.strip()
+    expected_implementation = """
+Outer::Inner::Inner(int val)
+    : value_{val}
+{
+    // Initialize
+}
+auto Outer::Inner::get_value() const -> int
+{
+    return value_;
+}
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+    assert rendered.inline_chunk.render_str(render_includes=False).strip() == expected_inline
+    assert rendered.implementation_chunk.render_str(render_includes=False).strip() == expected_implementation
+
+
+def test_cpp_struct_deeply_nested() -> None:
+    """Test deeply nested structs (3 levels)."""
+    header_a = Header("repo", "a.hh")
+
+    outer = types.CppStruct(
+        name=types.CppType([header_a], "Outer", "ns"),
+        doc="Outer struct.",
+    )
+
+    middle = types.CppStruct(
+        name=types.CppType([], "Middle", "ns::Outer"),
+        doc="Middle struct.",
+    )
+
+    inner = types.CppStruct(
+        name=types.CppType([], "Inner", "ns::Outer::Middle"),
+        doc="Inner struct.",
+    )
+
+    method_body = CppChunk()
+    method_body.append("return 123;")
+    inner.public.append(
+        types.CppMethod(
+            name="deeply_nested_method",
+            doc="Deeply nested method.",
+            return_type=types.CppType([], "int", None),
+            arguments=[],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=method_body,
+            no_discard=False,
+        )
+    )
+
+    middle.public.append(inner)
+    outer.public.append(middle)
+
+    rendered = outer.render("ns")
+    expected_header = """
+/// Outer struct.
+struct Outer
+{
+public:
+    /// Middle struct.
+    struct Middle
+    {
+    public:
+        /// Inner struct.
+        struct Inner
+        {
+        public:
+            /// Deeply nested method.
+            int deeply_nested_method();
+        };
+    };
+};
+    """.strip()
+    expected_implementation = """
+auto Outer::Middle::Inner::deeply_nested_method() -> int
+{
+    return 123;
+}
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+    assert rendered.inline_chunk.render_str(render_includes=False).strip() == ""
+    assert rendered.implementation_chunk.render_str(render_includes=False).strip() == expected_implementation
+
+
+def test_cpp_struct_nested_multiple_siblings() -> None:
+    """Test struct with multiple nested structs."""
+    header_a = Header("repo", "a.hh")
+
+    outer = types.CppStruct(
+        name=types.CppType([header_a], "Outer", "ns"),
+        doc="Outer struct.",
+    )
+
+    inner1 = types.CppStruct(
+        name=types.CppType([], "Inner1", "ns::Outer"),
+        doc="First inner struct.",
+    )
+
+    inner2 = types.CppStruct(
+        name=types.CppType([], "Inner2", "ns::Outer"),
+        doc="Second inner struct.",
+    )
+
+    outer.public.append(inner1)
+    outer.public.append(inner2)
+
+    rendered = outer.render("ns")
+    expected_header = """
+/// Outer struct.
+struct Outer
+{
+public:
+    /// First inner struct.
+    struct Inner1
+    {
+    };
+    /// Second inner struct.
+    struct Inner2
+    {
+    };
+};
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+
+
+def test_cpp_struct_nested_in_private_section() -> None:
+    """Test nested struct in private section."""
+    header_a = Header("repo", "a.hh")
+
+    outer = types.CppStruct(
+        name=types.CppType([header_a], "Outer", "ns"),
+        doc="Outer struct.",
+    )
+
+    inner_impl = types.CppStruct(
+        name=types.CppType([], "InnerImpl", "ns::Outer"),
+        doc="Private implementation detail.",
+    )
+    inner_impl.public.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([], "int", None), "internal_value"),
+            types.CppValue(None, "0"),
+            doc=None,
+        )
+    )
+
+    outer.private.append(inner_impl)
+
+    rendered = outer.render("ns")
+    expected_header = """
+/// Outer struct.
+struct Outer
+{
+private:
+    /// Private implementation detail.
+    struct InnerImpl
+    {
+    public:
+        int internal_value{0};
+    };
+};
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+
+
+def test_cpp_struct_with_public_base() -> None:
+    """Test struct with a single public base class."""
+    header_a = Header("repo", "a.hh")
+    header_b = Header("repo", "b.hh")
+
+    base_type = types.CppType([header_b], "BaseClass", "ns")
+    derived = types.CppStruct(
+        name=types.CppType([header_a], "Derived", "ns"),
+        doc="Derived struct.",
+    )
+    derived.base_classes.append((base_type, types.MemberAccess.public))
+
+    derived.public.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([], "int", None), "value"),
+            types.CppValue(None, "42"),
+            doc="Some value.",
+        )
+    )
+
+    rendered = derived.render("ns")
+    expected_header = """
+/// Derived struct.
+struct Derived : public BaseClass
+{
+public:
+    /// Some value.
+    int value{42};
+};
+    """.strip()
+    assert list(derived.includes) == [header_a, header_b]
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+
+
+def test_cpp_struct_with_private_base() -> None:
+    """Test struct with a single private base class."""
+    header_a = Header("repo", "a.hh")
+    header_b = Header("repo", "b.hh")
+
+    base_type = types.CppType([header_b], "BaseClass", "ns")
+    derived = types.CppStruct(
+        name=types.CppType([header_a], "Derived", "ns"),
+        doc="Derived struct.",
+    )
+    derived.base_classes.append((base_type, types.MemberAccess.private))
+
+    derived.public.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([], "int", None), "value"),
+            types.CppValue(None, "42"),
+            doc="Some value.",
+        )
+    )
+
+    rendered = derived.render("ns")
+    expected_header = """
+/// Derived struct.
+struct Derived : private BaseClass
+{
+public:
+    /// Some value.
+    int value{42};
+};
+    """.strip()
+    assert list(derived.includes) == [header_a, header_b]
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+
+
+def test_cpp_struct_with_multiple_bases() -> None:
+    """Test struct with multiple base classes with mixed access."""
+    header_a = Header("repo", "a.hh")
+    header_b = Header("repo", "b.hh")
+    header_c = Header("repo", "c.hh")
+
+    base1 = types.CppType([header_b], "PublicBase", "ns")
+    base2 = types.CppType([header_c], "PrivateBase", "ns")
+    derived = types.CppStruct(
+        name=types.CppType([header_a], "Derived", "ns"),
+        doc="Derived struct.",
+    )
+    derived.base_classes.append((base1, types.MemberAccess.public))
+    derived.base_classes.append((base2, types.MemberAccess.private))
+
+    derived.public.append(
+        types.CppNamedValue(
+            types.CppNamedType(types.CppType([], "int", None), "value"),
+            types.CppValue(None, "42"),
+            doc="Some value.",
+        )
+    )
+
+    rendered = derived.render("ns")
+    expected_header = """
+/// Derived struct.
+struct Derived : public PublicBase, private PrivateBase
+{
+public:
+    /// Some value.
+    int value{42};
+};
+    """.strip()
+    assert list(derived.includes) == [header_a, header_b, header_c]
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header
+
+
+def test_cpp_struct_base_with_different_namespace() -> None:
+    """Test struct with base class from different namespace."""
+    header_a = Header("repo", "a.hh")
+    header_b = Header("repo", "b.hh")
+
+    base_type = types.CppType([header_b], "BaseClass", "other_ns")
+    derived = types.CppStruct(
+        name=types.CppType([header_a], "Derived", "ns"),
+        doc="Derived struct.",
+    )
+    derived.base_classes.append((base_type, types.MemberAccess.public))
+
+    rendered = derived.render("ns")
+    expected_header = """
+/// Derived struct.
+struct Derived : public ::other_ns::BaseClass
+{
+};
+    """.strip()
+    assert rendered.header_chunk.render_str(render_includes=False).strip() == expected_header

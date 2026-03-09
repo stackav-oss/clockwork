@@ -10,9 +10,14 @@
 #include <catch2/catch_test_macros.hpp>
 #include <endian.h>
 
+#include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <iterator>
+#include <ranges>
 #include <span>
 #include <type_traits>
 
@@ -180,6 +185,104 @@ TEST_CASE("Transform changes type")
     REQUIRE(written_value != original);
     write_field<TestField>(read_value, as_writable_bytes(jewels::as_single_item_span(written_value)));
     REQUIRE(written_value == original);
+  }
+}
+
+TEMPLATE_TEST_CASE(
+  "IsArrayField", "", (ArrayField<BasicField<uint32_t, 0U>, 0U, 5U>), (ArrayField<BasicField<uint32_t, 0U>, 4U, 5U>))
+{
+  STATIC_REQUIRE(TestType::size_bytes == 20U);
+  STATIC_REQUIRE(IsArrayField<TestType>);
+}
+
+TEST_CASE("Array field type")
+{
+  constexpr auto add_one = [](auto value) { return value + 1U; };
+  constexpr auto subtract_one = [](auto value) { return value - 1U; };
+  SECTION("No offset or transform")
+  {
+    std::array<uint32_t, 4U> data{0U, 1U, 2U, 3U};
+    using Type = ArrayField<BasicField<uint32_t, 0U>, 0U, 4U>;
+    const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(range, data));
+    constexpr std::array<uint32_t, 4U> new_values{4U, 5U, 6U, 7U};
+    write_field<Type>(std::span{new_values}, std::as_writable_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(data, new_values));
+  }
+
+  SECTION("With offset")
+  {
+    std::array<uint32_t, 4U> data{0U, 1U, 2U, 3U};
+    using Type = ArrayField<BasicField<uint32_t, 0U>, 4U, 3U>;
+    const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(range, std::array{1U, 2U, 3U}));
+    constexpr std::array<uint32_t, 3U> new_values{4U, 5U, 6U};
+    write_field<Type>(std::span{new_values}, std::as_writable_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(data, std::array{0U, 4U, 5U, 6U}));
+  }
+
+  SECTION("With offset and transform")
+  {
+    std::array<uint32_t, 4U> data{0U, 1U, 2U, 3U};
+    using Type = ArrayField<Field<uint32_t, 0U, sizeof(uint32_t), add_one, subtract_one>, 4U, 3U>;
+    const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(range, std::array{2U, 3U, 4U}));
+    constexpr std::array<uint32_t, 3U> new_values{4U, 5U, 6U};
+    write_field<Type>(std::span{new_values}, std::as_writable_bytes(std::span{data}));
+    REQUIRE(std::ranges::equal(data, std::array{0U, 3U, 4U, 5U}));
+  }
+
+  SECTION("Nested array")
+  {
+    std::array<uint32_t, 4U> data{0U, 1U, 2U, 3U};
+    using ElementType = Field<uint32_t, 0U, sizeof(uint32_t), add_one, subtract_one>;
+    using SubType = ArrayField<ElementType, 0U, 2U>;
+    using Type = ArrayField<SubType, 0U, 2U>;
+    const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+    REQUIRE(range.size() == 2U);
+    REQUIRE(std::ranges::equal(*std::begin(range), std::array{1U, 2U}));
+    REQUIRE(std::ranges::equal(*std::next(std::begin(range)), std::array{3U, 4U}));
+  }
+
+  SECTION("As byte span")
+  {
+    std::array<std::byte, 4U> data{std::byte{0U}, std::byte{1U}, std::byte{2U}, std::byte{3U}};
+    SECTION("No offset")
+    {
+      using Type = ArrayField<BasicField<std::byte, 0U>, 0U, 4U>;
+      const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+      STATIC_REQUIRE(std::same_as<std::decay_t<decltype(range)>, std::span<const std::byte, 4U>>);
+      REQUIRE(std::ranges::equal(range, data));
+      constexpr std::array<std::byte, 4U> new_values{std::byte{4U}, std::byte{5U}, std::byte{6U}, std::byte{7U}};
+      write_field<Type>(std::span{new_values}, std::as_writable_bytes(std::span{data}));
+      REQUIRE(std::ranges::equal(data, new_values));
+    }
+    SECTION("With offset")
+    {
+      using Type = ArrayField<BasicField<std::byte, 0U>, 1U, 3U>;
+      const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+      STATIC_REQUIRE(std::same_as<std::decay_t<decltype(range)>, std::span<const std::byte, 3U>>);
+      REQUIRE(std::ranges::equal(range, std::span{data}.last(3U)));
+      constexpr std::array<std::byte, 3U> new_values{std::byte{4U}, std::byte{5U}, std::byte{6U}};
+      write_field<Type>(std::span{new_values}, std::as_writable_bytes(std::span{data}));
+      REQUIRE(std::ranges::equal(data, std::array{std::byte{0U}, std::byte{4U}, std::byte{5U}, std::byte{6U}}));
+    }
+    SECTION("Nested array")
+    {
+      using ElementType = BasicField<std::byte, 0U>;
+      using SubType = ArrayField<ElementType, 0U, 2U>;
+      using Type = ArrayField<SubType, 0U, 2U>;
+      const auto range = read_field<Type>(std::as_bytes(std::span{data}));
+      REQUIRE(range.size() == 2U);
+
+      const auto first = *std::begin(range);
+      STATIC_REQUIRE(std::same_as<std::decay_t<decltype(first)>, std::span<const std::byte, 2U>>);
+      REQUIRE(std::ranges::equal(first, std::span{data}.first(2U)));
+
+      const auto second = *std::next(std::begin(range));
+      STATIC_REQUIRE(std::same_as<std::decay_t<decltype(second)>, std::span<const std::byte, 2U>>);
+      REQUIRE(std::ranges::equal(second, std::span{data}.last(2U)));
+    }
   }
 }
 

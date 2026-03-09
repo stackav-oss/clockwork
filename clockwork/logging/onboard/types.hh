@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 
 #include <wise_enum.h>
 

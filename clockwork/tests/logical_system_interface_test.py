@@ -4,6 +4,8 @@
 
 """Tests the LogicalSystemInterface functionality."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -73,7 +75,9 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
             Path("clockwork/tests/support/test_system_description_2.clk"),
         ),
         fs_importer,
+        compatible_with=logical_system,
     )
+    logical_system_2.import_context_from(logical_system)
 
     # test getters
     assert len(logical_system.get_channels()) == 10
@@ -138,14 +142,14 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     assert len(channel_1_producers) == 1
     logical_system.add_log_producer(channel_1, alternative_input_channel_name=new_input_channel_name)
     channel_1_producers = channel_1.get_producers()
-    assert len(channel_1_producers) == 2
+    # we don't allow two log producers for the same channel
+    assert len(channel_1_producers) == 1
 
     assert channel_1.has_log_writer_policy() is False
     logical_system.add_telemetry_log_observers([channel_1])
     assert channel_1.has_log_writer_policy() is True
 
     # test adding entities to a different system
-    logical_system_2.import_context_from(logical_system)
     logical_system_2.clear_policies()
     logical_system_2.bind_cpu_domain_policy_to_process(cpu_domains[0], processes[0])
     new_cpu_domain = logical_system_2.add_cpu_domain(cpu_domains[0])
@@ -155,7 +159,7 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
         for channel in logical_system.get_channels():
             channel_name = channel.get_name()
             for observer in channel.get_observers():
-                if logical_system.is_endpoint_connected_to_cog(observer, cog) and isinstance(channel._channel, Channel):
+                if logical_system.is_endpoint_connected_to_cog(observer, cog) and isinstance(channel.channel, Channel):
                     logical_system_2.add_channel(channel)
                     new_channel = logical_system_2.get_channel(channel_name)
                     assert new_channel is not None
@@ -163,7 +167,7 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
                     assert new_channel.get_message_size_bytes() == channel.get_message_size_bytes()
                     logical_system_2.connect_channel_observer(new_channel, observer)
             for producer in channel.get_producers():
-                if isinstance(channel._channel, Channel) and logical_system.is_endpoint_connected_to_cog(producer, cog):
+                if isinstance(channel.channel, Channel) and logical_system.is_endpoint_connected_to_cog(producer, cog):
                     logical_system_2.add_channel(channel)
                     new_channel = logical_system_2.get_channel(channel_name)
                     assert new_channel is not None
@@ -265,3 +269,206 @@ def test_cog_interface_multi_node(test_system_multi_node: LogicalSystemInterface
     assert out_channel.get_name() == multi_node_chan_name
     assert test_system_multi_node.is_endpoint_connected_to_cog(in_endpoint, source_cog)
     assert test_system_multi_node.is_endpoint_connected_to_cog(out_endpoint, source_cog)
+
+
+def test_data_sources_and_state_restoration(fs_importer: FilesystemImporter) -> None:  # noqa: C901, PLR0912, PLR0915 # Test code only; we're testing a lot in this case
+    """Test data source and state restoration interfaces added in the most recent commit.
+
+    This test uses a dedicated test system with:
+    - Multiple data sources (some connected, some not)
+    - Multiple states (some connected, some not)
+    - A cog to connect things to
+    Then we test making new connections and setting fallbacks/init data sources.
+    """
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/logical_system_interface_test_system.clk"),
+        ),
+        fs_importer,
+    )
+
+    data_sources = logical_system.get_data_sources()
+    assert len(data_sources) == 3
+
+    primary_config_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::logical_system_interface_test_system."
+        "logical_system_interface_test_system.box.primary_config"
+    )
+    fallback_config_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::logical_system_interface_test_system."
+        "logical_system_interface_test_system.box.fallback_config"
+    )
+    unconnected_config_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::logical_system_interface_test_system."
+        "logical_system_interface_test_system.box.unconnected_config"
+    )
+
+    data_source_fqns = {ds.fqn for ds in data_sources}
+    assert primary_config_fqn in data_source_fqns
+    assert fallback_config_fqn in data_source_fqns
+    assert unconnected_config_fqn in data_source_fqns
+
+    primary_config_ds = None
+    fallback_config_ds = None
+    unconnected_config_ds = None
+    for ds in data_sources:
+        assert ds.uuid is not None
+        assert ds.fqn is not None
+        assert len(ds.fqn) > 0
+
+        if ds.fqn == primary_config_fqn:
+            primary_config_ds = ds
+        elif ds.fqn == fallback_config_fqn:
+            fallback_config_ds = ds
+        elif ds.fqn == unconnected_config_fqn:
+            unconnected_config_ds = ds
+
+    assert primary_config_ds is not None
+    assert fallback_config_ds is not None
+    assert unconnected_config_ds is not None
+
+    # Test DataSourceInterface.set_fallback() - set fallback for primary config
+    primary_config_ds.set_fallback(fallback_config_ds)
+
+    # Test get_state_instances() - should have 2 states
+    state_instances = logical_system.get_state_instances()
+    assert len(state_instances) == 2
+
+    connected_state_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::logical_system_interface_test_system."
+        "logical_system_interface_test_system.box.connected_state"
+    )
+    unconnected_state_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::logical_system_interface_test_system."
+        "logical_system_interface_test_system.box.unconnected_state"
+    )
+
+    state_names = {state.get_name() for state in state_instances}
+    assert connected_state_fqn in state_names
+    assert unconnected_state_fqn in state_names
+
+    connected_state = None
+    unconnected_state = None
+    for state in state_instances:
+        if state.get_name() == connected_state_fqn:
+            connected_state = state
+        elif state.get_name() == unconnected_state_fqn:
+            unconnected_state = state
+
+    assert connected_state is not None
+    assert unconnected_state is not None
+
+    # Test ConnectableInterface.set_init_data_source() on the unconnected state
+    unconnected_state.set_init_data_source(fallback_config_ds)
+
+    cogs = logical_system.get_cogs()
+    assert len(cogs) == 1
+    test_cog = cogs[0]
+
+    # Test get_config_endpoint_by_name() - cog should have a "config" endpoint
+    config_endpoint = test_cog.get_config_endpoint_by_name("config")
+    assert config_endpoint is not None
+
+    # Test get_config_endpoint_by_name() with invalid name
+    nonexistent_endpoint = test_cog.get_config_endpoint_by_name("nonexistent")
+    assert nonexistent_endpoint is None
+
+    # Test connect_config_by_name() - connect the unconnected_config to the cog
+    # First, get the connectables before the connection to see what's already there
+    connectables_before = test_cog.get_connectables()
+
+    # Connect unconnected_config to the cog's config endpoint
+    test_cog.connect_config_by_name("config", unconnected_config_ds)
+
+    # After connecting, verify the connection appears in get_connectables()
+    connectables_after = test_cog.get_connectables()
+    # Should still have the same number of connectables (we're just changing which data source is connected)
+    assert len(connectables_after) == len(connectables_before)
+
+    # Verify that unconnected_config now appears in the connectables
+    found_unconnected_config = False
+    for connectable in connectables_after:
+        endpoints = connectable.get_endpoints()
+        for endpoint in endpoints:
+            if (
+                logical_system.is_endpoint_connected_to_cog(endpoint, test_cog)
+                and connectable.connectable.entity == unconnected_config_ds.data_source
+            ):
+                found_unconnected_config = True
+                break
+        if found_unconnected_config:
+            break
+    assert found_unconnected_config, "unconnected_config should appear in connectables after connection"
+
+    with pytest.raises(RuntimeError, match="Could not find config endpoint"):
+        test_cog.connect_config_by_name("nonexistent_config", unconnected_config_ds)
+
+    # Test connect_state() - connect the unconnected_state to the cog
+    # We need to find a state endpoint in the cog to connect to
+    # The cog has a state called "state" which should have endpoints
+    # Get connectables and find the one that's a state
+    connectables = test_cog.get_connectables()
+    cog_state_connectable = None
+    for connectable in connectables:
+        # Look for the cog's internal state (not our unconnected_state)
+        if "box.connected_state" in connectable.get_name():
+            cog_state_connectable = connectable
+            break
+
+    # If we found the cog's state connectable, get its endpoints
+    assert cog_state_connectable is not None
+    state_endpoints = cog_state_connectable.get_endpoints()
+    # Find an endpoint that belongs to the cog (not to our unconnected_state)
+    for endpoint in state_endpoints:
+        # Check if this endpoint is connected to our test_cog
+        if logical_system.is_endpoint_connected_to_cog(endpoint, test_cog):
+            # Get the count of connectables before connecting the state
+            num_connectables_before = len(test_cog.get_connectables())
+
+            # Now test connecting our unconnected_state to this endpoint
+            logical_system.connect_state(unconnected_state, endpoint)
+
+            # After connecting, verify the connection appears in get_connectables()
+            connectables_after_state = test_cog.get_connectables()
+            # We should have the same number of connectables (we're just changing which state is connected)
+            assert len(connectables_after_state) == num_connectables_before
+
+            # Verify that unconnected_state now appears in the connectables
+            found_unconnected_state = False
+            for connectable in connectables_after_state:
+                if connectable.connectable.entity == unconnected_state.connectable.entity:
+                    # Verify it has endpoints connected to our test_cog
+                    endpoints = connectable.get_endpoints()
+                    for ep in endpoints:
+                        if logical_system.is_endpoint_connected_to_cog(ep, test_cog):
+                            found_unconnected_state = True
+                            break
+                if found_unconnected_state:
+                    break
+            assert found_unconnected_state, "unconnected_state should appear in connectables after connection"
+            break
+
+
+def test_connect_state_type_validation(fs_importer: FilesystemImporter) -> None:
+    """Test that connect_state validates types correctly."""
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description.clk"),
+        ),
+        fs_importer,
+    )
+
+    state_instances = logical_system.get_state_instances()
+    assert len(state_instances) > 0
+    state = state_instances[0]
+
+    cogs = logical_system.get_cogs()
+    assert len(cogs) > 0
+    cog = cogs[0]
+
+    input_endpoint = cog.get_endpoint_by_input_name("message_input")
+    assert input_endpoint is not None
+    with pytest.raises(TypeError, match="Can only connect cog StateDef endpoints to state"):
+        logical_system.connect_state(state, input_endpoint)

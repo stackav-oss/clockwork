@@ -1,5 +1,7 @@
-use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType}
-use clockwork::logging::channel_type::ChannelType;
+#![generate()]
+
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
 use clockwork::logging::writers::logger_channels;
 
 policy ChannelLoggingPolicy for logger_channels::LoggerConfigChannel

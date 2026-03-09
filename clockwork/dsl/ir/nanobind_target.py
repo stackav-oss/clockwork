@@ -5,17 +5,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.bazel.clk_targets import module_to_clk
 from clockwork.dsl.bazel.nanobind_targets import PyCcBinding
 from clockwork.dsl.bazel.targets import get_bazel_label_for_clk_label
 from clockwork.dsl.cpp.context import CppModuleChunks, as_cc_library, write_to_file
-from clockwork.dsl.ir import nanobinding_registry, node
+from clockwork.dsl.ir import clkenum, nanobinding_registry, node, schema, statement, typesys
 from clockwork.dsl.ir.cst_util import get_span
-from clockwork.dsl.ir.nanobind_binding import NanobindBinding
+from clockwork.dsl.ir.interface import InterfaceInstantiation
+from clockwork.dsl.ir.nanobind_binding import NanobindBinding, ResolvedNanobindBinding
 from clockwork.dsl.ir.nanobind_target_render import get_dependent_targets, render_nanobind_bindings_module
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.dsl.ir.statement import ImmutableBinding
@@ -27,12 +28,22 @@ if TYPE_CHECKING:
     from clockwork.dsl.bazel.cc_targets import CcLibrary
 
 
+@dataclass(slots=True)
+class NanobindGeneratedEntities:
+    """Structure for entities passed to NanobindTarget.from_generate_nanobind."""
+
+    schemas: list[schema.Schema] = field(default_factory=list)
+    enums: list[clkenum.ClkEnum] = field(default_factory=list)
+    constants: list[statement.ImmutableBinding] = field(default_factory=list)
+    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+
+
 @dataclass
 class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.NanobindTarget]):
     """IR for NanobindTargets."""
 
-    nanobind_bindings: list[NanobindBinding]
-    constants: dict[str, node.Deferrable[ImmutableBinding]]
+    nanobind_bindings: list[NanobindBinding | ResolvedNanobindBinding]
+    constants: dict[str, node.Deferrable[ImmutableBinding] | ImmutableBinding]
 
     @classmethod
     def from_cst(cls: type[NanobindTarget], cst_node: cst.NanobindTarget, module: node.Module) -> NanobindTarget:
@@ -76,6 +87,78 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
             constants=constants,
         )
 
+    @classmethod
+    def from_generate_nanobind(
+        cls: type[NanobindTarget], module: node.Module, entities: NanobindGeneratedEntities
+    ) -> NanobindTarget:
+        """Generate an IR NanobindTarget from the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_nb"
+
+        constants: dict[str, node.Deferrable[ImmutableBinding] | ImmutableBinding] = {
+            constant.name: constant for constant in entities.constants
+        }
+
+        nanobind_bindings: list[ResolvedNanobindBinding | NanobindBinding] = [
+            ResolvedNanobindBinding(
+                module=module,
+                cst_node=None,
+                original_type=clk_enum.get_resolved(),
+                alias_name=clk_enum.name,
+            )
+            for clk_enum in entities.enums
+        ]
+
+        for schema_ir in entities.schemas:
+            if schema_ir.programmatically_generated or schema_ir.parameters:
+                continue
+            interface_inst = InterfaceInstantiation.from_schema(schema_ir, module)
+            assert isinstance(interface_inst.typespec, typesys.Instantiation)
+            nanobind_bindings.append(
+                ResolvedNanobindBinding(
+                    module=module,
+                    cst_node=None,
+                    original_type=interface_inst.typespec,
+                    alias_name=schema_ir.name,
+                )
+            )
+
+        for instantiation in entities.instantiations:
+            assert isinstance(instantiation.typespec, typesys.Instantiation)
+            interface_inst = InterfaceInstantiation.from_schema(instantiation.typespec, module)
+            if instantiation.name:
+                alias_name = instantiation.name
+            else:
+                assert interface_inst.representation is not None
+                alias_name = interface_inst.representation.schema_ir.schema_name
+            assert isinstance(interface_inst.typespec, typesys.Instantiation)
+            nanobind_bindings.append(
+                ResolvedNanobindBinding(
+                    module=module,
+                    cst_node=None,
+                    original_type=interface_inst.typespec,
+                    alias_name=alias_name,
+                )
+            )
+
+        result = cls(
+            module=module,
+            cst_node=None,
+            doc=None,
+            name=name,
+            scope=module.inner_scope,
+            nanobind_bindings=nanobind_bindings,
+            constants=constants,
+        )
+
+        for binding in nanobind_bindings:
+            nanobinding_registry.register_binding(
+                binding.get_resolved().original_type,
+                result._make_nanobind_target_info(binding.get_resolved().alias_name),
+                result.module.context,
+            )
+
+        return result
+
     def _get_target_id(self) -> nanobinding_registry.TargetId:
         """Get the TargetId of this nanobind target."""
         return nanobinding_registry.TargetId(
@@ -93,6 +176,7 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         for entity in self.nanobind_bindings:
+            assert isinstance(entity, NanobindBinding)
             entity.resolve()
             # Each bindings registers which target it came from.
             # This is used to compute target dependencies because nanobind modules need to import their dependencies.
@@ -146,7 +230,7 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
         include_dir = self.module.module_id.get_base_path().parent
         cpp_mod = self.render_cpp_entities()
         # Process needs to manage namespace differently, therefore not included as part of `render_cpp_entities`
-        main_target: CcLibrary = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id)
+        main_target: CcLibrary = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id, False)
 
         # compute target dependencies
         dependent_targets = get_dependent_targets(

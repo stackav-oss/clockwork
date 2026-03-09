@@ -9,7 +9,7 @@ import textwrap
 from pathlib import Path
 from typing import Final
 
-from google.protobuf.compiler import plugin_pb2 as plugin
+import google.protobuf.compiler.plugin_pb2 as plugin
 from google.protobuf.descriptor_pb2 import FileDescriptorProto
 
 # "includes" is at the top of the file, right below all of the normal includes.

@@ -1,0 +1,63 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::signals)]
+
+// The reporting strategy for the report group.
+enum ReportingStrategy
+{
+    values
+    {
+        // Report group should batch data before reporting
+        #0 batched default;
+
+        // Report group should post-aggregate data before reporting
+        #1 post_aggregated;
+    }
+}
+
+// The type of logging requested for the group
+enum ReportGroupLogType
+{
+    values
+    {
+        // Don't log
+        #0 none default;
+
+        // Log during events only
+        #1 event;
+
+        // Log in telemetry log
+        #2 telemetry;
+    }
+}
+
+// Schema for the report group policy
+schema ReportGroupPolicyConfig
+{
+    fields
+    {
+        // Reporting strategy for this group
+        #0 reporting_strategy: ReportingStrategy;
+
+        // How this report group should be logged
+        #1 log_type: ReportGroupLogType;
+
+        // Minimum number of observations before reporting
+        #2 min_observations: Optional<UInt64> = nullopt;
+
+        // Maximum number of observations before reporting
+        #3 max_observations: Optional<UInt64> = nullopt;
+
+        // Min duration of report grouping window
+        #4 min_duration: Optional<Duration> = nullopt;
+
+        // Max duration of report grouping window
+        #5 max_duration: Optional<Duration> = nullopt;
+    }
+}
+
+// Policy for configuring report group behavior
+def policy ReportGroupPolicy
+{
+    binds_to: ReportGroup;
+    schema: ReportGroupPolicyConfig;
+}

@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork)]
+
 // Enumeration of the alignment types.
 enum AlignmentType
 {
@@ -17,14 +20,4 @@ enum AlignmentType
     // Timeout was reached, the current best set is returned and state updated.
     #3 partial;
   }
-}
-
-cpp_target alignment_type
-{
-  options
-  {
-    namespace clockwork;
-  }
-
-  enum AlignmentType;
 }

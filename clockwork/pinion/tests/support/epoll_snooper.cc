@@ -17,6 +17,11 @@ EPollSnooper::add(int efd, uint32_t /*events*/, const std::shared_ptr<AbstractEP
   return {};
 }
 
+jewels::expected<void, jewels::filesystem::ErrorCode> EPollSnooper::modify(int /*efd*/, uint32_t /*events*/)
+{
+  return {};
+}
+
 void EPollSnooper::remove(int efd)
 {
   callbacks_.erase(efd);

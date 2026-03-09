@@ -11,8 +11,10 @@ cc_library(
     deps = [
         "//jewels/container:at",
         "//jewels/container:compare",
+        "//jewels/memory:fields",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "//jewels/std:span",
         "@fmt",
     ],
 )

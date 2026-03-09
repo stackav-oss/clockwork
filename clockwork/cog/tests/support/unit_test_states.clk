@@ -1,0 +1,54 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cogs::testing)]
+
+// Doc
+#[cpp(type_header="clockwork/cog/tests/support/unit_test_cxx_state.hh", type_namespace=clockwork::cogs::testing)]
+extern_type CxxState;
+
+// Doc
+schema ClkState
+{
+  uuid: d8733811-0ff4-4da7-b3f6-7dd67f94dc0f;
+  fields
+  {
+    // Doc
+    #1 value : Int32;
+  }
+}
+
+// Doc
+schema InputCogState
+{
+  uuid: 18ee3703-a664-411e-9b4d-3bf6806413c0;
+  fields
+  {
+    // Doc
+    #1 input1_count : UInt32;
+
+    // Doc
+    #2 input1_value : Int32;
+
+    // Doc
+    #3 input2_count : UInt32;
+
+    // Doc
+    #4 input2_value : Int32;
+
+    // Doc
+    #5 input3_count : UInt32;
+
+    // Doc
+    #6 input3_value : Int32;
+  }
+}
+
+// Doc
+schema OutputCogState
+{
+  uuid: 16b4a0e2-6713-46ea-93e7-cd9392465e02;
+  fields
+  {
+    // Doc
+    #1 output1_sent : Bool;
+  }
+}

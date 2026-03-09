@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from clockwork.dsl import cst, parser
+from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_parser as parser
 from fltk.fegen.pyrt import errors, terminalsrc
 
 CstNodeType = TypeVar("CstNodeType")

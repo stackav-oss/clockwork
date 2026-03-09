@@ -3,18 +3,17 @@
 
 #pragma once
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/log_writer_config.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/onboard/clockwork_writer_policy.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/writers/channel_message_rates_config.hh"
-#include "clockwork/logging/writers/log_writer_state.hh"
+#include "clockwork/logging/writers/channel_message_rates_config_clk_cc.hh"
+#include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
-#include "clockwork/logging/writers/rate_status.hh"
+#include "clockwork/logging/writers/rate_status_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/channel_observer.hh"
 #include "clockwork/pinion/channel_observer_client.hh"
@@ -87,10 +86,12 @@ private:
     /// @param[in] memory_resource Memory resource
     /// @param[in] log_writer_config Log writer configuration
     /// @param[in] channel_rates_config Channel message rates config
+    /// @param[in,out] channel_name_strings Backing storage for channel name string views
     GuardedState(
       jewels::memory::MemoryResource memory_resource,
-      const LogWriterConfigTap& log_writer_config,
-      const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config);
+      const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
+      const clockwork::Tappy<ChannelMessageRatesConfig>& channel_rates_config,
+      std::pmr::unordered_set<std::pmr::string>& channel_name_strings);
 
     ~GuardedState() noexcept = default;
 
@@ -173,7 +174,7 @@ private:
   /// @param[in] channel_rates_config Channel message rates config
   LogWriterBase(
     jewels::memory::MemoryResource memory_resource,
-    const LogWriterConfigTap& log_writer_config,
+    const clockwork::Tappy<LogWriterConfig<>>& log_writer_config,
     std::string_view pinion_shm_root,
     std::string_view pinion_namespace,
     size_t buffer_pool_size,
@@ -229,8 +230,7 @@ public:
   void message_callback(
     jewels::time::SyncTime current_time,
     std::string_view channel_name,
-    jewels::memory::ObjectPtr<const clockwork::pinion::Buffer> buffer_ptr,
-    const clockwork::pinion::BufferIterator& buffer_iterator) final;
+    const ::clockwork::pinion::SlotRef& message_ref) final;
 
   /// @see ChannelObserverClient::drop_callback
   void drop_callback(std::string_view channel_name, size_t drop_count) final;
@@ -239,6 +239,11 @@ public:
   /// @note This method *MAY* be called by the thread that reports the writer state
   /// @return Writer state
   [[nodiscard]] LogWriterState get_state();
+
+  /// Get the current status string
+  /// @note This method *MAY* be called by the thread that reports the writer state
+  /// @return Status string
+  [[nodiscard]] std::pmr::string get_status_string();
 
   /// Check whether this writer is degraded
   /// @note This method *MAY* be called by the thread that reports the writer state
@@ -277,8 +282,9 @@ public:
   [[nodiscard]] std::chrono::nanoseconds get_and_reset_max_write_backlog() noexcept;
 
   /// Initialize the log writer
+  /// @param[in] log_writer_config Log writer configuration
   /// @return LogError on failure
-  [[nodiscard]] LogExpected<void> initialize();
+  [[nodiscard]] LogExpected<void> initialize(const clockwork::Tappy<LogWriterConfig<>>& log_writer_config);
 
   /// Get the message rates per channel
   /// @return Map from channel name to channel message rate
@@ -301,7 +307,7 @@ protected:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message(
     std::string_view channel_name,
-    const onboard::ClockworkMessageHandle& message_handle,
+    const ::clockwork::pinion::SlotRef& message_handle,
     LogTimestamp log_time,
     jewels::time::SteadyTime current_steady_time);
 
@@ -314,7 +320,7 @@ protected:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> log_message_wait(
     std::string_view channel_name,
-    const onboard::ClockworkMessageHandle& message_handle,
+    const ::clockwork::pinion::SlotRef& message_handle,
     LogTimestamp log_time,
     jewels::time::SteadyTime current_steady_time);
 
@@ -324,7 +330,7 @@ protected:
   /// @param[in] log_time Message log timestamp
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> save_persistent_message(
-    std::string_view channel_name, const onboard::ClockworkMessageHandle& message_handle, LogTimestamp log_time);
+    std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle, LogTimestamp log_time);
 
   /// Write a message to the log
   /// @param[in] message Message to log
@@ -366,8 +372,9 @@ protected:
 
 private:
   /// Add the logged channel metadata to the log writer
+  /// @param[in] log_writer_config Log writer configuration
   /// @return LogError on failure
-  [[nodiscard]] LogExpected<void> add_channels();
+  [[nodiscard]] LogExpected<void> add_channels(const clockwork::Tappy<LogWriterConfig<>>& log_writer_config);
 
   /// Try to subscribe to pending logged channels
   void poll_pending_subscriptions();
@@ -380,14 +387,14 @@ private:
   /// @param[in] current_steady_time Current steady time
   void update_max_write_backlog(jewels::time::SteadyTime current_steady_time);
 
-  /// State shared between the writer thread and the thread that reports writer status
-  jewels::memory::pmr_unique_ptr<GuardedState> guarded_state_{};
-
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
 
-  /// Log writer configuration
-  LogWriterConfigTap log_writer_config_;
+  /// Storage backing channel name string views
+  std::pmr::unordered_set<std::pmr::string> channel_name_strings_;
+
+  /// State shared between the writer thread and the thread that reports writer status
+  jewels::memory::pmr_unique_ptr<GuardedState> guarded_state_{};
 
   /// Pinion shared memory root directory
   std::pmr::string pinion_shm_root_;

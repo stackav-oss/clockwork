@@ -11,7 +11,7 @@ import channel_spy_config_proto instead.
 from pathlib import Path
 from typing import Final
 
-from clockwork.dsl.composition import channel_spy_config_proto
+from clockwork.dsl.composition import channel_spy_config_proto, constants
 from clockwork.dsl.ir import compiler
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
@@ -30,9 +30,9 @@ PublishedChannelMetadata: Final[type[channel_spy_config_proto.PublishedChannelMe
         CSC_MODULE.context,
         CSC_MODULE,
         "PublishedChannelMetadata",
-        max_channel_name_size=300,
+        max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_schema_name_size=511,
-        max_schema_definition_size=20000,
+        max_schema_definition_size=30000,
     )[0]
 )
 
@@ -41,8 +41,8 @@ ChannelSpyConfig: Final[type[channel_spy_config_proto.ChannelSpyConfig]] = tachy
     CSC_MODULE.context,
     CSC_MODULE,
     "ChannelSpyConfig",
-    max_channel_name_size=300,
+    max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
     max_schema_name_size=511,
-    max_schema_definition_size=20000,
+    max_schema_definition_size=30000,
     max_num_channels=2048,
 )[0]

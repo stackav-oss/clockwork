@@ -3,16 +3,20 @@
 
 #include "clockwork/cog/cog_state.hh"
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
+#include <cstring>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -67,6 +71,27 @@ auto CogStateDataImpl<Tap<Tachyon<SchemaType>>>::get_ptr() noexcept -> jewels::m
 {
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access) the .value() checks this (and it should never be unset)
   return jewels::memory::make_non_null_from_ref(current_publishable.value().message());
+}
+
+template <typename SchemaType>
+jewels::BinaryOutcome
+CogStateDataImpl<Tap<Tachyon<SchemaType>>>::set_from_bytes(std::span<const std::byte> data) noexcept
+{
+  if (!current_publishable)
+  {
+    jewels::log_cerr_error("set_from_bytes called on state without publishable");
+    return jewels::failure;
+  }
+
+  auto& message = current_publishable.value().message();
+  if (data.size() != sizeof(message))
+  {
+    jewels::log_cerr_error("State data size mismatch: got {}, expected {}", data.size(), sizeof(message));
+    return jewels::failure;
+  }
+
+  std::memcpy(&message, data.data(), data.size());
+  return jewels::success;
 }
 
 template <typename Policy>
@@ -131,6 +156,34 @@ template <typename Policy>
 auto CogState<Policy>::get_state() -> StatePtrType
 {
   return record_->get_ptr();
+}
+
+template <typename Policy>
+auto CogState<Policy>::get_mutable_state() -> MutableStatePtrType
+{
+  return record_->get_ptr();
+}
+
+template <typename Policy>
+auto CogState<Policy>::get_record_ptr() const -> RecordPtrType
+{
+  return record_;
+}
+
+template <typename Policy>
+auto CogState<Policy>::get_snapshot_info() noexcept -> StateSnapshotInfo*
+{
+  if (snapshot_info_)
+  {
+    return &(*snapshot_info_);
+  }
+  return nullptr;
+}
+
+template <typename Policy>
+void CogState<Policy>::set_snapshot_info(StateSnapshotInfo info)
+{
+  snapshot_info_.emplace(std::move(info));
 }
 
 } // namespace clockwork

@@ -1,0 +1,215 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::testing::cogs)]
+
+use clockwork::dsl::tests::support::clk_hellomsg;
+use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+
+//
+#[cpp(type_header="clockwork/dsl/tests/support/cxx_state.hh", type_namespace=clockwork::testing)]
+extern_type CxxState;
+
+// Hello, Cog!
+//
+// This cog is a minimal test case for the Clockwork framework.
+cog HelloCog
+{
+    resources
+    {
+        mem_hello: persistent;
+    }
+
+    configs
+    {
+        cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+    }
+
+    states
+    {
+        ro_hello: Tappy<clk_hellomsg::HelloMsg>;
+        rw_hello: Tappy<clk_hellomsg::HelloMsg>
+        {
+            mutable: true;
+        }
+        extern_hello: CxxState;
+    }
+
+    inputs
+    {
+        latest_hello: Tappy<clk_hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+
+        // Multi-publisher input
+        multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
+        {
+            no_dial: true;
+        }
+
+        // Make sure larger views work
+        history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
+        {
+            no_dial: false;
+            max_msgs: 5;
+            manual_cursor: true;
+            connect_optional: true;
+        }
+    }
+
+    outputs
+    {
+        out_world: Tappy<clk_hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_goodbye: Tappy<clk_hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_multi1: Tappy<clk_hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+        out_multi2: Tappy<clk_hellomsg::HelloMsg>
+        {
+            connect_optional: true;
+        }
+    }
+
+    execution
+    {
+        condition any_msg: any_message(latest_hello);
+        condition new_msg: new_message(max=2, input=history_of_hellos);
+        // Execute at least at 2Hz
+        condition periodic: time_since_last_exec(500ms);
+
+        execute when: (periodic and new_msg) or any_msg;
+    }
+
+    diagnostics
+    {
+        group_id: "fault_injector_b";
+        instance_id: "a";
+    }
+    simulation_options
+    {
+       execution_duration: 2ms;
+    }
+
+    metrics_options
+    {
+        enabled: false;
+    }
+}
+
+// Hello, Cog!
+//
+// This cog is a minimal test case for the Clockwork framework.
+cog HelloCogWithMetrics
+{
+    resources
+    {
+        mem_hello: persistent;
+    }
+
+    configs
+    {
+        cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+    }
+
+    states
+    {
+        ro_hello: Tappy<clk_hellomsg::HelloMsg>;
+        rw_hello: Tappy<clk_hellomsg::HelloMsg>
+        {
+            mutable: true;
+        }
+        extern_hello: CxxState;
+    }
+
+    inputs
+    {
+        latest_hello: Tappy<clk_hellomsg::HelloMsg>;
+
+        // Multi-publisher input
+        multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
+        {
+            no_dial: true;
+        }
+
+        // Make sure larger views work
+        history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
+        {
+            no_dial: false;
+            max_msgs: 5;
+            manual_cursor: true;
+        }
+    }
+
+    outputs
+    {
+        out_world: Tappy<clk_hellomsg::HelloMsg>;
+        out_goodbye: Tappy<clk_hellomsg::HelloMsg>;
+        out_multi1: Tappy<clk_hellomsg::HelloMsg>;
+        out_multi2: Tappy<clk_hellomsg::HelloMsg>;
+    }
+
+    execution
+    {
+        condition any_msg: any_message(latest_hello);
+        condition new_msg: new_message(max=2, input=history_of_hellos);
+        // Execute at least at 2Hz
+        condition periodic: time_since_last_exec(500ms);
+
+        execute when: (periodic and new_msg) or any_msg;
+    }
+
+    diagnostics
+    {
+        group_id: "fault_injector_b";
+        instance_id: "a";
+    }
+    simulation_options
+    {
+       execution_duration: 2ms;
+    }
+
+    metrics_options
+    {
+        enabled: false;
+    }
+}
+
+// Init cog
+cog HelloInit
+{
+    states
+    {
+        result: Tappy<clk_hellomsg::HelloMsg>
+        {
+            mutable: true;
+        }
+    }
+    execution
+    {
+        execute when: init;
+    }
+}
+
+// Init cog
+cog HelloInit2
+{
+    states
+    {
+        result: Tappy<clk_hellomsg::HelloMsg>
+        {
+            mutable: true;
+        }
+
+        input: Tappy<clk_hellomsg::HelloMsg>;
+    }
+    execution
+    {
+        execute when: init;
+    }
+}

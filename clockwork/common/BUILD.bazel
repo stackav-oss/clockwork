@@ -3,7 +3,6 @@
 
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
-load("//tools/rules:python.bzl", "py_library")
 
 package(default_visibility = ["//clockwork:__subpackages__"])
 
@@ -11,6 +10,7 @@ exports_files([
     "process_description.clk",
     "multi_subscriber_config.clk",
     "platform_diagnostics_config.clk",
+    "signal_metadata_config.clk",
 ])
 
 cc_library(
@@ -21,7 +21,7 @@ cc_library(
     deps = [
         ":abstract_cog_queue",
         ":cog_envelope",
-        ":cog_execution_error",
+        ":cog_execution_error_clk_cc",
         ":forward",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -34,6 +34,7 @@ cc_library(
     name = "abstract_cog_queue",
     srcs = ["abstract_cog_queue.cc"],
     hdrs = ["abstract_cog_queue.hh"],
+    visibility = ["//visibility:public"],
     deps = [
         ":forward",
         "//jewels/std:expected",
@@ -75,26 +76,16 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "cog_execution_error",
-    srcs = [
-        "cog_execution_error.cc",
-        "cog_execution_error.inl",
-    ],
-    hdrs = ["cog_execution_error.hh"],
-    data = [":cog_execution_error_clk"],
-    visibility = ["//visibility:public"],
-    deps = ["@wise_enum"],
-)
-
 clk(
     name = "cog_execution_error_clk",
     srcs = ["cog_execution_error.clk"],
     outs = [
-        "cog_execution_error.cc",
-        "cog_execution_error.hh",
-        "cog_execution_error.inl",
+        "cog_execution_error_clk_cc.cc",
+        "cog_execution_error_clk_cc.hh",
+        "cog_execution_error_clk_cc.inl",
     ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
 )
 
 clk(
@@ -106,38 +97,26 @@ clk(
         "cog_gpu_assignment_config_clk_cc.inl",
         "cog_gpu_assignment_config_clk_py.py",
     ],
+    cpp_deps = [":process_description_clk_cc"],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+    py_deps = [":process_description_clk_py"],
     visibility = ["//visibility:public"],
     deps = [":process_description_clk"],
 )
 
-cc_library(
-    name = "cog_gpu_assignment_config_clk_cc",
-    srcs = [
-        "cog_gpu_assignment_config_clk_cc.cc",
-        "cog_gpu_assignment_config_clk_cc.inl",
+clk(
+    name = "constants_clk",
+    srcs = ["constants.clk"],
+    outs = [
+        "constants_clk_cc.cc",
+        "constants_clk_cc.hh",
+        "constants_clk_cc.inl",
     ],
-    hdrs = ["cog_gpu_assignment_config_clk_cc.hh"],
-    data = [":cog_gpu_assignment_config_clk"],
-    deps = [
-        ":process_description",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
-py_library(
-    name = "cog_gpu_assignment_config_clk_py",
-    srcs = ["cog_gpu_assignment_config_clk_py.py"],
-    data = [":cog_gpu_assignment_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/serialization/py:tachyon_dyn",
-    ],
+    generate = ["cpp"],
 )
 
 cc_library(
@@ -173,65 +152,35 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
-cc_library(
-    name = "multi_subscriber_config",
-    srcs = [
-        "multi_subscriber_config.cc",
-        "multi_subscriber_config.inl",
-    ],
-    hdrs = ["multi_subscriber_config.hh"],
-    data = [":multi_subscriber_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":process_description",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
-)
-
 clk(
     name = "multi_subscriber_config_clk",
     srcs = ["multi_subscriber_config.clk"],
     outs = [
-        "multi_subscriber_config.cc",
-        "multi_subscriber_config.hh",
-        "multi_subscriber_config.inl",
+        "multi_subscriber_config_clk_cc.cc",
+        "multi_subscriber_config_clk_cc.hh",
+        "multi_subscriber_config_clk_cc.inl",
     ],
+    cpp_deps = [":process_description_clk_cc"],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
     deps = [":process_description_clk"],
-)
-
-cc_library(
-    name = "platform_diagnostics_config",
-    srcs = [
-        "platform_diagnostics_config.cc",
-        "platform_diagnostics_config.inl",
-    ],
-    hdrs = ["platform_diagnostics_config.hh"],
-    data = [":platform_diagnostics_config_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":process_description",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/diagnostics:report",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "platform_diagnostics_config_clk",
     srcs = ["platform_diagnostics_config.clk"],
     outs = [
-        "platform_diagnostics_config.cc",
-        "platform_diagnostics_config.hh",
-        "platform_diagnostics_config.inl",
+        "platform_diagnostics_config_clk_cc.cc",
+        "platform_diagnostics_config_clk_cc.hh",
+        "platform_diagnostics_config_clk_cc.inl",
     ],
+    cpp_deps = [
+        ":process_description_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
     deps = [
         ":process_description_clk",
@@ -239,35 +188,40 @@ clk(
     ],
 )
 
-cc_library(
-    name = "process_description",
-    srcs = [
-        "process_description.cc",
-        "process_description.inl",
-    ],
-    hdrs = ["process_description.hh"],
-    data = [":process_description_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container:compare",
-        "//jewels/container/tap:optional",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-        "@wise_enum",
-    ],
-)
-
 clk(
     name = "process_description_clk",
     srcs = ["process_description.clk"],
     outs = [
-        "process_description.cc",
-        "process_description.hh",
-        "process_description.inl",
+        "process_description_clk_cc.cc",
+        "process_description_clk_cc.hh",
+        "process_description_clk_cc.inl",
+        "process_description_clk_py.py",
     ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "signal_metadata_config_clk",
+    srcs = ["signal_metadata_config.clk"],
+    outs = [
+        "signal_metadata_config_clk_cc.cc",
+        "signal_metadata_config_clk_cc.hh",
+        "signal_metadata_config_clk_cc.inl",
+    ],
+    cpp_deps = [
+        ":constants_clk_cc",
+        ":process_description_clk_cc",
+    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":constants_clk",
+        ":process_description_clk",
+    ],
 )

@@ -11,8 +11,7 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <iterator>
@@ -39,6 +38,7 @@ namespace clockwork::tools
   const pinion::BufferLayout buffer_layout{
     .num_slots = num_slots,
     .message_size = message_size,
+    .is_published_once = false,
   };
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   auto factory_result = clockwork::pinion::ShmChannelFactory::make(memory_resource, socket_ns, shm_dir);
@@ -78,18 +78,8 @@ namespace clockwork::tools
     message_size,
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here
     [cb_fn = std::move(callback_fn)](
-      uint64_t sequence_number,
-      int64_t message_time,
-      std::span<const std::byte> data,
-      const pinion::SubscriberHandle& subscriber_handle,
-      pinion::BufferIterator buffer_iter)
-    {
-      cb_fn(
-        sequence_number,
-        message_time,
-        data,
-        [&subscriber_handle, buffer_iter]() { return subscriber_handle.still_available(buffer_iter); });
-    });
+      uint64_t sequence_number, int64_t message_time, std::span<const std::byte> data, pinion::SlotRef slot_ref)
+    { cb_fn(sequence_number, message_time, data, [&slot_ref]() { return slot_ref.is_valid(); }); });
 }
 
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
@@ -110,12 +100,8 @@ namespace clockwork::tools
     message_size,
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here
     [cb_fn = std::move(callback_fn)](
-      uint64_t sequence_number,
-      int64_t message_time,
-      std::span<const std::byte> data,
-      const pinion::SubscriberHandle& subscriber_handle,
-      pinion::BufferIterator buffer_iter)
-    { cb_fn(PythonCallbackHandle{sequence_number, message_time, data, subscriber_handle, buffer_iter}); });
+      uint64_t sequence_number, int64_t message_time, std::span<const std::byte> data, pinion::SlotRef slot_ref)
+    { cb_fn(PythonCallbackHandle{sequence_number, message_time, data, slot_ref}); });
 }
 
 void ChannelSpySubscriber::poll()
@@ -126,15 +112,15 @@ void ChannelSpySubscriber::poll()
     return;
   }
   const auto newest_iter = std::prev(available.end());
-  if (!is_sentinel_iterator(last_iter_) && last_iter_ == newest_iter)
+  if (!last_iter_.is_sentinel() && last_iter_ == newest_iter)
   {
     return;
   }
   last_iter_ = newest_iter;
-  const auto slot = last_iter_.dereference();
+  const auto slot = *last_iter_;
   const auto sequence_number = slot.header()->sequence_number;
   const auto message_time = slot.header()->publish_timestamp;
-  callback_fn_(sequence_number, message_time, slot.message(), subscriber_handle_, newest_iter);
+  callback_fn_(sequence_number, message_time, slot.message(), newest_iter);
 }
 
 ChannelSpySubscriber::ChannelSpySubscriber(

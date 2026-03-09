@@ -18,7 +18,10 @@ py_test(
         "summarize_test.py",
         ":__test__",
     ],
-    data = [":test_system_multi_node_topology_summary"],
+    data = [
+        ":test_system_multi_node_topology_summary",
+        ":test_system_multi_route_topology_summary",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
@@ -31,6 +34,11 @@ py_test(
 topology_summary(
     name = "test_system_multi_node_topology_summary",
     system_target = "//clockwork/tests/support:test_system_multi_node_clk",
+)
+
+topology_summary(
+    name = "test_system_multi_route_topology_summary",
+    system_target = "//clockwork/tests/support:test_system_multi_route_clk",
 )
 
 py_test(

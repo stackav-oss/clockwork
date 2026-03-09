@@ -3,12 +3,17 @@
 
 #pragma once
 
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
+#include <cstddef>
+#include <functional>
 #include <optional>
 #include <tuple>
+#include <utility>
 
 namespace clockwork
 {
@@ -22,7 +27,11 @@ class CogMemoryResources
 {
 public:
   static constexpr auto policy_count = sizeof...(Policies);
+  using PoliciesTuple = std::tuple<Policies...>;
   using MemoryResourcesTuple = std::tuple<typename Policies::MemoryResourceType...>;
+  template <size_t index>
+  using MemoryResourceRefType =
+    std::reference_wrapper<const typename std::tuple_element_t<index, MemoryResourcesTuple>>;
 
   /// Validate that all internal types are set.
   [[nodiscard]] bool validate() const;
@@ -36,6 +45,26 @@ public:
   /// Construct the memory_resources tuple.
   /// @return Tuple of memory_resourceuration objects.
   [[nodiscard]] MemoryResourcesTuple make_memory_resources();
+
+  /// Test whether the memory resource at the specified index has been set
+  /// @tparam index Record tuple index
+  /// @return True if the memory resource has been set
+  template <size_t index>
+  [[nodiscard]] bool is_memory_resource_set() const;
+
+  /// Get the memory resource at the specified index
+  /// @tparam index
+  /// @param[out] memres Memory resource reference
+  /// @return Success or failure if the memory resource has not been set
+  template <size_t index>
+  jewels::BinaryOutcome get_memory_resource(jewels::FactoryOut<MemoryResourceRefType<index>> memory_resource) const;
+
+  /// Set the memory resource at the specified index
+  /// @tparam index
+  /// @param[in] memory_resource Memory resource to set
+  /// @return Success of failure if the memory resource has already been set
+  template <size_t index>
+  jewels::BinaryOutcome set_memory_resource(typename std::tuple_element_t<index, MemoryResourcesTuple> memory_resource);
 
 private:
   template <typename Policy>

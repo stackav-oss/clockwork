@@ -8,7 +8,10 @@
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
+#include "jewels/filesystem/filesystem.hh"
+#include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -28,7 +31,6 @@
 #include <compare>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -88,6 +90,8 @@ struct TestAsyncWriterPolicy
     jewels::SharedObjectPool<AsyncWriteRequest<TestAsyncWriterPolicy>>::SharedReference;
 };
 
+using AsyncWriteRequestType = AsyncWriteRequest<TestAsyncWriterPolicy>;
+
 TEST_CASE("Write file asynchronously")
 {
   constexpr size_t write_buffer_count = 2U;
@@ -98,7 +102,7 @@ TEST_CASE("Write file asynchronously")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   jewels::SharedBufferPool<TestAsyncWriterPolicy::buffer_size, TestAsyncWriterPolicy::alignment> write_buffer_pool{
     memory_resource, write_buffer_count};
   jewels::SharedBufferPool<message_buffer_size, message_alignment> message_buffer_pool{
@@ -126,7 +130,9 @@ TEST_CASE("Write file asynchronously")
 
   std::vector<char> message1(message_buffer_size, 'A');
   REQUIRE(
-    write_request->copy_data(time1, std::as_bytes(std::span{message1.data(), message1.size()})) == message1.size());
+    write_request->copy_data(
+      time1, std::as_bytes(std::span{message1.data(), message1.size()}), AsyncWriteRequestType::DataType::message) ==
+    message1.size());
 
   constexpr jewels::time::SteadyTime time2{std::chrono::seconds(2)};
   auto message_result = message_buffer_pool.get_shared_buffer();
@@ -134,7 +140,8 @@ TEST_CASE("Write file asynchronously")
   auto message2 = std::move(message_result).value();
   std::memset(message2->data(), 'B', message2->size());
   REQUIRE(
-    write_request->zero_copy_data(time2, std::as_bytes(std::span{*message2}), MessageHandle{message2}) ==
+    write_request->zero_copy_data(
+      time2, std::as_bytes(std::span{*message2}), AsyncWriteRequestType::DataType::message, MessageHandle{message2}) ==
     message2->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -162,7 +169,8 @@ TEST_CASE("Write file asynchronously")
   auto message3 = std::move(message_result).value();
   std::memset(message3->data(), 'C', message3->size());
   REQUIRE(
-    write_request->zero_copy_data(time3, std::as_bytes(std::span{*message3}), MessageHandle{message3}) ==
+    write_request->zero_copy_data(
+      time3, std::as_bytes(std::span{*message3}), AsyncWriteRequestType::DataType::message, MessageHandle{message3}) ==
     message3->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -198,7 +206,9 @@ TEST_CASE("Write file asynchronously")
 
     std::vector<char> message4(message_buffer_size, 'D');
     REQUIRE(
-      write_request->copy_data(time4, std::as_bytes(std::span{message4.data(), message4.size()})) == message4.size());
+      write_request->copy_data(
+        time4, std::as_bytes(std::span{message4.data(), message4.size()}), AsyncWriteRequestType::DataType::message) ==
+      message4.size());
 
     constexpr jewels::time::SteadyTime time5{std::chrono::seconds(5)};
     message_result = message_buffer_pool.get_shared_buffer();
@@ -206,8 +216,11 @@ TEST_CASE("Write file asynchronously")
     auto message5 = std::move(message_result).value();
     std::memset(message5->data(), 'E', message5->size());
     REQUIRE(
-      write_request->zero_copy_data(time5, std::as_bytes(std::span{*message5}), MessageHandle{message5}) ==
-      message5->size());
+      write_request->zero_copy_data(
+        time5,
+        std::as_bytes(std::span{*message5}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{message5}) == message5->size());
 
     REQUIRE(async_writer2.write_async(std::move(write_request)));
     REQUIRE(async_writer2.get_write_backlog(time10).value() <= std::chrono::seconds(6));
@@ -234,8 +247,11 @@ TEST_CASE("Write file asynchronously")
     auto message6 = std::move(message_result).value();
     std::memset(message6->data(), 'F', message6->size());
     REQUIRE(
-      write_request->zero_copy_data(time6, std::as_bytes(std::span{*message6}), MessageHandle{message6}) ==
-      message6->size());
+      write_request->zero_copy_data(
+        time6,
+        std::as_bytes(std::span{*message6}),
+        AsyncWriteRequestType::DataType::message,
+        MessageHandle{message6}) == message6->size());
 
     REQUIRE(async_writer2.write_async(std::move(write_request)));
     REQUIRE(async_writer2.get_write_backlog(time10).value() <= std::chrono::seconds(7));
@@ -285,7 +301,7 @@ TEST_CASE("Overrun detected")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   jewels::SharedBufferPool<TestAsyncWriterPolicy::buffer_size, TestAsyncWriterPolicy::alignment> write_buffer_pool{
     memory_resource, write_buffer_count};
   jewels::SharedBufferPool<message_buffer_size, message_alignment> message_buffer_pool{
@@ -313,7 +329,9 @@ TEST_CASE("Overrun detected")
 
   std::vector<char> message1(message_buffer_size, 'A');
   REQUIRE(
-    write_request->copy_data(time1, std::as_bytes(std::span{message1.data(), message1.size()})) == message1.size());
+    write_request->copy_data(
+      time1, std::as_bytes(std::span{message1.data(), message1.size()}), AsyncWriteRequestType::DataType::message) ==
+    message1.size());
 
   constexpr jewels::time::SteadyTime time2{std::chrono::seconds(2)};
   auto message_result = message_buffer_pool.get_shared_buffer();
@@ -323,8 +341,11 @@ TEST_CASE("Overrun detected")
   MessageHandle message_handle2{message2};
   message_handle2.set_is_valid(false);
   REQUIRE(
-    write_request->zero_copy_data(time2, std::as_bytes(std::span{*message2}), std::move(message_handle2)) ==
-    message2->size());
+    write_request->zero_copy_data(
+      time2,
+      std::as_bytes(std::span{*message2}),
+      AsyncWriteRequestType::DataType::message,
+      std::move(message_handle2)) == message2->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
   REQUIRE(async_writer.get_write_backlog(time10).value() <= std::chrono::seconds(9));
@@ -364,7 +385,7 @@ TEST_CASE("Pause/Resume")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   jewels::SharedBufferPool<TestAsyncWriterPolicy::buffer_size, TestAsyncWriterPolicy::alignment> write_buffer_pool{
     memory_resource, write_buffer_count};
   jewels::SharedBufferPool<message_buffer_size, message_alignment> message_buffer_pool{
@@ -395,7 +416,9 @@ TEST_CASE("Pause/Resume")
 
   std::vector<char> message1(message_buffer_size, 'A');
   REQUIRE(
-    write_request->copy_data(time1, std::as_bytes(std::span{message1.data(), message1.size()})) == message1.size());
+    write_request->copy_data(
+      time1, std::as_bytes(std::span{message1.data(), message1.size()}), AsyncWriteRequestType::DataType::message) ==
+    message1.size());
 
   constexpr jewels::time::SteadyTime time2{std::chrono::seconds(2)};
   auto message_result = message_buffer_pool.get_shared_buffer();
@@ -403,7 +426,8 @@ TEST_CASE("Pause/Resume")
   auto message2 = std::move(message_result).value();
   std::memset(message2->data(), 'B', message2->size());
   REQUIRE(
-    write_request->zero_copy_data(time2, std::as_bytes(std::span{*message2}), MessageHandle{message2}) ==
+    write_request->zero_copy_data(
+      time2, std::as_bytes(std::span{*message2}), AsyncWriteRequestType::DataType::message, MessageHandle{message2}) ==
     message2->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -431,7 +455,8 @@ TEST_CASE("Pause/Resume")
   auto message3 = std::move(message_result).value();
   std::memset(message3->data(), 'C', message3->size());
   REQUIRE(
-    write_request->zero_copy_data(time3, std::as_bytes(std::span{*message3}), MessageHandle{message3}) ==
+    write_request->zero_copy_data(
+      time3, std::as_bytes(std::span{*message3}), AsyncWriteRequestType::DataType::message, MessageHandle{message3}) ==
     message3->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -460,7 +485,9 @@ TEST_CASE("Pause/Resume")
 
   std::vector<char> message4(message_buffer_size, 'D');
   REQUIRE(
-    write_request->copy_data(time4, std::as_bytes(std::span{message4.data(), message4.size()})) == message4.size());
+    write_request->copy_data(
+      time4, std::as_bytes(std::span{message4.data(), message4.size()}), AsyncWriteRequestType::DataType::message) ==
+    message4.size());
 
   constexpr jewels::time::SteadyTime time5{std::chrono::seconds(5)};
   message_result = message_buffer_pool.get_shared_buffer();
@@ -468,7 +495,8 @@ TEST_CASE("Pause/Resume")
   auto message5 = std::move(message_result).value();
   std::memset(message5->data(), 'E', message5->size());
   REQUIRE(
-    write_request->zero_copy_data(time5, std::as_bytes(std::span{*message5}), MessageHandle{message5}) ==
+    write_request->zero_copy_data(
+      time5, std::as_bytes(std::span{*message5}), AsyncWriteRequestType::DataType::message, MessageHandle{message5}) ==
     message5->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -496,7 +524,8 @@ TEST_CASE("Pause/Resume")
   auto message6 = std::move(message_result).value();
   std::memset(message6->data(), 'F', message6->size());
   REQUIRE(
-    write_request->zero_copy_data(time6, std::as_bytes(std::span{*message6}), MessageHandle{message6}) ==
+    write_request->zero_copy_data(
+      time6, std::as_bytes(std::span{*message6}), AsyncWriteRequestType::DataType::message, MessageHandle{message6}) ==
     message6->size());
 
   REQUIRE(async_writer.write_async(std::move(write_request)));
@@ -547,7 +576,7 @@ TEST_CASE("Error handling")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto memory_resource = jewels::memory::get_default_memory_resource();
   jewels::SharedBufferPool<message_buffer_size, message_alignment> message_buffer_pool{
     memory_resource, message_buffer_count};
   jewels::SharedObjectPool<AsyncWriteRequest<TestAsyncWriterPolicy>> async_write_request_pool{
@@ -571,7 +600,8 @@ TEST_CASE("Error handling")
   {
     AsyncWriter<TestAsyncWriterPolicy> async_writer{memory_resource, memory_resource, WriterEnvironment::normal};
     REQUIRE(async_writer.open_log(log_dir.string(), log_file_prefix));
-    std::filesystem::rename(log_dir, test_dir.get_path() / "XXXX");
+    const jewels::filesystem::Filesystem vfs{memory_resource};
+    REQUIRE(vfs.rename(log_dir, test_dir.get_path() / "XXXX"));
     REQUIRE(async_writer.pause_logging());
     REQUIRE(async_writer.resume_logging() == jewels::unexpected(LogError::failed_to_open_log_file));
     REQUIRE(async_writer.get_state() == WriterState::failed);
@@ -616,7 +646,8 @@ TEST_CASE("Error handling")
     auto message = std::move(message_result).value();
     std::memset(message->data(), 'A', message->size());
     REQUIRE(
-      write_request->zero_copy_data(time1, std::as_bytes(std::span{*message}), MessageHandle{message}) ==
+      write_request->zero_copy_data(
+        time1, std::as_bytes(std::span{*message}), AsyncWriteRequestType::DataType::message, MessageHandle{message}) ==
       message->size());
     REQUIRE(async_writer.write_async(write_request));
     REQUIRE(async_writer.write_async(write_request));

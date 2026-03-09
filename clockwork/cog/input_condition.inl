@@ -4,16 +4,13 @@
 #include "clockwork/cog/input_condition.hh"
 
 #include "clockwork/dial/cond_messages_present.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/std/expected.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include <algorithm>
 #include <cstdint>
-#include <iterator>
 #include <optional>
 #include <ranges>
 #include <utility>
@@ -40,7 +37,7 @@ bool InputCondition<Policy>::validate() const
 }
 
 template <typename Policy>
-jewels::expected<std::ranges::subrange<pinion::BufferIterator>, pinion::ProgressError>
+jewels::expected<std::ranges::subrange<pinion::SlotRef>, pinion::ProgressError>
 InputCondition<Policy>::available_range() const
 {
   if (!subscriber_)
@@ -54,7 +51,7 @@ InputCondition<Policy>::available_range() const
   case InputConditionType::any_message:
     return available;
   case InputConditionType::new_message:
-    if (is_sentinel_iterator(last_viewed_) || (last_viewed_ < available.begin()))
+    if (last_viewed_.is_sentinel() || (last_viewed_ < available.begin()))
     {
       return available;
     }
@@ -76,9 +73,9 @@ auto InputCondition<Policy>::make_condition() -> ConditionType
 }
 
 template <typename Policy>
-void InputCondition<Policy>::commit(pinion::BufferIterator last_viewed)
+void InputCondition<Policy>::commit(pinion::SlotRef last_viewed)
 {
-  last_viewed_ = last_viewed;
+  last_viewed_ = std::move(last_viewed);
 }
 
 } // namespace clockwork

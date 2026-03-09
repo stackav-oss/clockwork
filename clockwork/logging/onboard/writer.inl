@@ -4,23 +4,22 @@
 
 #include "clockwork/logging/onboard/writer.hh"
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/nolint_helper.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "clockwork/logging/zstd_helper.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -30,7 +29,8 @@
 #include "jewels/std/span.hh"
 #include "jewels/time/sync_time.hh"
 
-#include <fmt10/base.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <array>
@@ -42,13 +42,14 @@
 #include <cstring>
 #include <functional>
 #include <iterator>
-#include <list>
 #include <memory_resource>
 #include <mutex>
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <regex>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -89,7 +90,9 @@ Writer<Policy>::Writer(
     channel_map_(runtime_memory_resource_),
     persistent_channel_message_map_(runtime_memory_resource_),
     compressor_(runtime_memory_resource_),
-    writer_environment_(writer_environment)
+    writer_environment_(writer_environment),
+    max_pending_message_data_bytes_(
+      (write_buffer_pool_ptr_->get_capacity() - calculate_schema_reserve_buffers()) * BufferPoolType::buffer_size)
 {
 }
 
@@ -112,8 +115,18 @@ Writer<Policy>::Writer(
     channel_map_(runtime_memory_resource_),
     persistent_channel_message_map_(runtime_memory_resource_),
     compressor_(runtime_memory_resource_),
-    writer_environment_(writer_environment)
+    writer_environment_(writer_environment),
+    max_pending_message_data_bytes_(
+      (write_buffer_pool_ptr_->get_capacity() - calculate_schema_reserve_buffers()) * BufferPoolType::buffer_size)
 {
+  if (write_buffer_pool_ptr_->get_capacity() <= calculate_schema_reserve_buffers())
+  {
+    throw std::runtime_error(
+      fmt::format(
+        "Write buffer pool capacity ({}) less than number schema reserve buffers ({})",
+        write_buffer_pool_ptr_->get_capacity(),
+        calculate_schema_reserve_buffers()));
+  }
 }
 
 template <typename Policy>
@@ -144,7 +157,7 @@ template <typename Policy>
   }
   LogHeader log_header{};
   std::span<const std::byte> header_span = std::as_bytes(std::span{&log_header, 1U});
-  auto open_result = copy_log_data({&header_span, 1U}, current_steady_time);
+  auto open_result = copy_log_data({&header_span, 1U}, AsyncWriteRequestType::DataType::metadata, current_steady_time);
   if (const auto write_result = write_all_metadata(current_steady_time); !write_result && open_result)
   {
     open_result = write_result;
@@ -217,7 +230,8 @@ template <typename Policy>
   }
   LogHeader log_header{};
   std::span<const std::byte> header_span = std::as_bytes(std::span{&log_header, 1U});
-  auto resume_result = copy_log_data({&header_span, 1U}, current_steady_time);
+  auto resume_result =
+    copy_log_data({&header_span, 1U}, AsyncWriteRequestType::DataType::metadata, current_steady_time);
   if (const auto write_result = write_all_metadata(current_steady_time); !write_result && resume_result)
   {
     resume_result = write_result;
@@ -366,9 +380,16 @@ Writer<Policy>::add_channel(const LoggedChannelMetadata& channel_metadata, jewel
 }
 
 template <typename Policy>
+[[nodiscard]] size_t Writer<Policy>::get_pending_message_data_bytes() const
+{
+  return (async_request_handle_.is_valid() ? async_request_handle_->get_message_data_size() : 0U) +
+         async_writer_.get_pending_message_data_bytes();
+}
+
+template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message(
   const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-  requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
+  requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>)
 {
   if (const auto check_result = pre_write_check(message.channel_name, current_steady_time); !check_result)
   {
@@ -380,7 +401,7 @@ template <typename Policy>
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message_wait(
   const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-  requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
+  requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>)
 {
   if (const auto wait_result = pre_write_wait(); !wait_result)
   {
@@ -414,6 +435,7 @@ Writer<Policy>::save_persistent_message(const Message& message, const MessageHan
           .data = std::span{&message.data, 1U},
         },
         /*is_lite_compressed=*/false,
+        /*is_repeated_persistent=*/false,
         record_header);
       !header_result)
   {
@@ -439,7 +461,7 @@ Writer<Policy>::save_persistent_message(const Message& message, const MessageHan
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_clockwork_message(
   std::string_view channel_name,
-  const ClockworkMessageHandle& message_handle,
+  const ::clockwork::pinion::SlotRef& message_handle,
   LogTimestamp log_time,
   jewels::time::SteadyTime current_steady_time)
 {
@@ -453,7 +475,7 @@ template <typename Policy>
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_clockwork_message_wait(
   std::string_view channel_name,
-  const ClockworkMessageHandle& message_handle,
+  const ::clockwork::pinion::SlotRef& message_handle,
   LogTimestamp log_time,
   jewels::time::SteadyTime current_steady_time)
 {
@@ -466,7 +488,7 @@ template <typename Policy>
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::save_persistent_clockwork_message(
-  std::string_view channel_name, const ClockworkMessageHandle& message_handle, LogTimestamp log_time)
+  std::string_view channel_name, const ::clockwork::pinion::SlotRef& message_handle, LogTimestamp log_time)
   requires std::is_same_v<MessageHandleType, NullMessageHandle>
 {
   const auto state = get_state();
@@ -479,7 +501,7 @@ template <typename Policy>
   {
     return jewels::unexpected(LogError::is_logging);
   }
-  auto slot = message_handle.get_buffer_iterator().dereference();
+  auto slot = message_handle.slot();
   auto header_ptr = slot.header();
   const std::span<const std::byte> message = slot.message();
   auto data = compressor_.compress(message);
@@ -501,6 +523,7 @@ template <typename Policy>
           .data = data,
         },
         is_lite_compressed,
+        /*is_repeated_persistent=*/false,
         record_header);
       !header_result)
   {
@@ -548,12 +571,15 @@ template <typename Policy>
   {
     return check_result;
   }
-  return log_message_impl(message, is_lite_compressed, current_steady_time);
+  return log_message_impl(message, is_lite_compressed, /*is_repeated_persistent=*/false, current_steady_time);
 }
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message_wait(
-  const Message& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time)
+  const Message& message,
+  bool is_lite_compressed,
+  jewels::time::SteadyTime current_steady_time,
+  bool is_repeated_persistent)
 {
   return log_message_wait(
     ZeroCopyMessage{
@@ -565,18 +591,22 @@ template <typename Policy>
       .data = std::span{&message.data, 1U},
     },
     is_lite_compressed,
-    current_steady_time);
+    current_steady_time,
+    is_repeated_persistent);
 }
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message_wait(
-  const ZeroCopyMessage& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time)
+  const ZeroCopyMessage& message,
+  bool is_lite_compressed,
+  jewels::time::SteadyTime current_steady_time,
+  bool is_repeated_persistent)
 {
   if (const auto wait_result = pre_write_wait(); !wait_result)
   {
     return wait_result;
   }
-  return log_message_impl(message, is_lite_compressed, current_steady_time);
+  return log_message_impl(message, is_lite_compressed, is_repeated_persistent, current_steady_time);
 }
 
 template <typename Policy>
@@ -609,7 +639,9 @@ Writer<Policy>::save_persistent_message(const ZeroCopyMessage& message, bool is_
     return jewels::unexpected(LogError::is_logging);
   }
   MessageRecordHeader record_header{};
-  if (const auto header_result = fill_message_record_header(message, is_lite_compressed, record_header); !header_result)
+  if (const auto header_result =
+        fill_message_record_header(message, is_lite_compressed, /*is_repeated_persistent=*/false, record_header);
+      !header_result)
   {
     return jewels::unexpected(header_result.error());
   }
@@ -642,10 +674,7 @@ Writer<Policy>::pre_write_check(std::string_view channel_name, jewels::time::Ste
       return jewels::unexpected(LogError::message_dropped);
     }
   }
-  if (
-    (!std::is_same_v<MessageHandleType, ClockworkMessageHandle> &&
-     write_buffer_pool_ptr_->get_avail_count() <= calculate_schema_reserve_buffers()) ||
-    (async_writer_.get_avail_async_request_handles() <= calculate_schema_reserve_async_write_requests()))
+  if (get_pending_message_data_bytes() > max_pending_message_data_bytes_)
   {
     if (guarded_state_->drop_count.fetch_add(1U, std::memory_order_release) == 0U)
     {
@@ -678,8 +707,11 @@ template <typename Policy>
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::fill_message_record_header(
-  const ZeroCopyMessage& message, bool is_lite_compressed, MessageRecordHeader& record_header)
-  requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
+  const ZeroCopyMessage& message,
+  bool is_lite_compressed,
+  bool is_repeated_persistent,
+  MessageRecordHeader& record_header)
+  requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>)
 {
   const auto data_size = std::accumulate(
     message.data.begin(), message.data.end(), size_t{0U}, [](size_t lhs, auto& rhs) { return lhs + rhs.size(); });
@@ -706,6 +738,11 @@ template <typename Policy>
     jewels::log_cerr_error("{}", status_string);
     return jewels::unexpected(set_writer_error(LogError::missing_channel_metadata, std::move(status_string)));
   }
+  if (is_repeated_persistent && channel_map_iter->second->channel_type != ChannelType::persistent)
+  {
+    jewels::log_cerr_error("Messages on non-persistent channels cannot be repeated persistent");
+    return jewels::unexpected(LogError::not_persistent);
+  }
   const auto channel_id = channel_map_iter->second->channel_id;
   record_header.header.record_type = RecordType::message;
   record_header.header.record_size = static_cast<uint32_t>(record_size);
@@ -715,6 +752,7 @@ template <typename Policy>
   record_header.message_time_ns = message.message_time.get_nanoseconds();
   const auto is_persistent = channel_map_iter->second->channel_type == ChannelType::persistent;
   record_header.flags.is_persistent = is_persistent ? 1U : 0U;
+  record_header.flags.is_repeated = is_repeated_persistent ? 1U : 0U;
   record_header.flags.is_lite_compressed = (is_lite_compressed ? 1U : 0U);
   record_header.header_length = static_cast<uint16_t>(message.header.size());
   return {};
@@ -723,7 +761,7 @@ template <typename Policy>
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message_impl(
   const Message& message, const MessageHandleType& message_handle, jewels::time::SteadyTime current_steady_time)
-  requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
+  requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>)
 {
   MessageRecordHeader record_header{};
   if (const auto header_result = fill_message_record_header(
@@ -736,6 +774,7 @@ template <typename Policy>
           .data = std::span{&message.data, 1U},
         },
         /*is_lite_compressed=*/false,
+        /*is_repeated_persistent=*/false,
         record_header);
       !header_result)
   {
@@ -770,7 +809,7 @@ template <typename Policy>
     message.data.size() >= Policy::min_zero_copy_message_size && message_handle.supports_zero_copy()
       ? zero_copy_log_message(
           record_header, message.header, message.data, record_trailer, std::move(message_handle), current_steady_time)
-      : copy_log_data({record_spans}, current_steady_time);
+      : copy_log_data({record_spans}, AsyncWriteRequestType::DataType::message, current_steady_time);
   if (!write_result)
   {
     if (get_state() == WriterState::failed)
@@ -793,12 +832,12 @@ template <typename Policy>
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_clockwork_message_impl(
   std::string_view channel_name,
-  const ClockworkMessageHandle& message_handle,
+  const ::clockwork::pinion::SlotRef& message_handle,
   LogTimestamp log_time,
   jewels::time::SteadyTime current_steady_time)
   requires std::is_same_v<MessageHandleType, NullMessageHandle>
 {
-  auto slot = message_handle.get_buffer_iterator().dereference();
+  auto slot = message_handle.slot();
   auto header_ptr = slot.header();
   const std::span<const std::byte> message = slot.message();
   auto data = compressor_.compress(message);
@@ -820,6 +859,7 @@ template <typename Policy>
           .data = data,
         },
         is_lite_compressed,
+        /*is_repeated_persistent=*/false,
         record_header);
       !header_result)
   {
@@ -850,7 +890,7 @@ template <typename Policy>
     persistent_channel_message_map_[channel_name] = std::move(maybe_persistent_channel_message).value();
   }
   update_logging_rates(record_header.header.record_size, 1U);
-  const auto copy_result = copy_log_data({record_spans}, current_steady_time);
+  const auto copy_result = copy_log_data({record_spans}, AsyncWriteRequestType::DataType::message, current_steady_time);
   if (!copy_result && (get_state() == WriterState::failed))
   {
     return jewels::unexpected{
@@ -867,10 +907,15 @@ template <typename Policy>
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::log_message_impl(
-  const ZeroCopyMessage& message, bool is_lite_compressed, jewels::time::SteadyTime current_steady_time)
+  const ZeroCopyMessage& message,
+  bool is_lite_compressed,
+  bool is_repeated_persistent,
+  jewels::time::SteadyTime current_steady_time)
 {
   MessageRecordHeader record_header{};
-  if (const auto header_result = fill_message_record_header(message, is_lite_compressed, record_header); !header_result)
+  if (const auto header_result =
+        fill_message_record_header(message, is_lite_compressed, is_repeated_persistent, record_header);
+      !header_result)
   {
     return jewels::unexpected(header_result.error());
   }
@@ -893,7 +938,8 @@ template <typename Policy>
     persistent_channel_message_map_[message.channel_name] = std::move(maybe_persistent_channel_message).value();
   }
   update_logging_rates(record_header.header.record_size, 1U);
-  const auto write_result = copy_log_data({record_spans}, current_steady_time);
+  const auto write_result =
+    copy_log_data({record_spans}, AsyncWriteRequestType::DataType::message, current_steady_time);
   if (!write_result)
   {
     if (get_state() == WriterState::failed)
@@ -902,10 +948,13 @@ template <typename Policy>
         guarded_state_->maybe_writer_error.load(std::memory_order_relaxed).value_or(LogError::failed)};
     }
   }
-  if (const auto split_result = split_log_if_needed(message.message_time, message.log_time, current_steady_time);
-      !split_result && write_result)
+  if (!is_repeated_persistent)
   {
-    return split_result;
+    if (const auto split_result = split_log_if_needed(message.message_time, message.log_time, current_steady_time);
+        !split_result && write_result)
+    {
+      return split_result;
+    }
   }
   return write_result;
 }
@@ -1029,19 +1078,20 @@ template <typename Policy>
 [[nodiscard]] size_t Writer<Policy>::calculate_write_buffer_pool_size(
   size_t max_write_mib_per_sec, std::chrono::nanoseconds max_backlog) noexcept
 {
-  if constexpr (std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
-  {
-    return calculate_schema_reserve_buffers();
-  }
-  else
-  {
-    const auto max_buffers_per_sec =
-      max_write_mib_per_sec * jewels::math::constants::bytes_per_mib<size_t> / buffer_size;
-    constexpr std::chrono::nanoseconds one_second = std::chrono::seconds(1);
-    const auto max_backlog_buffers =
-      max_buffers_per_sec * static_cast<size_t>(max_backlog.count()) / static_cast<size_t>(one_second.count());
-    return max_backlog_buffers + calculate_schema_reserve_buffers();
-  }
+  const auto max_buffers_per_sec = max_write_mib_per_sec * jewels::math::constants::bytes_per_mib<size_t> / buffer_size;
+  constexpr std::chrono::nanoseconds one_second = std::chrono::seconds(1);
+  const auto max_backlog_buffers =
+    max_buffers_per_sec * static_cast<size_t>(max_backlog.count()) / static_cast<size_t>(one_second.count());
+  return max_backlog_buffers + calculate_schema_reserve_buffers();
+}
+
+template <typename Policy>
+[[nodiscard]] constexpr size_t Writer<Policy>::calculate_max_pending_message_data_bytes(
+  size_t max_write_mib_per_sec, std::chrono::nanoseconds max_backlog) noexcept
+{
+  const auto max_bytes_per_sec = max_write_mib_per_sec * jewels::math::constants::bytes_per_mib<size_t>;
+  constexpr std::chrono::nanoseconds one_second = std::chrono::seconds(1);
+  return max_bytes_per_sec * static_cast<size_t>(max_backlog.count()) / static_cast<size_t>(one_second.count());
 }
 
 template <typename Policy>
@@ -1062,7 +1112,7 @@ template <typename Policy>
   const RecordTrailer& record_trailer,
   const MessageHandleType& message_handle,
   jewels::time::SteadyTime current_steady_time)
-  requires(!std::is_same_v<MessageHandleType, ClockworkMessageHandle>)
+  requires(!std::is_same_v<MessageHandleType, ::clockwork::pinion::SlotRef>)
 {
   const auto data_start_offset = static_cast<size_t>(AlignerType::ptr_aligned_remainder(data.data()));
   const auto data_end_offset = AlignerType::aligned_offset(data.size() - data_start_offset);
@@ -1096,12 +1146,15 @@ template <typename Policy>
     }
   }
   std::array pre_aligned_spans = {std::as_bytes(std::span{&record_header, 1U}), header, data.first(data_start_offset)};
-  if (const auto copy_result = copy_log_data({pre_aligned_spans}, current_steady_time); !copy_result)
+  if (const auto copy_result =
+        copy_log_data({pre_aligned_spans}, AsyncWriteRequestType::DataType::message, current_steady_time);
+      !copy_result)
   {
     return copy_result;
   }
   if (const auto copy_result = zero_copy_log_data(
         data.subspan(data_start_offset, data.size() - data_start_offset - data_end_offset),
+        AsyncWriteRequestType::DataType::message,
         message_handle,
         current_steady_time);
       !copy_result)
@@ -1109,7 +1162,7 @@ template <typename Policy>
     return copy_result;
   }
   std::array post_aligned_spans = {data.last(data_end_offset), std::as_bytes(std::span{&record_trailer, 1U})};
-  return copy_log_data({post_aligned_spans}, current_steady_time);
+  return copy_log_data({post_aligned_spans}, AsyncWriteRequestType::DataType::message, current_steady_time);
 }
 
 template <typename Policy>
@@ -1123,7 +1176,9 @@ Writer<Policy>::write_latest_persistent_channel_messages(jewels::time::SteadyTim
       std::as_bytes(std::span{&message.record_header, 1U}),
       std::as_bytes(std::span{message.payload}),
       std::as_bytes(std::span{&message.record_trailer, 1U})};
-    if (const auto copy_result = copy_log_data({data_spans}, current_steady_time); !copy_result)
+    if (const auto copy_result =
+          copy_log_data({data_spans}, AsyncWriteRequestType::DataType::repeated_persistent, current_steady_time);
+        !copy_result)
     {
       if (write_result)
       {
@@ -1213,7 +1268,7 @@ template <typename Policy>
     std::as_bytes(std::span{&trailer, 1U})};
   trailer.xxh3_checksum = compute_xxh3_checksum(std::span{data_spans}.first(data_spans.size() - 1U));
   update_logging_rates(record_size, 0U);
-  return copy_log_data({data_spans}, current_steady_time);
+  return copy_log_data({data_spans}, AsyncWriteRequestType::DataType::metadata, current_steady_time);
 }
 
 template <typename Policy>
@@ -1270,7 +1325,7 @@ template <typename Policy>
     std::as_bytes(std::span{&trailer, 1U})};
   trailer.xxh3_checksum = compute_xxh3_checksum(std::span{data_spans}.first(data_spans.size() - 1U));
   update_logging_rates(record_size, 0U);
-  return copy_log_data({data_spans}, current_steady_time);
+  return copy_log_data({data_spans}, AsyncWriteRequestType::DataType::metadata, current_steady_time);
 }
 
 template <typename Policy>
@@ -1322,16 +1377,18 @@ template <typename Policy>
   maybe_min_message_timestamp_ = std::nullopt;
   maybe_max_message_timestamp_ = std::nullopt;
   update_logging_rates(record_size, 0U);
-  return copy_log_data({data_spans}, current_steady_time);
+  return copy_log_data({data_spans}, AsyncWriteRequestType::DataType::metadata, current_steady_time);
 }
 
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::copy_log_data(
-  std::span<std::span<const std::byte>> data_spans, jewels::time::SteadyTime current_steady_time)
+  std::span<std::span<const std::byte>> data_spans,
+  AsyncWriteRequestType::DataType data_type,
+  jewels::time::SteadyTime current_steady_time)
 {
   for (const auto data : data_spans)
   {
-    if (const auto copy_result = copy_log_data(data, current_steady_time); !copy_result)
+    if (const auto copy_result = copy_log_data(data, data_type, current_steady_time); !copy_result)
     {
       return copy_result;
     }
@@ -1340,8 +1397,10 @@ template <typename Policy>
 }
 
 template <typename Policy>
-[[nodiscard]] LogExpected<void>
-Writer<Policy>::copy_log_data(std::span<const std::byte> data, jewels::time::SteadyTime current_steady_time)
+[[nodiscard]] LogExpected<void> Writer<Policy>::copy_log_data(
+  std::span<const std::byte> data,
+  AsyncWriteRequestType::DataType data_type,
+  jewels::time::SteadyTime current_steady_time)
 {
   if (!async_request_handle_.is_valid())
   {
@@ -1362,7 +1421,7 @@ Writer<Policy>::copy_log_data(std::span<const std::byte> data, jewels::time::Ste
   while (bytes_remaining != 0U)
   {
     const auto subspan = data.last(bytes_remaining);
-    const auto bytes_copied = async_request_handle_->copy_data(current_steady_time, subspan);
+    const auto bytes_copied = async_request_handle_->copy_data(current_steady_time, subspan, data_type);
     if (!guarded_state_->maybe_oldest_pending_data_timestamp.load(std::memory_order_relaxed).has_value())
     {
       guarded_state_->maybe_oldest_pending_data_timestamp.store(current_steady_time, std::memory_order_release);
@@ -1382,6 +1441,7 @@ Writer<Policy>::copy_log_data(std::span<const std::byte> data, jewels::time::Ste
 template <typename Policy>
 [[nodiscard]] LogExpected<void> Writer<Policy>::zero_copy_log_data(
   std::span<const std::byte> data,
+  AsyncWriteRequestType::DataType data_type,
   const MessageHandleType& message_handle,
   jewels::time::SteadyTime current_steady_time)
 {
@@ -1402,7 +1462,8 @@ template <typename Policy>
   }
   while (!data.empty())
   {
-    const auto bytes_zero_copied = async_request_handle_->zero_copy_data(current_steady_time, data, message_handle);
+    const auto bytes_zero_copied =
+      async_request_handle_->zero_copy_data(current_steady_time, data, data_type, message_handle);
     if (!guarded_state_->maybe_oldest_pending_data_timestamp.load(std::memory_order_relaxed).has_value())
     {
       guarded_state_->maybe_oldest_pending_data_timestamp.store(current_steady_time, std::memory_order_release);

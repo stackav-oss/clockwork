@@ -6,13 +6,14 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
@@ -39,13 +40,28 @@ public:
 
   WISE_ENUM_CLASS_MEMBER(
     (Error, uint8_t),
-    invalid_class_uuid,
-    invalid_instance_uuid,
-    buffer_error,
-    init_failure,
-    connect_publisher_failure,
-    connect_subscriber_failure,
-    empty_endpoint_ids)
+    (invalid_class_uuid, 1),
+    (invalid_instance_uuid, 2),
+    (buffer_error, 3),
+    (init_failure, 4),
+    (connect_publisher_failure, 5),
+    (connect_subscriber_failure, 6),
+    (empty_endpoint_ids, 7))
+
+  /// This is designed to have the same underlying values as Error but with an extra success value.
+  /// You can safely static_cast between the two types, if it's an error value rather than success.
+  WISE_ENUM_CLASS_MEMBER(
+    (OutcomeEnum, uint8_t),
+    (success, 0),
+    (invalid_class_uuid, 1),
+    (invalid_instance_uuid, 2),
+    (buffer_error, 3),
+    (init_failure, 4),
+    (connect_publisher_failure, 5),
+    (connect_subscriber_failure, 6),
+    (empty_endpoint_ids, 7))
+
+  using Outcome = jewels::Outcome<OutcomeEnum, OutcomeEnum::success>;
 
   AbstractCasing() = default;
   virtual ~AbstractCasing() = default;
@@ -63,7 +79,7 @@ public:
   //   Should match the memory_resource_id from the cog instance description.
   // @return A pointer to AbstractCog (to register with runner), or error.
   virtual jewels::expected<std::shared_ptr<AbstractCog>, Error> try_instantiate_cog(
-    const common::CogInstanceDescriptionTap& description,
+    const Tappy<common::CogInstanceDescription<>>& description,
     std::shared_ptr<AbstractCogQueue> runner_queue,
     jewels::memory::MemoryResource execution_resource) = 0;
 
@@ -71,6 +87,14 @@ public:
   // Allocates an instance of the given ClassId and assigns it the given InstanceId
   virtual jewels::expected<void, Error> try_instantiate_state(
     jewels::Uuid<common::StateInstanceId>, jewels::Uuid<RepresentationTag>, pinion::PublisherHandle) = 0;
+
+  // Instantiate pure serialized state with initial data.
+  // Allocates an instance of the given ClassId and assigns it the given InstanceId, then loads data into it
+  virtual Outcome try_instantiate_state(
+    jewels::Uuid<common::StateInstanceId>,
+    jewels::Uuid<RepresentationTag>,
+    pinion::PublisherHandle,
+    std::span<const std::byte> data) = 0;
 
   // Instantiate pure C++ state.
   // Allocates an instance of the given ClassId and assigns it the given InstanceId
@@ -92,6 +116,16 @@ public:
     jewels::Uuid<RepresentationTag>,
     std::span<const std::byte> buffer,
     jewels::memory::MemoryResource) = 0;
+
+  // Deserialize data from protobuf format to tachyon format.
+  // @param repr_id The representation ID identifying the schema type
+  // @param input_data The input data in protobuf text format
+  // @param output_data The output buffer to store the deserialized tachyon data
+  // @return Outcome indicating success or specific failure reason
+  virtual Outcome try_deserialize_data(
+    jewels::Uuid<RepresentationTag> repr_id,
+    std::span<const std::byte> input_data,
+    std::span<std::byte> output_data) = 0;
 
   // Instantiate a local publisher.
   virtual jewels::expected<void, Error>
@@ -144,6 +178,15 @@ public:
   // Connect a MemoryResource instance to a Cog instance's memres endpoint
   virtual jewels::expected<void, Error>
     try_connect_memory_resource(jewels::Uuid<common::EndpointInstanceId>, jewels::memory::MemoryResource) = 0;
+
+  WISE_ENUM_CLASS_MEMBER((SnapshotConfigResult, uint8_t), success, endpoint_not_found, set_handle_failed)
+  using SnapshotConfigOutcome = jewels::Outcome<SnapshotConfigResult, SnapshotConfigResult::success>;
+
+  // Connect a snapshot configuration to a state or config endpoint.
+  // The endpoint must have been previously instantiated via try_connect_state or try_connect_config.
+  // @param snapshot_config The snapshot configuration from ProcessDescription
+  // @return Outcome indicating success or specific failure reason
+  virtual SnapshotConfigOutcome try_configure_snapshot(const Tappy<common::SnapshotConfig>& snapshot_config) = 0;
 
   // Instantiate an IO object.
   virtual jewels::expected<std::shared_ptr<EPollable>, Error> try_instantiate_io_connection(

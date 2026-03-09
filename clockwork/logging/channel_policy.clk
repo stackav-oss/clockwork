@@ -1,4 +1,6 @@
-use clockwork::logging::channel_type::ChannelType;
+#![generate()]
+
+use clockwork::logging::channel_type::{ChannelType};
 
 // The type of logging requested (event vs telemetry)
 enum LogType

@@ -5,7 +5,6 @@
 
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
-#include "clockwork/logging/onboard/clockwork_message_handle.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/shared_pool/shared_buffer_pool.hh"
 #include "jewels/shared_pool/shared_object_pool.hh"

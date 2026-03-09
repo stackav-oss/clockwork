@@ -16,7 +16,7 @@
 #include "clockwork/cog/detail.hh"
 #include "clockwork/cog/simple_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/reporter.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
@@ -84,6 +84,9 @@ struct FakeCogPolicy
   using DiagnosticsType = CogDiagnostics<>;
   using InfraDiagnosticsType =
     CogInfraDiagnostics<typename FakeCogInfraDiagnostics<n_input, n_output>::CogInfraDiagnosticsPolicy>;
+  struct SignalApiType
+  {
+  };
 
   [[nodiscard]] static bool is_ready(
     CogStatistics& /*statistics*/,
@@ -91,6 +94,13 @@ struct FakeCogPolicy
     typename ConditionsType::ConditionsTuple& /*conditions*/)
   {
     return true;
+  }
+
+  template <typename PublishablesTuple>
+  [[nodiscard]] static auto publish_report_groups(SignalApiType& /*signals*/, PublishablesTuple& /*publishables*/)
+    -> jewels::BinaryOutcome
+  {
+    return jewels::success;
   }
 };
 

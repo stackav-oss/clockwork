@@ -11,21 +11,33 @@ load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
 load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 load("//tools/rules:python.bzl", "py_cc_binding", "py_library")
 
-package(default_testonly = True)
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
 
 exports_files([
+    "clk_cpu_domains.clk",
+    "clk_hellocog.clk",
+    "clk_hellomod.clk",
+    "clk_hellosys.clk",
+    "clk_hellomsg.clk",
+    "clk_hello_udp.clk",
     "hellocog.clk",
     "goodbyecog.clk",
-    "hellomod.clk",
     "hellomsg.clk",
     "tapmsg.clk",
     "taptags.clk",
     "testpolicy.clk",
     "protomsg.clk",
+    "clk_protomsg.clk",
     "nanobind_bindings.clk",
     "nanobind_bindings_dep.clk",
     "nanobind_type_casters.clk",
     "constants.clk",
+    "clk_constants.clk",
+    "test_snapshot_policy.clk",
+    "test_signals.clk",
 ])
 
 merge_simplelaunch_config(
@@ -43,6 +55,7 @@ merge_simplelaunch_config(
         "hellomod.helloworld.HostA_channel_spy_config.tachyon",
         "hellomod.helloworld.HostA_event_logger_config.tachyon",
         "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
+        "hellomod.helloworld.HostA_signal_metadata_config.tachyon",
         "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
         "hellomod.helloworld.diagnostics_database_config.tachyon",
         ":helloworld_exe",
@@ -105,10 +118,13 @@ cc_library(
         ":dependency_tester_cpp",
         "//clockwork:repr_iface",
         "//clockwork:tags",
+        "//jewels/callsig:outcome",
         "//jewels/container:compare",
         "//jewels/container/tap:optional",
+        "//jewels/container/tap:soa",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
+        "//jewels/memory:aligned_storage",
         "//jewels/meta:concepts",
         "//jewels/time:sync_time",
         "//jewels/uuid",
@@ -125,6 +141,245 @@ proto_py_library(
         ":proto_tester_onboard_py_library",
         "@protobuf//:protobuf_python",
     ],
+)
+
+merge_simplelaunch_config(
+    name = "clk_a.textproto",
+    srcs = [
+        "clk_hellosys.clk_hellosys.ClkHostA_simplelaunch_config.textproto",
+        ":clk_host_a_simplelaunch_config.textproto",
+        ":clk_host_b_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clk_hellosys.clk_hellosys.ClkHostA.clockwork.clockwork.dsl.tests.support.clk_hellomod.MultiPublisherChannel_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_channel_allocations.csv",
+        "clk_hellosys.clk_hellosys.ClkHostA_channel_spy_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_event_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_metrics_channel_metadata_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_signal_metadata_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_telemetry_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.diagnostics_database_config.tachyon",
+        "clockwork.clockwork.dsl.tests.support.clk_hellosys.clk_hellosys.proc.tachyon",
+        ":clk_hellomod_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "clk_constants_clk",
+    srcs = ["clk_constants.clk"],
+    outs = [
+        "clk_constants_clk_cc.cc",
+        "clk_constants_clk_cc.hh",
+        "clk_constants_clk_cc.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "clk_cpu_domains_clk",
+    srcs = ["clk_cpu_domains.clk"],
+    generate = ["none"],
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "clk_hello_udp_clk",
+    srcs = ["clk_hello_udp.clk"],
+    outs = [
+        "clk_hello_udp_clk_cc.cc",
+        "clk_hello_udp_clk_cc.hh",
+        "clk_hello_udp_clk_cc.inl",
+    ],
+    cpp_deps = ["//clockwork/io:var_packet_clk_cc"],
+    generate = ["cpp"],
+    visibility = ["//visibility:public"],
+    deps = ["//clockwork/io:var_packet_clk"],
+)
+
+clk(
+    name = "clk_hellobox_clk",
+    srcs = ["clk_hellobox.clk"],
+    outs = [
+        "clk_hellobox_clk_cc.cc",
+        "clk_hellobox_clk_cc.hh",
+        "clk_hellobox_clk_cc.inl",
+    ],
+    generate = ["cpp"],
+    deps = [":clk_hellomod_clk"],
+)
+
+clk(
+    name = "clk_hellocog_clk",
+    srcs = ["clk_hellocog.clk"],
+    outs = [
+        "clk_hellocog_clk_cc.cc",
+        "clk_hellocog_clk_cc.hh",
+        "clk_hellocog_clk_cc.inl",
+        "clk_hellocog_clk_cc_dial.cc",
+        "clk_hellocog_clk_cc_dial.hh",
+        "clk_hellocog_clk_cc_dial.inl",
+    ],
+    cpp_deps = [
+        ":clk_hellomsg_clk_cc",
+        ":cxx_state",
+        "//clockwork/diagnostics:report_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":clk_hellomsg_clk",
+        "//clockwork/diagnostics:report_clk",
+    ],
+)
+
+cc_library(
+    name = "clk_hellocog_clk_cc_impl",
+    srcs = ["clk_hellocog_clk_cc_impl.cc"],
+    visibility = ["//visibility:public"],
+    deps = [":clk_hellocog_clk_cc_dial"],
+)
+
+clk(
+    name = "clk_hellomod_clk",
+    srcs = ["clk_hellomod.clk"],
+    outs = [
+        "clk_hellomod_clk_cc.cc",
+        "clk_hellomod_clk_cc.hh",
+        "clk_hellomod_clk_cc.inl",
+        "clk_hellomod_clk_exe.cc",
+        "clk_hellomod_clk_exe.hh",
+        "clk_hellomod_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":clk_hellocog_clk_cc",
+        ":clk_hellomsg_clk_cc",
+        ":clk_hellomsg_clk_proto_conv",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp_exe",
+        "cpp",
+    ],
+    proto_deps = [":clk_hellomsg_clk_proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":clk_hellocog_clk",
+        ":clk_hellomsg_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//clockwork/io:var_packet_clk",
+    ],
+)
+
+clk(
+    name = "clk_hellomsg_clk",
+    srcs = ["clk_hellomsg.clk"],
+    outs = [
+        "clk_hellomsg_clk_cc.cc",
+        "clk_hellomsg_clk_cc.hh",
+        "clk_hellomsg_clk_cc.inl",
+        "clk_hellomsg_clk_nb.cc",
+        "clk_hellomsg_clk_nb.hh",
+        "clk_hellomsg_clk_nb.inl",
+        "clk_hellomsg_clk_proto.proto",
+        "clk_hellomsg_clk_proto_conv.cc",
+        "clk_hellomsg_clk_proto_conv.hh",
+        "clk_hellomsg_clk_proto_conv.inl",
+    ],
+    cpp_deps = [
+        ":cxx_state",
+        ":extern_type",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+        "proto",
+        "proto_conv",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "clk_hellosys_clk",
+    srcs = ["clk_hellosys.clk"],
+    outs = [
+        "clk_hellosys.clk_hellosys.ClkHostA.clockwork.clockwork.dsl.tests.support.clk_hellomod.MultiPublisherChannel_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_channel_allocations.csv",
+        "clk_hellosys.clk_hellosys.ClkHostA_channel_spy_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_event_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_metrics_channel_metadata_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_signal_metadata_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_simplelaunch_config.textproto",
+        "clk_hellosys.clk_hellosys.ClkHostA_telemetry_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.diagnostics_database_config.tachyon",
+        "clk_hellosys.clk_hellosys.logged_channel_metadata.pbbin",
+        "clockwork.clockwork.dsl.tests.support.clk_hellosys.clk_hellosys.proc.tachyon",
+    ],
+    deps = [":clk_hellomod_clk"],
+)
+
+filegroup(
+    name = "clk_host_a_simplelaunch_config.textproto",
+    srcs = ["resources/clk_host_a_simplelaunch_config.textproto"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "clk_host_b_simplelaunch_config.textproto",
+    srcs = ["resources/clk_host_b_simplelaunch_config.textproto"],
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "clk_protomsg_clk",
+    srcs = ["clk_protomsg.clk"],
+    outs = [
+        "clk_protomsg_clk_cc.cc",
+        "clk_protomsg_clk_cc.hh",
+        "clk_protomsg_clk_cc.inl",
+        "clk_protomsg_clk_proto.proto",
+        "clk_protomsg_clk_proto_conv.cc",
+        "clk_protomsg_clk_proto_conv.hh",
+        "clk_protomsg_clk_proto_conv.inl",
+    ],
+    generate = [
+        "cpp",
+        "proto",
+        "go_proto",
+        "proto_conv",
+    ],
+    go_import_path = "github.com/stack-av-llc/av/clockwork/testing/proto",
+)
+
+clk(
+    name = "clk_tapmsg_clk",
+    srcs = ["clk_tapmsg.clk"],
+    outs = [
+        "clk_tapmsg_clk_cc.cc",
+        "clk_tapmsg_clk_cc.hh",
+        "clk_tapmsg_clk_cc.inl",
+        "clk_tapmsg_clk_nb.cc",
+        "clk_tapmsg_clk_nb.hh",
+        "clk_tapmsg_clk_nb.inl",
+        "clk_tapmsg_clk_py.py",
+    ],
+    cpp_deps = [
+        ":extern_type",
+        ":taptags_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "py",
+        "nanobind",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":taptags_clk"],
 )
 
 clk(
@@ -284,6 +539,7 @@ cc_library(
         ":goodbyecog_impl",
         "//clockwork/cog:include_common",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -406,8 +662,8 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//clockwork:repr_iface",
-        "//clockwork/common:process_description",
-        "//clockwork/io:var_packet",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/pinion:bidirectional_udp",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
@@ -444,7 +700,7 @@ cc_library(
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
-        "//clockwork/common:process_description",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
         "//jewels/memory:memory_resource",
@@ -485,14 +741,14 @@ cc_library(
         "//clockwork/cog:include_common",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/diagnostics:reporter",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/utility:enum_flags",
         "@wise_enum",
     ],
+    alwayslink = True,
 )
 
 clk(
@@ -550,8 +806,8 @@ cc_library(
     data = [":hellomod_clk"],
     deps = [
         "//clockwork:repr_iface",
-        "//clockwork/common:process_description",
-        "//clockwork/io:var_packet",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
         "//jewels/memory:memory_resource",
@@ -572,6 +828,7 @@ clk(
         "hellomod.helloworld.HostA_channel_spy_config.tachyon",
         "hellomod.helloworld.HostA_event_logger_config.tachyon",
         "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
+        "hellomod.helloworld.HostA_signal_metadata_config.tachyon",
         "hellomod.helloworld.HostA_simplelaunch_config.textproto",
         "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
         "hellomod.helloworld.diagnostics_database_config.tachyon",
@@ -621,34 +878,13 @@ cc_binary(
         ":hellomod",
         "//clockwork:repr_iface",
         "//clockwork:tags",
-        "//clockwork/io:var_packet",
+        "//clockwork/io:var_packet_clk_cc",
         "//clockwork/scaffolding:abstract_casing",
         "//clockwork/scaffolding:casing",
         "//clockwork/scaffolding:online_main",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/uuid",
-    ],
-)
-
-merge_simplelaunch_config(
-    name = "host_a.textproto",
-    srcs = [
-        "hellomod.helloworld.HostA_simplelaunch_config.textproto",
-        ":host_a_simplelaunch_config.textproto",
-        ":host_b_simplelaunch_config.textproto",
-        "//clockwork/launch:clockwork_prelaunch.textproto",
-    ],
-    data = [
-        "clockwork.clockwork.dsl.tests.support.hellomod.helloworld.proc.tachyon",
-        "hellomod.helloworld.HostA.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
-        "hellomod.helloworld.HostA_channel_allocations.csv",
-        "hellomod.helloworld.HostA_channel_spy_config.tachyon",
-        "hellomod.helloworld.HostA_event_logger_config.tachyon",
-        "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
-        "hellomod.helloworld.diagnostics_database_config.tachyon",
-        ":helloworld_exe",
-        "//clockwork/pinion:tcp_bridge_main",
     ],
 )
 
@@ -662,27 +898,6 @@ filegroup(
     name = "host_b_simplelaunch_config.textproto",
     srcs = ["resources/host_b_simplelaunch_config.textproto"],
     visibility = ["//visibility:public"],
-)
-
-merge_simplelaunch_config(
-    name = "hosta.textproto",
-    srcs = [
-        "hellomod.helloworld.HostA_simplelaunch_config.textproto",
-        ":host_a_simplelaunch_config.textproto",
-        ":host_b_simplelaunch_config.textproto",
-        "//clockwork/launch:clockwork_prelaunch.textproto",
-    ],
-    data = [
-        "clockwork.clockwork.dsl.tests.support.hellomod.helloworld.proc.tachyon",
-        "hellomod.helloworld.HostA.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
-        "hellomod.helloworld.HostA_channel_allocations.csv",
-        "hellomod.helloworld.HostA_channel_spy_config.tachyon",
-        "hellomod.helloworld.HostA_event_logger_config.tachyon",
-        "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
-        "hellomod.helloworld.diagnostics_database_config.tachyon",
-        ":helloworld_exe",
-        "//clockwork/pinion:tcp_bridge_main",
-    ],
 )
 
 cc_library(
@@ -704,7 +919,7 @@ cc_library(
         "//jewels/container/tap:var_array",
         "//jewels/meta:concepts",
         "//jewels/std:span",
-        "//jewels/units/clk:au",
+        "//jewels/units/clk:au_clk_cc",
         "//jewels/uuid",
     ],
 )
@@ -884,7 +1099,7 @@ cc_library(
         "//jewels/container/tap:var_string",
         "//jewels/meta:concepts",
         "//jewels/time:sync_time",
-        "//jewels/units/clk:au",
+        "//jewels/units/clk:au_clk_cc",
         "//jewels/uuid",
         "@wise_enum",
     ],
@@ -1104,7 +1319,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":extern_type",
-        ":taptags",
+        ":taptags_clk_cc",
         "//clockwork:repr_iface",
         "//clockwork:tags",
         "//jewels/container:compare",
@@ -1146,25 +1361,15 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
-cc_library(
-    name = "taptags",
-    srcs = [
-        "taptags.cc",
-        "taptags.inl",
-    ],
-    hdrs = ["taptags.hh"],
-    data = [":taptags_clk"],
-    visibility = ["//visibility:public"],
-)
-
 clk(
     name = "taptags_clk",
     srcs = ["taptags.clk"],
     outs = [
-        "taptags.cc",
-        "taptags.hh",
-        "taptags.inl",
+        "taptags_clk_cc.cc",
+        "taptags_clk_cc.hh",
+        "taptags_clk_cc.inl",
     ],
+    generate = ["cpp"],
     visibility = ["//visibility:public"],
 )
 
@@ -1175,6 +1380,56 @@ clk(
     deps = [
         ":hellomod_clk",
         "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "test_signals_clk",
+    srcs = ["test_signals.clk"],
+)
+
+clk(
+    name = "test_snapshot_policy_clk",
+    srcs = ["test_snapshot_policy.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.tests.support.test_snapshot_policy.test_snapshot_system.proc.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_channel_allocations.csv",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_channel_spy_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_event_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_signal_metadata_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_simplelaunch_config.textproto",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_telemetry_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.diagnostics_database_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.logged_channel_metadata.pbbin",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":hellomod_clk",
+        ":hellomsg_clk",
+        "//std:snapshot_clk",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "testcpu.textproto",
+    srcs = [
+        "test_snapshot_policy.test_snapshot_system.TestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.tests.support.test_snapshot_policy.test_snapshot_system.proc.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_channel_allocations.csv",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_channel_spy_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_event_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_signal_metadata_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_telemetry_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.diagnostics_database_config.tachyon",
+        ":helloworld_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
     ],
 )
 

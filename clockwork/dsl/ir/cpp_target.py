@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from typing import TYPE_CHECKING, cast
 
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.bazel.targets import Label
+from clockwork.dsl.cog.cpp_test_cog import CppTestCog as CppTestCogGenerator
 from clockwork.dsl.cog.cppcog import to_dial_name
 from clockwork.dsl.cog.cppdial import Dial as DialGenerator
 from clockwork.dsl.cpp import literal, typereg, types
@@ -23,17 +24,21 @@ from clockwork.dsl.cpp.context import (
     write_to_file,
 )
 from clockwork.dsl.ir import (
+    audio,
     clkbuiltins,
     clkenum,
     cog,
     converter,
     cpp_extern,
     expr,
+    extern_type,
     node,
     primitive,
     schema,
+    statement,
     strongtypes,
     typesys,
+    udp,
 )
 from clockwork.dsl.ir.cog import Cog
 from clockwork.dsl.ir.cpp_executable import CppAudioSource, CppCog, CppPythonCog, CppUdpSocket
@@ -42,7 +47,10 @@ from clockwork.dsl.ir.interface import InterfaceAlias, InterfaceInstantiation
 from clockwork.dsl.ir.module_id import JEWELS_REPO
 from clockwork.dsl.ir.nanobind_type_casters import NanobindTypeCaster, render_nanobind_casters
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
-from clockwork.dsl.ir.representation import ReprInstantiation
+from clockwork.dsl.ir.representation import (
+    ReprInstantiation,
+    ResolvedReprInstantiation,
+)
 from clockwork.dsl.ir.statement import ImmutableBinding
 from clockwork.dsl.serialization.tap import to_cpp_struct
 
@@ -56,7 +64,9 @@ if TYPE_CHECKING:
 def _render_cpp_constant(binding: ImmutableBinding) -> types.CppNamedValue:
     assert isinstance(binding.type_info, typesys.InferenceVar)
     resolution = binding.type_info.resolution()
-    assert isinstance(resolution, typesys.TypeVal)
+    if not isinstance(resolution, typesys.TypeVal):
+        msg = binding.append_error_line("Variable type has not been constrained")
+        raise TypeError(msg)
 
     cpp_type = (
         types.STRING_VIEW
@@ -95,6 +105,46 @@ def _render_cpp_constants(bindings: list[ImmutableBinding], namespace: str) -> C
     return cpp_mod
 
 
+def _render_instantiate_aliases(
+    instantiations: list[schema.InstantiateStmt], namespace: str, compiler_context: CompilerContext
+) -> CppModuleChunks:
+    """Render aliases for a collection of instantiation statements."""
+    cpp_mod = CppModuleChunks()
+    for instantiation_ir in instantiations:
+        instantiation_alias = types.CppTypeAliasDef(
+            name=instantiation_ir.name,
+            alias_for=typereg.get_cpp_type(compiler_context, instantiation_ir.typespec),
+            doc=None,
+        )
+        cpp_mod.header_chunk.append(instantiation_alias.render(namespace))
+
+    return cpp_mod
+
+
+@dataclass(slots=True)
+class CppGeneratedEntities:
+    """Structure for entities passed to CppTarget.from_generate_cpp."""
+
+    cogs: list[cog.Cog] = field(default_factory=list)
+    schemas: list[schema.Schema] = field(default_factory=list)
+    enums: list[clkenum.ClkEnum] = field(default_factory=list)
+    constants: list[statement.ImmutableBinding] = field(default_factory=list)
+    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+    tags: list[strongtypes.Tag] = field(default_factory=list)
+    extern_types: list[extern_type.ExternType] = field(default_factory=list)
+    strong_types: list[strongtypes.StrongType] = field(default_factory=list)
+    udp_sockets: list[udp.UdpSocket] = field(default_factory=list)
+    audio_sources: list[audio.AudioSource] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ProtoConvGeneratedEntities:
+    """Structure for entities passed to CppTarget.from_generate_proto_conv."""
+
+    schemas: list[schema.Schema] = field(default_factory=list)
+    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+
+
 @dataclass
 class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget]):
     """IR for CppTargets."""
@@ -103,10 +153,12 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
     schema_tags: list[SchemaTag]
     tags: list[TagTarget]
     enums: list[EnumTarget]
-    representations: list[ReprInstantiation]
+    representations: list[ReprInstantiation | ResolvedReprInstantiation]
     interfaces: list[InterfaceInstantiation]
+    representations_and_interfaces: list[tuple[ResolvedReprInstantiation, InterfaceInstantiation]]
     cogs: list[CppCog]
     dials: list[CppDial]
+    cpp_test_cogs: list[CppTestCog]
     python_cogs: list[CppPythonCog]
     externs: list[cpp_extern.CppExtern]
     converters: list[converter.Converter]
@@ -114,6 +166,7 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
     audio_sources: list[CppAudioSource]
     nanobind_casters: list[NanobindTypeCaster]
     constants: dict[str, node.Deferrable[ImmutableBinding]]
+    instantiations: list[schema.InstantiateStmt]
 
     # We must disable C901, PLR0912 and PLR0915 here (function complexity, branches, too many statements) because
     # we inherently have many branches, one for each type of module-level entity.
@@ -122,7 +175,9 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
     # branches, but it would be awkward and would not decouple the code in a
     # meaningful way.
     @classmethod
-    def from_cst(cls: type[CppTarget], cst_node: cst.CppTarget, module: node.Module) -> CppTarget:  # noqa: C901, PLR0912, PLR0915 (see above)
+    def from_cst(  # noqa: C901, PLR0912, PLR0915 (see above)
+        cls: type[CppTarget], cst_node: cst.CppTarget, module: node.Module
+    ) -> CppTarget:
         """Create an IR CppTarget from a CST node."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
@@ -137,6 +192,7 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         interfaces = []
         cogs = []
         dials = []
+        cpp_test_cogs = []
         python_cogs = []
         externs = []
         converters = []
@@ -144,46 +200,48 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         audio_sources = []
         nanobind_casters = []
         constants: dict[str, node.Deferrable[ImmutableBinding]] = {}
-        for statement in cst_node.children_cpp_target_statement():
-            if representation_cst := statement.maybe_cpp_representation():
+        for target_stmt in cst_node.children_cpp_target_statement():
+            if representation_cst := target_stmt.maybe_cpp_representation():
                 representations.append(representation := ReprInstantiation.from_cst(representation_cst, module))
                 if representation.name:
                     module.inner_scope.define(representation.name, representation, module.terminals)
-            elif schema_tag_cst := statement.maybe_schema_tag():
+            elif schema_tag_cst := target_stmt.maybe_schema_tag():
                 schema_tags.append(SchemaTag.from_cst(schema_tag_cst, module))
-            elif tag_cst := statement.maybe_tag_target():
+            elif tag_cst := target_stmt.maybe_tag_target():
                 tags.append(TagTarget.from_cst(tag_cst, module))
-            elif enum_cst := statement.maybe_cpp_enum():
+            elif enum_cst := target_stmt.maybe_cpp_enum():
                 enums.append(EnumTarget.from_cst(enum_cst, module))
-            elif interface_cst := statement.maybe_cpp_interface():
+            elif interface_cst := target_stmt.maybe_cpp_interface():
                 interface = InterfaceInstantiation.from_cst(interface_cst, module)
                 interfaces.append(interface)
                 if interface.name:
                     module.inner_scope.define(
                         interface.name, InterfaceAlias.from_instantiation(interface), module.terminals
                     )
-            elif cog_cst := statement.maybe_cpp_cog():
+            elif cog_cst := target_stmt.maybe_cpp_cog():
                 cpp_cog = CppCog.from_cst(cog_cst, module)
                 cogs.append(cpp_cog)
                 dials.append(CppDial(cpp_cog))
-            elif python_cog_cst := statement.maybe_cpp_python_cog():
+                if options.generate_cpp_test_cogs:
+                    cpp_test_cogs.append(CppTestCog(cpp_cog))
+            elif python_cog_cst := target_stmt.maybe_cpp_python_cog():
                 cpp_cog = CppCog.from_cst(python_cog_cst, module)
                 cogs.append(cpp_cog)
                 dials.append(CppDial(cpp_cog))
                 python_cogs.append(CppPythonCog(python_cog_cst, module, cpp_cog))
-            elif extern_cst := statement.maybe_cpp_extern():
+            elif extern_cst := target_stmt.maybe_cpp_extern():
                 extern_ir = cpp_extern.CppExtern.from_cst(extern_cst, module)
                 externs.append(extern_ir)
-            elif converter_cst := statement.maybe_converter():
+            elif converter_cst := target_stmt.maybe_converter():
                 converter_ir = converter.Converter.from_cst(converter_cst, module, options.namespace)
                 converters.append(converter_ir)
-            elif udp_socket_cst := statement.maybe_cpp_udp_socket():
+            elif udp_socket_cst := target_stmt.maybe_cpp_udp_socket():
                 udp_socket_ir = CppUdpSocket.from_cst(udp_socket_cst, module)
                 udp_sockets.append(udp_socket_ir)
-            elif nanobind_caster_cst := statement.maybe_nanobind_type_caster():
+            elif nanobind_caster_cst := target_stmt.maybe_nanobind_type_caster():
                 nanobind_caster_ir = NanobindTypeCaster.from_cst(nanobind_caster_cst, module, options.namespace)
                 nanobind_casters.append(nanobind_caster_ir)
-            elif constant_cst := statement.maybe_target_constant():
+            elif constant_cst := target_stmt.maybe_target_constant():
                 constant_lookup = node.DeferredLookup.make(
                     expected_type=ImmutableBinding,
                     cst_identifier=constant_cst.child_constant_name(),
@@ -197,11 +255,11 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
                     )
                     raise ValueError(msg)
                 constants[constant_lookup.identifier] = constant_lookup
-            elif audio_source_cst := statement.maybe_cpp_audio_source():
+            elif audio_source_cst := target_stmt.maybe_cpp_audio_source():
                 audio_source_ir = CppAudioSource.from_cst(audio_source_cst, module)
                 audio_sources.append(audio_source_ir)
             else:
-                msg = node.append_error_line(statement, module, "Unrecognized statement within cpp_target")
+                msg = node.append_error_line(target_stmt, module, "Unrecognized statement within cpp_target")
                 raise NotImplementedError(msg)
 
         return cls(
@@ -216,8 +274,10 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             enums=enums,
             representations=representations,
             interfaces=interfaces,
+            representations_and_interfaces=[],
             cogs=cogs,
             dials=dials,
+            cpp_test_cogs=cpp_test_cogs,
             python_cogs=python_cogs,
             externs=externs,
             converters=converters,
@@ -225,6 +285,273 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             audio_sources=audio_sources,
             nanobind_casters=nanobind_casters,
             constants=constants,
+            instantiations=[],
+        )
+
+    # We disable C901, PLR0912, PLR0915 (function complexity, statements, branches) here because the
+    # complexity comes from having to process each entity type passed in from the compiler.
+    # However, they're handled in a uniform way that isn't difficult to understand.
+    @classmethod
+    def from_generate_cpp(cls: type[CppTarget], module: node.Module, entities: CppGeneratedEntities) -> CppTarget:  # noqa: C901, PLR0915 (see above)
+        """Generate an IR CppTarget from the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_cc"
+        schema_tags = []
+        representations_and_interfaces = []
+        instantiations: list[schema.InstantiateStmt] = []
+        enums = []
+        tags = []
+        externs = []
+        constants: dict[str, node.Deferrable[ImmutableBinding]] = {}
+
+        assert module.generates is not None
+        assert module.inner_attrs is not None  # Attributes are set whenever the generate attribute set
+        namespace = module.inner_attrs.get_cpp_namespace()
+        if namespace is None:
+            msg = node.append_error_line(module.cst_node, module, "cpp namespace attribute is not set")
+            raise ValueError(msg)
+
+        cogs = [CppCog(cog_ir=cog, dial_header=None, cog_header=None) for cog in entities.cogs]
+        python_cogs = (
+            [CppPythonCog(None, module, cpp_cog) for cpp_cog in cogs]
+            if node.GenerateTarget.py_cog in module.generates
+            else []
+        )
+        dials = [CppDial(cpp_cog=cog) for cog in cogs]
+        cpp_test_cogs = (
+            [CppTestCog(cpp_cog) for cpp_cog in cogs] if node.GenerateTarget.cpp_test_cog in module.generates else []
+        )
+
+        options = CppTargetOptions(
+            module=module,
+            cst_node=None,
+            namespace=namespace,
+            generate_cog_metrics=module.inner_attrs.get_cpp_generate_cog_metrics(),
+            generate_cpp_test_cogs=node.GenerateTarget.cpp_test_cog in module.generates,
+        )
+
+        for constant in entities.constants:
+            constants[constant.name] = constant
+
+        for schema_ir in entities.schemas:
+            if schema_ir.programmatically_generated:
+                continue
+
+            schema_tag = SchemaTag(schema_ir=schema_ir)
+            schema_tags.append(schema_tag)
+
+            if schema_ir.parameters:
+                # Parameterized schemas are handled with instantitate statements
+                continue
+
+            representation_ir = ResolvedReprInstantiation.from_schema(schema_ir, module)
+            interface_ir = InterfaceInstantiation.from_schema(schema_ir, module)
+            representations_and_interfaces.append((representation_ir, interface_ir))
+
+        for instantiation in entities.instantiations:
+            if instantiation.name:
+                instantiations.append(instantiation)
+
+            assert isinstance(instantiation.typespec, typesys.Instantiation)
+            representation_ir = ResolvedReprInstantiation.from_schema(instantiation.typespec, module)
+            interface_ir = InterfaceInstantiation.from_schema(instantiation.typespec, module)
+            representations_and_interfaces.append((representation_ir, interface_ir))
+
+        for enum_ir in entities.enums:
+            enum_target = EnumTarget(enum_ir=enum_ir)
+            enums.append(enum_target)
+
+        for tag_ir in entities.tags:
+            tag_target = TagTarget(tag_ir=tag_ir)
+            tags.append(tag_target)
+
+        for extern_type_ir in entities.extern_types:
+            assert extern_type_ir.attributes is not None
+            type_header = extern_type_ir.attributes.get_cpp_type_header()
+            type_namespace = extern_type_ir.attributes.get_cpp_type_namespace()
+            assert type_header is not None  # Invariant
+            assert type_namespace is not None  # Invariant
+            extern_type = cpp_extern.CppExternType(
+                module=module,
+                cst_node=None,
+                extern_type_expr=None,
+                subclass_handler=cpp_extern.CppExternHandler(extern_typ=extern_type_ir),
+            )
+            externs.append(
+                cpp_extern.CppExtern(
+                    module=module,
+                    cst_node=None,
+                    doc=None,
+                    header=Header(module.module_id.repo, type_header, iwyu_pragma="IWYU pragma: export"),
+                    namespace=type_namespace,
+                    extern_types=[extern_type],
+                )
+            )
+
+        for strong_type_ir in entities.strong_types:
+            assert strong_type_ir.attributes is not None
+            type_header = strong_type_ir.attributes.get_cpp_type_header()
+            type_namespace = strong_type_ir.attributes.get_cpp_type_namespace()
+            if type_header is None or type_namespace is None:
+                continue
+            extern_type = cpp_extern.CppExternType(
+                module=module,
+                cst_node=None,
+                extern_type_expr=None,
+                subclass_handler=cpp_extern.StrongTypeHandler(
+                    strong_type=strong_type_ir,
+                    factory=strong_type_ir.attributes.get_cpp_type_factory(),
+                    cst_node=None,
+                    module=module,
+                ),
+            )
+            externs.append(
+                cpp_extern.CppExtern(
+                    module=module,
+                    cst_node=None,
+                    doc=None,
+                    header=Header(module.module_id.repo, type_header, iwyu_pragma="IWYU pragma: export"),
+                    namespace=type_namespace,
+                    extern_types=[extern_type],
+                )
+            )
+
+        udp_sockets = [CppUdpSocket.from_generate_cpp(udp_socket) for udp_socket in entities.udp_sockets]
+        audio_sources = [CppAudioSource.from_generate_cpp(audio_source) for audio_source in entities.audio_sources]
+
+        result = cls(
+            module=module,
+            cst_node=None,
+            doc=module.doc,
+            name=name,
+            scope=module.inner_scope,
+            options=options,
+            schema_tags=schema_tags,
+            tags=tags,
+            enums=enums,
+            representations=[],
+            interfaces=[],
+            representations_and_interfaces=representations_and_interfaces,
+            cogs=cogs,
+            dials=dials,
+            cpp_test_cogs=cpp_test_cogs,
+            python_cogs=python_cogs,
+            externs=externs,
+            converters=[],
+            udp_sockets=udp_sockets,
+            audio_sources=audio_sources,
+            nanobind_casters=[],
+            constants=constants,
+            instantiations=instantiations,
+        )
+
+        result._handle_generated_cog_metrics()
+        result._register_report_group_outputs_on_dial()
+        return result
+
+    @classmethod
+    def from_generate_proto_conv(
+        cls: type[CppTarget], module: node.Module, entities: ProtoConvGeneratedEntities
+    ) -> CppTarget:
+        """Generate an IR CppTarget to implement protobuf conversion for the entities defined in a module."""
+        name = f"{module.module_id.name.split('::')[-1]}_clk_proto_conv"
+        converters = []
+
+        assert module.inner_attrs is not None  # Attributes are set whenever the generate attribute set
+        namespace = module.inner_attrs.get_proto_conv_namespace()
+        if namespace is None:
+            msg = node.append_error_line(module.cst_node, module, "proto_conv or cpp namespace attribute is not set")
+            raise ValueError(msg)
+
+        options = CppTargetOptions(
+            module=module,
+            cst_node=None,
+            namespace=namespace,
+            generate_cog_metrics=False,
+            generate_cpp_test_cogs=False,
+        )
+
+        for schema_ir in entities.schemas:
+            if schema_ir.programmatically_generated or schema_ir.parameters:
+                # Parameterized schemas are handled with instantitate statements
+                continue
+            assert schema_ir.attributes is not None
+            cpp_interface_ir = InterfaceInstantiation.from_schema(schema_ir, module)
+            assert isinstance(cpp_interface_ir.typespec, typesys.Instantiation)
+            proto_representation_ir = ResolvedReprInstantiation.from_proto_schema(schema_ir, module)
+            assert isinstance(proto_representation_ir.typespec, typesys.Instantiation)
+            if schema_ir.attributes.get_proto_conv_tap_to_protobuf():
+                converters.append(
+                    converter.Converter.from_generate_proto_conv(
+                        module=module,
+                        namespace=namespace,
+                        converter_type=clkbuiltins.TAP_TO_PROTOBUF,
+                        cpp_typespec=cpp_interface_ir.typespec,
+                        proto_typespec=proto_representation_ir.typespec,
+                    )
+                )
+            if schema_ir.attributes.get_proto_conv_protobuf_to_tap():
+                converters.append(
+                    converter.Converter.from_generate_proto_conv(
+                        module=module,
+                        namespace=namespace,
+                        converter_type=clkbuiltins.PROTOBUF_TO_TAP,
+                        cpp_typespec=cpp_interface_ir.typespec,
+                        proto_typespec=proto_representation_ir.typespec,
+                    )
+                )
+
+        for instantiation in entities.instantiations:
+            assert isinstance(instantiation.typespec, typesys.Instantiation)
+            assert isinstance(instantiation.typespec.instantiates, schema.Schema)
+            proto_representation_ir = ResolvedReprInstantiation.from_proto_schema(instantiation.typespec, module)
+            assert isinstance(proto_representation_ir.typespec, typesys.Instantiation)
+            cpp_interface_ir = InterfaceInstantiation.from_schema(instantiation.typespec, module)
+            assert isinstance(cpp_interface_ir.typespec, typesys.Instantiation)
+            if instantiation.attributes.get_proto_conv_tap_to_protobuf():
+                converters.append(
+                    converter.Converter.from_generate_proto_conv(
+                        module=module,
+                        namespace=namespace,
+                        converter_type=clkbuiltins.TAP_TO_PROTOBUF,
+                        cpp_typespec=cpp_interface_ir.typespec,
+                        proto_typespec=proto_representation_ir.typespec,
+                    )
+                )
+            if instantiation.attributes.get_proto_conv_protobuf_to_tap():
+                converters.append(
+                    converter.Converter.from_generate_proto_conv(
+                        module=module,
+                        namespace=namespace,
+                        converter_type=clkbuiltins.PROTOBUF_TO_TAP,
+                        cpp_typespec=cpp_interface_ir.typespec,
+                        proto_typespec=proto_representation_ir.typespec,
+                    )
+                )
+
+        return cls(
+            module=module,
+            cst_node=None,
+            doc=module.doc,
+            name=name,
+            scope=module.inner_scope,
+            options=options,
+            schema_tags=[],
+            tags=[],
+            enums=[],
+            representations=[],
+            interfaces=[],
+            representations_and_interfaces=[],
+            cogs=[],
+            dials=[],
+            cpp_test_cogs=[],
+            python_cogs=[],
+            externs=[],
+            converters=converters,
+            udp_sockets=[],
+            audio_sources=[],
+            nanobind_casters=[],
+            constants={},
+            instantiations=[],
         )
 
     def resolve(self) -> None:
@@ -248,6 +575,10 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
                 entity,
             ).resolve()
 
+        self._handle_generated_cog_metrics()
+        self._register_report_group_outputs_on_dial()
+
+    def _handle_generated_cog_metrics(self) -> None:
         for member_cog in self.cogs:
             if not isinstance(member_cog.cog_ir, cog.Cog):
                 msg = "Attempted to access an unresolved Cog"
@@ -255,6 +586,7 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
 
             # Add the generated clockwork representations, interfaces, schemas, enums, etc. to the target.
             # This ensures that the necessary corresponding c++ will be generated.
+            # Note: Report group generated entities are handled separately in _register_report_group_outputs_on_dial
             self.representations.extend(member_cog.cog_ir.generated_repr())
             self.interfaces.extend(member_cog.cog_ir.generated_interfaces())
             self.schema_tags.extend(
@@ -262,6 +594,20 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             )
             self.enums.extend(
                 EnumTarget(enum_ir=generated_enum) for generated_enum in member_cog.cog_ir.generated_enums()
+            )
+
+    def _register_report_group_outputs_on_dial(self) -> None:
+        """Register generated report group representations, interfaces, and schemas on their corresponding dial targets."""
+        for member_cog, dial in zip(self.cogs, self.dials, strict=True):
+            if not isinstance(member_cog.cog_ir, cog.Cog):
+                msg = "Attempted to access an unresolved Cog"
+                raise TypeError(msg)
+
+            dial.representations.extend(member_cog.cog_ir.generated_report_group_repr())
+            dial.interfaces.extend(member_cog.cog_ir.generated_report_group_interfaces())
+            dial.schema_tags.extend(
+                SchemaTag(schema_ir=generated_schema)
+                for generated_schema in member_cog.cog_ir.generated_report_group_schemas()
             )
 
     def render_cpp_entities(self) -> CppModuleChunks:
@@ -288,19 +634,21 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
 
         cpp_mod.append(f"}} // namespace {self.options.namespace}")
 
-        for entity in chain(self.interfaces, self.externs):
+        clk_interfaces = [interface for _, interface in self.representations_and_interfaces]
+        for entity in chain(self.interfaces, self.externs, clk_interfaces):
             cpp_mod.append(cast("InterfaceInstantiation | cpp_extern.CppExtern", entity).render(types.GLOBAL_NAMESPACE))  # pyright: ignore[reportUnnecessaryCast] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
 
         cpp_mod.append(
             [
                 f"namespace {self.options.namespace}",
                 "{",
-                "// Interface aliases",
+                "// Interface and instantiation aliases",
             ]
         )
-        for entity in self.interfaces:
+        for entity in chain(self.interfaces, clk_interfaces):
             if entity.name:
                 cpp_mod.append(entity.render_alias(self.options.namespace))
+        cpp_mod.append(_render_instantiate_aliases(self.instantiations, self.options.namespace, self.module.context))
 
         cpp_mod.append(f"}} // namespace {self.options.namespace}")
 
@@ -320,7 +668,37 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             dial_cpp_mod.append(dial.render(self.options.namespace))
         dial_cpp_mod.append(f"}} // namespace {self.options.namespace}")
 
+        dial_interfaces = list(chain.from_iterable(dial.interfaces for dial in self.dials))
+        for interface in dial_interfaces:
+            dial_cpp_mod.append(interface.render(types.GLOBAL_NAMESPACE))
+
+        if dial_interfaces:
+            dial_cpp_mod.append(
+                [
+                    f"namespace {self.options.namespace}",
+                    "{",
+                    "// Interface and instantiation aliases",
+                ]
+            )
+            for interface in dial_interfaces:
+                if interface.name:
+                    dial_cpp_mod.append(interface.render_alias(self.options.namespace))
+            dial_cpp_mod.append(f"}} // namespace {self.options.namespace}")
+
         return dial_cpp_mod
+
+    def render_cpp_test_cogs(self) -> CppModuleChunks | None:
+        """Convert Dials to C++."""
+        if not self.cpp_test_cogs:
+            return None
+
+        cpp_mod = CppModuleChunks()
+        cpp_mod.append([f"namespace {self.options.namespace}", "{"])
+        for cpp_test_cog in self.cpp_test_cogs:
+            cpp_mod.append(cpp_test_cog.render(self.options.namespace))
+        cpp_mod.append(f"}} // namespace {self.options.namespace}")
+
+        return cpp_mod
 
     def render_cpp_python_cog(self) -> CppModuleChunks | None:
         """Convert python cogs to C++."""
@@ -357,6 +735,9 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         dial_cpp_mod = self.render_cpp_dial()
         if dial_cpp_mod:
             write_to_file(dial_cpp_mod, write_dir, include_dir, self.name + "_dial", self.module.module_id.repo)
+        test_cogs_cpp_mod = self.render_cpp_test_cogs()
+        if test_cogs_cpp_mod:
+            write_to_file(test_cogs_cpp_mod, write_dir, include_dir, self.name + "_test", self.module.module_id.repo)
         python_cog_cpp_mod = self.render_cpp_python_cog()
         if python_cog_cpp_mod:
             write_to_file(python_cog_cpp_mod, write_dir, include_dir, self.name + "_impl", self.module.module_id.repo)
@@ -366,7 +747,7 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
         include_dir = self.module.module_id.get_base_path().parent
         cpp_mod = self.render_cpp_entities()
         # Process needs to manage namespace differently, therefore not included as part of `render_cpp_entities`
-        main_target = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id)
+        main_target = as_cc_library(cpp_mod, self.name, include_dir, self.module.module_id, False)
         targets = [main_target]
 
         dial_cpp_mod = self.render_cpp_dial()
@@ -377,11 +758,19 @@ class CppTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.CppTarget
             # with a `_impl` suffix.
             main_target.deps = [*list(main_target.deps), Label(f"//{include_dir}:{self.name}_impl")]
 
-            targets.append(as_cc_library(dial_cpp_mod, self.name + "_dial", include_dir, self.module.module_id))
+            targets.append(as_cc_library(dial_cpp_mod, self.name + "_dial", include_dir, self.module.module_id, False))
+
+        test_cogs_cpp_mod = self.render_cpp_test_cogs()
+        if test_cogs_cpp_mod:
+            targets.append(
+                as_cc_library(test_cogs_cpp_mod, self.name + "_test", include_dir, self.module.module_id, False)
+            )
 
         python_cog_cpp_mod = self.render_cpp_python_cog()
         if python_cog_cpp_mod:
-            targets.append(as_cc_library(python_cog_cpp_mod, self.name + "_impl", include_dir, self.module.module_id))
+            targets.append(
+                as_cc_library(python_cog_cpp_mod, self.name + "_impl", include_dir, self.module.module_id, False)
+            )
 
         return targets
 
@@ -392,6 +781,7 @@ class CppTargetOptions(node.CstNode[cst.CppTargetOptions]):
 
     namespace: str
     generate_cog_metrics: bool = False
+    generate_cpp_test_cogs: bool = False
 
     @classmethod
     def from_cst(cls: type[CppTargetOptions], cst_node: cst.CppTargetOptions, module: node.Module) -> CppTargetOptions:
@@ -401,6 +791,7 @@ class CppTargetOptions(node.CstNode[cst.CppTargetOptions]):
             raise ValueError(msg)
         namespace = None
         generate_cog_metrics = False
+        generate_cpp_test_cogs = False
 
         # Look for namespace option
         if ns_option := cst_node.maybe_cpp_namespace_option():
@@ -411,11 +802,22 @@ class CppTargetOptions(node.CstNode[cst.CppTargetOptions]):
             metrics_value = metrics_option.child_boolean()
             generate_cog_metrics = metrics_value.maybe_true() is not None
 
+        # Look for generate_cpp_test_cogs option
+        if cpp_test_cogs_option := cst_node.maybe_generate_cpp_test_cogs_option():
+            cpp_test_cogs_value = cpp_test_cogs_option.child_boolean()
+            generate_cpp_test_cogs = cpp_test_cogs_value.maybe_true() is not None
+
         if namespace is None:
             msg = node.append_error_line(cst_node, module, "Namespace option must be provided")
             raise ValueError(msg)
 
-        return cls(namespace=namespace, generate_cog_metrics=generate_cog_metrics, module=module, cst_node=cst_node)
+        return cls(
+            namespace=namespace,
+            generate_cog_metrics=generate_cog_metrics,
+            module=module,
+            cst_node=cst_node,
+            generate_cpp_test_cogs=generate_cpp_test_cogs,
+        )
 
 
 @dataclass(eq=True, slots=True)
@@ -557,6 +959,9 @@ class CppDial:
     """A wrapper around a CppCog to render the dial."""
 
     cpp_cog: CppCog
+    schema_tags: list[SchemaTag] = field(default_factory=list)
+    representations: list[ReprInstantiation | ResolvedReprInstantiation] = field(default_factory=list)
+    interfaces: list[InterfaceInstantiation] = field(default_factory=list)
 
     def render(self, namespace: str) -> CppModuleChunks:
         """Convert the dial to C++."""
@@ -572,4 +977,29 @@ class CppDial:
             class_name=dial_class_name,
             cpp_namespace=namespace,
         )
-        return dial_gen.render()
+
+        cpp_mod = dial_gen.render()
+
+        for schema_tag in self.schema_tags:
+            cpp_mod.append(schema_tag.render(self.cpp_cog.cog_ir.module.context, namespace))
+
+        return cpp_mod
+
+
+@dataclass(eq=True, slots=True)
+class CppTestCog:
+    """A wrapper around a CppCog to render the dial."""
+
+    cpp_cog: CppCog
+
+    def render(self, namespace: str) -> CppModuleChunks:
+        """Convert the test cog to C++."""
+        if not isinstance(self.cpp_cog.cog_ir, Cog) or self.cpp_cog.cog_header is None:
+            # This is resolved by the CppCog.  No need for an extra resolve here.
+            msg = "Attempt to render before resolving."
+            raise TypeError(msg)
+
+        cpp_test_cog_gen = CppTestCogGenerator(
+            cog_ir=self.cpp_cog.cog_ir, cpp_namespace=namespace, cog_header=self.cpp_cog.cog_header
+        )
+        return cpp_test_cog_gen.render()

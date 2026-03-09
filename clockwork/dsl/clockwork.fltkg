@@ -1,19 +1,32 @@
-module := (doc . '\n')? , use* , entity+;
+module := (doc . '\n')? , ((clk_generate , clk_inner_attrs? , clk_use* , clk_entity+) | (use* , entity+));
 doc := (/ */ . "//" . line:doc_line)+ . / */;
 doc_line := (" " . text:/[^\n]*/)? . "\n";
 
-use := "use" : use_body , ";"? , ;
+use := "use" : use_body . " "* . ";" . "\n"+ ;
 use_alias :=  "as" : alias:identifier ;
-use_body := (use_repo:repo_prefix , "::")? , use_path:namespace_path , (("::" , use_block) | use_alias)?;
+use_body := (use_repo:repo_prefix . "::")? . use_path:namespace_path . (("::" . use_block) | (" "+ . use_alias))?;
+use_block := "{" , use_type , ((";"|",") , use_type)* , (";"|",")? , "}" ;
 repo_prefix := "@" , identifier ;
-use_block := "{" , use_body , ((";"|",") , use_body)* , (";"|",")? , "}" ;
+use_type := typename:identifier , (use_alias)? ;
 
-entity := cog | schema | enum | representation | tag | channel | udp_socket | multicast_udp_socket | audio_source | cpp_executable | cpp_target | nanobind_target | py_target | proto_target | system_target | box | strong_type | policy_def | policy | extern_type | cpu_domain | ethernet | assignment_stmt;
+entity := cog | schema | enum | representation | tag | channel | module_scope_signal | udp_socket | multicast_udp_socket | audio_source | cpp_executable | cpp_target | nanobind_target | py_target | proto_target | system_target | box | strong_type | policy_def | policy | extern_type | cpu_domain | ethernet | assignment_stmt | pcie_link | dfl_trait_def | dfl_impl_decl | dfl_fn_def ;
 
-cog := doc . "cog" : identifier , "{" , resources_block? , configs_block? , states_block? , inputs_block? , outputs_block? , execution_block , diagnostics_block?, simulation_options_block? , python_options_block? , metrics_options_block? , "}" , ;
+cog := doc . clk_outer_attrs? . "cog" : identifier , cog_blocks , ;
+cog_blocks := "{" , resources_block? , configs_block? , states_block? , report_groups? , inputs_block? , outputs_block? , execution_block , diagnostics_block?, simulation_options_block? , python_options_block? , metrics_options_block? , "}" , ;
 resources_block := "resources", "{", resource_def+ , "}" , ;
 resource_def := doc? . resource_memory_def , ;
 resource_memory_def := identifier , ":" , "persistent", ";" , ;
+
+report_groups := report_group+ , ;
+report_group := "signals" , group_name:identifier? , "{" , report_group_instance_name? , report_group_entry+ , "}" , ;
+report_group_instance_name := "instance_name", ":", value:expr, ";", ;
+report_group_entry := cog_scope_signal | signal_reference , ;
+signal_reference := doc? . identifier , (":" , signal_name:identifier)? , (signal_instance_block | ";") , ;
+cog_scope_signal := doc? . identifier , ":" , "signal" : signal_type:expr , (signal_block | ";") , ;
+signal_instance_block := "{" , signal_instance_option* , "}" , ;
+signal_instance_option := signal_instance_name | signal_post_aggregation ;
+signal_instance_name := doc? . "instance_name", ":", value:expr, ";", ;
+signal_post_aggregation := doc? . "post_aggregation", ":", "[", aggregation_list, "]", ";", ;
 
 configs_block := "configs", "{", config_def+ , "}" , ;
 config_def := doc? . identifier , ":" , config_type:expr , ";" , ;
@@ -58,30 +71,25 @@ metrics_options_block := "metrics_options" , "{" , metrics_enabled_option? , met
 metrics_enabled_option := "enabled", ":", boolean , ";" ;
 metrics_batch_size_option := "batch_size", ":", value:literal, ";" ;
 
-schema := doc . "schema" : identifier , "{" , uuid_spec? , schema_options?, schema_parameters_block? , schema_fields_block , schema_history_block? , "}", ;
+schema := doc . clk_outer_attrs? . "schema" : identifier , "{" , uuid_spec? , schema_options?, schema_parameters_block? , schema_fields_block , schema_history_block? , "}", ;
 schema_parameters_block := "parameters", "{", (schema_field , ";" , )* , "}" , ;
 schema_fields_block := "fields", "{", (schema_field , ";" , )+ , "}", ;
 schema_field := doc? . "#" . field_num:nonnegative_integer , name:identifier , (":" , typespec:expr)? ,
     ("=" , init_value:expr)?;
 schema_options := "options" , "{" , schema_option* , "}" , ;
-schema_option := schema_option_constructor ;
+schema_option := schema_option_constructor | schema_option_soa_enabled ;
 schema_option_constructor := "constructor", ":", constructor_expr:expr, ";" , ;
+schema_option_soa_enabled := "soa_enabled", ":", boolean, ";" , ;
 
-schema_history_block := "history" , "{" , version_spec , fields_history? , schema_history? , "}" , ;
-version_spec :=  "versions" , ":" , "[" , version:nonnegative_integer , ("," , version:nonnegative_integer)* , "]" ,
-    ";" , version_pseudofields? ,;
-version_pseudofields := "version_pseudofields" , ":" , "[" , (version:nonnegative_integer , ("," ,
-    version:nonnegative_integer)*)? , "]" , ";" , ;
-fields_history := doc? . "fields", "{" , field_history* , "}" , ;
-field_history := schema_field , "->" , field_change , ";" , ;
-field_change := (removed:"removed" | became:"became") : "#" . changed_version:nonnegative_integer ;
+schema_history_block := "history" , "{" , version_spec , legacy_became_spec? , removed_spec? , "}" , ;
+version_spec := "version" , ":" , version:nonnegative_integer , ";" , ;
+legacy_became_spec := "legacy_became" , ":" , "[" , became_spec , ("," , became_spec)* , "]" , ";" , ;
+became_spec := old_number:nonnegative_integer , "->" , new_number:nonnegative_integer , ;
+removed_spec :=  "removed" , ":" , "[" , num:nonnegative_integer , ("," , num:nonnegative_integer)* , "]" , ";" , ;
 
-schema_history := "schema" , "{" , schema_history_name , "}" , ;
-schema_history_name := "name" , "{" , "#" , version:nonnegative_integer , identifier , ";" , "}" , ;
-
-enum := doc . "enum" : identifier , "{" , uuid_spec? , enum_option_block? , enum_values_block , enum_history_block? , "}" , ;
+enum := doc . clk_outer_attrs? . "enum" : identifier , "{" , uuid_spec? , enum_option_block? , enum_values_block , enum_history_block? , "}" , ;
 enum_option_block := "options" , "{" , enum_option* , "}" , ;
-enum_option := enum_option_flags | enum_option_underlying_type | linter_override;
+enum_option := enum_option_flags | enum_option_underlying_type | linter_override ;
 enum_option_flags := bit_flags:"bit_flags" , ";" , ;
 enum_option_underlying_type := underlying_type_tag:"underlying_type" , ":" , underlying_type:expr , ";" , ;
 linter_override := doc? . "enable_linter_override", ":" , linter_override_type:literal , ";" , ;
@@ -89,22 +97,14 @@ enum_values_block := "values" , "{" , enum_value+ , "}" , ;
 enum_value := doc . "#" . value_num:nonnegative_integer , name:identifier , default:"default"? , (";"| "{" , enum_value_detail* , "}") , ;
 enum_value_detail := underlying_value_tag:"underlying_value" , ":" , value:expr , ";" , ;
 
-enum_history_block := "history" , "{" , version_spec , enum_values_history? , enum_history? , "}" , ;
-enum_values_history := doc? . "values", "{" , enum_value_history* , "}" , ;
-enum_value_history := enum_history_value , "->" , enum_value_change , ";" , ;
-enum_history_value := doc . "#" . value_num:nonnegative_integer , name:identifier , default:"default"? , ("{" , enum_value_detail* , "}")? , ;
-enum_value_change := (removed:"removed" | became:"became") : "#" . changed_version:nonnegative_integer ;
-
-enum_history := "enum" , "{" , enum_history_options_block? , "}" , ;
-enum_history_options_block := "options" , "{" , enum_history_options* , "}" , ;
-enum_history_options := "#" , version:nonnegative_integer , "{" , enum_option* , "}" ,;
+enum_history_block := "history" , "{" , version_spec , legacy_became_spec? , removed_spec? , "}" , ;
 
 uuid_spec := "uuid" , ":" , uuid:/[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}/ , ";" , ;
 
-strong_type := doc . "strong_type" : identifier , "{" , underlying_type, "}" , ;
+strong_type := doc . clk_outer_attrs? . "strong_type" : identifier , "{" , underlying_type, "}" , ;
 underlying_type := "underlying_type" , ":" , typespec:expr , ";" , ;
 
-extern_type := doc . "extern_type" : identifier , ";" , ;
+extern_type := doc . clk_outer_attrs? . "extern_type" : identifier , ";" , ;
 
 cpp_extern := doc? . "extern" , "{" , cpp_extern_block , "}" , ;
 cpp_extern_block := cpp_extern_header , cpp_extern_namespace , cpp_extern_type* , ;
@@ -123,18 +123,31 @@ repr_fields := "fields" , "{" , repr_field* , "}" , ;
 repr_field := doc? . "#" . field_num:nonnegative_integer , name:identifier , "{" , repr_field_option* , "}" , ;
 repr_field_option := repr_option_align ;
 
-tag := doc . "tag" : identifier , ";" , ;
+tag := doc . clk_outer_attrs? . "tag" : identifier , ";" , ;
 
 channel := doc . "channel" : identifier , "{" , channel_name? , channel_message_type, channel_option_message_size?
-    , channel_option_num_slots, channel_option_publishers? , channel_option_enforce_backwards_compatibility? , "}" , ;
+    , (channel_option_num_slots | channel_option_published_once), channel_option_publishers? , channel_option_enforce_backwards_compatibility? , channel_option_bulk_data? , "}" , ;
 channel_name := doc? . "name", ":", value:expr , ";" , ;
 channel_message_type := doc? . "message_type", ":", typespec:expr , ";" , ;
 channel_option_message_size := doc? . "message_size", ":", value:expr , ";" , ;
 channel_option_num_slots := doc? . "max_num_messages", ":", value:expr , ";" , ;
-channel_option_publishers := doc? . "publishers", ":", (single:"single" | multiple:"multiple" | diagnostics:"diagnostics" | bridge_status:"bridge_status") , ";" , ;
+channel_option_published_once := doc? . "published_once", ":", value:boolean , ";" , ;
+channel_option_publishers := doc? . "publishers", ":", (single:"single" | multiple:"multiple" | diagnostics:"diagnostics" | bridge_status:"bridge_status" | c2c_bridge_status:"c2c_bridge_status") , ";" , ;
 channel_option_enforce_backwards_compatibility := doc? . "enforce_backwards_compatibility", ":" , boolean , ";" , ;
+channel_option_bulk_data := doc? . "bulk_data", ":" , boolean , ";" , ;
 
-udp_socket := doc . "udp_socket" : identifier , "{" , udp_socket_address, udp_socket_port , udp_socket_direction , udp_socket_message_type , udp_socket_remote_address? , udp_socket_remote_port? , udp_socket_batch_size? , udp_socket_options?, "}" , ;
+module_scope_signal := doc? . "signal" : identifier , ":" , signal_type:expr , (signal_block | ";") , ;
+signal_block := "{" , signal_option* , "}" , ;
+signal_option := signal_name | signal_multi_instance | signal_metadata | signal_pre_aggregation | signal_option_post_aggregation ;
+signal_name := doc? . "name", ":", value:expr, ";", ;
+signal_multi_instance := doc? . "multi_instance", ":", boolean, ";", ;
+signal_metadata := doc? . "metadata", ":", typespec:expr, ";", ;
+signal_pre_aggregation := doc? . "pre_aggregation", ":", "[", aggregation_list, "]", ";", ;
+signal_option_post_aggregation := doc? . "post_aggregation", ":", "[", aggregation_list, "]", ";", ;
+aggregation_list := string_literal , ("," , string_literal)* , ","? ;
+
+
+udp_socket := doc . clk_outer_attrs? . "udp_socket" : identifier , "{" , udp_socket_address, udp_socket_port , udp_socket_direction , udp_socket_message_type , udp_socket_remote_address? , udp_socket_remote_port? , udp_socket_batch_size? , udp_socket_options?, "}" , ;
 udp_socket_address := "address", ":", value:ipv4_address , ";" , ;
 udp_socket_port := "port", ":", value:literal , ";" , ;
 udp_socket_remote_address := "remote_address", ":", value:ipv4_address , ";" , ;
@@ -145,14 +158,14 @@ udp_socket_batch_size := "batch_size", ":", value:expr , ";" , ;
 udp_socket_options := "options", "{", udp_socket_option*, "}", ;
 udp_socket_option := (socket_reuse_address | socket_receive_buffer | socket_bind_to_interface);
 socket_reuse_address := "reuse_address", ":", typespec:expr, ";", ;
-socket_receive_buffer := "receive_buffer", ":", typespec:expr, ";", ;
-socket_bind_to_interface := "bind_to_interface", ":", typespec:expr, ";", ;
+socket_receive_buffer := doc? . "receive_buffer", ":", typespec:expr, ";", ;
+socket_bind_to_interface := "bind_to_interface", ":", (address:ipv4_address | typespec:expr), ";", ;
 
-multicast_udp_socket := doc . "multicast_udp_socket" : identifier , "{" , multicast_udp_socket_group_address , multicast_udp_socket_interface_address, udp_socket_port , udp_socket_remote_port?  , udp_socket_direction , udp_socket_message_type , udp_socket_batch_size? , udp_socket_options?, "}" , ;
+multicast_udp_socket := doc . clk_outer_attrs? . "multicast_udp_socket" : identifier , "{" , multicast_udp_socket_group_address , multicast_udp_socket_interface_address, udp_socket_port , udp_socket_remote_port?  , udp_socket_direction , udp_socket_message_type , udp_socket_batch_size? , udp_socket_options?, "}" , ;
 multicast_udp_socket_group_address := "group_address", ":", value:ipv4_address, ";", ;
 multicast_udp_socket_interface_address := "interface_address", ":", value:ipv4_address , ";" , ;
 
-audio_source := doc . "audio_source" : identifier , ;
+audio_source := doc . clk_outer_attrs? . "audio_source" : identifier , ;
 
 target_constant := "constant", constant_name:identifier, ";", ;
 
@@ -167,9 +180,10 @@ py_python_cog_input_type := "inputs" . "." . name:identifier , ":" : python_type
 py_python_cog_output_type := "outputs" . "." . name:identifier , ":" : python_type:expr , ";" , ;
 
 cpp_target := doc? . "cpp_target" : identifier , "{" , cpp_target_options , cpp_target_statement+ , "}", ;
-cpp_target_options := "options", "{" , cpp_namespace_option? , generate_cog_metrics_option? , "}" , ;
+cpp_target_options := "options", "{" , cpp_namespace_option? , generate_cog_metrics_option? , generate_cpp_test_cogs_option? , "}" , ;
 cpp_namespace_option := "namespace" : namespace_path , ";" ;
 generate_cog_metrics_option := "generate_cog_metrics" : boolean , ";" ;
+generate_cpp_test_cogs_option := "generate_cpp_test_cogs" : boolean , ";" ;
 cpp_target_statement := (schema_tag | tag_target | cpp_enum | cpp_representation | cpp_interface | cpp_udp_socket | cpp_audio_source | cpp_cog | cpp_python_cog | cpp_extern | converter | nanobind_type_caster | target_constant) ;
 schema_tag := "schema" : typespec:expr , ";" , ;
 tag_target := "tag" : typespec:expr , ";" , ;
@@ -200,17 +214,19 @@ cpp_executable_param := doc? . param:identifier, ":" : value:expr , ";" , ;
 box := doc? . "box" : identifier , "{" , box_element* , "}" , ;
 box_element := new_stmt | connect_stmt | policy_apply_stmt;
 new_stmt := doc? . "new" : identifier , ":" , typespec:expr , ";" , ;
-assignment_stmt := doc? . identifier , (":", typespec:expr)? , "=" , rhs:expr , ";" , ;
+assignment_stmt := doc? . clk_outer_attrs? . identifier , (":", typespec:expr)? , "=" , rhs:expr , ";" , ;
 connect_stmt := doc? . "connect" : source:expr : "to" : target:expr , ";" , ;
 policy_apply_stmt := doc? . "apply" : policy_data:expr : (to:"to" | in:"in") : target:expr , ";" , ;
 
 cpu_domain := doc? . "cpu_domain" : identifier , (cpu_domain_options | ";") , ;
-cpu_domain_options := "{" , simplelaunch_node? , simplelaunch_src+ , bridge_cpus? , default_cpus? , logging_backup? , "}" ;
+cpu_domain_options := "{" , simplelaunch_node? , simplelaunch_src* , bridge_cpus? , default_cpus? , logging_backup? , "}" ;
 simplelaunch_node := "simplelaunch_node" , ":" , node:expr , ";" , ;
 simplelaunch_src := "simplelaunch_src" , ":" , label:expr , ";" , ;
 bridge_cpus := "bridge_cpus" , ":" , cpu_set , ";" , ;
 default_cpus := "default_cpus" , ":" , cpu_set , ";" , ;
 logging_backup := "logging_backup" , ":" , cpu_domain:expr , ";" , ;
+pcie_link := doc? . "pcie_link" , domain_a:identifier , domain_b:identifier , "{" , pcie_link_param+ , "}" , ;
+pcie_link_param := param:identifier , ":" , value:expr , ";" , ;
 
 cpu_set := start_cpu:nonnegative_integer , ("-" , end_cpu:nonnegative_integer)? , ;
 
@@ -225,10 +241,11 @@ ethernet_ipv4 := doc? . "ipv4_address" : ipv4_address , ":" , cpu_domain:expr , 
 bridge_ports := doc? . "bridge_ports" , ":" , begin:nonnegative_integer , "-" , end:nonnegative_integer , ";" , ;
 
 proto_target := doc? . "proto_target" : identifier , "{" , proto_target_options? , proto_target_statement+ , "}", ;
-proto_target_options := "options", "{" , proto_package_option? , proto_go_package_option?, proto_validation_option? , "}" , ;
+proto_target_options := "options", "{" , proto_package_option? , proto_go_package_option?, proto_validation_option? , proto_prefix_enum_value_names_option? , "}" , ;
 proto_package_option := "package" : package_name , ";" ;
 proto_go_package_option:= "go_package" : go_package_name , ";" ;
 proto_validation_option:= "validate_proto" : boolean , ";" ;
+proto_prefix_enum_value_names_option := "prefix_enum_value_names" : boolean , ";" , ;
 proto_target_statement := (proto_representation | proto_enum);
 proto_representation := "representation" : (generic:"generic" :)? . (name:identifier , ":" ,)? . typespec:expr , ";" , ;
 proto_enum := "enum" : typespec:expr , ";" , ;
@@ -239,10 +256,11 @@ policy_def_schema := "schema" , ":" , typespec:expr , ";" ;
 
 policy := doc? . "policy" : policy_class:expr : "for" : target:expr , "{" , assignment_stmt* , "}" , ;
 
-expr := instantiate | call | namespaced_identifier | dotted_identifier | identifier | literal;
+expr := instantiate | call | subscript | namespaced_identifier | dotted_identifier | identifier | literal | list;
 
 instantiate := operand:expr . "<" , arg_list? , ">";
 call := operand:expr . "(" , arg_list? , ")";
+subscript := operand:expr . "[" , (wildcard:"*" | index:expr) , "]";
 arg_list := arg , ("," , arg)*;
 arg := name:identifier, "=", expr | expr;
 
@@ -263,3 +281,132 @@ unit_literal := number . unit_identifier;
 unit_identifier := seconds:"s" | milliseconds:"ms" | microseconds:"us" | bit:"bit" | byte:"byte";
 boolean := true:"true" | false:"false";
 string_literal := value:/("([^"\n\\]|\\.)+"|'([^'\n\\]|\\.)+')/;
+list := "[" , element:expr, ("," , element:expr)* , "]" , ;
+
+clk_generate := "#![" . " "* . "generate" . " "* . "(" . " "* . ( clk_generate_target . " "* . ( "," . " "* . clk_generate_target . " "* . )* . " "* . )? . ")" . " "* . "]" . "\n" ;
+clk_generate_target := (cpp:"cpp" . (cpp_cog:"_cog" | cpp_exe:"_exe" | cpp_test_cog:"_test_cog")?) | (proto:"proto" . conv:"_conv"?) | go_proto:"go_proto" | (py:"py" . (py_cog:"_cog" | py_exe:"_exe")?) | nanobind:"nanobind" ;
+
+clk_use := "use" . clk_use_target? : use_body . " "* . ";" . "\n"+ ;
+clk_use_target := " "* . "[" . " "* . ( clk_generate_target . " "* . ( "," . " "* . clk_generate_target . " "* . )* . " "* . )? . "]" ;
+
+clk_inner_attrs := clk_inner_attr+ ;
+clk_inner_attr := "#![" . " "* . clk_attr . " "* . "]" . "\n" ;
+clk_outer_attrs := clk_outer_attr+ ;
+clk_outer_attr := "#[" . " "* . clk_attr . " "* . "]" . "\n";
+clk_attr := clk_cpp_attr | clk_proto_attr | clk_proto_conv_attr | clk_exe_attr | clk_py_cog_attr ;
+
+clk_cpp_attr := "cpp" . " "* . "(" . " "* . clk_cpp_value . " "* . ( "," . " "* .  clk_cpp_value . " "* . )* . ")" ;
+clk_cpp_value := clk_cpp_namespace | clk_cpp_type_namespace | clk_cpp_type_header | clk_cpp_type_factory | clk_cpp_generate_cog_metrics ;
+clk_cpp_namespace := "namespace" . " "* . "=" . " "* . namespace:namespace_path ;
+clk_cpp_type_namespace := "type_namespace" . " "* . "=" . " "* . namespace:namespace_path ;
+clk_cpp_type_header := "type_header" . " "* . "=" . " "* . header:string_literal ;
+clk_cpp_type_factory := "type_factory" . " "* . "=" . " "* . factory:identifier ;
+clk_cpp_generate_cog_metrics := "generate_cog_metrics" . " "* . "=" . " "* . value:boolean ;
+
+clk_proto_attr := "proto" . " "* . "(" . " "* . clk_proto_value . " "* . ( "," . " "* . clk_proto_value . " "* . )* . " "* . ")" ;
+clk_proto_value := clk_proto_package | clk_proto_go_package | clk_proto_validate | clk_proto_prefix_enum_value_names ;
+clk_proto_package := "package" . " "* . "=" . " "* . package:package_name ;
+clk_proto_go_package := "go_package" . " "* . "=" . " "* . go_package:go_package_name ;
+clk_proto_validate := "validate" . " "* . "=" . " "* . validate:boolean ;
+clk_proto_prefix_enum_value_names := "prefix_enum_value_names" . " "* . "=" . " "* . prefix:boolean ;
+
+clk_proto_conv_attr := "proto_conv" . " "* . "(" . " "* . clk_proto_conv_value . " "* . ( "," . " "* . clk_proto_conv_value . " "* . )* . " "* . ")" ;
+clk_proto_conv_value := clk_protobuf_to_tap | clk_tap_to_protobuf | clk_proto_conv_namespace ;
+clk_protobuf_to_tap := "protobuf_to_tap" . " "* . "=" . " "* . value:boolean ;
+clk_tap_to_protobuf := "tap_to_protobuf" . " "* . "=" . " "* . value:boolean ;
+clk_proto_conv_namespace := "namespace" . " "* . "=" . " "* . namespace:namespace_path ;
+
+clk_exe_attr := "exe" . " "* . "(" . " "* . clk_offline? . " "* . ")" ;
+clk_offline := "offline" . " "* . "=" . " "* . value:boolean ;
+
+clk_py_cog_attr := "py_cog" . " "* . "(" . " "* . clk_wrapper_type? . " "* . ")" ;
+clk_wrapper_type := "wrapper_type" . " "* . "=" . " "* . (nanobind:"nanobind" | python:"python") ;
+
+instantiate_stmt := doc? . clk_outer_attrs? . "instantiate" : (name:identifier , ":" ,)? .  typespec:expr , ";" , ;
+python_cog := doc? . clk_outer_attrs? . "python_cog" : identifier , cog_blocks , ;
+
+clk_entity := cog | python_cog | schema | enum | tag | channel | module_scope_signal | udp_socket | multicast_udp_socket | box | strong_type | policy_def | policy | extern_type | cpu_domain | ethernet | assignment_stmt | pcie_link | instantiate_stmt | audio_source | dfl_trait_def | dfl_impl_decl | dfl_fn_def ;
+
+// ---------------------------------------------------------------------------
+// DFL (Declarative Functional Language) Expressions
+// ---------------------------------------------------------------------------
+
+// Trait definitions: trait Add<Rhs = Self> { type Output; }
+dfl_trait_def := doc? . "trait" : identifier , dfl_trait_type_params? , (dfl_trait_body | ";") , ;
+dfl_trait_type_params := "<" , dfl_trait_type_param , ("," , dfl_trait_type_param)* , ">" ;
+dfl_trait_type_param := name:identifier , ("=" , default:dfl_type_param_default)? ;
+dfl_type_param_default := self_type:"Self" | typespec:expr ;
+dfl_trait_body := "{" , dfl_trait_assoc_type_decl* , "}" ;
+dfl_trait_assoc_type_decl := dfl_trait_assoc_type , ";" , ;
+dfl_trait_assoc_type := "type" : name:identifier ;
+
+// Impl declarations: impl Add<Float64> for Duration { type Output = Duration; }
+dfl_impl_decl := doc? . "impl" : trait:expr , "for" : for_type:expr , (dfl_impl_body | ";") , ;
+dfl_impl_body := "{" , dfl_impl_assoc_type_decl* , "}" ;
+dfl_impl_assoc_type_decl := dfl_impl_assoc_type , ";" , ;
+dfl_impl_assoc_type := "type" : name:identifier , "=" , typespec:expr ;
+
+// Function definitions: fn double(x) { x + x }
+dfl_fn_def := doc? . "fn" : name:identifier , "(" , dfl_fn_params? . ","? , ")" , dfl_fn_return_type? , "{" , body:dfl_expr , "}" ;
+dfl_fn_params := dfl_variadic_param | dfl_fn_param , ("," , (dfl_variadic_param | dfl_fn_param) ,)* ;
+dfl_fn_param := name:identifier , (":" , typespec:expr)? ;
+dfl_variadic_param := name:identifier . "..." , (":" , typespec:expr)? ;
+dfl_fn_return_type := "->" , typespec:expr ;
+
+
+// DFL expression entry point
+dfl_expr := dfl_or_expr ;
+
+// Boolean operators (lowest precedence)
+dfl_or_expr := dfl_and_expr , ("or" : dfl_and_expr)* ;
+dfl_and_expr := dfl_not_expr , ("and" : dfl_not_expr)* ;
+dfl_not_expr := "not" : dfl_not_expr | dfl_comparison_expr ;
+
+// Comparison operators
+dfl_comparison_expr := dfl_additive_expr , (dfl_comparison_op , dfl_additive_expr)? ;
+dfl_comparison_op := eq:"==" | ne:"!=" | le:"<=" | ge:">=" | lt:"<" | gt:">" ;
+
+// Arithmetic operators
+dfl_additive_expr := dfl_multiplicative_expr , (dfl_additive_op , dfl_multiplicative_expr)* ;
+dfl_additive_op := add:"+" | sub:"-" ;
+
+dfl_multiplicative_expr := dfl_unary_expr , (dfl_multiplicative_op , dfl_unary_expr)* ;
+dfl_multiplicative_op := mul:"*" | div:"/" | mod:"%" ;
+
+// Unary operators
+dfl_unary_expr := (neg:"-" | pos:"+") . dfl_unary_expr | dfl_postfix_expr ;
+
+// Postfix expressions
+dfl_postfix_expr := dfl_primary_expr , (dfl_call_suffix | dfl_member_suffix)* ;
+dfl_call_suffix := "(" , dfl_arg_list? , ")" ;
+dfl_member_suffix := "." . identifier ;
+dfl_arg_list := dfl_arg , ("," , dfl_arg)* , ","? ;
+dfl_arg := (name:identifier , "=")? , value:dfl_expr . spread:"..."? ;
+
+// Primary expressions
+dfl_primary_expr := dfl_lambda | dfl_abs_expr | dfl_if_expr | dfl_cond_expr | dfl_match_expr | dfl_array_literal | dfl_paren_expr | literal | identifier ;
+dfl_lambda := "fn" , "(" , dfl_lambda_params? , ")" , dfl_expr ;
+dfl_lambda_params := identifier , ("," , identifier)* ;
+dfl_abs_expr := "|" , dfl_expr , "|" ;
+dfl_paren_expr := "(" , dfl_expr , ")" ;
+dfl_array_literal := "[" , (dfl_expr , ("," , dfl_expr)* , ","?)? , "]" ;
+
+// Conditional expressions
+dfl_if_expr := "if" : condition:dfl_expr , "then" : if_true:dfl_expr , "else" : if_false:dfl_expr ;
+
+dfl_cond_expr := "cond" , "{" , dfl_cond_arms , "}" ;
+dfl_cond_arms := dfl_cond_arm , ("," , dfl_cond_arm ,)* . ","? ;
+dfl_cond_arm := dfl_cond_guard , "=>" , dfl_expr ;
+dfl_cond_guard := else_guard:"else" | dfl_expr ;
+
+// Match expressions
+dfl_match_expr := "match" : scrutinee:dfl_expr , "{" , dfl_match_arms , "}" ;
+dfl_match_arms := dfl_match_arm , ("," , dfl_match_arm ,)* . ","? ;
+dfl_match_arm := dfl_match_pattern , "=>" , dfl_expr ;
+
+// Pattern matching
+dfl_range_pattern := lo:integer , ".." , hi:integer ;
+dfl_simple_pattern := literal | namespaced_identifier ;
+dfl_pattern := dfl_range_pattern | dfl_simple_pattern ;
+dfl_pattern_list := dfl_pattern , ("|" , dfl_pattern ,)* ;
+dfl_match_pattern := else:"else" | dfl_pattern_list ;

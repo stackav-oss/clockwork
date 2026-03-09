@@ -55,7 +55,7 @@ public:
 
   /// Access the path string
   /// @return Path string
-  [[nodiscard]] const std::pmr::string& string() const noexcept;
+  [[nodiscard]] std::pmr::string string() const noexcept;
 
   /// Get a a string view for the path string
   /// @return Path string view

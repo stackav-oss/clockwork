@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
-load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
+load("//tools/rules:cc.bzl", "cc_library")
 
 package(
     default_testonly = True,
@@ -13,97 +13,41 @@ clk(
     name = "camera_clk",
     srcs = ["camera.clk"],
     outs = [
-        "camera_cog.cc",
-        "camera_cog.hh",
-        "camera_cog.inl",
-        "camera_cog_dial.cc",
-        "camera_cog_dial.hh",
-        "camera_cog_dial.inl",
-        "camera_exe.cc",
-        "camera_exe.hh",
-        "camera_exe.inl",
+        "camera_clk_cc.cc",
+        "camera_clk_cc.hh",
+        "camera_clk_cc.inl",
+        "camera_clk_cc_dial.cc",
+        "camera_clk_cc_dial.hh",
+        "camera_clk_cc_dial.inl",
+        "camera_clk_exe.cc",
+        "camera_clk_exe.hh",
+        "camera_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":camera_state",
+        ":video_message_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
     ],
     deps = [
         ":video_channels_clk",
         ":video_message_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/examples/demo_system:cpu_domain_clk",
     ],
 )
 
 cc_library(
-    name = "camera_cog",
-    srcs = [
-        "camera_cog.cc",
-        "camera_cog.inl",
-    ],
-    hdrs = ["camera_cog.hh"],
-    data = [":camera_clk"],
+    name = "camera_clk_cc_impl",
+    srcs = ["camera_clk_cc_impl.cc"],
     deps = [
-        ":camera_cog_dial",
-        ":camera_cog_impl",
-        ":camera_state",
-        ":video_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-)
-
-cc_library(
-    name = "camera_cog_dial",
-    srcs = [
-        "camera_cog_dial.cc",
-        "camera_cog_dial.inl",
-    ],
-    hdrs = ["camera_cog_dial.hh"],
-    data = [":camera_clk"],
-    deps = [
-        ":camera_state",
-        ":video_message",
-        "//clockwork/dial:include_common",
-    ],
-)
-
-cc_library(
-    name = "camera_cog_impl",
-    srcs = ["camera_cog_impl.cc"],
-    deps = [
-        ":camera_cog_dial",
-        ":video_message",
+        ":camera_clk_cc_dial",
+        ":video_message_clk_cc",
         "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publisher_handle",
-    ],
-)
-
-cc_binary(
-    name = "camera_exe",
-    srcs = [
-        "camera_exe.cc",
-        "camera_exe.hh",
-        "camera_exe.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":camera_cog",
-        ":camera_state",
-        ":video_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/scaffolding:abstract_casing",
-        "//clockwork/scaffolding:casing",
-        "//clockwork/scaffolding:online_main",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/uuid",
+        "//clockwork/pinion:publishable",
     ],
 )
 
@@ -117,6 +61,7 @@ cc_library(
 clk(
     name = "video_channel_policies_clk",
     srcs = ["video_channel_policies.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
         ":video_channels_clk",
@@ -128,33 +73,18 @@ clk(
 clk(
     name = "video_channels_clk",
     srcs = ["video_channels.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [":video_message_clk"],
-)
-
-cc_library(
-    name = "video_message",
-    srcs = [
-        "video_message.cc",
-        "video_message.inl",
-    ],
-    hdrs = ["video_message.hh"],
-    data = [":video_message_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
 )
 
 clk(
     name = "video_message_clk",
     srcs = ["video_message.clk"],
     outs = [
-        "video_message.cc",
-        "video_message.hh",
-        "video_message.inl",
+        "video_message_clk_cc.cc",
+        "video_message_clk_cc.hh",
+        "video_message_clk_cc.inl",
     ],
+    generate = ["cpp"],
 )

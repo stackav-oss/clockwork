@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/filesystem/path.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h> // IWYU pragma: keep
 
-#include <filesystem>
 #include <new>
 #include <string>
 
@@ -25,6 +25,6 @@ NB_MODULE(nb_tmp_directory_guard, mod)
       "Create a test directory that is deleted automatically.")
     .def_prop_ro(
       "path",
-      [](jewels::testing::TmpDirectoryGuard& obj) -> std::string { return obj.get_path().string(); },
+      [](jewels::testing::TmpDirectoryGuard& obj) -> std::string { return std::string{obj.get_path().c_str()}; },
       "Get the temp directory path string.");
 }

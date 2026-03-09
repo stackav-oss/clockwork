@@ -40,7 +40,7 @@ cc_test(
     name = "copy_cog_test",
     srcs = ["copy_cog_test.cc"],
     deps = [
-        "//clockwork/dsl/cog/tests/support:copy_cog",
+        "//clockwork/dsl/cog/tests/support:copy_cog_clk_cc",
         "@catch2//:catch2_main",
     ],
 )
@@ -105,6 +105,7 @@ py_test(
     deps = [
         ":__test__",
         "//clockwork/dsl/cog:cppcog",
+        "//clockwork/dsl/cog:pycog",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/ir:cog",
         "//clockwork/dsl/ir:compiler",
@@ -151,6 +152,7 @@ py_test(
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
     ],
 )
 
@@ -162,9 +164,8 @@ cc_test(
         "//clockwork/cog:input_view",
         "//clockwork/dial:cond_messages_present",
         "//clockwork/dial:cond_time_since_last_exec",
-        "//clockwork/dsl/cog:cog_event_metrics_cpp",
-        "//clockwork/dsl/cog:cog_telemetry_metrics_cpp",
-        "//clockwork/dsl/cog:min_max_mean_cpp",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//clockwork/dsl/cog:ten_nanosecond_type",
         "//clockwork/dsl/tests/support:hellocog",
         "//clockwork/pinion:buffer",
@@ -181,7 +182,22 @@ cc_test(
     name = "rate_limited_cog_test",
     srcs = ["rate_limited_cog_test.cc"],
     deps = [
-        "//clockwork/dsl/cog/tests/support:rate_limited_cog",
+        "//clockwork/cog:cog_publishers",
+        "//clockwork/dsl/cog/tests/support:rate_limited_cog_clk_cc",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "signal_api_test",
+    srcs = ["signal_api_test.cc"],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/ir/tests/support:report_group_defs",
+        "//clockwork/dsl/ir/tests/support:report_group_defs_dial",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/time:sync_time",
         "@catch2//:catch2_main",
     ],
 )
@@ -190,7 +206,7 @@ cc_test(
     name = "skip_cog_test",
     srcs = ["skip_cog_test.cc"],
     deps = [
-        "//clockwork/dsl/cog/tests/support:skip_cog",
+        "//clockwork/dsl/cog/tests/support:skip_cog_clk_cc",
         "@catch2//:catch2_main",
     ],
 )

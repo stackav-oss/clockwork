@@ -1,3 +1,6 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging)]
+
 // Log writer state
 enum LogWriterState
 {
@@ -40,13 +43,4 @@ enum LogWriterState
       underlying_value: 5;
     }
   }
-}
-
-cpp_target log_writer_state
-{
-  options
-  {
-    namespace clockwork_logging;
-  }
-  enum LogWriterState;
 }

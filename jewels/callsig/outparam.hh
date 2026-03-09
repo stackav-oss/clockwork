@@ -15,7 +15,11 @@ namespace jewels
 template <class T>
 class Out;
 template <class T>
+class InOut;
+template <class T>
 class OptionalOut;
+template <class T>
+class OptionalInOut;
 template <class T>
 class MaybeOut;
 template <class T>
@@ -23,6 +27,7 @@ class FactoryResult;
 
 ///
 /// Type traits for output parameter types
+/// Note - base classes don't get traits because they're not intended to be used.
 ///
 
 template <typename T>
@@ -36,7 +41,17 @@ struct IsOutParamType<Out<T>> : std::true_type
 };
 
 template <typename T>
+struct IsOutParamType<InOut<T>> : std::true_type
+{
+};
+
+template <typename T>
 struct IsOutParamType<OptionalOut<T>> : std::true_type
+{
+};
+
+template <typename T>
+struct IsOutParamType<OptionalInOut<T>> : std::true_type
 {
 };
 
@@ -53,23 +68,24 @@ concept OutParamType = is_out_param_type_v<T>;
 
 /// Wrapper for output parameters.
 /// The purpose of this class is to clearly indicate that a function is expected to modify the object it is passed.
+/// This base class is inherited by Out and InOut without any changes.
 template <class T>
-class Out
+class OutBase
 {
 public:
   /// Construct from a reference to an object
-  explicit Out(T& ref) noexcept
+  explicit OutBase(T& ref) noexcept
     : ref_{jewels::memory::make_non_null_from_ref(ref)}
   {
   }
 
-  ~Out() = default;
+  ~OutBase() = default;
 
   // Prevent copy/move to avoid confusion
-  Out(const Out&) = delete;
-  Out& operator=(const Out&) = delete;
-  Out(Out&&) = delete;
-  Out& operator=(Out&&) = delete;
+  OutBase(const OutBase&) = delete;
+  OutBase& operator=(const OutBase&) = delete;
+  OutBase(OutBase&&) = delete;
+  OutBase& operator=(OutBase&&) = delete;
 
   /// Access the referenced object by pointer
   [[nodiscard]] T* operator->() noexcept
@@ -111,86 +127,113 @@ private:
   jewels::memory::ObjectPtr<T> ref_;
 };
 
+/// Wrapper for output parameters.
+/// The purpose of this class is to clearly indicate that a function is expected to modify the object it is passed.
+template <class T>
+class Out : public OutBase<T>
+{
+public:
+  using OutBase<T>::OutBase;
+};
+
+/// Wrapper for parameters which are both inputs and outputs.
+/// The purpose of this class is to clearly indicate that a function is expected to modify the object it is passed after
+/// reading its value.
+/// If that function can fail, the function's documentation should specify whether the output is modified in the case of
+/// failure.
+template <class T>
+class InOut : public OutBase<T>
+{
+public:
+  using OutBase<T>::OutBase;
+};
+
 /// Wrapper for caller-optional output parameters.
 /// The caller decides whether an output is needed by passing either an object or nullopt.
+/// This base class is inherited by OptionalOut and OptionalInOut without any changes.
 template <class T>
-class OptionalOut
+class OptionalOutBase
 {
 public:
   /// Construct with a reference to an object (output is desired)
-  explicit OptionalOut(T& ref) noexcept
+  explicit constexpr OptionalOutBase(T& ref) noexcept
     : ptr_{&ref}
   {
   }
 
   /// Construct with nullopt (output is not needed)
-  OptionalOut(std::nullopt_t /*nullopt*/) noexcept // NOLINT(google-explicit-constructor) We want to allow implicit here
+  constexpr OptionalOutBase( // NOLINT(google-explicit-constructor) We want to allow implicit conversion from nullopt
+    std::nullopt_t /*nullopt*/) noexcept
     : ptr_{nullptr}
   {
   }
 
+  /// Construct from another OptionalOutBase.
+  // NOLINTNEXTLINE(google-explicit-constructor) We explicitly want to disable non-conversion implicit copying here.
+  explicit OptionalOutBase(OptionalOutBase<T>& other) noexcept = default;
+
   /// Construct with an optional, either containing the object or nullopt (output depends on contents).
-  explicit OptionalOut(std::optional<T>& maybe_ref) noexcept
+  explicit constexpr OptionalOutBase(std::optional<T>& maybe_ref) noexcept
     : ptr_(maybe_ref.has_value() ? &(*maybe_ref) : nullptr)
   {
   }
 
-  ~OptionalOut() = default;
+  ~OptionalOutBase() = default;
 
   // Prevent copying/moving to avoid confusion
-  OptionalOut(const OptionalOut&) = delete;
-  OptionalOut& operator=(const OptionalOut&) = delete;
-  OptionalOut(OptionalOut&&) = delete;
-  OptionalOut& operator=(OptionalOut&&) = delete;
+  OptionalOutBase(const OptionalOutBase&) = delete;
+  OptionalOutBase& operator=(const OptionalOutBase&) = delete;
+  OptionalOutBase(OptionalOutBase&&) = delete;
+  OptionalOutBase& operator=(OptionalOutBase&&) = delete;
 
   /// Check if output is desired (i.e., not nullopt)
-  [[nodiscard]] bool has_value() const noexcept
+  [[nodiscard]] constexpr bool has_value() const noexcept
   {
     return ptr_ != nullptr;
   }
 
   /// Check if output is desired (i.e., not nullopt)
-  [[nodiscard]] explicit operator bool() const noexcept
+  [[nodiscard]] constexpr explicit operator bool() const noexcept
   {
     return has_value();
   }
 
   /// (UNCHECKED) Access the referenced object by pointer
   /// @pre has_value() must be true
-  [[nodiscard]] T* operator->() noexcept
+  [[nodiscard]] constexpr T* operator->() noexcept
   {
     return ptr_;
   }
 
   /// (UNCHECKED) Access the referenced object by pointer (const)
   /// @pre has_value() must be true
-  [[nodiscard]] const T* operator->() const noexcept
+  [[nodiscard]] constexpr const T* operator->() const noexcept
   {
     return ptr_;
   }
 
   /// (UNCHECKED) Access the referenced object by reference
   /// @pre has_value() must be true
-  [[nodiscard]] T& operator*() noexcept
+  [[nodiscard]] constexpr T& operator*() noexcept
   {
     return *ptr_;
   }
 
   /// (UNCHECKED) Access the referenced object by reference (const)
   /// @pre has_value() must be true
-  [[nodiscard]] const T& operator*() const noexcept
+  [[nodiscard]] constexpr const T& operator*() const noexcept
   {
     return *ptr_;
   }
 
   /// Get the underlying pointer (may be null)
-  [[nodiscard]] T* get() noexcept
+  [[nodiscard]] constexpr T* get() noexcept
   {
     return ptr_;
   }
 
   /// Get the underlying pointer (may be null)
-  [[nodiscard]] const T* get() const noexcept
+  [[nodiscard]] constexpr const T* get() const noexcept
   {
     return ptr_;
   }
@@ -199,8 +242,42 @@ private:
   T* ptr_;
 };
 
+/// Wrapper for caller-optional output parameters.
+/// The caller decides whether an output is needed by passing either an object or nullopt.
+template <class T>
+// Member functions are fully specified in the base class and explicitly inherited.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
+class OptionalOut : public OptionalOutBase<T>
+{
+public:
+  using OptionalOutBase<T>::OptionalOutBase;
+
+  /// Construct from another OptionalOut
+  // NOLINTNEXTLINE(google-explicit-constructor) We explicitly want to disable non-conversion implicit copying here.
+  explicit OptionalOut(OptionalOut<T>& other) noexcept = default;
+};
+
+/// Wrapper for caller-optional input/output parameters.
+/// The caller decides whether an output is needed by passing either an object or nullopt.
+/// If that function can fail, the function's documentation should specify whether the output is modified in the case of
+/// failure.
+template <class T>
+// Member functions are fully specified in the base class and explicitly inherited.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
+class OptionalInOut : public OptionalOutBase<T>
+{
+public:
+  using OptionalOutBase<T>::OptionalOutBase;
+
+  /// Construct from another OptionalInOut
+  // NOLINTNEXTLINE(google-explicit-constructor) We explicitly want to disable non-conversion implicit copying here.
+  explicit OptionalInOut(OptionalInOut<T>& other) noexcept = default;
+};
+
 /// Wrapper for callee-optional output parameters.
 /// The caller always provides an object, but the callee decides whether to modify it.
+/// Note - a MaybeInOut version of this class doesn't make sense because the callee has no way of indicating whether an
+/// input should be provided.
 template <class T>
 class MaybeOut
 {
@@ -414,13 +491,26 @@ private:
   std::optional<T> storage_;
 };
 
+///
+/// Deduction guides
+/// Note - base classes don't get deduction guides because they're not intended to be used.
+///
+
 /// Deduction guide for Out
 template <typename T>
 Out(T&) -> Out<T>;
 
+/// Deduction guide for InOut
+template <typename T>
+InOut(T&) -> InOut<T>;
+
 /// Deduction guide for OptionalOut
 template <typename T>
 OptionalOut(T&) -> OptionalOut<T>;
+
+/// Deduction guide for OptionalInOut
+template <typename T>
+OptionalInOut(T&) -> OptionalInOut<T>;
 
 /// Deduction guide for MaybeOut
 template <typename T>

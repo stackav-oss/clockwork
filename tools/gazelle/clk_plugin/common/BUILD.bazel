@@ -1,0 +1,22 @@
+# Copyright 2025 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "common",
+    srcs = ["common.go"],
+    importpath = "github.com/stackav-oss/clockwork/tools/gazelle/clk_plugin/common",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@@gazelle+//rule",
+        "@org_skia_go_infra//go/util",
+    ],
+)
+
+go_test(
+    name = "common_test",
+    srcs = ["common_test.go"],
+    embed = [":common"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)

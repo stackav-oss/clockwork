@@ -21,8 +21,8 @@ cc_library(
         "//clockwork/scaffolding:__subpackages__",
     ],
     deps = [
-        "//clockwork/io:network_var_packet",
-        "//clockwork/io:var_packet",
+        "//clockwork/io:network_var_packet_clk_cc",
+        "//clockwork/io:var_packet_clk_cc",
         "//jewels/std:expected",
         "//jewels/std:span",
     ],
@@ -35,6 +35,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":socket_common",
+        "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",

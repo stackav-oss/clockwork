@@ -21,8 +21,8 @@ class TestChannelSpyNanobindClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, socket_ns)
+        test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         assert channel_spy.channels == ["channel_1", "channel_2"]
         assert (
@@ -35,8 +35,8 @@ class TestChannelSpyNanobindClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, socket_ns)
+        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         publisher = helper.open_publisher(0)
 
@@ -84,8 +84,8 @@ class TestChannelSpyNanobindClass:
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
-        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, socket_ns)
-        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, socket_ns)
+        helper = test_helper.TestHelper.make_test_helper(shm_root_dir, shm_root_dir, socket_ns)
+        channel_spy = channel_spy_impl.ChannelSpy(shm_root_dir, shm_root_dir, socket_ns)
 
         publisher = helper.open_publisher(0)
 

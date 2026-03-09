@@ -6,7 +6,7 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/process_description.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/writers/deterministic_log_writer.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
 #include "clockwork/runners/deterministic_runner.hh"

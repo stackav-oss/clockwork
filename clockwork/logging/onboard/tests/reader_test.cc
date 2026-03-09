@@ -1,12 +1,12 @@
 // Copyright 2025 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/logging/channel_type.hh"
+#include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/logging/message_encoding.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
@@ -16,7 +16,7 @@
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
-#include "clockwork/logging/schema_encoding.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/aligner/aligner.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/error_code.hh"
@@ -37,7 +37,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <fmt10/format.h>
+#include <fmt/format.h>
 #include <gsl/util>
 
 #include <algorithm>
@@ -45,7 +45,6 @@
 #include <compare>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <list>
 #include <memory_resource>
@@ -1175,7 +1174,7 @@ TEST_CASE("List log files for interval")
     const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
       memory_resource,
       log_dir.string(),
-      LogInterval{log_time0 + std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)});
+      LogInterval{log_time0 - std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)});
     REQUIRE(list_result);
     REQUIRE(list_result->size() == 1U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});

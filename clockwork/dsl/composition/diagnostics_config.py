@@ -24,7 +24,7 @@ CLK_MODULE: Final = compiler.compile_source_file(
     _fs_importer,
 )
 
-max_reporter_name = 256
+max_reporter_name = 512
 
 max_reporters = 400
 

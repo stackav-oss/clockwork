@@ -12,7 +12,7 @@ from textwrap import dedent
 from typing import Final
 
 import pytest
-from clockwork.dsl import cst
+from clockwork.dsl import clockwork_cst as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -119,13 +119,13 @@ def test_error_no_terminals(hellomsg_module: node.Module) -> None:
     hellomsg_module.terminals = None
     assert hellomsg_module.cst_node is not None
     schema_cst = next(hellomsg_module.cst_node.children_entity()).child_schema()
-    with pytest.raises(ValueError, match="Cannot construct IR nodes from CST without a TerminalSource"):
+    with pytest.raises(ValueError, match=r"Cannot construct IR nodes from CST without a TerminalSource"):
         schema.Schema.from_cst(
             module=hellomsg_module,
             scope=hellomsg_module.inner_scope,
             cst_schema=schema_cst,
         )
-    with pytest.raises(ValueError, match="Cannot construct IR nodes from CST without a TerminalSource"):
+    with pytest.raises(ValueError, match=r"Cannot construct IR nodes from CST without a TerminalSource"):
         schema.FieldDef.from_cst(
             module=hellomsg_module,
             cst_node=next(
@@ -520,7 +520,7 @@ def test_constructor_invalid() -> None:
         }
         """,
     )
-    with pytest.raises(ValueError, match="Unsupported constructor type.  Only `source_code_order` is supported."):
+    with pytest.raises(ValueError, match=r"Unsupported constructor type\.  Only `source_code_order` is supported\."):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "bad"), importer=fs_importer)
 
 
@@ -550,6 +550,167 @@ def test_constructor_source_code_order() -> None:
     assert isinstance(schema_ir, schema.Schema)
     assert schema_ir.options
     assert schema_ir.options.provide_constructor
+
+
+def test_duplicate_constructor() -> None:
+    """Test that specifying constructor twice raises an error."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema DuplicateConstructor
+        {
+          options
+          {
+            constructor: source_code_order;
+            constructor: source_code_order;
+          }
+          fields
+          {
+            // Doc
+            #1 field: Int8;
+          }
+        }
+        """,
+    )
+    with pytest.raises(ValueError, match=r"Schema option 'constructor' can only be specified once\."):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "duplicate_constructor"), importer=fs_importer)
+
+
+def test_soa_enabled_true() -> None:
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema SoaEnabledSchema
+        {
+          options
+          {
+            soa_enabled: true;
+          }
+          fields
+          {
+            // Doc
+            #1 x: Float32;
+            // Doc
+            #2 y: Float32;
+            // Doc
+            #3 z: Float32;
+          }
+        }
+        """,
+    )
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "soa_enabled_schema"), importer=fs_importer)
+    schema_ir = module.inner_scope.lookup("SoaEnabledSchema", recursive=False)
+    assert isinstance(schema_ir, schema.Schema)
+    assert schema_ir.options
+    assert schema_ir.options.soa_enabled
+
+
+def test_soa_enabled_false() -> None:
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema SoaDisabledSchema
+        {
+          options
+          {
+            soa_enabled: false;
+          }
+          fields
+          {
+            // Doc
+            #1 x: Float32;
+          }
+        }
+        """,
+    )
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "soa_disabled_schema"), importer=fs_importer)
+    schema_ir = module.inner_scope.lookup("SoaDisabledSchema", recursive=False)
+    assert isinstance(schema_ir, schema.Schema)
+    assert schema_ir.options
+    assert not schema_ir.options.soa_enabled
+
+
+def test_soa_enabled_default() -> None:
+    """Test that soa_enabled defaults to false when not specified."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema DefaultSoaSchema
+        {
+          options {}
+          fields
+          {
+            // Doc
+            #1 field: Int8;
+          }
+        }
+        """,
+    )
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "default_soa_schema"), importer=fs_importer)
+    schema_ir = module.inner_scope.lookup("DefaultSoaSchema", recursive=False)
+    assert isinstance(schema_ir, schema.Schema)
+    assert schema_ir.options is not None
+    assert not schema_ir.options.soa_enabled
+
+
+def test_soa_enabled_with_constructor() -> None:
+    """Test that soa_enabled and constructor options can be used together."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema SoaWithConstructor
+        {
+          options
+          {
+            constructor: source_code_order;
+            soa_enabled: true;
+          }
+          fields
+          {
+            // Doc
+            #1 x: Float32;
+            // Doc
+            #2 y: Float32;
+          }
+        }
+        """,
+    )
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "soa_with_constructor"), importer=fs_importer)
+    schema_ir = module.inner_scope.lookup("SoaWithConstructor", recursive=False)
+    assert isinstance(schema_ir, schema.Schema)
+    assert schema_ir.options
+    assert schema_ir.options.provide_constructor
+    assert schema_ir.options.soa_enabled
+
+
+def test_duplicate_soa_enabled() -> None:
+    """Test that specifying soa_enabled twice raises an error."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        // Doc
+        schema DuplicateSoaEnabled
+        {
+          options
+          {
+            soa_enabled: true;
+            soa_enabled: false;
+          }
+          fields
+          {
+            // Doc
+            #1 field: Int8;
+          }
+        }
+        """,
+    )
+    with pytest.raises(ValueError, match=r"Schema option 'soa_enabled' can only be specified once\."):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "duplicate_soa_enabled"), importer=fs_importer)
 
 
 def test_param_as_field_type() -> None:
@@ -625,23 +786,9 @@ def test_schema_history() -> None:
           }
           history
           {
-            versions: [2, 3, 6];
-            fields
-            {
-              // test removal
-              #2 obsolete: Int32 -> removed #3;
-              #0 fp: Float32 -> became #4;
-              #1 boolean: Bool -> became #5;
-              #4 floating_point: Float32 -> became #6;
-            }
-
-            schema
-            {
-              name
-              {
-                #1 OldSchema;
-              }
-            }
+            version: 6;
+            legacy_became: [0->4, 1->5, 4->6];
+            removed: [2];
           }
         }
         """
@@ -653,40 +800,17 @@ def test_schema_history() -> None:
 
     # Test history parsing
     assert schema_ir.history is not None
-    assert schema_ir.history.versions == [2, 3, 6]
-    assert len(schema_ir.history.fields) == 4
-    assert schema_ir.history.old_names == {1: "OldSchema"}
-
-    # Test historical field details
-    hist_field = schema_ir.history.fields[2]
-    assert hist_field.num == 2
-    assert hist_field.name == "obsolete"
-    assert hist_field.removed_in_version == 3
-
-    hist_field = schema_ir.history.fields[1]
-    assert hist_field.num == 1
-    assert hist_field.name == "boolean"
-    assert hist_field.became_field_num == 5
+    assert schema_ir.history.version == 6
 
     # Test resolution
     resolved = schema_ir.resolve()
     assert resolved.history is not None
-    assert resolved.history.versions == [2, 3, 6]
-
-    resolved_field = resolved.history.fields[2]
-    assert isinstance(resolved_field.original_type, typesys.TypeVal)
-    assert resolved_field.original_type is clkbuiltins.INT32
-    assert resolved_field.removed_in_version == 3
+    assert resolved.history.version == 6
 
     # Test instantiation
     instantiated = schema.InstantiatedSchema.from_typespec(schema_ir)
     assert instantiated.history is not None
-    assert instantiated.history.versions == [2, 3, 6]
-
-    inst_field = instantiated.history.fields[1]
-    assert isinstance(inst_field.original_type, typesys.TypeVal)
-    assert inst_field.original_type is clkbuiltins.BOOL
-    assert inst_field.became_field_num == 5
+    assert instantiated.history.version == 6
 
 
 def test_schema_history_with_parameters() -> None:
@@ -708,12 +832,8 @@ def test_schema_history_with_parameters() -> None:
           }
           history
           {
-            versions: [2, 3];
-            fields
-            {
-              // Historical parameterized field
-              #2 old: T -> became #3;
-            }
+            version: 3;
+            legacy_became: [2->3];
           }
         }
         """
@@ -726,9 +846,6 @@ def test_schema_history_with_parameters() -> None:
     # Test resolution
     resolved = schema_ir.resolve()
     assert resolved.history is not None
-    hist_field = resolved.history.fields[2]
-    assert isinstance(hist_field.original_type, schema.ParameterRef)
-    assert hist_field.original_type.name == "T"
 
     # Test instantiation with concrete type
     instantiated = schema.InstantiatedSchema.from_typespec(
@@ -739,9 +856,6 @@ def test_schema_history_with_parameters() -> None:
         )
     )
     assert instantiated.history is not None
-    inst_field = instantiated.history.fields[2]
-    assert isinstance(inst_field.original_type, typesys.TypeVal)
-    assert inst_field.original_type is clkbuiltins.INT64
 
 
 def test_schema_history_errors() -> None:
@@ -760,17 +874,13 @@ def test_schema_history_errors() -> None:
           }
           history
           {
-            versions: [1];
-            fields
-            {
-              #1 old1: Int32 -> removed #2;
-              #1 old2: Int32 -> removed #2;
-            }
+            version: 1;
+            removed: [1, 1];
           }
         }
         """
     )
-    with pytest.raises(ValueError, match="Duplicate field number"):
+    with pytest.raises(ValueError, match=r"Field numbers \{1\} are used in both current and historical fields"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "duplicate_history"), importer=fs_importer)
 
 
@@ -791,66 +901,13 @@ def test_schema_history_validation_errors() -> None:
           }
           history
           {
-            versions: [1];
-            fields
-            {
-              #1 old: Int32 -> removed #2;
-            }
+            version: 1;
+            removed: [1];
           }
         }
         """
     )
-    with pytest.raises(ValueError, match=re.escape("Field numbers {1} are used in both current and historical fields")):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-    # Test change version <= field number
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // field
-            #3 field: Int32;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Int32 -> removed #2;
-            }
-          }
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Historical field 2 cannot be changed in version 2"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-    # Test non-existent change version
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // field
-            #2 field: Int32;
-          }
-          history
-          {
-            versions: [2];
-            fields
-            {
-              #1 old: Int32 -> removed #3;
-            }
-          }
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Historical field 1 references non-existent version 3"):
+    with pytest.raises(ValueError, match=r"Field numbers \{1\} are used in both current and historical fields"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
 
     # Test multiple fields becoming same field
@@ -866,497 +923,11 @@ def test_schema_history_validation_errors() -> None:
           }
           history
           {
-            versions: [3];
-            fields
-            {
-              #1 old1: Int32 -> became #3;
-              #2 old2: Int32 -> became #3;
-            }
+            version: 3;
+            legacy_became: [1->3, 2->3];
           }
         }
         """
     )
-    with pytest.raises(ValueError, match="Historical fields 2 and 1 cannot both become field 3"):
+    with pytest.raises(ValueError, match=r"Duplicate new field number 3"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-    # Test version list contains non-existent version
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // field
-            #3 field: Int32;
-          }
-          history
-          {
-            versions: [1, 2, 3];
-            fields
-            {
-              #2 old: Int32 -> removed #3;
-            }
-          }
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Version 1 is listed in version history but not defined by any field"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-    # Test current version not in version list
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // field
-            #2 field: Int32;
-          }
-          history
-          {
-            versions: [1];
-            fields
-            {
-              #1 old: Int32 -> removed #2;
-            }
-          }
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Historical version does not include current version 2"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-
-def test_schema_history_type_changes() -> None:
-    """Test type compatibility checks in schema history."""
-    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
-
-    # Test compatible integer to integer field change
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: Int64;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Int32 -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    # This should compile without error - Int32 to Int64 is allowed because they map to same Python type
-    compiler.compile_source_text(source, ModuleID(CLK_REPO, "test1"), importer=fs_importer)
-
-    # Test incompatible integer to float field change
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: Float64;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Int32 -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Incompatible type change.*Int32.*became.*Float64"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test2"), importer=fs_importer)
-
-    # Test container type changes (Optional -> VarArray -> FixedArray)
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: VarArray<Int32, max_size=10>;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Optional<Int32> -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    # This should compile - container types with compatible inner types are allowed
-    compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
-
-    # Test incompatible container inner types
-    source = dedent(
-        """
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: Optional<Float32>;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Optional<Int32> -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Incompatible type change.*Optional.*Int32.*became.*Optional.*Float32"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test3"), importer=fs_importer)
-
-    # Test integer to enum with explicit values
-    source = dedent(
-        """
-        // Test enum with explicit values
-        enum TestEnum
-        {
-          values
-          {
-            // 0
-            #0 zero default { underlying_value: 0; }
-            // 1
-            #1 one { underlying_value: 1; }
-            // 2
-            #2 two { underlying_value : 2; }
-          }
-        }
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: TestEnum;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Int32 -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    # This should compile - integer to enum with explicit values is allowed
-    compiler.compile_source_text(source, ModuleID(CLK_REPO, "test4"), importer=fs_importer)
-
-    # Test integer to enum without explicit values
-    source = dedent(
-        """
-        // Test enum without explicit values
-        enum TestEnum
-        {
-          values
-          {
-            // 0
-            #0 zero default;
-            // 1
-            #1 one;
-            // 2
-            #2 two;
-          }
-        }
-        // TEst
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: TestEnum;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Int32 -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Incompatible type change.*Int32.*became.*TestEnum"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test5"), importer=fs_importer)
-
-    # Test enum to enum (always incompatible)
-    source = dedent(
-        """
-        // Test enum to enum
-        enum Enum1
-        {
-          values
-          {
-            // 0
-            #0 zero default { underlying_value: 0; }
-            // 1
-            #1 one { underlying_value: 1; }
-          }
-        }
-        // Test
-        enum Enum2
-        {
-          values
-          {
-            // 0
-            #0 zero default { underlying_value: 0; }
-            // 1
-            #1 one { underlying_value: 1; }
-          }
-        }
-        // Test
-        schema Test
-        {
-          fields
-          {
-            // Current
-            #3 field: Enum2;
-          }
-          history
-          {
-            versions: [2, 3];
-            fields
-            {
-              #2 old: Enum1 -> became #3;
-            }
-          }
-        }
-
-        cpp_target test
-        {
-          options { namespace test; }
-          schema Test;
-          representation Tachyon<Test>;
-          interface Tappy<Test>;
-        }
-        """
-    )
-    with pytest.raises(ValueError, match="Incompatible type change.*Enum1.*became.*Enum2"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test7"), importer=fs_importer)
-
-
-def test_schema_pseudoversions() -> None:
-    """Test pseudoversions in schema history."""
-    source = dedent(
-        """
-        // Test pseudoversions
-        schema SchemaWithPseudoversions
-        {
-          fields
-          {
-            // Bool
-            #6 boolean: Bool = true;
-            // Integer
-            #4 integer: Int64;
-            // Floating point
-            #7 floating_point: Float64;
-          }
-          history
-          {
-            versions: [2, 3, 7];
-            version_pseudofields: [3, 5];
-            fields
-            {
-              // test removal
-              #2 obsolete: Int32 -> removed #3;
-              #1 boolean: Bool -> became #6;
-            }
-          }
-        }
-        """
-    )
-    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
-    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "pseudover_test"), importer=fs_importer)
-    schema_ir = module.inner_scope.lookup("SchemaWithPseudoversions")
-    assert isinstance(schema_ir, schema.Schema)
-
-    # Test history parsing
-    assert schema_ir.history is not None
-    assert schema_ir.history.versions == [2, 3, 7]
-    assert schema_ir.history.pseudoversions == [3, 5]
-
-    # Test resolution
-    resolved = schema_ir.resolve()
-    assert resolved.history is not None
-    assert resolved.history.versions == [2, 3, 7]
-    assert resolved.history.pseudoversions == [3, 5]
-
-    # Test instantiation
-    instantiated = schema.InstantiatedSchema.from_typespec(schema_ir)
-    assert instantiated.history is not None
-    assert instantiated.history.versions == [2, 3, 7]
-    assert instantiated.history.pseudoversions == [3, 5]
-
-    # Test current version includes pseudoversions
-    assert instantiated.cur_version() == 7
-
-
-def test_schema_pseudoversion_conflict() -> None:
-    """Test that pseudoversions can't conflict with field numbers."""
-    source = dedent(
-        """
-        // Test pseudoversion conflicts
-        schema ConflictingPseudoversions
-        {
-          fields
-          {
-            // Bool
-            #5 boolean: Bool = true;
-          }
-          history
-          {
-            versions: [5];
-            version_pseudofields: [5];
-            fields {}
-          }
-        }
-        """
-    )
-    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
-    with pytest.raises(ValueError, match=r"Pseudoversions \{5\} conflict with field numbers"):
-        compiler.compile_source_text(source, ModuleID(CLK_REPO, "conflict_test"), importer=fs_importer)
-
-
-def test_empty_pseudoversions() -> None:
-    """Test schema with empty pseudoversions list."""
-    source = dedent(
-        """
-        // Test empty pseudoversions
-        schema EmptyPseudoversions
-        {
-          fields
-          {
-            // Bool
-            #3 boolean: Bool = true;
-          }
-          history
-          {
-            versions: [3];
-            version_pseudofields: [];
-            fields {}
-          }
-        }
-        """
-    )
-    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
-    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "empty_pseudover_test"), importer=fs_importer)
-    schema_ir = module.inner_scope.lookup("EmptyPseudoversions")
-    assert isinstance(schema_ir, schema.Schema)
-    assert schema_ir.history is not None
-    assert schema_ir.history.pseudoversions == []
-
-
-def test_schema_pseudoversion_in_current_version() -> None:
-    """Test that pseudoversions are included in current version calculation."""
-    source = dedent(
-        """
-        // Test pseudoversion in current version
-        schema PseudoCurrentVersion
-        {
-          fields
-          {
-            // Bool
-            #3 boolean: Bool = true;
-          }
-          history
-          {
-            versions: [8];
-            version_pseudofields: [8];
-            fields {}
-          }
-        }
-        """
-    )
-    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
-    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "pseudover_current_test"), importer=fs_importer)
-    schema_ir = module.inner_scope.lookup("PseudoCurrentVersion")
-    assert isinstance(schema_ir, schema.Schema)
-
-    # Test current version calculation
-    resolved = schema_ir.resolve()
-    assert resolved is not None
-    # current_version should be 8 (the pseudoversion), not 3 (the field number)
-    assert schema_ir.current_version() == 8
-
-    # Test instantiated schema
-    instantiated = schema.InstantiatedSchema.from_typespec(schema_ir)
-    assert instantiated.cur_version() == 8

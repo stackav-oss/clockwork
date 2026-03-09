@@ -1,3 +1,6 @@
+#![generate(cpp, proto, proto_conv)]
+#![cpp(namespace=clockwork::testing)]
+#![proto(package=clockwork.testing.proto)]
 
 // Common tag for ids from config
 tag ConfigId;
@@ -67,51 +70,4 @@ schema Message2
         // The calculation result
         #4 result: UInt64;
     }
-}
-
-cpp_target test_msgs
-{
-  options
-  {
-    namespace clockwork::testing;
-  }
-
-  tag ConfigId;
-  tag GroupId;
-
-  schema InitConfig;
-  schema Config;
-  schema State;
-  schema Message1;
-  schema Message2;
-  representation Tachyon<InitConfig>;
-  representation Tachyon<Config>;
-  representation Tachyon<State>;
-  representation Tachyon<Message1>;
-  representation Tachyon<Message2>;
-  interface Tap<Tachyon<InitConfig>>;
-  interface Tap<Tachyon<Config>>;
-  interface Tap<Tachyon<State>>;
-  interface Tap<Tachyon<Message1>>;
-  interface Tap<Tachyon<Message2>>;
-}
-
-proto_target test_msgs_proto
-{
-  options
-  {
-    package clockwork.testing.proto;
-  }
-  representation Protobuf<InitConfig>;
-  representation Protobuf<Config>;
-}
-
-cpp_target test_msgs_proto_conv
-{
-  options
-  {
-    namespace clockwork::testing;
-  }
-  converter ProtobufToTap<Protobuf<InitConfig>, Tap<Tachyon<InitConfig>>>;
-  converter ProtobufToTap<Protobuf<Config>, Tap<Tachyon<Config>>>;
 }

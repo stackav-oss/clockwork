@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Representation of an entire Clockwork system."""
@@ -11,19 +11,28 @@ from typing import TYPE_CHECKING, Any, Final, Generic, TypeAlias, TypeVar, cast
 from uuid import UUID, uuid3
 
 from clockwork.dsl.composition import (
+    aligned_input,
+    channel_config,
+    channel_config_proto,
     graphir,
     logger_config,
     logger_config_proto,
+    realtime_playback_config,
     snapshot_config,
 )
 from clockwork.dsl.composition.str_manip import snake_from_camel
+from clockwork.dsl.ir import (
+    aligner as aligner_mod,
+)
 from clockwork.dsl.ir import (
     audio,
     box,
     clkbuiltins,
     clkenum,
     cog,
+    cog_components,
     diagnostics,
+    extern_type,
     hardware,
     node,
     policy,
@@ -65,12 +74,16 @@ class SnapshotMetadata:
     cycles: int | None  # Execution cycles (None for SnapshotOnce)
 
 
+MemoryResourceEndpointType: TypeAlias = cog.CogInstanceMember[cog.ResourceDef] | box.StateInstance
+
 EndpointType: TypeAlias = (
     cog.CogInstanceMember[Any]
+    | cog.CogInstanceMemberElement[Any]
     | udp.UdpSocketEndpointInstance
     | audio.AudioSourceInstance
     | LogProducer
     | diagnostics.DiagnosticsInstance
+    | box.StateInstance
 )
 
 ProducerType: TypeAlias = (
@@ -84,9 +97,15 @@ ProducerType: TypeAlias = (
     | cog.CogInstanceMember[cog.ConfigDef]
 )
 
-ObserverType: TypeAlias = cog.CogInstanceMember[cog.InputDef] | udp.UdpSocketEndpointInstance
+ObserverType: TypeAlias = (
+    cog.CogInstanceMember[cog.InputDef]
+    | cog.CogInstanceMemberElement[Any]
+    | cog.CogInstanceMember[cog_components.CogAlignedInputDef]
+    | udp.UdpSocketEndpointInstance
+)
 
 MetricsProducerType: TypeAlias = cog.CogInstanceMember[cog.MetricsOutputDef]
+SnapshotEndpointType: TypeAlias = cog.CogInstanceMember[cog.ConfigDef] | cog.CogInstanceMember[cog.StateDef]
 
 
 @dataclass(slots=True)
@@ -113,6 +132,10 @@ class MetricsChannel:
         """Determine if this is a bridge status channel."""
         return False
 
+    def is_simplelaunch_status(self) -> bool:
+        """Determine if this is a simplelaunch status channel."""
+        return False
+
     def is_single_producer(self) -> bool:
         """Determine if this is a single-producer channel."""
         return True
@@ -124,6 +147,10 @@ class MetricsChannel:
     def is_bulk_data(self) -> bool:
         """Determine whether this channel holds bulk data."""
         return False
+
+    def channel_type(self) -> channel_config_proto.ChannelType:
+        """Returns the configured backend type of the channel."""
+        return channel_config.ChannelType.unspecified
 
 
 @dataclass(slots=True)
@@ -150,6 +177,10 @@ class Channel:
         """Determine if this is a bridge status channel."""
         return self.channel.is_bridge_status
 
+    def is_simplelaunch_status(self) -> bool:
+        """Determine if this is a simplelaunch status channel."""
+        return self.channel.is_simplelaunch_status
+
     def is_valid(self) -> bool:
         """Determine if this is a valid channel."""
         return bool(self.producers) and (self.channel.is_multi_publisher or len(self.producers) == 1)
@@ -161,6 +192,10 @@ class Channel:
     def is_bulk_data(self) -> bool:
         """Determine whether this channel holds bulk data."""
         return self.channel.is_bulk_data
+
+    def channel_type(self) -> channel_config_proto.ChannelType:
+        """Returns the configured backend type of the channel."""
+        return self.channel.channel_type
 
 
 ConnectableType = TypeVar("ConnectableType")
@@ -190,11 +225,12 @@ class LogicalSystem:
 
     module: node.Module
     require_logging_policies: bool
+    use_simplelaunch: bool
     all_entities: dict[UUID, Any] = field(default_factory=dict)
     config_endpoints: dict[
         UUID, Endpoint[cog.CogInstanceMember[cog.ConfigDef], box.FirstMessageInstance | box.SerializedDataFileInstance]
     ] = field(default_factory=dict)
-    memres_endpoints: dict[UUID, Endpoint[cog.CogInstanceMember[cog.ResourceDef], box.MemoryResourceInstance]] = field(
+    memres_endpoints: dict[UUID, Endpoint[MemoryResourceEndpointType, box.MemoryResourceInstance]] = field(
         default_factory=dict
     )
     observer_endpoints: dict[UUID, Endpoint[ObserverType, Any]] = field(default_factory=dict)
@@ -213,7 +249,7 @@ class LogicalSystem:
     states: dict[UUID, Connectable[box.StateInstance, cog.CogInstanceMember[cog.StateDef]]] = field(
         default_factory=dict
     )
-    mem_resources: dict[UUID, Connectable[box.MemoryResourceInstance, cog.CogInstanceMember[cog.ResourceDef]]] = field(
+    mem_resources: dict[UUID, Connectable[box.MemoryResourceInstance, MemoryResourceEndpointType]] = field(
         default_factory=dict
     )
     udp_sockets: dict[UUID, udp.UdpSocketInstance] = field(default_factory=dict)
@@ -229,6 +265,10 @@ class LogicalSystem:
     data_sources: dict[UUID, box.FirstMessageInstance | box.SerializedDataFileInstance] = field(default_factory=dict)
     init_data_sources: dict[UUID, UUID] = field(default_factory=dict)
     data_source_fallbacks: dict[UUID, UUID] = field(default_factory=dict)
+    realtime_playback_assignments: tuple[realtime_playback_config.RealtimePlaybackAssignment, ...] = ()
+    deferred_aligned_connections: list[tuple[box.ResolvedBox, graphir.ChannelToAlignedInputConnection]] = field(
+        default_factory=list
+    )
 
     def add_entity(self, entity: Any, uuid: UUID | None = None) -> UUID:  # noqa: ANN401 (Any required for polymorphism)
         """Add a new entity to the system, ensuring uniqueness.
@@ -318,12 +358,17 @@ class LogicalSystem:
 
     def add_cog(self, instance: cog.CogInstance) -> UUID:
         """Add a Cog instance to the system."""
+        aligned_input.expand_aligned_inputs(instance, self.module.context)
         uuid = self.add_entity(instance)
         process = self._ensure_process(instance)
         self.entity_to_process[uuid] = process
         self.cogs[uuid] = instance
         for endpoint in instance.members:
-            self.add_cog_endpoint(endpoint, process)
+            if isinstance(endpoint.member, cog.InputDef) and endpoint.elements:
+                for element in endpoint.elements:
+                    self.add_cog_endpoint_element(element, process)
+            else:
+                self.add_cog_endpoint(endpoint, process)
         self.add_metrics_channels(instance)
         self.add_report_group_channels(instance)
         self.connect_cog_infra_diagnostics(instance)
@@ -339,7 +384,7 @@ class LogicalSystem:
             config_ep = Endpoint(entity=endpoint, connected_to=None, process=process)
             self.config_endpoints[uuid] = config_ep
             self.producer_endpoints[uuid] = cast("Endpoint[ProducerType, Any]", config_ep)
-        elif isinstance(endpoint.member, cog.InputDef):
+        elif isinstance(endpoint.member, (cog.InputDef, cog_components.CogAlignedInputDef)):
             self.observer_endpoints[uuid] = Endpoint(entity=endpoint, connected_to=None, process=process)
         elif isinstance(
             endpoint.member,
@@ -358,6 +403,17 @@ class LogicalSystem:
             self.producer_endpoints[uuid] = cast("Endpoint[ProducerType, Any]", state_ep)
         else:
             msg = f"Unrecognized endpoint type: {type(endpoint.member)}"
+            raise TypeError(msg)
+        self.entity_to_process[uuid] = process
+        return uuid
+
+    def add_cog_endpoint_element(self, element: cog.CogInstanceMemberElement[Any], process: UUID) -> UUID:
+        """Add an endpoint element to the system."""
+        if isinstance(element.member, cog_components.InputDefElement):
+            uuid = self.add_entity(element)
+            self.observer_endpoints[uuid] = Endpoint(entity=element, connected_to=None, process=process)
+        else:
+            msg = f"Unrecognized endpoint element type: {type(element.member)}"
             raise TypeError(msg)
         self.entity_to_process[uuid] = process
         return uuid
@@ -390,6 +446,12 @@ class LogicalSystem:
         process = self._ensure_process(instance)
         self.entity_to_process[uuid] = process
         self.states[uuid] = Connectable(instance, {})
+        if instance.memory_resource:
+            self.memres_endpoints[uuid] = Endpoint(entity=instance, connected_to=None, process=process)
+            self.connect_memory_resource(
+                memory_resource=instance.memory_resource,
+                endpoint=instance,
+            )
         return uuid
 
     def add_or_lookup_data_source(self, instance: box.FirstMessageInstance | box.SerializedDataFileInstance) -> UUID:
@@ -513,6 +575,14 @@ class LogicalSystem:
             self.channels[name] = found
         return found
 
+    def get_channel(self, channel_name: str) -> Channel | MetricsChannel:
+        """Get a channel by name."""
+        # Look up in channels, then metrics channels, and raise if not found in either
+        try:
+            return self.channels[channel_name]
+        except KeyError:
+            return self.metrics_channels[channel_name]
+
     def ensure_metrics_channel(self, channel: graphir.MetricsChannel) -> MetricsChannel:
         """Ensure that the channel is in the channels map."""
         name = channel.channel_name
@@ -600,7 +670,7 @@ class LogicalSystem:
                 if message_size is None:
                     message_size = 0
                 channel_obj = graphir.MetricsChannel(
-                    channel_name=f"{name_prefix}{instance.cog_class.name}/{uuid}",
+                    channel_name=f"{name_prefix}{instance.cog_class.name if isinstance(instance.cog_class, cog.Cog) else instance.cog_class.cog_ir.name}/{uuid}",
                     message_repr=channel.member.get_resolved_representation_instantiation(),
                     log_type=channel.member.log_type,
                     message_size=message_size,
@@ -621,12 +691,16 @@ class LogicalSystem:
                 if schema_source is None:
                     msg = f"Report group {channel.member.name} has no schema source"
                     raise ValueError(msg)
-
+                message_size = graphir.get_schema_size(self.module.context, generated_schema)
+                if message_size is None:
+                    # If we can't find a message size it means the cog is not in a cpp target, in which case this
+                    # becomes irrelevant anyway so set the size to 0.
+                    message_size = 0
                 channel_obj = graphir.MetricsChannel(
-                    channel_name=report_group_instance_channel_name(channel.member, instance.fqn),
+                    channel_name=report_group_instance_channel_name(channel.member, instance.fqn, self.module.context),
                     message_repr=representation.ResolvedReprInstantiation.from_schema(schema_source, self.module),
                     log_type=channel.member.log_type,
-                    message_size=graphir.get_schema_size(self.module.context, generated_schema),
+                    message_size=message_size,
                     num_slots=5,
                     uuid=report_group_instance_channel_uuid(channel.member, instance.fqn),
                     cog_path=instance.cog_class.fqn,
@@ -651,11 +725,16 @@ class LogicalSystem:
             our_channel.producers[uuid] = endpoint
 
     def connect_memory_resource(
-        self, memory_resource: box.MemoryResourceInstance, endpoint: cog.CogInstanceMember[cog.ResourceDef]
+        self, memory_resource: box.MemoryResourceInstance, endpoint: MemoryResourceEndpointType
     ) -> None:
         """Connect a memory resource to a Cog endpoint."""
         mem_uuid = self._require_entity(memory_resource)
         mem_res = self.mem_resources[mem_uuid]
+
+        if len(mem_res.endpoints) > 0:
+            msg = f"Memory resource {memory_resource.value_key()} already connected to an endpoint, cannot connect to {endpoint.value_key()}"
+            raise RuntimeError(msg)
+
         ep_uuid = self._require_entity(endpoint)
         ep = self.memres_endpoints[ep_uuid]
         try:
@@ -736,7 +815,9 @@ class LogicalSystem:
                     self.state_endpoints[ep_uuid].connected_to = None
                 break
 
-    def _get_cog_endpoint_message_size(self, cog_endpoint: cog.InputDef | cog.OutputDef) -> int:
+    def _get_cog_endpoint_message_size(
+        self, cog_endpoint: cog.InputDef | cog_components.InputDefElement | cog.OutputDef
+    ) -> int:
         representation_reference = cog_endpoint.get_representation_reference()
         representation_instantiation = schema_reg.lookup_representation(self.module.context, representation_reference)
         if not representation_instantiation:
@@ -792,8 +873,10 @@ class LogicalSystem:
                 raise ValueError(msg)
         for uuid, observer in self.observer_endpoints.items():
             if observer.connected_to is None:
-                if isinstance(observer.entity, cog.CogInstanceMember) and (
-                    observer.entity.member.view_params.is_optional
+                if (
+                    isinstance(observer.entity, (cog.CogInstanceMember, cog.CogInstanceMemberElement))
+                    and isinstance(observer.entity.member, (cog.InputDef, cog_components.InputDefElement))
+                    and observer.entity.member.view_params.is_optional
                 ):
                     self.ignored_observer_endpoints[uuid] = self._get_cog_endpoint_message_size(observer.entity.member)
                     continue
@@ -807,17 +890,20 @@ def make_system(
     boxes: Iterable[box.ResolvedBox],
     system_module: node.Module,
     require_logging_policies: bool,
+    use_simplelaunch: bool,
     compiler_context: CompilerContext | None = None,
 ) -> LogicalSystem:
     """Construct a System from a set of boxes."""
-    result = LogicalSystem(module=system_module, require_logging_policies=require_logging_policies)
+    result = LogicalSystem(
+        module=system_module, require_logging_policies=require_logging_policies, use_simplelaunch=use_simplelaunch
+    )
     compiler_context = compiler_context or system_module.context
     for a_box in boxes:
         _add_box_to_system(a_box, result)
     log_reader_policy_class = logger_config.get_log_reader_policy(compiler_context)
     for log_reader_policy_data in policy.lookup_all_policies(result.module, log_reader_policy_class):
         ir_channel = log_reader_policy_data.target
-        assert isinstance(ir_channel, pubsub.Channel)
+        assert isinstance(ir_channel, (pubsub.Channel, pubsub.InstantiatedChannel))
         channel = graphir.lookup_channel(ir_channel, result.module.context)
         if len(result.processes) > 1:
             msg = f"LogReaderPolicy can only be used in single-process systems (channel: {channel.channel_name})"
@@ -829,16 +915,27 @@ def make_system(
         else:
             assert isinstance(policy_source, primitive.StringValue)
             source_name = policy_source.value
+        # fmt: off
         log_producer = LogProducer(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"logreader-({source_name})-to-({channel.channel_name})",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=result.module.inner_scope,
             type_info=LOG_PRODUCER_TYPE,
             source_name=source_name,
         )
+        # fmt: on
         register_entity_with_stable_key(system_module.context, log_producer, allow_existing=True)
         result.add_log_producer(log_producer, channel)
 
     add_snapshot_producers_to_logical_system(result)
+    result.realtime_playback_assignments = realtime_playback_config.resolve_assignments(
+        result.module,
+        result.channels,
+        result.cpu_domains,
+    )
+
+    _resolve_deferred_aligned_connections(result)
 
     return result
 
@@ -846,8 +943,24 @@ def make_system(
 def _add_box_to_system(a_box: box.ResolvedBox, system: LogicalSystem) -> None:
     for instance in a_box.instances:
         _add_instance_to_system(a_box, system, instance)
-    for connection in a_box.connections:
-        _add_connection_to_system(a_box, system, graphir.from_ir_connection(connection, system.module.context))
+    pending_connections: list[box.Connection] = a_box.connections
+    while pending_connections:
+        prev_pending_connections = pending_connections
+        pending_connections = []
+        for connection in prev_pending_connections:
+            if graphir_connection := graphir.from_ir_connection(connection, system.module.context):
+                _add_connection_to_system(a_box, system, graphir_connection)
+            else:
+                pending_connections.append(connection)
+        if len(pending_connections) == len(prev_pending_connections):  # No progress
+            ir_node = pending_connections[0]
+            source_name = (
+                f"{ir_node.source.cog_instance.name}.{ir_node.source.name}"
+                if isinstance(ir_node.source, cog.CogInstanceMember)
+                else "Source"
+            )
+            msg = ir_node.append_error_line(f"{source_name} is unconnected")
+            raise RuntimeError(msg)
 
 
 def _add_instance_to_system(a_box: box.ResolvedBox, system: LogicalSystem, instance: node.NamedEntity) -> None:  # noqa: C901 (branches for type dispatch)
@@ -876,7 +989,7 @@ def _add_instance_to_system(a_box: box.ResolvedBox, system: LogicalSystem, insta
         raise NotImplementedError(msg)
 
 
-def _add_connection_to_system(  # noqa: C901 # complexity due to many branches, but conceptually straightforward
+def _add_connection_to_system(  # noqa: C901, PLR0912 # complexity due to many branches, but conceptually straightforward
     a_box: box.ResolvedBox, system: LogicalSystem, connection: graphir.ConnectionType
 ) -> None:
     if isinstance(connection, graphir.ChannelToCogPublishConnection):
@@ -885,6 +998,8 @@ def _add_connection_to_system(  # noqa: C901 # complexity due to many branches, 
         system.connect_channel_producer(connection.channel, connection.socket_endpoint)
     elif isinstance(connection, graphir.ChannelToAudioPublishConnection):
         system.connect_channel_producer(connection.channel, connection.source_instance)
+    elif isinstance(connection, graphir.ChannelToAlignedInputConnection):
+        system.deferred_aligned_connections.append((a_box, connection))
     elif isinstance(connection, graphir.ChannelToCogSubscribeConnection):
         system.connect_channel_observer(connection.channel, connection.cog_instance_member)
     elif isinstance(connection, graphir.ChannelToUdpSubscribeConnection):
@@ -906,27 +1021,171 @@ def _add_connection_to_system(  # noqa: C901 # complexity due to many branches, 
         fallback_uuid = system.add_or_lookup_data_source(connection.fallback_data_source)
         system.data_sources[fallback_uuid] = connection.fallback_data_source
         system.data_source_fallbacks[data_source_uuid] = fallback_uuid
+    elif isinstance(connection, graphir.MultiChannelToCogSubscribeConnection):
+        assert connection.cog_instance_member.elements
+        for channel, element in zip(connection.channels, connection.cog_instance_member.elements, strict=False):
+            system.connect_channel_observer(channel, element)
     else:
         msg = a_box.append_error_line(f"Unsupported connection type: {type(connection)}")
         raise NotImplementedError(msg)
 
 
-def _validate_snapshot_endpoint(logical_system: LogicalSystem, endpoint: typesys.Value) -> UUID:
-    """Validate snapshot policy endpoint and return its UUID.
+def _resolve_deferred_aligned_connections(system: LogicalSystem) -> None:
+    """Resolve all deferred aligned input connections.
+
+    This runs after all boxes have been fully processed so that all channel
+    connections (including the aligner's upstream connections) are registered.
+    """
+    for a_box, connection in system.deferred_aligned_connections:
+        _resolve_aligned_input_connection(a_box, system, connection)
+    system.deferred_aligned_connections.clear()
+
+
+def _resolve_aligned_input_connection(
+    a_box: box.ResolvedBox,
+    system: LogicalSystem,
+    connection: graphir.ChannelToAlignedInputConnection,
+) -> None:
+    """Resolve one aligned input connection into N+1 channel subscriptions.
+
+    Subscribes the aligned input member to the alignment channel, then traces
+    the alignment channel back to its producer (the aligner cog), and subscribes
+    the downstream cog's expanded upstream input members to the same channels.
+    """
+    # Subscribe the aligned input to the aligner output channel.
+    system.connect_channel_observer(connection.channel, connection.cog_instance_member)
+
+    aligned_def = connection.cog_instance_member.member
+    aligner_type = aligned_def.aligned_type
+    if not isinstance(aligner_type, aligner_mod.Aligner):
+        msg = a_box.append_error_line(f"Expected Aligner type, got {type(aligner_type).__name__}")
+        raise TypeError(msg)
+    if aligner_type.synthetic_cog is None:
+        msg = a_box.append_error_line(f"Aligner '{aligner_type.name}' has no synthetic cog")
+        raise ValueError(msg)
+
+    # Collect producers of the alignment channel and validate each is an
+    # instance of this aligner's synthetic cog. Multiple producers are
+    # tolerated here; `_make_physical_channel` enforces a single producer
+    # for the final system after any downstream cog filtering.
+    alignment_sys_channel = system.ensure_channel(connection.channel)
+    assert isinstance(alignment_sys_channel, Channel)
+    producers = list(alignment_sys_channel.producers.values())
+    if not producers:
+        msg = a_box.append_error_line(f"Alignment channel '{connection.channel.channel_name}' has no producer")
+        raise ValueError(msg)
+    aligner_cog_instances: list[cog.CogInstance] = []
+    for producer in producers:
+        producer_endpoint = producer.entity
+        if not isinstance(producer_endpoint, cog.CogInstanceMember):
+            msg = a_box.append_error_line(
+                f"Alignment channel producer must be a cog output, not {type(producer_endpoint).__name__}"
+            )
+            raise TypeError(msg)
+        if not isinstance(producer_endpoint.member, cog.OutputDef):
+            msg = a_box.append_error_line(
+                f"Alignment channel producer must be a cog output, not {type(producer_endpoint.member).__name__}"
+            )
+            raise TypeError(msg)
+        if producer_endpoint.cog_instance.cog_class is not aligner_type.synthetic_cog:
+            msg = a_box.append_error_line(
+                f"Alignment channel producer '{producer_endpoint.cog_instance.name}' is not an instance of "
+                + f"aligner '{aligner_type.name}'"
+            )
+            raise ValueError(msg)
+        aligner_cog_instances.append(producer_endpoint.cog_instance)
+
+    # Resolve each upstream channel subscription. If there are multiple aligner
+    # producers, require that every producer routes this input to the same
+    # upstream channel; divergent wiring is a real bug.
+    consumer_cog_instance = connection.cog_instance_member.cog_instance
+
+    for input_name in aligner_type.inputs:
+        _resolve_one_upstream_subscription(
+            a_box=a_box,
+            system=system,
+            aligner_cog_instances=aligner_cog_instances,
+            consumer_cog_instance=consumer_cog_instance,
+            downstream_member_name=f"{aligned_def.name}.{input_name}",
+            input_name=input_name,
+        )
+
+
+def _resolve_one_upstream_subscription(  # noqa: PLR0913 # Too many args mitigated by kwonly args
+    *,
+    a_box: box.ResolvedBox,
+    system: LogicalSystem,
+    aligner_cog_instances: list[cog.CogInstance],
+    consumer_cog_instance: cog.CogInstance,
+    downstream_member_name: str,
+    input_name: str,
+) -> None:
+    """Resolve one upstream channel subscription for an aligned input.
+
+    If multiple aligner cog instances are provided, every aligner must route
+    this input to the same upstream channel.
+    """
+    upstream_channel: Channel | None = None
+    for aligner_cog_instance in aligner_cog_instances:
+        aligner_member = aligner_cog_instance.attribute(input_name)
+        if aligner_member is None:
+            msg = a_box.append_error_line(f"Aligner cog instance has no member '{input_name}'")
+            raise ValueError(msg)
+        aligner_member_uuid = lookup_uuid(system.module.context, aligner_member)
+        if aligner_member_uuid not in system.observer_endpoints:
+            msg = a_box.append_error_line(f"Aligner input '{input_name}' is not registered as an observer endpoint")
+            raise ValueError(msg)
+        aligner_endpoint = system.observer_endpoints[aligner_member_uuid]
+        if aligner_endpoint.connected_to is None:
+            msg = a_box.append_error_line(f"Aligner input '{input_name}' is not connected to any channel")
+            raise ValueError(msg)
+        if not isinstance(aligner_endpoint.connected_to, Channel):
+            msg = a_box.append_error_line(f"Aligner input '{input_name}' is connected to a non-channel entity")
+            raise TypeError(msg)
+        candidate = aligner_endpoint.connected_to
+        if upstream_channel is None:
+            upstream_channel = candidate
+        elif candidate is not upstream_channel:
+            msg = a_box.append_error_line(
+                f"Aligner input '{input_name}' is routed to different upstream channels "
+                + f"across multiple aligner instances: '{upstream_channel.channel.channel_name}' vs "
+                + f"'{candidate.channel.channel_name}'"
+            )
+            raise ValueError(msg)
+    assert upstream_channel is not None
+
+    downstream_member = consumer_cog_instance.attribute(downstream_member_name)
+    if downstream_member is None:
+        msg = a_box.append_error_line(f"Consumer cog has no expanded member '{downstream_member_name}'")
+        raise ValueError(msg)
+    if not isinstance(downstream_member, cog.CogInstanceMember):
+        msg = a_box.append_error_line(f"Expanded member '{downstream_member_name}' is not a CogInstanceMember")
+        raise TypeError(msg)
+
+    system.connect_channel_observer(upstream_channel.channel, downstream_member)
+
+
+def _validate_snapshot_endpoint(
+    logical_system: LogicalSystem, endpoint: typesys.Value
+) -> tuple[UUID, SnapshotEndpointType]:
+    """Validate a snapshot policy endpoint and return its UUID and member.
 
     Args:
         logical_system: The LogicalSystem being constructed
         endpoint: The policy target endpoint to validate
 
     Returns:
-        UUID of the validated endpoint
+        UUID and cog member of the validated endpoint
 
     Raises:
-        TypeError: If endpoint is not a CogInstanceMember
+        TypeError: If endpoint is not a cog state or config
         ValueError: If the endpoint's cog is not assigned to a process
     """
     if not isinstance(endpoint, cog.CogInstanceMember):
         msg = node.enrich_error_if_possible(endpoint, "Snapshot policy target must be a cog endpoint")
+        raise TypeError(msg)
+    if not isinstance(endpoint.member, cog.ConfigDef | cog.StateDef):
+        msg = node.enrich_error_if_possible(endpoint, "Snapshot policy target must be a cog state or config")
         raise TypeError(msg)
 
     endpoint_uuid = lookup_uuid(logical_system.module.context, endpoint)
@@ -939,7 +1198,7 @@ def _validate_snapshot_endpoint(logical_system: LogicalSystem, endpoint: typesys
         )
         raise ValueError(msg)
 
-    return endpoint_uuid
+    return (endpoint_uuid, cast("SnapshotEndpointType", endpoint))
 
 
 def _extract_snapshot_timing(
@@ -1009,7 +1268,7 @@ def _process_snapshot_policy(logical_system: LogicalSystem, policy_data: policy.
         # This is not part of our system; comes from generating a casing
         return
 
-    endpoint_uuid = _validate_snapshot_endpoint(logical_system, endpoint)
+    endpoint_uuid, snapshot_endpoint = _validate_snapshot_endpoint(logical_system, endpoint)
 
     channel_ir = policy_data.data.data["channel"]
     if not isinstance(channel_ir, pubsub.Channel):
@@ -1020,6 +1279,23 @@ def _process_snapshot_policy(logical_system: LogicalSystem, policy_data: policy.
         raise TypeError(msg)
 
     graphir_channel = graphir.lookup_channel(channel_ir, logical_system.module.context)
+
+    if policy_data.policy_class is snapshot_config.get_take_snapshots_policy(logical_system.module.context):
+        message_type = snapshot_endpoint.member.message_type
+        if isinstance(message_type, extern_type.ExternType):
+            serialized_form = message_type.serialized_form
+            if serialized_form is None:
+                msg = node.enrich_error_if_possible(
+                    endpoint, "TakeSnapshots requires an external state with a serialized form"
+                )
+                raise ValueError(msg)
+            if graphir_channel.message_repr.typespec.value_key() != serialized_form.value_key():
+                msg = node.enrich_error_if_possible(
+                    endpoint,
+                    f"Snapshot channel type {graphir_channel.message_repr.typespec.value_key()} does not match "
+                    f"serialized state type {serialized_form.value_key()}",
+                )
+                raise TypeError(msg)
 
     interval_ns, cycles = _extract_snapshot_timing(endpoint, policy_data, logical_system)
 
@@ -1147,6 +1423,7 @@ class PinionBufferLayout:
     num_slots: int
     message_size: int
     is_published_once: bool
+    max_msgs_per_exec: int = 1
 
 
 @dataclass(slots=True)
@@ -1170,7 +1447,7 @@ class PinionBufferBase:
         self.num_subscribers += (
             2
             if isinstance(observer, LogObserver)
-            and observer.log_type in (entities.log_type.telemetry, entities.log_type.redundant_telemetry)
+            and observer.log_type in (entities.log_type.non_redundant_telemetry, entities.log_type.redundant_telemetry)
             else 1
         )
         self.observers[uuid] = observer
@@ -1193,7 +1470,7 @@ class PinionBuffer(PinionBufferBase):
     def has_local_endpoints(self) -> bool:
         """Test if the pinion buffer has any local system endpoints."""
         return any(
-            isinstance(observer, cog.CogInstanceMember) and isinstance(observer.member, cog.InputDef)  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+            isinstance(observer, cog.CogInstanceMember) and isinstance(observer.member, cog.InputDef)
             for observer in self.observers.values()
         )
 
@@ -1211,6 +1488,7 @@ class PhysicalCpuDomain:
     log_observers: dict[UUID, LogObserver] = field(default_factory=dict)
     log_producers: dict[UUID, tuple[LogProducer, UUID]] = field(default_factory=dict)
     buffers: dict[UUID, PinionBuffer] = field(default_factory=dict)
+    channel_link_keys: dict[UUID, tuple[str, str]] = field(default_factory=lambda: defaultdict(lambda: ("", "")))
     metrics_buffers: dict[UUID, MetricsPinionBuffer] = field(default_factory=dict)
     lan_connection: hardware.EthernetNode | None = None
     lan_port_range: tuple[int, int] | None = None
@@ -1218,9 +1496,11 @@ class PhysicalCpuDomain:
     pcie_links: dict[str, hardware.ResolvedPcieLink] = field(default_factory=dict)
     pinion_buffer_bridge_observers: dict[UUID, BridgeObserver] = field(default_factory=dict)
     platform_diagnostics_producers: dict[UUID, PlatformDiagnosticsProducer] = field(default_factory=dict)
+    platform_status_producers: dict[UUID, PlatformProducer] = field(default_factory=dict)
     bridge_diagnostics_producer: UUID | None = field(default=None)
-    platform_bridge_status_producers: dict[UUID, PlatformProducer] = field(default_factory=dict)
     bridge_status_producer: UUID | None = field(default=None)
+    simplelaunch_diagnostics_producer: UUID | None = field(default=None)
+    simplelaunch_status_producer: UUID | None = field(default=None)
     logging_backup: UUID | None = field(default=None)
 
     def lookup_observer(self, observer_uuid: UUID) -> PinionObserverType:
@@ -1288,8 +1568,11 @@ class PhysicalCpuDomain:
         is_redundant: bool,
     ) -> UUID:
         """Add a new log observer."""
+        # fmt: off
         observer = LogObserver(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"log-{log_type}-{buffer_uuid}",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=self.scope,
             type_info=LOG_OBSERVER_TYPE,
             pinion_buffer=buffer_uuid,
@@ -1297,6 +1580,7 @@ class PhysicalCpuDomain:
             channel_type=channel_type,
             is_redundant=is_redundant,
         )
+        # fmt: on
         uuid = register_entity_with_stable_key(self.system.system.module.context, observer)
         self.log_observers[uuid] = observer
         buffer = (self.buffers | self.metrics_buffers)[buffer_uuid]
@@ -1320,7 +1604,7 @@ class PhysicalCpuDomain:
         self.platform_diagnostics_producers[uuid] = result
         return uuid
 
-    def add_platform_bridge_status_producer(self, result: PlatformProducer) -> UUID:
+    def add_platform_status_producer(self, result: PlatformProducer) -> UUID:
         """Add a platform bridge status producer.
 
         Unlike most of the add_x() methods, this takes a pre-constructed
@@ -1331,10 +1615,10 @@ class PhysicalCpuDomain:
         PhysicalSystem.add_bridge_link()).
         """
         uuid = register_entity_with_stable_key(self.system.system.module.context, result)
-        if uuid in self.platform_bridge_status_producers:
-            msg = f"Duplicate platform bridge status producer UUID {uuid}:\n{self.platform_bridge_status_producers[uuid]}\n{result}"
+        if uuid in self.platform_status_producers:
+            msg = f"Duplicate platform bridge status producer UUID {uuid}:\n{self.platform_status_producers[uuid]}\n{result}"
             raise KeyError(msg)
-        self.platform_bridge_status_producers[uuid] = result
+        self.platform_status_producers[uuid] = result
         return uuid
 
     def add_pinion_buffer(self, producer: PinionProducerType, channel: Channel) -> UUID:
@@ -1344,6 +1628,9 @@ class PhysicalCpuDomain:
         if uuid in self.buffers:
             msg = f"Pinion buffer already exists: {uuid} {self.buffers[uuid].producer.name}"
             raise KeyError(msg)
+        max_msgs_per_exec = 1
+        if isinstance(producer, cog.CogInstanceMember) and isinstance(producer.member, cog.OutputDef):
+            max_msgs_per_exec = producer.member.max_msgs_per_exec
         result = PinionBuffer(
             uuid=uuid,
             cpu_domain_uuid=self.uuid,
@@ -1353,6 +1640,7 @@ class PhysicalCpuDomain:
                 num_slots=channel.channel.num_slots,
                 message_size=channel.channel.message_size,
                 is_published_once=channel.channel.is_published_once,
+                max_msgs_per_exec=max_msgs_per_exec,
             ),
             channel=channel,
             num_subscribers=0,
@@ -1440,6 +1728,7 @@ class PhysicalSystem:
         observer = source_domain.pinion_buffer_bridge_observers.get(source_buffer_uuid, None)
         if observer:
             observer_uuid = lookup_uuid(self.system.module.context, observer)
+            source_buffer.num_subscribers += 1
         else:
             assert source_domain.lan_port_range is not None
             # We allocate port numbers sequentially starting at the beginning of the
@@ -1447,8 +1736,11 @@ class PhysicalSystem:
             # number of producers made so far to get the next port number to
             # allocate.
             observer_port = source_domain.lan_port_range[0] + len(source_domain.lan_port_producers)
+            # fmt: off
             observer = TcpBridgeObserver(
+                # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                 name=f"bridge-{source_buffer_uuid}-to-{dest_domain_uuid}",
+                # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                 scope=source_domain.scope,
                 type_info=TCP_BRIDGE_OBSERVER_TYPE,
                 source_domain=source_domain_uuid,
@@ -1457,11 +1749,15 @@ class PhysicalSystem:
                 remote_producers=[],
                 lan_port=observer_port,
             )
+            # fmt: on
             observer_uuid = source_domain.add_bridge_observer(observer)
             assert source_buffer.add_observer(self.system.module.context, observer) == observer_uuid
 
+        # fmt: off
         producer = TcpBridgeProducer(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"bridge-{source_buffer_uuid}-from-{source_domain_uuid}",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=dest_domain.scope,
             type_info=TCP_BRIDGE_PRODUCER_TYPE,
             source_domain=source_domain_uuid,
@@ -1469,6 +1765,7 @@ class PhysicalSystem:
             dest_pinion_buffer=UUID(int=0),  # Replaced below once we know it
             remote_source=observer_uuid,
         )
+        # fmt: on
 
         return observer, producer
 
@@ -1493,6 +1790,7 @@ class PhysicalSystem:
             and dest_domain.lan_connection is not None
             and source_domain.lan_connection.lan is dest_domain.lan_connection.lan
         ):
+
             observer, producer = self._add_tcp_bridge_link(source_domain_uuid, source_buffer_uuid, dest_domain_uuid)
 
         if observer is None or producer is None:
@@ -1520,6 +1818,7 @@ def make_physical_system(system: LogicalSystem) -> PhysicalSystem:
         assert result.add_cpu_domain(domain) == domain_uuid
     for channel in system.channels.values():
         _make_physical_channel(result, channel)
+    _add_simplelaunch_channel_producers(result)
     _add_bridge_channel_producers(result)
     for metrics_channel in system.metrics_channels.values():
         _make_metrics_channel(result, metrics_channel)
@@ -1580,8 +1879,6 @@ def _make_physical_channel(system: PhysicalSystem, channel: Channel) -> None:
             for domain_observer_uuid in observers:
                 domain_observer = domain.lookup_observer(domain_observer_uuid)
                 domain_buffer.add_observer(system.system.module.context, domain_observer)
-
-
 def _add_logging_observers(
     system: PhysicalSystem, channel: Channel, producer_domain_uuid: UUID, producer_buffer_uuid: UUID
 ) -> tuple[UUID | None, UUID | None]:
@@ -1590,8 +1887,9 @@ def _add_logging_observers(
     policy_data = policy.lookup_policy(system.system.module, channel_logging_policy, channel.channel.ir_node)
     if policy_data is None:
         if system.system.require_logging_policies:
-            msg = channel.channel.ir_node.append_error_line(
-                f"No logging policy defined for {channel.channel.channel_name} in @{system.system.module.module_id.repo}::{system.system.module.module_id.name}"
+            msg = node.enrich_error_if_possible(
+                channel.channel.ir_node,
+                f"No logging policy defined for {channel.channel.channel_name} in @{system.system.module.module_id.repo}::{system.system.module.module_id.name}",
             )
             raise ValueError(msg)
         return (None, None)
@@ -1604,6 +1902,7 @@ def _add_logging_observers(
     log_type = entities.log_type[log_type_ref.name]  # pyright: ignore[reportInvalidTypeArguments] # This is an Enum, but linter doesn't know that
     channel_type_ref = policy_data.data.data["channel_type"]
     assert isinstance(channel_type_ref, clkenum.ValueRef)
+    # pyrefly: ignore[unsupported-operation] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     channel_type = entities.channel_type[
         channel_type_ref.name  # pyright: ignore[reportInvalidTypeArguments]
     ]  # This is an Enum, but linter doesn't know that
@@ -1611,7 +1910,7 @@ def _add_logging_observers(
     producer_domain = system.cpu_domains[producer_domain_uuid]
     assert log_type in (
         entities.log_type.none,
-        entities.log_type.telemetry,
+        entities.log_type.non_redundant_telemetry,
         entities.log_type.event,
         entities.log_type.redundant_telemetry,
     )
@@ -1635,8 +1934,11 @@ def _add_bridge_diagnostics_producers(
 ) -> None:
     for producer_domain_uuid in system.bridge_domains:
         producer_domain = system.cpu_domains[producer_domain_uuid]
+        # fmt: off
         diagnostics_producer = PlatformDiagnosticsProducer(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"bridge-diagnostics-{producer_domain_uuid}",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=producer_domain.scope,
             type_info=PLATFORM_DIAGNOSTICS_PRODUCER_TYPE,
             uuid=UUID(int=0),  # Replaced below once we know it
@@ -1644,6 +1946,7 @@ def _add_bridge_diagnostics_producers(
             group_id="tcp_bridge",
             instance_id=snake_from_camel(producer_domain.logical.name),
         )
+        # fmt: on
         diagnostics_producer_uuid = producer_domain.add_platform_diagnostics_producer(diagnostics_producer)
         producer_buffer_uuid = producer_domain.add_pinion_buffer(diagnostics_producer, diagnostics_channel)
         diagnostics_producer.uuid = diagnostics_producer_uuid
@@ -1679,14 +1982,18 @@ def _add_bridge_status_producers(
 ) -> None:
     for producer_domain_uuid in system.bridge_domains:
         producer_domain = system.cpu_domains[producer_domain_uuid]
+        # fmt: off
         bridge_status_producer = PlatformProducer(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"bridge-status-{producer_domain_uuid}",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=producer_domain.scope,
             type_info=PLATFORM_PRODUCER_TYPE,
             uuid=UUID(int=0),  # Replaced below once we know it
             pinion_buffer=UUID(int=0),  # Replaced below once we know it
         )
-        bridge_status_producer_uuid = producer_domain.add_platform_bridge_status_producer(bridge_status_producer)
+        # fmt: on
+        bridge_status_producer_uuid = producer_domain.add_platform_status_producer(bridge_status_producer)
         producer_buffer_uuid = producer_domain.add_pinion_buffer(bridge_status_producer, bridge_status_channel)
         bridge_status_producer.uuid = bridge_status_producer_uuid
         bridge_status_producer.pinion_buffer = producer_buffer_uuid
@@ -1717,7 +2024,7 @@ def _add_bridge_status_producers(
 
 
 def _add_bridge_channel_producers(system: PhysicalSystem) -> None:
-    """Add producers for the channels published by the TCP bridge."""
+    """Add producers for the channels published by the bridge components."""
     ir_diagnostics_channel = graphir.diagnostics_channel(system.system.module.context)
     ir_bridge_status_channel = graphir.bridge_status_channel(system.system.module.context)
     if (ir_diagnostics_channel or ir_bridge_status_channel) and system.bridge_domains:
@@ -1745,6 +2052,136 @@ def _add_bridge_channel_producers(system: PhysicalSystem) -> None:
             _add_bridge_status_producers(system, bridge_status_channel, bridge_status_observers_by_domain)
 
 
+def _add_simplelaunch_diagnostics_producers(
+    system: PhysicalSystem, diagnostics_channel: Channel, observers_by_domain: dict[UUID, list[UUID]]
+) -> None:
+    """Add diagnostics producers for simplelaunch."""
+    for producer_domain_uuid, producer_domain in system.cpu_domains.items():
+        # fmt: off
+        diagnostics_producer = PlatformDiagnosticsProducer(
+            # pyrefly: ignore[unexpected-keyword] name is inherited from parent class
+            name=f"simplelaunch-diagnostics-{producer_domain_uuid}",
+            # pyrefly: ignore[unexpected-keyword] scope is inherited from parent class
+            scope=producer_domain.scope,
+            type_info=PLATFORM_DIAGNOSTICS_PRODUCER_TYPE,
+            uuid=UUID(int=0),  # Replaced below once we know it
+            pinion_buffer=UUID(int=0),  # Replaced below once we know it
+            group_id="simplelaunch",
+            instance_id=snake_from_camel(producer_domain.logical.name),
+        )
+        # fmt: on
+        diagnostics_producer_uuid = producer_domain.add_platform_diagnostics_producer(diagnostics_producer)
+        producer_buffer_uuid = producer_domain.add_pinion_buffer(diagnostics_producer, diagnostics_channel)
+        diagnostics_producer.uuid = diagnostics_producer_uuid
+        diagnostics_producer.pinion_buffer = producer_buffer_uuid
+        producer_domain.simplelaunch_diagnostics_producer = diagnostics_producer_uuid
+
+        redundant_logging_domain_uuid, redundant_logging_buffer_uuid = _add_logging_observers(
+            system, diagnostics_channel, producer_domain_uuid, producer_buffer_uuid
+        )
+
+        for domain_uuid, observers in observers_by_domain.items():
+            if domain_uuid != producer_domain_uuid:
+                if domain_uuid != redundant_logging_domain_uuid:
+                    domain_buffer_uuid = system.add_bridge_link(
+                        source_domain_uuid=producer_domain_uuid,
+                        source_buffer_uuid=producer_buffer_uuid,
+                        dest_domain_uuid=domain_uuid,
+                    )
+                else:
+                    assert isinstance(redundant_logging_buffer_uuid, UUID)
+                    domain_buffer_uuid = redundant_logging_buffer_uuid
+            else:
+                domain_buffer_uuid = producer_buffer_uuid
+            domain = system.cpu_domains[domain_uuid]
+            domain_buffer = domain.buffers[domain_buffer_uuid]
+            for domain_observer_uuid in observers:
+                domain_observer = domain.lookup_observer(domain_observer_uuid)
+                domain_buffer.add_observer(system.system.module.context, domain_observer)
+
+
+def _add_simplelaunch_status_producers(
+    system: PhysicalSystem,
+    producer_domain_uuid: UUID,
+    simplelaunch_status_channel: Channel,
+    observers_by_domain: dict[UUID, list[UUID]],
+) -> None:
+    """Add status producers for simplelaunch."""
+    producer_domain = system.cpu_domains[producer_domain_uuid]
+    # fmt: off
+    status_producer = PlatformProducer(
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+        name=f"simplelaunch-status-{producer_domain_uuid}",
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+        scope=producer_domain.scope,
+        type_info=PLATFORM_PRODUCER_TYPE,
+        uuid=UUID(int=0),  # Replaced below once we know it
+        pinion_buffer=UUID(int=0),  # Replaced below once we know it
+    )
+    # fmt: on
+    status_producer_uuid = producer_domain.add_platform_status_producer(status_producer)
+    producer_buffer_uuid = producer_domain.add_pinion_buffer(status_producer, simplelaunch_status_channel)
+    status_producer.uuid = status_producer_uuid
+    status_producer.pinion_buffer = producer_buffer_uuid
+    producer_domain.simplelaunch_status_producer = status_producer_uuid
+
+    redundant_logging_domain_uuid, redundant_logging_buffer_uuid = _add_logging_observers(
+        system, simplelaunch_status_channel, producer_domain_uuid, producer_buffer_uuid
+    )
+
+    for domain_uuid, observers in observers_by_domain.items():
+        if domain_uuid != producer_domain_uuid:
+            if domain_uuid != redundant_logging_domain_uuid:
+                domain_buffer_uuid = system.add_bridge_link(
+                    source_domain_uuid=producer_domain_uuid,
+                    source_buffer_uuid=producer_buffer_uuid,
+                    dest_domain_uuid=domain_uuid,
+                )
+            else:
+                assert isinstance(redundant_logging_buffer_uuid, UUID)
+                domain_buffer_uuid = redundant_logging_buffer_uuid
+        else:
+            domain_buffer_uuid = producer_buffer_uuid
+        domain = system.cpu_domains[domain_uuid]
+        domain_buffer = domain.buffers[domain_buffer_uuid]
+        for domain_observer_uuid in observers:
+            domain_observer = domain.lookup_observer(domain_observer_uuid)
+            domain_buffer.add_observer(system.system.module.context, domain_observer)
+
+
+def _add_simplelaunch_channel_producers(system: PhysicalSystem) -> None:
+    """Add producers for the channels published by the simplelaunch runners."""
+    if not system.system.use_simplelaunch:
+        return
+    ir_diagnostics_channel = graphir.diagnostics_channel(system.system.module.context)
+    if ir_diagnostics_channel:
+        diagnostics_observers_by_domain: dict[UUID, list[UUID]] = defaultdict(list)
+        diagnostics_channel = system.system.ensure_channel(ir_diagnostics_channel)
+        assert isinstance(diagnostics_channel, Channel)
+        for observer_uuid, observer in diagnostics_channel.observers.items():
+            if len(system.cpu_domains) > 1:
+                system.bridge_domains.add(system.system.process_to_domain[observer.process])
+            diagnostics_observers_by_domain[system.system.process_to_domain[observer.process]].append(observer_uuid)
+        _add_simplelaunch_diagnostics_producers(system, diagnostics_channel, diagnostics_observers_by_domain)
+    for cpu_domain_uuid, cpu_domain in system.cpu_domains.items():
+        ir_simplelaunch_status_channel = graphir.simplelaunch_status_channel(
+            cpu_domain.logical, system.system.module.context
+        )
+        if ir_simplelaunch_status_channel:
+            simplelaunch_status_observers_by_domain: dict[UUID, list[UUID]] = defaultdict(list)
+            simplelaunch_status_channel = system.system.ensure_channel(ir_simplelaunch_status_channel)
+            assert isinstance(simplelaunch_status_channel, Channel)
+            for observer_uuid, observer in simplelaunch_status_channel.observers.items():
+                if len(system.cpu_domains) > 1:
+                    system.bridge_domains.add(system.system.process_to_domain[observer.process])
+                simplelaunch_status_observers_by_domain[system.system.process_to_domain[observer.process]].append(
+                    observer_uuid
+                )
+            _add_simplelaunch_status_producers(
+                system, cpu_domain_uuid, simplelaunch_status_channel, simplelaunch_status_observers_by_domain
+            )
+
+
 def add_metrics_logging_observers(system: PhysicalSystem) -> None:
     """Add metrics logging observers to a system."""
     entities = logger_config.get_entities(system.system.module.context)
@@ -1752,8 +2189,8 @@ def add_metrics_logging_observers(system: PhysicalSystem) -> None:
         for buffer_uuid, buffer in domain.metrics_buffers.items():
             if buffer.channel.channel.log_type == cog.MetricsLogType.event:
                 log_type = entities.log_type.event
-            elif buffer.channel.channel.log_type == cog.MetricsLogType.telemetry:
-                log_type = entities.log_type.telemetry
+            elif buffer.channel.channel.log_type == cog.MetricsLogType.non_redundant_telemetry:
+                log_type = entities.log_type.non_redundant_telemetry
             else:
                 msg = f"Unsupported log type {buffer.channel.channel.log_type} for metrics channel {buffer.channel.channel.channel_name}"
                 raise ValueError(msg)

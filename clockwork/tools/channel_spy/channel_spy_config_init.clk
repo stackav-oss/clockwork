@@ -13,16 +13,16 @@ cog SpyConfigInitCog
 
   configs
   {
-    spy_config : Tappy<ChannelSpyConfig<>>;
+    spy_config: Tappy<ChannelSpyConfig<>>;
   }
 
   execution
   {
-      execute when: init;
+    execute when: init;
   }
 }
 
 box SpyConfigInitBox
 {
-  new spy_init_cog:  SpyConfigInitCog;
+  new spy_init_cog: SpyConfigInitCog;
 }

@@ -1,0 +1,799 @@
+namespace {
+
+using LidarIt = decltype(
+    std::declval<KitchenSinkDialInputs&>()
+        .get_lidar().get_view().begin());
+using CameraIt = decltype(
+    std::declval<KitchenSinkDialInputs&>()
+        .get_camera().get_view().begin());
+using RadarIt = decltype(
+    std::declval<KitchenSinkDialInputs&>()
+        .get_radar().get_view().begin());
+using PoseIt = decltype(
+    std::declval<KitchenSinkDialInputs&>()
+        .get_pose().get_view().begin());
+
+struct InputViews {
+  decltype(std::declval<KitchenSinkDialInputs&>().get_lidar().get_cursor_view())
+      lidar_view;
+  decltype(std::declval<KitchenSinkDialInputs&>().get_camera().get_cursor_view())
+      camera_view;
+  decltype(std::declval<KitchenSinkDialInputs&>().get_radar().get_cursor_view())
+      radar_view;
+  decltype(std::declval<KitchenSinkDialInputs&>().get_pose().get_cursor_view())
+      pose_view;
+};
+
+static InputViews make_input_views(KitchenSinkDialInputs& inputs)
+{
+  return InputViews{
+      .lidar_view = inputs.get_lidar().get_cursor_view(),
+      .camera_view = inputs.get_camera().get_cursor_view(),
+      .radar_view = inputs.get_radar().get_cursor_view(),
+      .pose_view = inputs.get_pose().get_cursor_view(),
+  };
+}
+
+struct CandidateSuffix4 {
+  std::optional<RadarIt> radar_it;
+};
+
+struct CandidateSuffix3 {
+  LidarIt lidar_it;
+  CandidateSuffix4 suffix4;
+};
+
+struct CandidateSuffix2 {
+  CameraIt camera_it;
+  CandidateSuffix3 suffix3;
+};
+
+struct CandidateSuffix1 {
+  PoseIt pose_hi_it;
+  CandidateSuffix2 suffix2;
+};
+
+struct CandidateSuffix0 {
+  PoseIt pose_lo_it;
+  CandidateSuffix1 suffix1;
+};
+
+struct PresenceState {
+  static constexpr std::size_t optional_count = 1U;
+  std::bitset<optional_count> present_mask{};
+  uint8_t present_count{};
+
+  static constexpr std::size_t radar_present_bit = 0U;
+
+  bool has_radar() const {
+    return present_mask.test(radar_present_bit);
+  }
+
+  uint8_t count_present() const {
+    return present_count;
+  }
+};
+
+struct CandidateAlignment {
+  CandidateSuffix0 suffix0;
+  [[no_unique_address]] PresenceState presence;
+};
+
+static auto& candidate_pose_lo_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.pose_lo_it);
+}
+
+static const auto& candidate_pose_lo_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.pose_lo_it);
+}
+
+static auto& candidate_pose_hi_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.pose_hi_it);
+}
+
+static const auto& candidate_pose_hi_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.pose_hi_it);
+}
+
+static auto& candidate_camera_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.camera_it);
+}
+
+static const auto& candidate_camera_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.camera_it);
+}
+
+static auto& candidate_lidar_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.suffix3.lidar_it);
+}
+
+static const auto& candidate_lidar_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.suffix3.lidar_it);
+}
+
+static auto& candidate_radar_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.suffix3.suffix4.radar_it);
+}
+
+static const auto& candidate_radar_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.suffix3.suffix4.radar_it);
+}
+
+static void refresh_radar_presence(CandidateAlignment& candidate)
+{
+  const bool is_present = candidate_radar_it(candidate).has_value();
+  const bool was_present = candidate.presence.has_radar();
+  if (is_present == was_present) {
+    return;
+  }
+  if (is_present) {
+    candidate.presence.present_mask.set(PresenceState::radar_present_bit);
+    ++candidate.presence.present_count;
+  } else {
+    candidate.presence.present_mask.reset(PresenceState::radar_present_bit);
+    --candidate.presence.present_count;
+  }
+}
+
+
+static bool objective_0_is_active(const PresenceState& presence)
+{
+  return presence.has_radar();
+}
+
+static auto objective_0_value(const CandidateAlignment& candidate)
+{
+  return std::abs(((*candidate_lidar_it(candidate)).get_observation_time() - (*candidate_camera_it(candidate)).get_observation_time()).count()) + std::abs(((*candidate_lidar_it(candidate)).get_observation_time() - (*candidate_radar_it(candidate).value()).get_observation_time()).count());
+}
+
+static bool objective_1_is_active(const PresenceState& presence)
+{
+  return !presence.has_radar();
+}
+
+static auto objective_1_value(const CandidateAlignment& candidate)
+{
+  return std::abs(((*candidate_lidar_it(candidate)).get_observation_time() - (*candidate_camera_it(candidate)).get_observation_time()).count());
+}
+
+struct BestSuffix0 {
+  CandidateSuffix0 suffix;
+  [[no_unique_address]] PresenceState presence;
+};
+
+struct BestSuffix1 {
+  CandidateSuffix1 suffix;
+  [[no_unique_address]] PresenceState presence;
+};
+
+struct BestSuffix2 {
+  CandidateSuffix2 suffix;
+  [[no_unique_address]] PresenceState presence;
+};
+
+struct BestSuffix3 {
+  CandidateSuffix3 suffix;
+  [[no_unique_address]] PresenceState presence;
+};
+
+static void store_best_suffix_0(
+    const CandidateAlignment& candidate,
+    BestSuffix0& best)
+{
+  best.suffix = candidate.suffix0;
+  best.presence = candidate.presence;
+}
+
+static void restore_best_suffix_0(
+    const BestSuffix0& best,
+    CandidateAlignment& candidate)
+{
+  candidate.suffix0 = best.suffix;
+  candidate.presence = best.presence;
+}
+
+static bool is_better_than_best_suffix_0(
+    const CandidateAlignment& candidate,
+    const BestSuffix0& best)
+{
+  if (candidate.presence.count_present() != best.presence.count_present()) {
+    return candidate.presence.count_present() > best.presence.count_present();
+  }
+  if (objective_0_is_active(candidate.presence)
+      && objective_0_is_active(best.presence)) {
+    const auto my_obj_0 = objective_0_value(candidate);
+    const auto other_obj_0 = std::abs(((*best.suffix.suffix1.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix1.suffix2.camera_it).get_observation_time()).count()) + std::abs(((*best.suffix.suffix1.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix1.suffix2.suffix3.suffix4.radar_it.value()).get_observation_time()).count());
+    if (my_obj_0 != other_obj_0) { return my_obj_0 < other_obj_0; }
+  }
+  if (objective_1_is_active(candidate.presence)
+      && objective_1_is_active(best.presence)) {
+    const auto my_obj_1 = objective_1_value(candidate);
+    const auto other_obj_1 = std::abs(((*best.suffix.suffix1.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix1.suffix2.camera_it).get_observation_time()).count());
+    if (my_obj_1 != other_obj_1) { return my_obj_1 < other_obj_1; }
+  }
+  return false;
+}
+
+static void store_best_suffix_1(
+    const CandidateAlignment& candidate,
+    BestSuffix1& best)
+{
+  best.suffix = candidate.suffix0.suffix1;
+  best.presence = candidate.presence;
+}
+
+static void restore_best_suffix_1(
+    const BestSuffix1& best,
+    CandidateAlignment& candidate)
+{
+  candidate.suffix0.suffix1 = best.suffix;
+  candidate.presence = best.presence;
+}
+
+static bool is_better_than_best_suffix_1(
+    const CandidateAlignment& candidate,
+    const BestSuffix1& best)
+{
+  if (candidate.presence.count_present() != best.presence.count_present()) {
+    return candidate.presence.count_present() > best.presence.count_present();
+  }
+  if (objective_0_is_active(candidate.presence)
+      && objective_0_is_active(best.presence)) {
+    const auto my_obj_0 = objective_0_value(candidate);
+    const auto other_obj_0 = std::abs(((*best.suffix.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix2.camera_it).get_observation_time()).count()) + std::abs(((*best.suffix.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix2.suffix3.suffix4.radar_it.value()).get_observation_time()).count());
+    if (my_obj_0 != other_obj_0) { return my_obj_0 < other_obj_0; }
+  }
+  if (objective_1_is_active(candidate.presence)
+      && objective_1_is_active(best.presence)) {
+    const auto my_obj_1 = objective_1_value(candidate);
+    const auto other_obj_1 = std::abs(((*best.suffix.suffix2.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix2.camera_it).get_observation_time()).count());
+    if (my_obj_1 != other_obj_1) { return my_obj_1 < other_obj_1; }
+  }
+  return false;
+}
+
+static void store_best_suffix_2(
+    const CandidateAlignment& candidate,
+    BestSuffix2& best)
+{
+  best.suffix = candidate.suffix0.suffix1.suffix2;
+  best.presence = candidate.presence;
+}
+
+static void restore_best_suffix_2(
+    const BestSuffix2& best,
+    CandidateAlignment& candidate)
+{
+  candidate.suffix0.suffix1.suffix2 = best.suffix;
+  candidate.presence = best.presence;
+}
+
+static bool is_better_than_best_suffix_2(
+    const CandidateAlignment& candidate,
+    const BestSuffix2& best)
+{
+  if (candidate.presence.count_present() != best.presence.count_present()) {
+    return candidate.presence.count_present() > best.presence.count_present();
+  }
+  if (objective_0_is_active(candidate.presence)
+      && objective_0_is_active(best.presence)) {
+    const auto my_obj_0 = objective_0_value(candidate);
+    const auto other_obj_0 = std::abs(((*best.suffix.suffix3.lidar_it).get_observation_time() - (*best.suffix.camera_it).get_observation_time()).count()) + std::abs(((*best.suffix.suffix3.lidar_it).get_observation_time() - (*best.suffix.suffix3.suffix4.radar_it.value()).get_observation_time()).count());
+    if (my_obj_0 != other_obj_0) { return my_obj_0 < other_obj_0; }
+  }
+  if (objective_1_is_active(candidate.presence)
+      && objective_1_is_active(best.presence)) {
+    const auto my_obj_1 = objective_1_value(candidate);
+    const auto other_obj_1 = std::abs(((*best.suffix.suffix3.lidar_it).get_observation_time() - (*best.suffix.camera_it).get_observation_time()).count());
+    if (my_obj_1 != other_obj_1) { return my_obj_1 < other_obj_1; }
+  }
+  return false;
+}
+
+static void store_best_suffix_3(
+    const CandidateAlignment& candidate,
+    BestSuffix3& best)
+{
+  best.suffix = candidate.suffix0.suffix1.suffix2.suffix3;
+  best.presence = candidate.presence;
+}
+
+static void restore_best_suffix_3(
+    const BestSuffix3& best,
+    CandidateAlignment& candidate)
+{
+  candidate.suffix0.suffix1.suffix2.suffix3 = best.suffix;
+  candidate.presence = best.presence;
+}
+
+static bool is_better_than_best_suffix_3(
+    const CandidateAlignment& candidate,
+    const BestSuffix3& best)
+{
+  if (candidate.presence.count_present() != best.presence.count_present()) {
+    return candidate.presence.count_present() > best.presence.count_present();
+  }
+  if (objective_0_is_active(candidate.presence)
+      && objective_0_is_active(best.presence)) {
+    const auto my_obj_0 = objective_0_value(candidate);
+    const auto other_obj_0 = std::abs(((*best.suffix.lidar_it).get_observation_time() - (*candidate_camera_it(candidate)).get_observation_time()).count()) + std::abs(((*best.suffix.lidar_it).get_observation_time() - (*best.suffix.suffix4.radar_it.value()).get_observation_time()).count());
+    if (my_obj_0 != other_obj_0) { return my_obj_0 < other_obj_0; }
+  }
+  if (objective_1_is_active(candidate.presence)
+      && objective_1_is_active(best.presence)) {
+    const auto my_obj_1 = objective_1_value(candidate);
+    const auto other_obj_1 = std::abs(((*best.suffix.lidar_it).get_observation_time() - (*candidate_camera_it(candidate)).get_observation_time()).count());
+    if (my_obj_1 != other_obj_1) { return my_obj_1 < other_obj_1; }
+  }
+  return false;
+}
+
+
+// Level 4: radar (nearest: distance-ordered from lidar.observation_time)
+static jewels::BinaryOutcome search_level_4(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  // Path 1: present.
+  {
+    const auto& view = views.radar_view;
+
+    // Window: observation_time
+    auto win_lo_observation_time = jewels::time::SyncTime::min();
+    auto win_hi_observation_time = jewels::time::SyncTime::max();
+    win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_pose_lo_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{350'000'000});
+    win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_pose_hi_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{300'000'000});
+    win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{300'000'000});
+    win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{300'000'000});
+    win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_lidar_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{200'000'000});
+    win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_lidar_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{200'000'000});
+
+    auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+        [](const auto& msg, const auto& t) {
+          return msg.get_observation_time() < t;
+        });
+    auto it_end = std::upper_bound(it_start, view.end(), win_hi_observation_time,
+        [](const auto& t, const auto& msg) {
+          return t < msg.get_observation_time();
+        });
+
+    if (it_start < it_end) {
+      const auto ref = (*candidate_lidar_it(*candidate)).get_observation_time();
+
+      // Binary search to reference point within windowed range.
+      auto mid = std::lower_bound(it_start, it_end, ref,
+          [](const auto& msg, const auto& r) {
+            return msg.get_observation_time() < r;
+          });
+
+      auto right = mid;
+      auto left = (mid != it_start)
+          ? std::prev(mid)
+          : it_end;  // sentinel: left side exhausted
+
+      while (right != it_end || left != it_end) {
+        bool pick_right = false;
+        if (right != it_end && left != it_end) {
+          // Pick whichever pointer is closer to the reference.
+          // Equal distance: right (later value) wins.
+          pick_right = ((*right).get_observation_time() - ref
+                        <= ref - (*left).get_observation_time());
+        } else {
+          pick_right = (right != it_end);
+        }
+
+        const auto candidate_it = pick_right ? right : left;
+
+        candidate_radar_it(*candidate) = candidate_it;
+        refresh_radar_presence(*candidate);
+        return jewels::success;
+      }
+    }
+  }
+  // Path 2: absent.
+  candidate_radar_it(*candidate) = std::nullopt;
+  refresh_radar_presence(*candidate);
+  return jewels::success;
+}
+
+// Level 3: lidar (nearest: distance-ordered from camera.observation_time)
+static jewels::BinaryOutcome search_level_3(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  std::optional<BestSuffix3> best;
+
+  const auto& view = views.lidar_view;
+
+  // Window: observation_time
+  auto win_lo_observation_time = jewels::time::SyncTime::min();
+  auto win_hi_observation_time = jewels::time::SyncTime::max();
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_pose_lo_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{150'000'000});
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{100'000'000});
+  win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{100'000'000});
+
+  auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+      [](const auto& msg, const auto& t) {
+        return msg.get_observation_time() < t;
+      });
+  auto it_end = std::upper_bound(it_start, view.end(), win_hi_observation_time,
+      [](const auto& t, const auto& msg) {
+        return t < msg.get_observation_time();
+      });
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  const auto ref = (*candidate_camera_it(*candidate)).get_observation_time();
+
+  // Binary search to reference point within windowed range.
+  auto mid = std::lower_bound(it_start, it_end, ref,
+      [](const auto& msg, const auto& r) {
+        return msg.get_observation_time() < r;
+      });
+
+  auto right = mid;
+  auto left = (mid != it_start)
+      ? std::prev(mid)
+      : it_end;  // sentinel: left side exhausted
+
+  const auto& cutoff_view_radar = views.radar_view;
+
+  bool radar_right_feasible = true;
+  bool radar_left_feasible = true;
+
+  while (right != it_end || left != it_end) {
+    bool pick_right = false;
+    if (right != it_end && left != it_end) {
+      // Pick whichever pointer is closer to the reference.
+      // Equal distance: right (later value) wins.
+      pick_right = ((*right).get_observation_time() - ref
+                    <= ref - (*left).get_observation_time());
+    } else {
+      pick_right = (right != it_end);
+    }
+
+    if (pick_right) {
+      if (radar_right_feasible) {
+        if (cutoff_view_radar.begin() != cutoff_view_radar.end()
+            && (*right).get_observation_time() - (*std::prev(cutoff_view_radar.end())).get_observation_time() > ::std::chrono::nanoseconds{200'000'000})
+        {
+          radar_right_feasible = false;
+        }
+      }
+    } else {
+      if (radar_left_feasible) {
+        if (cutoff_view_radar.begin() != cutoff_view_radar.end()
+            && (*cutoff_view_radar.begin()).get_observation_time() - (*left).get_observation_time() > ::std::chrono::nanoseconds{200'000'000})
+        {
+          radar_left_feasible = false;
+        }
+      }
+    }
+    if (!radar_right_feasible && !radar_left_feasible && best.has_value()) {
+      break;
+    }
+    const auto candidate_it = pick_right ? right : left;
+
+    candidate_lidar_it(*candidate) = candidate_it;
+    if (jewels::ok(search_level_4(jewels::InOut{*candidate}, views))) {
+      if (!best.has_value()) {
+        best.emplace();
+        store_best_suffix_3(*candidate, *best);
+      } else if (is_better_than_best_suffix_3(*candidate, *best)) {
+        store_best_suffix_3(*candidate, *best);
+      }
+    }
+
+    if (pick_right) {
+      ++right;
+    } else {
+      left = (left != it_start)
+          ? std::prev(left)
+          : it_end;
+    }
+  }
+  if (best.has_value()) {
+    restore_best_suffix_3(*best, *candidate);
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+// Level 2: camera (enumerate)
+static jewels::BinaryOutcome search_level_2(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  std::optional<BestSuffix2> best;
+
+  const auto& view = views.camera_view;
+
+  // Window: observation_time
+  auto win_lo_observation_time = jewels::time::SyncTime::min();
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_pose_lo_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{250'000'000});
+
+  auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+      [](const auto& msg, const auto& t) {
+        return msg.get_observation_time() < t;
+      });
+  auto it_end = view.end();
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  const auto& cutoff_view_lidar = views.lidar_view;
+  const auto& cutoff_view_radar = views.radar_view;
+
+  bool radar_feasible = true;
+
+  for (auto it = it_start; it < it_end; ++it) {
+    // Cutoff: no later lidar element can satisfy constraint
+    if (cutoff_view_lidar.begin() != cutoff_view_lidar.end()
+        && (*it).get_observation_time() - (*std::prev(cutoff_view_lidar.end())).get_observation_time() > ::std::chrono::nanoseconds{100'000'000})
+    {
+      break;
+    }
+    if (radar_feasible) {
+      if (cutoff_view_radar.begin() != cutoff_view_radar.end()
+          && (*it).get_observation_time() - (*std::prev(cutoff_view_radar.end())).get_observation_time() > ::std::chrono::nanoseconds{300'000'000})
+      {
+        radar_feasible = false;
+      }
+    }
+    if (!radar_feasible && best.has_value()) {
+      break;
+    }
+    candidate_camera_it(*candidate) = it;
+    if (jewels::ok(search_level_3(jewels::InOut{*candidate}, views))) {
+      if (!best.has_value()) {
+        best.emplace();
+        store_best_suffix_2(*candidate, *best);
+      } else if (is_better_than_best_suffix_2(*candidate, *best)) {
+        store_best_suffix_2(*candidate, *best);
+      }
+    }
+  }
+  if (best.has_value()) {
+    restore_best_suffix_2(*best, *candidate);
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+// Level 1: pose (last_in_range)
+static jewels::BinaryOutcome search_level_1(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  std::optional<BestSuffix1> best;
+
+  const auto& view = views.pose_view;
+
+  // IndexInView window(s).
+  const auto clamp_index_offset = [&view](auto ref, auto offset) {
+    const auto min_offset = -std::distance(view.begin(), ref);
+    const auto max_offset = std::distance(ref, view.end());
+    const auto bounded_offset = std::clamp(
+        static_cast<decltype(max_offset)>(offset), min_offset, max_offset);
+    return ref + bounded_offset;
+  };
+  auto it_start = clamp_index_offset(candidate_pose_lo_it(*candidate), 1);
+  auto it_end = clamp_index_offset(candidate_pose_lo_it(*candidate), 4);
+
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  const auto& cutoff_view_radar = views.radar_view;
+
+  bool radar_feasible = true;
+
+  auto it = std::prev(it_end);
+  while (true) {
+    if (radar_feasible) {
+      if (cutoff_view_radar.begin() != cutoff_view_radar.end()
+          && (*cutoff_view_radar.begin()).get_observation_time() - (*it).get_observation_time() > ::std::chrono::nanoseconds{300'000'000})
+      {
+        radar_feasible = false;
+      }
+    }
+    if (!radar_feasible && best.has_value()) {
+      break;
+    }
+    candidate_pose_hi_it(*candidate) = it;
+    if (jewels::ok(search_level_2(jewels::InOut{*candidate}, views))) {
+      if (!best.has_value()) {
+        best.emplace();
+        store_best_suffix_1(*candidate, *best);
+      } else if (is_better_than_best_suffix_1(*candidate, *best)) {
+        store_best_suffix_1(*candidate, *best);
+      }
+    }
+    if (it == it_start) {
+      break;
+    }
+    --it;
+  }
+  if (best.has_value()) {
+    restore_best_suffix_1(*best, *candidate);
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+// Level 0: pose (first_in_range)
+static jewels::BinaryOutcome search_level_0(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  std::optional<BestSuffix0> best;
+
+  const auto& view = views.pose_view;
+
+  auto it_start = view.begin();
+  auto it_end = view.end();
+
+  const auto& cutoff_view_lidar = views.lidar_view;
+
+  for (auto it = it_start; it < it_end; ++it) {
+    // Cutoff: no later lidar element can satisfy constraint
+    if (cutoff_view_lidar.begin() != cutoff_view_lidar.end()
+        && (*it).get_observation_time() - (*std::prev(cutoff_view_lidar.end())).get_observation_time() > ::std::chrono::nanoseconds{150'000'000})
+    {
+      break;
+    }
+    candidate_pose_lo_it(*candidate) = it;
+    if (jewels::ok(search_level_1(jewels::InOut{*candidate}, views))) {
+      if (!best.has_value()) {
+        best.emplace();
+        store_best_suffix_0(*candidate, *best);
+      } else if (is_better_than_best_suffix_0(*candidate, *best)) {
+        store_best_suffix_0(*candidate, *best);
+      }
+    } else {
+      // Required constraints tighten: future candidates also fail.
+      if (!best.has_value()) { return jewels::failure; }
+      break;
+    }
+  }
+  if (best.has_value()) {
+    restore_best_suffix_0(*best, *candidate);
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+static void publish_alignment(
+    KitchenSinkDial& dial,
+    const CandidateAlignment& candidate)
+{
+  auto& pub = dial.get_outputs().get_alignment();
+  auto& inputs = dial.get_inputs();
+  pub.message().set_lidar_seq(
+      inputs.get_lidar().get_sequence_number(candidate_lidar_it(candidate)));
+  pub.message().set_camera_seq(
+      inputs.get_camera().get_sequence_number(candidate_camera_it(candidate)));
+  pub.message().set_has_radar(candidate_radar_it(candidate).has_value());
+  if (candidate_radar_it(candidate).has_value()) {
+    pub.message().set_radar_seq(
+        inputs.get_radar().get_sequence_number(*candidate_radar_it(candidate)));
+  }
+  pub.message().set_pose_begin_seq(
+      inputs.get_pose().get_sequence_number(candidate_pose_lo_it(candidate)));
+  pub.message().set_pose_end_seq(
+      inputs.get_pose().get_sequence_number(candidate_pose_hi_it(candidate)));
+  pub.mark_for_publish();
+}
+
+static void advance_cursors(
+    KitchenSinkDialInputs& inputs,
+    const CandidateAlignment& candidate)
+{
+  inputs.get_lidar().set_cursor(std::next(candidate_lidar_it(candidate)));
+  inputs.get_camera().set_cursor(std::next(candidate_camera_it(candidate)));
+  if (candidate_radar_it(candidate).has_value()) {
+    inputs.get_radar().set_cursor(std::next(*candidate_radar_it(candidate)));
+  }
+  inputs.get_pose().set_cursor(std::next(candidate_pose_hi_it(candidate)));
+}
+
+static constexpr auto radar_timeout = std::chrono::nanoseconds{200000000};
+
+static bool all_timeout_optionals_present(const CandidateAlignment& candidate)
+{
+  return candidate_radar_it(candidate).has_value();
+}
+
+static jewels::time::SyncTime compute_effective_deadline(
+    jewels::time::SyncTime t0,
+    const CandidateAlignment& candidate)
+{
+  auto max_remaining = std::chrono::nanoseconds{0};
+  if (!candidate_radar_it(candidate).has_value()) {
+    max_remaining = std::max(max_remaining, radar_timeout);
+  }
+  return t0 + max_remaining;
+}
+
+}  // anonymous namespace
+
+void execute_cog(KitchenSinkDial& dial)
+{
+  auto& inputs = dial.get_inputs();
+  const auto views = make_input_views(inputs);
+  auto& timer = dial.get_optional_timer();
+  auto& state = dial.get_states().get_aligner_state();
+  const auto now = dial.get_start_time();
+  const bool timer_fired = static_cast<bool>(
+      dial.get_conditions().get_optional_timer());
+
+  CandidateAlignment candidate;
+  candidate.presence = PresenceState{};
+  if (jewels::fails(search_level_0(
+          jewels::InOut{candidate}, views))) {
+    static_cast<void>(timer.disarm());
+    return;
+  }
+
+  if (all_timeout_optionals_present(candidate)) {
+    if (jewels::fails(timer.disarm())) {
+      jewels::log_cerr_error("Failed to disarm aligner timeout timer");
+    }
+    publish_alignment(dial, candidate);
+    advance_cursors(inputs, candidate);
+    return;
+  }
+
+  // Partial alignment: some timeout optionals missing.
+
+  if (timer_fired) {
+    // Timer deadline reached — publish the partial alignment.
+    if (jewels::fails(timer.disarm())) {
+      jewels::log_cerr_error("Failed to disarm aligner timeout timer");
+    }
+    publish_alignment(dial, candidate);
+    advance_cursors(inputs, candidate);
+    return;
+  }
+
+  if (!timer.is_armed()) {
+    // Start waiting period for optional data.
+    state.set_partial_start_time(now);
+    const auto deadline = compute_effective_deadline(now, candidate);
+    if (jewels::fails(timer.arm(deadline))) {
+      jewels::log_cerr_error("Failed to arm aligner timeout timer");
+    }
+    return;
+  }
+
+  const auto t0 = state.get_partial_start_time();
+  const auto effective_deadline =
+      compute_effective_deadline(t0, candidate);
+
+  if (effective_deadline <= now) {
+    if (jewels::fails(timer.disarm())) {
+      jewels::log_cerr_error("Failed to disarm aligner timeout timer");
+    }
+    publish_alignment(dial, candidate);
+    advance_cursors(inputs, candidate);
+    return;
+  }
+
+  if (jewels::fails(timer.arm(effective_deadline))) {
+    jewels::log_cerr_error("Failed to arm aligner timeout timer");
+  }
+}

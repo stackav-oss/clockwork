@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -22,7 +22,6 @@ cc_test(
     srcs = ["exec_tools_test.cc"],
     deps = [
         "//clockwork/common:exec_tools",
-        "//clockwork/pinion:shm_channel_factory",
         "//jewels/filesystem:file",
         "//jewels/filesystem:path",
         "//jewels/memory:memory_resource",

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """C++ backend for Clockwork schemas.
@@ -72,6 +72,7 @@ class CppValue:
     def includes(self) -> Iterable[Include]:
         """Includes for the type."""
         if self.value_type is None:
+            # pyrefly: ignore[bad-return] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             return []
         yield from self.value_type.includes
         for value in self._value_list():
@@ -98,6 +99,7 @@ class CppValue:
     def render(self, enclosing_namespace: str) -> str:
         """Convert to a string."""
         if self.value_type is None:
+            # pyrefly: ignore[implicit-any-type-argument] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             if isinstance(self.value, list | dict):
                 msg = "CppValue does not support multiple value arguments when the value type is None."
                 raise ValueError(msg)
@@ -197,7 +199,7 @@ class CppTemplateType:
 
     include: list[Include]
     template_name: str
-    cpp_namespace: str
+    cpp_namespace: str | None
     arguments: list[CppTypeExpr | CppValueExpr] | None = None
     const: bool = False
     ref: Ref | None = None
@@ -228,7 +230,7 @@ class CppTemplate:
 
     includes: list[Include]
     template_name: str
-    cpp_namespace: str
+    cpp_namespace: str | None
 
     def instantiate(self, arguments: Iterable[CppTypeExpr | CppValueExpr]) -> CppTemplateType:
         """Instantiate the template with arguments."""
@@ -572,6 +574,7 @@ class CppStruct:
     static_data_members: list[CppNamedValue] = field(default_factory=list)
     members: CppMemberDict = field(default_factory=dict)
     template_param: list[CppTemplateParam] = field(default_factory=list)
+    template_args: list[CppTypeExpr | CppValueExpr] = field(default_factory=list)
     no_lints: list[str] | None = None
     leading_header_chunk: CppChunk | None = None
     parent: CppStruct | None = None
@@ -592,9 +595,13 @@ class CppStruct:
         """Access the private members."""
         return self.members.setdefault(MemberAccess.private, [])
 
-    def _render_template_params(self, namespace: str) -> str:
+    def render_template_params(self, namespace: str) -> str:
         """Render template parameters as a string."""
         return ", ".join(param.render(namespace) for param in self.template_param)
+
+    def render_template_args(self, namespace: str) -> str:
+        """Render template parameters as a string."""
+        return ", ".join(arg.render(namespace) for arg in self.template_args)
 
     def _get_qualified_name(self, namespace: str) -> str:
         """Get the fully-qualified name including parent struct names.
@@ -608,6 +615,8 @@ class CppStruct:
         if self.parent is None:
             return self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
         parent_fqn = self.parent._get_qualified_name(namespace)  # noqa: SLF001 - recursive call to same method
+        if self.parent.template_args:
+            parent_fqn = f"{parent_fqn}<{self.parent.render_template_args(namespace)}>"
         struct_name = self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
         return f"{parent_fqn}::{struct_name}"
 
@@ -645,7 +654,12 @@ class CppStruct:
 
     def _render_method_member(self, member: CppMethod, cpp_mod: CppModuleChunks, namespace: str) -> None:
         """Render a method member."""
-        member_chunks = member.render(self.name, namespace)
+        self_name = self.name
+        if isinstance(self_name, CppType) and self.template_args:
+            self_name = CppTemplate(includes=[], template_name=self_name.type_name, cpp_namespace=None).instantiate(
+                self.template_args
+            )
+        member_chunks = member.render(self_name, namespace)
 
         if self.parent is not None:
             fqn_str = self._get_qualified_name(namespace)
@@ -657,15 +671,29 @@ class CppStruct:
             member_chunks.inline_chunk = fqn_chunks.inline_chunk
             member_chunks.implementation_chunk = fqn_chunks.implementation_chunk
 
-        if self.template_param and member_chunks.inline_chunk.produce:
-            params = self._render_template_params(namespace)
-            member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+        if self.template_param:
+            params = self.render_template_params(namespace)
+            if member_chunks.inline_chunk.produce:
+                member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+            else:
+                member_chunks.implementation_chunk.lines.insert(0, f"template <{params}>")
+        if self.parent and self.parent.template_param:
+            params = self.parent.render_template_params(namespace)
+            if member_chunks.inline_chunk.produce:
+                member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+            else:
+                member_chunks.implementation_chunk.lines.insert(0, f"template <{params}>")
         cpp_mod.append(member_chunks)
 
     def _render_constructor_member(self, member: CppConstructor, cpp_mod: CppModuleChunks, namespace: str) -> None:
         """Render a constructor member."""
         if self.parent is None:
-            member_chunks = member.render(self.name, namespace)
+            self_name = self.name
+            if isinstance(self_name, CppType) and self.template_args:
+                self_name = CppTemplate(includes=[], template_name=self_name.type_name, cpp_namespace=None).instantiate(
+                    self.template_args
+                )
+            member_chunks = member.render(self_name, namespace)
         else:
             fqn_str = self._get_qualified_name(namespace)
             simple_name = self.name.type_name if isinstance(self.name, CppType) else self.name.template_name
@@ -675,9 +703,18 @@ class CppStruct:
                 fqn_type = replace(self.name, template_name=fqn_str, cpp_namespace=None)
             member_chunks = member.render(fqn_type, namespace, constructor_name=simple_name)
 
-        if self.template_param and member_chunks.inline_chunk.produce:
-            params = self._render_template_params(namespace)
-            member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+        if self.template_param:
+            params = self.render_template_params(namespace)
+            if member_chunks.inline_chunk.produce:
+                member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+            else:
+                member_chunks.implementation_chunk.lines.insert(0, f"template <{params}>")
+        if self.parent and self.parent.template_param:
+            params = self.parent.render_template_params(namespace)
+            if member_chunks.inline_chunk.produce:
+                member_chunks.inline_chunk.lines.insert(0, f"template <{params}>")
+            else:
+                member_chunks.implementation_chunk.lines.insert(0, f"template <{params}>")
         cpp_mod.append(member_chunks)
 
     def _render_member(self, member: CppMember, cpp_mod: CppModuleChunks, namespace: str) -> None:
@@ -714,7 +751,7 @@ class CppStruct:
         cpp_mod.header_chunk.append(comment_doc_string(self.doc))
 
         if isinstance(self.name, CppTemplateType) or self.template_param:
-            params = self._render_template_params(namespace)
+            params = self.render_template_params(namespace)
             cpp_mod.header_chunk.append(f"template <{params}>")
 
         cpp_mod.header_chunk.append(self._render_struct_declaration(namespace))
@@ -886,4 +923,10 @@ SECONDS = CppType(
     includes=[SystemHeader("chrono")],
     type_name="seconds",
     cpp_namespace="std::chrono",
+)
+
+TENSOR_SIZES: Final = CppTemplate(
+    includes=[Header(JEWELS_REPO, "jewels/container/tap/tensor.hh")],
+    template_name="Sizes",
+    cpp_namespace="jewels::tap",
 )

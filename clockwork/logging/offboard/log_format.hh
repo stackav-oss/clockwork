@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -10,6 +10,10 @@
 #include "clockwork/logging/wrapping_counter.hh"
 #include "jewels/math/constants.hh"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <string_view>
 
 namespace clockwork_logging::offboard
@@ -35,6 +39,9 @@ static constexpr auto log_metadata_filename = std::string_view{"stack_log_metada
 
 /// Log union file name
 static constexpr auto log_union_filename = std::string_view{"stack_log_union.pbtxt"};
+
+/// Log amendment file name
+static constexpr auto log_amendment_filename = std::string_view{"stack_log_amendment.pbtxt"};
 
 /// Maximum schema or channel name string length
 static constexpr size_t max_name_string_size = std::numeric_limits<uint16_t>::max();
@@ -368,6 +375,16 @@ static constexpr size_t metadata_chunk_trailer_size = 20U;
 static_assert(
   sizeof(MetadataChunkTrailer) == metadata_chunk_trailer_size); // Metadata chunk trailer size must never change
 
+/// Metadata chunk channel entry flags
+struct __attribute__((packed)) MetadataChunkChannelEntryFlags
+{
+  /// Channel is amended
+  uint8_t is_amended : 1 {};
+
+  /// Reserved bits must be zero
+  uint8_t reserved : 7 {};
+};
+
 /// Metadata chunk channel entry
 struct __attribute__((packed)) MetadataChunkChannelEntry
 {
@@ -404,9 +421,12 @@ struct __attribute__((packed)) MetadataChunkChannelEntry
   /// Channel type
   ChannelType channel_type{};
 
+  /// Flags field
+  MetadataChunkChannelEntryFlags flags{};
+
   /// Reserved bytes (set to zero)
-  static constexpr auto reserved_size = 3U;
-  std::array<std::byte, 3U> reserved{};
+  static constexpr auto reserved_size = 2U;
+  std::array<std::byte, reserved_size> reserved{};
 };
 
 static constexpr size_t metadata_chunk_channel_entry_size = 36U;

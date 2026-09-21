@@ -138,8 +138,7 @@ Remember they are invisible to the Cog while it's executing.
 > [!WARNING]
 > The scenario described here is very problematic for another reason: the Cog is taking so long to execute that it's view is about to drop out of the channel entirely; this is called "overrun".
 > This is a fault situation if it happens and will lead to the Cog being killed unless the input is set to copy mode.
-> The details of handling this fault and copy mode are outside the scope of this document; for our purposes here, just make sure those channels are configured to be large enough that the view never "falls off" the end of the channel!
-> See also the note on [sizing](#choosing-input-view-size) below.
+> [Avoiding overruns](#avoiding-overruns) discusses several ways to avoid this situation.
 
 #### Time t4
 
@@ -255,11 +254,39 @@ inputs
 }
 ```
 
+### Device pointers
+
+Certain [channel types](../reference/channels.md) use on-device memory.
+How this is implemented depends on the specific channel type, platform, and implementation.
+Regardless, to be able to access the on-device memory address you must opt an input in to using DevicePtr:
+
+```clk
+inputs
+{
+  some_input: Tappy<SomeMessage>
+  {
+    use_device_ptr: true;
+  }
+}
+```
+
+When an input is configured with `use_device_ptr` it will provide a `device_ptr()` function that maps an input _iterator_ to its device address. For example:
+
+```cpp
+pinion::DevicePtr<const Tappy<SomeMessage>> some_dev_input =
+  dial.get_inputs().get_some_input().device_ptr(dial.get_inputs().get_some_input().get_first_new());
+```
+
+The `DevicePtr<T>` type operates similarly to a `unique_ptr<T>`, supporting `.get()` to access the pointer and `operator->` to access members.
+It cannot be copied, and calling `device_ptr(iter)` will transfer ownership of the underlying resource to the cog and further calls to `device_ptr(iter)` will return `nullptr` for a particular `iter`.
+
+Cogs outputs also support `use_device_ptr` in a similar fashion, but the returned `DevicePtr<T>` is not `const`.
+
 ### Avoiding overruns
 
 The producer and consumer(s) of a channel communicate using a ring buffer in shared memory.
 As an optimization, access to the shared memory region is done without locking or copying by default.
-This means there is a risk of the producer of a channel overwriting messages while a consumer is reading them.
+This means there is a risk of the producer of a channel overwriting messages while a consumer is reading them, as shown in the [example above](#time-t3).
 This can happen if the producer is bursty or if the consumer consistently executes slower than the message arrival rate.
 This section describes several means you can employ to address this risk and avoid having your processes terminated.
 
@@ -286,10 +313,20 @@ It's also important to note that enabling copying will increase the amount of me
 > Many of the remedies described in the sections below only apply to inputs that are associated with `new_message` conditions that use the `max` parameter.
 > If your cog is being overrun and the relevant input does not meet those criteria, you probably want to enable input copying if addressing the root cause of the overrun is non-trivial.
 
+#### Resize your input views
+
+If the input view size is larger than it needs to be for your Cog's functionality, you can consider making it smaller.
+See the section on [sizing](#choosing-input-view-size) input views for more details.
+
 #### Resize your channels
 
-Sometimes a cog isn't pathologically slow, but is instead sensitive to bursts from upstream producers.
-Another simple way to avoid overruns in this case is to increase the size of the channel between the bursty producer and the sensitive consumer.
+Assuming Cog input views are sized appropriately, the channel size might need to be adjusted.
+Each channel should be large enough to accommodate each consumer Cog's connected input view size, all additional inputs that arrive on the channel during each Cog's execution, and the safety margin.
+With an idea of a consumer Cog's execution time and the number of messages that will be produced on the channel during that time, the size of the channel should be roughly `view_size + exec_duration * message_rate + safety_margin`.
+If multiple Cogs are subscribed to a channel, the channel should be sized for the Cog with the largest required channel size.
+
+Sometimes a Cog isn't pathologically slow, but is instead sensitive to bursts from upstream producers.
+This can be also be handled by increasing the size of the channel between the bursty producer and the sensitive consumer to account for bursts of messages.
 Similar to copying, this remedy can be applied to inputs regardless of their association with execution conditions.
 
 > [!NOTE]

@@ -3,24 +3,23 @@ use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReade
 
 policy ChannelLoggingPolicy for hellomod::HelloChan
 {
-    log_type = LogType::event;
+  log_type = LogType::event;
 }
 
 policy ChannelLoggingPolicy for hellomod::AnotherChan
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 policy ChannelLoggingPolicy for hellomod::MultiPublisherChannel
 {
-    log_type = LogType::redundant_telemetry;
+  log_type = LogType::redundant_telemetry;
 }
 
 policy LogReaderPolicy for hellomod::HelloChan
-{
-}
+{}
 
 policy LogReaderPolicy for hellomod::AnotherChan
 {
-    source_name = '/another/chan';
+  source_name = '/another/chan';
 }

@@ -9,7 +9,7 @@ schema MultiSubscriberConfig
   parameters
   {
     // Maximum number of publishers on a multi-publisher channel
-    #0 max_publishers = 1024;
+    #0 max_publishers = 2048;
   }
 
   fields
@@ -19,6 +19,11 @@ schema MultiSubscriberConfig
 
     // Endpoint identifiers for each publisher on the channel.
     #2 publisher_ids: VarArray<Uuid<process_description::EndpointInstanceId>, max_publishers>;
+  }
+
+  history
+  {
+    version: 3;
   }
 }
 

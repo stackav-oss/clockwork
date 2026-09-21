@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/tcp_bridge.hh"
@@ -8,12 +8,9 @@
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/bridge_status_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/shm_subscriber.hh" // IWYU pragma: keep
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/tcp_bridge_client.hh"
@@ -44,7 +41,6 @@
 #include <compare>
 #include <cstddef>
 #include <functional>
-#include <list>
 #include <map>
 #include <memory>
 #include <memory_resource>
@@ -53,6 +49,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -66,28 +63,26 @@ using jewels::success;
 
 TcpBridge::TcpBridge(
   jewels::memory::MemoryResource memres,
-  ShmChannelFactory channel_factory,
-  const Tappy<TcpBridgeConfig<>>& config,
+  std::shared_ptr<AbstractChannelFactory> channel_factory,
+  const Tappy<TcpBridgeConfig<>>& bridge_config,
   jewels::time::SyncTime current_time)
   : memres_(std::move(memres)),
-    config_(jewels::memory::make_pmr_shared<Tappy<TcpBridgeConfig<>>>(memres_, config)),
+    host_name_(bridge_config.get_host_name(), memres_),
     channel_factory_(std::move(channel_factory)),
-    subscribers_(memres_),
     publishers_(memres_),
     epoll_(memres_),
-    pending_servers_(memres_),
     servers_(memres_),
     clients_(memres_),
     diagnostics_state_(jewels::memory::make_pmr_shared<TcpBridgeDiagnosticsState>(memres_)),
-    last_pending_bridge_server_time_(current_time - ShmSubscriber::reconnect_interval_sec),
     last_status_report_time_(current_time),
-    bulk_data_channels_(memres_)
+    bulk_data_channels_(memres_),
+    bulk_data_channel_names_(memres_)
 {
 }
 
-jewels::BinaryOutcome TcpBridge::initialize()
+jewels::BinaryOutcome TcpBridge::initialize(const Tappy<TcpBridgeConfig<>>& bridge_config)
 {
-  const auto& diagnostics_config = config_->get_diagnostics_config();
+  const auto& diagnostics_config = bridge_config.get_diagnostics_config();
   if (!diagnostics_config.get_reporter_id().is_nil())
   {
     if (diagnostics_config.get_group_id() != wise_enum::to_string(diagnostics::SignalGroupId::tcp_bridge))
@@ -96,32 +91,35 @@ jewels::BinaryOutcome TcpBridge::initialize()
       return jewels::failure;
     }
     if (!ok(open_publisher(
-          memres_, diagnostics_config.get_publish_endpoint(), channel_factory_, Out{diagnostics_publisher_})))
+          memres_, diagnostics_config.get_publish_endpoint(), *channel_factory_, Out{diagnostics_publisher_})))
     {
       return failure;
     }
-    scaffolding::bind_channel_to_epoll(static_pointer_cast<ShmChannel>(diagnostics_publisher_), epoll_);
+    scaffolding::bind_channel_to_epoll(static_pointer_cast<AbstractChannel>(diagnostics_publisher_), epoll_);
     diagnostics_manager_ = std::make_unique<diagnostics::ClockworkManager<diagnostics::SignalGroupId::tcp_bridge>>(
       diagnostics_config.get_instance_id(), diagnostics_config.get_reporter_id());
     diagnostics_manager_->publisher().set_handle(diagnostics_publisher_->extract_publisher().value());
   }
-  const auto& status_publish_endpoint = config_->get_status_publish_endpoint();
+  const auto& status_publish_endpoint = bridge_config.get_status_publish_endpoint();
   if (!status_publish_endpoint.get_publisher_id().is_nil())
   {
-    if (!ok(open_publisher(memres_, status_publish_endpoint, channel_factory_, Out{status_publisher_})))
+    if (!ok(open_publisher(memres_, status_publish_endpoint, *channel_factory_, Out{status_publisher_})))
     {
       return jewels::failure;
     }
-    scaffolding::bind_channel_to_epoll(static_pointer_cast<ShmChannel>(status_publisher_), epoll_);
+    scaffolding::bind_channel_to_epoll(static_pointer_cast<AbstractChannel>(status_publisher_), epoll_);
     maybe_status_publisher_handle_.emplace(std::move(status_publisher_->extract_publisher()).value());
   }
-  if (!ok(open_publishers()))
+  if (!ok(open_publishers(bridge_config)))
   {
     return jewels::failure;
   }
-  initialize_pending_servers();
   scaffolding::bind_channels_to_epoll(publishers_, epoll_);
-  if (!ok(create_bridge_clients()))
+  if (!ok(create_bridge_servers(bridge_config)))
+  {
+    return jewels::failure;
+  }
+  if (!ok(create_bridge_clients(bridge_config)))
   {
     return jewels::failure;
   }
@@ -141,12 +139,11 @@ jewels::BinaryOutcome TcpBridge::run()
 
 jewels::BinaryOutcome TcpBridge::run_once(jewels::time::SyncTime current_time)
 {
-  if (current_time - last_status_report_time_ > status_report_interval)
+  if (current_time - last_diagnostics_report_time_ > diagnostics_report_interval)
   {
     const auto diagnostics_counters = diagnostics_state_->get_and_reset_counters();
-    const auto report_interval = current_time - last_status_report_time_;
-    last_status_report_time_ = current_time;
-    publish_bridge_status(diagnostics_counters, report_interval, current_time);
+    last_diagnostics_report_time_ = current_time;
+    combine_diagnostics_counters(diagnostics_counters, bridge_status_diagnostics_counters_);
     publish_bridge_diagnostics(diagnostics_counters, current_time);
     if (diagnostics_counters.max_bridge_latency >= min_reportable_bridge_latency)
     {
@@ -164,9 +161,12 @@ jewels::BinaryOutcome TcpBridge::run_once(jewels::time::SyncTime current_time)
         diagnostics_counters.max_bulk_data_latency_channel_name);
     }
   }
-  if (!ok(create_pending_bridge_servers(current_time)))
+  if (current_time - last_status_report_time_ > status_report_interval)
   {
-    return failure;
+    const auto report_interval = current_time - last_status_report_time_;
+    last_status_report_time_ = current_time;
+    publish_bridge_status(bridge_status_diagnostics_counters_, report_interval, current_time);
+    bridge_status_diagnostics_counters_ = {};
   }
   if (const auto result = epoll_.wait(epoll_wait_interval); !result)
   {
@@ -174,11 +174,6 @@ jewels::BinaryOutcome TcpBridge::run_once(jewels::time::SyncTime current_time)
     jewels::log_cerr_error("epoll wait failed with {}", result.error());
   }
   return success;
-}
-
-[[nodiscard]] size_t TcpBridge::get_num_pending_servers() const
-{
-  return pending_servers_.size();
 }
 
 [[nodiscard]] size_t TcpBridge::get_num_servers() const
@@ -191,9 +186,9 @@ jewels::BinaryOutcome TcpBridge::run_once(jewels::time::SyncTime current_time)
   return clients_.size();
 }
 
-[[nodiscard]] ShmChannelFactory& TcpBridge::channel_factory()
+[[nodiscard]] AbstractChannelFactory& TcpBridge::channel_factory()
 {
-  return channel_factory_;
+  return *channel_factory_;
 }
 
 [[nodiscard]] TcpBridgeDiagnosticsState& TcpBridge::diagnostics_state()
@@ -201,45 +196,11 @@ jewels::BinaryOutcome TcpBridge::run_once(jewels::time::SyncTime current_time)
   return *diagnostics_state_;
 }
 
-jewels::BinaryOutcome
-TcpBridge::open_subscriber(const Tappy<TcpBridgeServerConfig>& config, Out<std::shared_ptr<ShmSubscriber>> subscriber)
-{
-  if (subscribers_.contains(config.get_publisher_id()))
-  {
-    *subscriber = static_pointer_cast<ShmSubscriber>(subscribers_.at(config.get_publisher_id()));
-    return success;
-  }
-  const auto uuid_str = config.get_publisher_id().to_string(memres_);
-  const pinion::BufferLayout layout{
-    .num_slots = config.get_buffer_layout().get_num_slots(),
-    .message_size = config.get_buffer_layout().get_message_size(),
-    .is_published_once = config.get_buffer_layout().get_is_published_once(),
-  };
-  auto subscriber_ptr = channel_factory_.open_subscriber(uuid_str, config.get_channel_name(), layout, 1);
-  if (!subscriber_ptr)
-  {
-    if (subscriber_ptr.error() != pinion::ShmChannel::Error::missing)
-    {
-      jewels::log_cerr_error(
-        "Could not create subscriber '{}': {}",
-        config.get_channel_name(),
-        wise_enum::to_string(subscriber_ptr.error()));
-      return failure;
-    }
-    *subscriber = nullptr;
-    return success;
-  }
-  scaffolding::bind_channel_to_epoll(static_pointer_cast<ShmChannel>(subscriber_ptr.value()), epoll_);
-  subscribers_.emplace(config.get_publisher_id(), subscriber_ptr.value());
-  *subscriber = std::move(subscriber_ptr.value());
-  return success;
-}
-
 jewels::BinaryOutcome TcpBridge::open_publisher(
   const jewels::memory::MemoryResource& memres,
   const Tappy<common::PublishEndpoint<common::MAX_CHANNEL_NAME_SIZE>>& publish_endpoint,
-  ShmChannelFactory& channel_factory,
-  Out<std::shared_ptr<pinion::ShmPublisher>> publisher)
+  AbstractChannelFactory& channel_factory,
+  Out<std::shared_ptr<pinion::AbstractPublisher>> publisher)
 {
   const auto& buffer_layout = publish_endpoint.get_buffer_layout();
   const auto layout = pinion::BufferLayout{
@@ -260,104 +221,70 @@ jewels::BinaryOutcome TcpBridge::open_publisher(
   return success;
 }
 
-jewels::BinaryOutcome TcpBridge::open_publishers()
+jewels::BinaryOutcome TcpBridge::open_publishers(const Tappy<TcpBridgeConfig<>>& bridge_config)
 {
-  for (const auto& config : config_->get_bridge_clients())
+  for (const auto& config : bridge_config.get_bridge_clients())
   {
-    std::shared_ptr<pinion::ShmPublisher> publisher;
-    if (!ok(open_publisher(memres_, config.get_publisher_endpoint(), channel_factory_, Out{publisher})))
+    std::shared_ptr<pinion::AbstractPublisher> publisher;
+    if (!ok(open_publisher(memres_, config.get_publisher_endpoint(), *channel_factory_, Out{publisher})))
     {
       return failure;
+    }
+    while (!publisher->handshake())
+    {
+      jewels::log_cerr_info(
+        "Waiting for publisher initialization to complete ({})", config.get_publisher_endpoint().get_channel_name());
+      std::this_thread::sleep_for(clockwork::scaffolding::channel_connect_sleep_time);
     }
     publishers_.emplace(config.get_publisher_endpoint().get_publisher_id(), std::move(publisher));
   }
   return success;
 }
 
-void TcpBridge::initialize_pending_servers()
+jewels::BinaryOutcome TcpBridge::create_bridge_servers(const Tappy<TcpBridgeConfig<>>& bridge_config)
 {
-  for (const auto& config : config_->get_bridge_servers())
+  for (const auto& config : bridge_config.get_bridge_servers())
   {
     if (config.get_is_bulk_data())
     {
-      bulk_data_channels_.emplace(config.get_channel_name());
-    }
-    pending_servers_.push_back(jewels::memory::make_non_null_from_ref(config));
-  }
-}
-
-jewels::BinaryOutcome TcpBridge::create_pending_bridge_servers(jewels::time::SyncTime current_time)
-{
-  if (pending_servers_.empty())
-  {
-    return success;
-  }
-  if (current_time - last_pending_bridge_server_time_ < ShmSubscriber::reconnect_interval_sec)
-  {
-    return success;
-  }
-  last_pending_bridge_server_time_ = current_time;
-  for (auto config_it = pending_servers_.begin(); config_it != pending_servers_.end();)
-  {
-    const auto& config = **config_it;
-    std::shared_ptr<ShmSubscriber> subscriber;
-    if (!ok(open_subscriber(config, Out{subscriber})))
-    {
-      return failure;
-    }
-    if (!subscriber)
-    {
-      ++config_it;
-      continue;
+      // NOLINTNEXTLINE(modernize-use-emplace) Compiler doesn't accept emplace_back(channel_name, memory_resource_)
+      bulk_data_channel_names_.emplace_back(std::pmr::string{config.get_channel_name(), memres_});
+      bulk_data_channels_.emplace(bulk_data_channel_names_.back());
     }
     auto bridge_server = TcpBridgeServer::make(
-      memres_,
-      config,
-      subscriber->make_subscriber(),
-      jewels::memory::make_non_null_from_ref(epoll_),
-      diagnostics_state_);
+      memres_, config, channel_factory_, jewels::memory::make_non_null_from_ref(epoll_), diagnostics_state_);
     if (!bridge_server)
     {
       return failure;
     }
-    if (!subscriber->add_observer(jewels::memory::make_non_null_from_ref(*bridge_server)))
-    {
-      return failure;
-    }
     servers_.emplace(config.get_publisher_id(), std::move(bridge_server));
-    config_it = pending_servers_.erase(config_it);
-  }
-  if (!pending_servers_.empty())
-  {
-    jewels::log_cerr_info(
-      "Waiting for publisher creation ({} subscribers remaining. Next up: {})",
-      pending_servers_.size(),
-      pending_servers_.front()->get_channel_name());
   }
   return success;
 }
 
-jewels::BinaryOutcome TcpBridge::create_bridge_clients()
+jewels::BinaryOutcome TcpBridge::create_bridge_clients(const Tappy<TcpBridgeConfig<>>& bridge_config)
 {
-  for (const auto& config : config_->get_bridge_clients())
+  for (const auto& config : bridge_config.get_bridge_clients())
   {
     auto& channel = publishers_.at(config.get_publisher_endpoint().get_publisher_id());
-    auto publisher = std::dynamic_pointer_cast<ShmPublisher>(channel)->extract_publisher();
+    auto publisher = std::dynamic_pointer_cast<AbstractPublisher>(channel)->extract_publisher();
     if (!publisher)
     {
       jewels::log_cerr_error(
         "Failed to extract publisher handle for channel {}", config.get_publisher_endpoint().get_publisher_id());
       return failure;
     }
-    auto bridge_client =
-      TcpBridgeClient::make(memres_, config, *std::move(publisher), channel->make_subscriber(), diagnostics_state_);
+    auto bridge_client = TcpBridgeClient::make(memres_, config, *std::move(publisher), channel, diagnostics_state_);
     if (!bridge_client)
     {
       return failure;
     }
     if (config.get_publisher_endpoint().get_is_bulk_data())
     {
-      bulk_data_channels_.emplace(config.get_publisher_endpoint().get_channel_name());
+      bulk_data_channel_names_.emplace_back(
+        // NOLINTNEXTLINE(modernize-use-emplace) Compiler doesn't accept emplace(channel_name, memory_resource_)
+        std::pmr::string{config.get_publisher_endpoint().get_channel_name(), memres_});
+      bulk_data_channels_.emplace(bulk_data_channel_names_.back());
     }
     clients_.emplace(config.get_publisher_endpoint().get_publisher_id(), std::move(bridge_client));
   }
@@ -406,11 +333,11 @@ void TcpBridge::publish_bridge_status(
     diagnostics_state_->increment_status_errors();
     return;
   }
-  auto slot = reservation->slot();
+  auto slot = reservation->slots().front();
   auto& status_msg =
     *detail::marshal_as<Tappy<BridgeStatus>>(std::span<std::byte, sizeof(Tappy<BridgeStatus>)>{slot.message()});
   status_msg = {};
-  status_msg.get_underlying_host_name().set_truncate(config_->get_host_name());
+  status_msg.get_underlying_host_name().set_truncate(host_name_);
   TcpBridgeClientServerCounters total_client_counters{};
   TcpBridgeClientServerCounters total_client_bulk_data_counters{};
   std::pmr::map<std::string_view, TcpBridgeClientServerCounters> client_counters_map{memres_};
@@ -430,8 +357,11 @@ void TcpBridge::publish_bridge_status(
   }
   for (const auto& [channel_name, counters] : client_counters_map)
   {
-    auto& status_counters = status_msg.get_underlying_client_counters().emplace_back();
-    store_client_server_counters(channel_name, counters, report_interval, status_counters);
+    if (counters.message_count != 0U)
+    {
+      auto& status_counters = status_msg.get_underlying_client_counters().emplace_back();
+      store_client_server_counters(channel_name, counters, report_interval, status_counters);
+    }
   }
   auto& status_total_client_counters = status_msg.get_underlying_client_counters().emplace_back();
   store_client_server_counters("CLIENT TOTAL", total_client_counters, report_interval, status_total_client_counters);
@@ -457,8 +387,11 @@ void TcpBridge::publish_bridge_status(
   }
   for (const auto& [channel_name, counters] : server_counters_map)
   {
-    auto& status_counters = status_msg.get_underlying_server_counters().emplace_back();
-    store_client_server_counters(channel_name, counters, report_interval, status_counters);
+    if (counters.message_count != 0U)
+    {
+      auto& status_counters = status_msg.get_underlying_server_counters().emplace_back();
+      store_client_server_counters(channel_name, counters, report_interval, status_counters);
+    }
   }
   auto& status_total_server_counters = status_msg.get_underlying_server_counters().emplace_back();
   store_client_server_counters("SERVER TOTAL", total_server_counters, report_interval, status_total_server_counters);

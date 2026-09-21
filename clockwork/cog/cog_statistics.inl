@@ -73,6 +73,16 @@ std::optional<double> MinMaxMean<T>::mean() const
   return static_cast<double>(sum_) / static_cast<double>(count_);
 }
 
+template <typename T>
+std::optional<T> MinMaxMean<T>::sum() const
+{
+  if (!set_)
+  {
+    return std::nullopt;
+  }
+  return sum_;
+}
+
 template <>
 std::optional<double> MinMaxMean<TenNanoseconds>::mean() const
 {

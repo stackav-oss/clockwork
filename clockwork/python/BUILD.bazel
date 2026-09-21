@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -13,7 +13,7 @@ cc_library(
     name = "gil_lock_guard",
     srcs = ["gil_lock_guard.cc"],
     hdrs = ["gil_lock_guard.hh"],
-    deps = ["@python_3_10//:python_headers"],
+    deps = ["@rules_python//python/cc:current_py_cc_headers"],
 )
 
 cc_library(
@@ -21,7 +21,7 @@ cc_library(
     srcs = ["python_init.cc"],
     hdrs = ["python_init.hh"],
     deps = [
-        "@python_3_10//:python_headers",
+        "@rules_python//python/cc:current_py_cc_headers",
         "@wise_enum",
     ],
 )
@@ -35,7 +35,7 @@ cc_library(
     hdrs = ["python_object.hh"],
     deps = [
         "//jewels/meta:concepts",
-        "@python_3_10//:python_headers",
+        "@rules_python//python/cc:current_py_cc_headers",
     ],
 )
 
@@ -57,6 +57,9 @@ clk(
         "python_state_clk_cc.cc",
         "python_state_clk_cc.hh",
         "python_state_clk_cc.inl",
+        "python_state_clk_cc_types.cc",
+        "python_state_clk_cc_types.hh",
+        "python_state_clk_cc_types.inl",
     ],
     cpp_deps = [":python_state"],
     generate = ["cpp"],

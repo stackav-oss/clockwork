@@ -15,7 +15,7 @@ The schema history is recorded in the `history` section of the schema definition
 Here is a brief example.
 
 This is the initial definition of the example schema.
-This schema does not have a history section, so the schema version number is implicitly defined to be the maximim field number contained in the schema, in this case the version is 1.
+This schema does not have a history section, so the schema version number is implicitly defined to be the maximum field number contained in the schema, in this case the version is 1.
 
 ```clockwork
 // Initial schema definition (version is 1)
@@ -30,7 +30,7 @@ schema SomeSchema
 ```
 
 Next we add another field to the example schema without any extra boilerplate.
-We skipped field number 2 for some reason and that is allowed as long as the field number is greater than any other field numberss already in the schema.
+We skipped field number 2 for some reason and that is allowed as long as the field number is greater than any other field numbers already in the schema.
 The version is still implicit, adding the new field increases the version from 1 to 3.
 
 ```clockwork
@@ -112,7 +112,8 @@ Unit tests can also be written that enforce for example no transitive changes (w
 
 The `version` specification within the `history` block contains the logical version number of the schema.
 If the schema does not have a history block, the version number is implicitly defined as the maximum field number in the schema.
-The `version` must be increased every time the schema is changed.
+Once you have a version in the history block, version numbers are decoupled from field numbers.
+The `version` must be increased by at least one every time the schema is changed.
 
 ## The `deleted` field
 
@@ -166,7 +167,7 @@ Changing parameters does not require increasing the schema version because schem
 ### Remove fields
 
 Fields can be removed as long as the history is updated to show they've been removed.
-Here we have a schema where field 0 has been renmoved.
+Here we have a schema where field 0 has been removed.
 Removing the field also increased the version to 2.
 
 ```clockwork
@@ -235,7 +236,7 @@ schema SomeSchema
 
 The data type of a field may be changed so long as there is a conversion from the old type to the new type.
 
-The syntax for this also requires increasing the sequence number.
+The syntax for this also requires increasing the schema version number.
 The syntax is the same as for any other field change, such as rename or init value, shown above.
 
 #### Integer type changes
@@ -259,7 +260,21 @@ In this context `Optional` is treated as equivalent to a `VarArray` with max siz
 This can cause a runtime error if the new container type's size cannot hold the existing data.
 In particular, if changing from `VarArray` to `Optional`, the array must have 0 or 1 element.
 More than one element will cause a runtime error.
-Changing the size of `FixedArray` is not allowed, so changing the type from `Optional` or `VarArray` to `FixedArray` has limited usefullness since the upgrade will fail at runtime unless the size of the `FixedArray` is correct for all instances in the log.
+Changing the size of `FixedArray` is not allowed, so changing the type from `Optional` or `VarArray` to `FixedArray` has limited usefulness since the upgrade will fail at runtime unless the size of the `FixedArray` is correct for all instances in the log.
+
+#### Bitset type changes
+
+`Bitset<size>` is not upgradeable to a different bitset size.
+Growing a bitset would invent the meaning of newly introduced bits, while shrinking one discards information.
+A bitset field may still be added or removed using the normal schema-history rules.
+
+#### Tensor type changes
+
+`Tensor` is handled differently than other containers.
+It may, with the appropriate history annotation, be upgraded to from a `FixedArray` with an equivalent element type and size equal to the product of the destination `Tensor`'s dimensions, but not the other way around.
+A `Tensor` can also be ugpraded to another `Tensor` as long as their element types are compatible and the product of their dimensions are equivalent.
+When the shape is changed in a upgrade, the layout of the underlying buffer does not change, i.e. the operation behaves similar to the view API exposed by some Tensor runtimes.
+Changes to a Tensor's strides are not currently supported.
 
 #### Array-of-Structs to Struct-of-Arrays conversions
 
@@ -284,9 +299,7 @@ It is not possible to change from a container type to a non-container type.
 
 New fields can be added, which implicitly creates a new version.
 When upgrading data from an older schema version, new fields will be given their init values.
-
-Adding a field is simply adding it to the `fields` section of the schema as usual, and then updating the `versions` field of the `history` block to include it.
-If the `history` block is not yet present, it needs to be created, and `versions` should contain the previous version and the new version.
+If the history block exists then the `version` field needs to be incremented for the new field.
 
 ### Rename schema
 
@@ -329,7 +342,7 @@ Every change made to an enum is a version change and every change might change t
 ### Add new values
 
 New values may be added without restriction.
-The `versions` list in the `history` block should be updated just as with schemas.
+If the history block exists then the `version` field needs to be incremented for the new field.
 
 > [!WARNING]
 > Adding new values to an enum may cause the underlying type to change!
@@ -445,7 +458,7 @@ Value numbers may not be changed.
 
 Clockwork provides a unit test script that can be used to check that the logged channels for a system can be upgraded from a previous version of the schemas for those channels.
 The following Bazel macro is from the [demo system](../../examples/demo_system/README.md) and provides an example of how to validate that changes to the logged channel schemas can be upgraded from a version of the metadata stored in the repo.
-Typically one would use external storage to upload the metadata for each version of the schema and then use this unit test to check compatability before allowing a new version of the schema to merge into the repo.
+Typically one would use external storage to upload the metadata for each version of the schema and then use this unit test to check compatibility before allowing a new version of the schema to merge into the repo.
 
 ```bazel
 sh_test(

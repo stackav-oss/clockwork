@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -18,8 +18,10 @@ cc_binary(
         "//clockwork/logging/onboard:null_message_handle",
         "//clockwork/logging/onboard:types",
         "//clockwork/logging/onboard:writer",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:buffer",
         "//clockwork/pinion:buffer_index",
+        "//clockwork/pinion:buffer_layout",
         "//clockwork/pinion:slot",
         "//clockwork/pinion:slot_ref",
         "//jewels/math:constants",

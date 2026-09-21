@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """UDP endpoints."""
@@ -11,7 +11,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Final, TypeAlias
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys, uuid_reg
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
@@ -274,6 +274,7 @@ class UdpSocketOptions(node.CstNode[cst.UdpSocketOptions]):
     def resolve(self) -> None:
         """Perform finalization of the IR."""
         for value in self.options.values():
+            # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             value.resolve()
 
 
@@ -331,6 +332,7 @@ class UdpSocket(
     observer_endpoint: UdpSocketEndpoint | None
 
     @classmethod
+    @classmethod
     def from_cst(
         cls: type[UdpSocket], cst_node: cst.UdpSocket | cst.MulticastUdpSocket, module: node.Module
     ) -> UdpSocket:
@@ -353,34 +355,8 @@ class UdpSocket(
         message_type = expr.TypeExpression.make(
             expr.Expr.from_cst(cst_node.child_udp_socket_message_type().child_typespec(), module)
         )
-
-        direction_str = get_span(cst_node.child_udp_socket_direction().child_value(), module.terminals)
-        try:
-            direction = IODirection[direction_str]
-        except KeyError:
-            # This should only fire if the fltk and IODirection enum don't match.
-            msg = node.append_error_line(cst_node, module, f"Invalid IO direction: {direction_str}")
-            raise ValueError(msg) from None
-
-        # Handle remote address and port.  Conditions:
-        # - If bidirectional, parse remote address and port
-        # - If not bidrectional, presence of remote address or port is invalid and user should be notified
-        remote_address = None
-        remote_port = None
-        if direction == IODirection.bidirectional:
-            remote_address, remote_port = _get_remote_endpoint_fields(cst_node, multicast_group, module)
-        else:
-            # Not bidirectional, so remote address and port should not be present
-            if isinstance(cst_node, cst.UdpSocket) and cst_node.maybe_udp_socket_remote_address():
-                msg = node.append_error_line(
-                    cst_node, module, "direction is not bidirectional; should not specify remote_address"
-                )
-                raise ValueError(msg)
-            if cst_node.maybe_udp_socket_remote_port():
-                msg = node.append_error_line(
-                    cst_node, module, "direction is not bidirectional; should not specify remote_port"
-                )
-                raise ValueError(msg)
+        direction = _get_direction(cst_node, module)
+        remote_address, remote_port = _get_remote_endpoint(cst_node, multicast_group, module, direction)
 
         batch_size: expr.Expr | primitive.DecimalValue | None = None
         if batch_size_cst := cst_node.maybe_udp_socket_batch_size():
@@ -482,10 +458,47 @@ class UdpSocket(
 
 
 def _get_socket_address(cst_node: cst.UdpSocket | cst.MulticastUdpSocket, module: node.Module) -> primitive.IPv4Address:
-    if isinstance(cst_node, cst.UdpSocket):
+    if cst_node.kind == cst.UdpSocket.kind:
         return primitive.IPv4Address.from_cst(cst_node.child_udp_socket_address().child_value(), module)
 
     return primitive.IPv4Address.from_cst(cst_node.child_multicast_udp_socket_interface_address().child_value(), module)
+
+
+def _get_direction(cst_node: cst.UdpSocket | cst.MulticastUdpSocket, module: node.Module) -> IODirection:
+    direction = cst_node.child_udp_socket_direction().child_value()
+    if direction.maybe_incoming() is not None:
+        return IODirection.incoming
+    if direction.maybe_outgoing() is not None:
+        return IODirection.outgoing
+    if direction.maybe_bidirectional() is not None:
+        return IODirection.bidirectional
+    # This should only fire if the fltk and IODirection enum don't match.
+    msg = node.append_error_line(cst_node, module, "Invalid IO direction")
+    raise ValueError(msg)
+
+
+def _get_remote_endpoint(
+    cst_node: cst.UdpSocket | cst.MulticastUdpSocket,
+    multicast_group: primitive.IPv4Address | None,
+    module: node.Module,
+    direction: IODirection,
+) -> tuple[primitive.IPv4Address | None, primitive.DecimalLiteral | None]:
+    # Handle remote address and port.  Conditions:
+    # - If bidirectional, parse remote address and port
+    # - If not bidirectional, presence of remote address or port is invalid and user should be notified
+    if direction == IODirection.bidirectional:
+        return _get_remote_endpoint_fields(cst_node, multicast_group, module)
+
+    if cst_node.kind == cst.UdpSocket.kind and cst_node.maybe_udp_socket_remote_address():
+        msg = node.append_error_line(
+            cst_node, module, "direction is not bidirectional; should not specify remote_address"
+        )
+        raise ValueError(msg)
+    if cst_node.maybe_udp_socket_remote_port():
+        msg = node.append_error_line(cst_node, module, "direction is not bidirectional; should not specify remote_port")
+        raise ValueError(msg)
+
+    return None, None
 
 
 def _get_remote_endpoint_fields(
@@ -494,7 +507,7 @@ def _get_remote_endpoint_fields(
     remote_address = None
     remote_port = None
 
-    if isinstance(cst_node, cst.UdpSocket):
+    if cst_node.kind == cst.UdpSocket.kind:
         if (remote_address_child := cst_node.maybe_udp_socket_remote_address()) is None:
             msg = node.append_error_line(cst_node, module, "Need to specify remote_address for bidirectional socket.")
             raise ValueError(msg)
@@ -518,7 +531,7 @@ def _get_remote_endpoint_fields(
 def _maybe_get_multicast_group(
     cst_node: cst.UdpSocket | cst.MulticastUdpSocket, module: node.Module
 ) -> primitive.IPv4Address | None:
-    if isinstance(cst_node, cst.UdpSocket):
+    if cst_node.kind == cst.UdpSocket.kind:
         return None
 
     group_address = primitive.IPv4Address.from_cst(
@@ -612,8 +625,11 @@ class UdpSocketInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.N
         else:
             observer_endpoint = None
 
+        # fmt: off
         return cls(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=scope,
             inner_scope=inner_scope,
             type_info=clkbuiltins.UDP_SOCKET_INSTANCE_TYPE,
@@ -624,6 +640,7 @@ class UdpSocketInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.N
             observer_endpoint=observer_endpoint,
             producer_endpoint=producer_endpoint,
         )
+        # fmt: on
 
 
 def validate_message_type(message_type: typesys.TypeVal, socket: UdpSocket, channel_name: str) -> str | None:

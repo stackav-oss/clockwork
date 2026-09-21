@@ -1,0 +1,17 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::journal)]
+
+// Four MiB provides more than three times headroom over a 1.1 MiB representative deployed topology summary
+MAX_JOURNAL_TOPOLOGY_FILE_SIZE: UInt64 = 4'194'304;
+
+// Immutable rendered journal topology file supplied to the log controller
+schema JournalTopologyFileConfig
+{
+  uuid: 43623046-8a13-4c1f-a055-59d95b9b2834;
+
+  fields
+  {
+    // Complete JournalTopology protobuf text including its header
+    #0 contents: VarString<MAX_JOURNAL_TOPOLOGY_FILE_SIZE>;
+  }
+}

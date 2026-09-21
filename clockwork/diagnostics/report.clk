@@ -4,6 +4,18 @@
 // Type tag for diagnostic reporter Uuid
 tag ReporterId;
 
+// Result of executing the cog that produced a diagnostic report
+enum ReportHealth
+{
+  uuid: 56ed5cee-30ae-4860-88aa-26b05abad405;
+
+  values
+  {
+    // The executed without issue
+    #0 healthy default;
+  }
+}
+
 // Report
 schema Report
 {
@@ -19,5 +31,8 @@ schema Report
 
     // Uuid for this reporter
     #4 id: Uuid<ReporterId>;
+
+    // Result of the cog execution associated with this report
+    #5 health: ReportHealth = ReportHealth::healthy;
   }
 }

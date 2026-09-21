@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/publishable.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -29,7 +29,6 @@
 #include "jewels/utility/fix_clockwork_path.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
@@ -37,7 +36,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
-#include <iterator>
 #include <memory>
 #include <memory_resource>
 #include <optional>
@@ -162,48 +160,52 @@ TEST_CASE("clockwork_integration")
 
   constexpr int32_t expected_cycles = 10;
 
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_chan2;
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_state1;
-  testing::RunStopper exec(
-    [&snoop_chan2, &snoop_state1, &channel_factory, &chan2_desc, &state_desc, &exec, &test_system_config_id]()
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_chan2;
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_state1;
+  auto test_coordinator =
+    [&snoop_chan2, &snoop_state1, &channel_factory, &chan2_desc, &state_desc, &test_system_config_id](auto& exec)
+  {
+    if (!snoop_chan2)
     {
-      if (!snoop_chan2)
+      snoop_chan2 =
+        testing::make_snooper(channel_factory, chan2_desc->get_publisher_id(), chan2_desc->get_buffer_layout());
+    }
+    if (!snoop_state1)
+    {
+      snoop_state1 = testing::make_snooper(
+        channel_factory, state_desc->get_state_instance_id(), state_desc->value_maybe_buffer_layout());
+    }
+    if (!snoop_chan2 || !snoop_state1)
+    {
+      return;
+    }
+    if (const auto msg = testing::last<Tappy<testing::Message2>>(snoop_chan2); msg)
+    {
+      CHECK(msg->get_echo_config() == test_system_config_id);
+      CHECK(msg->get_group_id() == jewels::Uuid<testing::GroupId>::from_string("fca314a1-f4d0-4679-bef8-29778adad50c"));
+      CHECK(msg->get_result() == fibonacci(msg->get_cycle()));
+      if (msg->get_cycle() > expected_cycles)
       {
-        snoop_chan2 =
-          testing::make_snooper(channel_factory, chan2_desc->get_publisher_id(), chan2_desc->get_buffer_layout());
+        const auto msg_history = testing::dump<Tappy<testing::Message2>>(snoop_chan2);
+        CHECK(msg_history[0].get_cycle() == 2);
+        // State technically hasn't been published yet, but should
+        // still exist in the first slot.
+        const auto state_it = snoop_state1->available().begin();
+        const auto& state = pinion::MessageCast<const Tappy<testing::State>>{}(*state_it);
+        CHECK(state.get_cycle() > 10);
+        exec.set_exit();
       }
-      if (!snoop_state1)
-      {
-        snoop_state1 = testing::make_snooper(
-          channel_factory, state_desc->get_state_instance_id(), state_desc->value_maybe_buffer_layout());
-      }
-      if (!snoop_chan2 || !snoop_state1)
-      {
-        return;
-      }
-      if (const auto msg = testing::last<Tappy<testing::Message2>>(snoop_chan2->make_subscriber()); msg)
-      {
-        CHECK(msg->get_echo_config() == test_system_config_id);
-        CHECK(
-          msg->get_group_id() == jewels::Uuid<testing::GroupId>::from_string("fca314a1-f4d0-4679-bef8-29778adad50c"));
-        CHECK(msg->get_result() == fibonacci(msg->get_cycle()));
-        if (msg->get_cycle() > expected_cycles)
-        {
-          const auto msg_history = testing::dump<Tappy<testing::Message2>>(snoop_chan2->make_subscriber());
-          CHECK(msg_history[0].get_cycle() == 2);
-          // State technically hasn't been published yet, but should
-          // still exist in the first slot.
-          const auto state_it = snoop_state1->make_subscriber().available().begin();
-          const auto& state = pinion::MessageCast<const Tappy<testing::State>>{}(*state_it);
-          CHECK(state.get_cycle() > 10);
-          exec.set_exit();
-        }
-      }
-    });
+    }
+  };
 
   SECTION("success")
   {
-    CHECK(main(static_cast<int>(args.size()), args.data(), exec.get_condition()) == EXIT_SUCCESS);
+    int result = EXIT_FAILURE;
+    {
+      testing::RunStopper exec(std::move(test_coordinator));
+      result = main(static_cast<int>(args.size()), args.data(), exec.get_condition());
+    }
+    CHECK(result == EXIT_SUCCESS);
   }
   SECTION("exit with code")
   {
@@ -214,7 +216,12 @@ TEST_CASE("clockwork_integration")
     args.push_back("9000000000");
     constexpr int test_code = 123;
     testing::cog1_exit_code = test_code;
-    CHECK(main(static_cast<int>(args.size()), args.data(), exec.get_condition()) == test_code);
+    int result = 0;
+    {
+      testing::RunStopper exec(std::move(test_coordinator)); // NOLINT(bugprone-use-after-move) separate SECTIONS
+      result = main(static_cast<int>(args.size()), args.data(), exec.get_condition());
+    }
+    CHECK(result == test_code);
   }
 }
 

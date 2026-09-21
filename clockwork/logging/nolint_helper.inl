@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <span>
 #include <string_view>
+#include <tuple>
 
 namespace clockwork_logging::nolint_helper
 {
@@ -75,6 +76,12 @@ const char* get_environment_variable(const char* env_var)
 {
   // NOLINTNEXTLINE(concurrency-mt-unsafe) Environment variables are not modified by the process
   return std::getenv(env_var);
+}
+
+void set_environment_variable(const char* env_var, const char* env_val)
+{
+  // NOLINTNEXTLINE(concurrency-mt-unsafe) Caller is expected to know that nothing is accessing the environment
+  std::ignore = ::setenv(env_var, env_val, 0);
 }
 
 } // namespace clockwork_logging::nolint_helper

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """NanobindTarget-related IR nodes."""
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.bazel.clk_targets import module_to_clk
 from clockwork.dsl.bazel.nanobind_targets import PyCcBinding
 from clockwork.dsl.bazel.targets import get_bazel_label_for_clk_label
@@ -35,7 +35,7 @@ class NanobindGeneratedEntities:
     schemas: list[schema.Schema] = field(default_factory=list)
     enums: list[clkenum.ClkEnum] = field(default_factory=list)
     constants: list[statement.ImmutableBinding] = field(default_factory=list)
-    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+    schema_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
 
 
 @dataclass
@@ -77,15 +77,18 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
                 msg = node.append_error_line(statement_cst, module, "Unrecognized statement within nanobind_target")
                 raise NotImplementedError(msg)
 
+        # fmt: off
         return cls(
             module=module,
             cst_node=cst_node,
             doc=doc,
             name=name,
             scope=module.inner_scope,
+            # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             nanobind_bindings=nanobind_bindings,
             constants=constants,
         )
+        # fmt: on
 
     @classmethod
     def from_generate_nanobind(
@@ -122,7 +125,7 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
                 )
             )
 
-        for instantiation in entities.instantiations:
+        for instantiation in entities.schema_instantiations:
             assert isinstance(instantiation.typespec, typesys.Instantiation)
             interface_inst = InterfaceInstantiation.from_schema(instantiation.typespec, module)
             if instantiation.name:
@@ -223,7 +226,13 @@ class NanobindTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.Nano
         write_dir = root_dir / BazelPathResolver().to_buildtime_path(self.module.module_id).parent
 
         cpp_mod = self.render_cpp_entities()
-        write_to_file(cpp_mod, write_dir, include_dir, self.name, self.module.module_id.repo)
+        write_to_file(
+            cpp_mod,
+            write_dir=write_dir,
+            include_dir=include_dir,
+            stem=self.name,
+            current_repo=self.module.module_id.repo,
+        )
 
     def output_targets(self) -> list[PyCcBinding]:
         """Extract language target dependency information."""

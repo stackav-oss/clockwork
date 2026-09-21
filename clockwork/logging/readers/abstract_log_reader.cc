@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/abstract_log_reader.hh"
@@ -33,14 +33,44 @@ AbstractLogReader::~AbstractLogReader() = default;
   return maybe_relative_interval_;
 }
 
+void AbstractLogReader::set_sequence_number_filter(
+  const std::function<bool(std::string_view, uint32_t)>& sequence_number_filter)
+{
+  sequence_number_filter_ = sequence_number_filter;
+}
+
 LogExpected<LogMetrics> AbstractLogReader::get_metrics()
 {
   return jewels::unexpected(LogError::not_implemented);
 }
 
-[[nodiscard]] std::optional<ZeroCopyLoggedMessage> AbstractLogReader::zero_copy_next_message()
+std::optional<LoggedMessage> AbstractLogReader::next_message()
 {
-  const auto maybe_msg = next_message();
+  while (auto maybe_msg = next_message_impl())
+  {
+    if (!sequence_number_filter_ || sequence_number_filter_(maybe_msg->topic, maybe_msg->sequence_number))
+    {
+      return maybe_msg;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<ZeroCopyLoggedMessage> AbstractLogReader::zero_copy_next_message()
+{
+  while (auto maybe_msg = zero_copy_next_message_impl())
+  {
+    if (!sequence_number_filter_ || sequence_number_filter_(maybe_msg->topic, maybe_msg->sequence_number))
+    {
+      return maybe_msg;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<ZeroCopyLoggedMessage> AbstractLogReader::zero_copy_next_message_impl()
+{
+  const auto maybe_msg = next_message_impl();
   if (!maybe_msg)
   {
     return std::nullopt;

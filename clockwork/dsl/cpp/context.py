@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Facilities for dealing with C++ code generation context."""
@@ -55,6 +55,7 @@ class Header(Include):
     path: PurePath
     iwyu_pragma: str | None
 
+    # pyrefly: ignore[missing-super-call] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     def __init__(self, repo: str | None, path: PurePath | str, iwyu_pragma: str | None = None) -> None:
         """Create a new Header.
 
@@ -104,9 +105,12 @@ class Header(Include):
         if self.is_system:
             return None
         package = self.path.parent if self.path.parent != Path() else ""
+        # fmt: off
         name = (
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             str(self.path.name).replace(".pb.h", "_cc_library") if str(self.path).endswith(".pb.h") else self.path.stem
         )
+        # fmt: on
         if self.repo != current_repo:
             return Label(f"@{self.repo}//{package}:{name}")
         return Label(f"//{package}:{name}")
@@ -191,15 +195,27 @@ class CppContext:
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
         },
         Header(CLK_REPO, "clockwork/dial/include_common.hh"): {
-            Header(JEWELS_REPO, "jewels/memory/pointers.hh"),
+            Header(JEWELS_REPO, "jewels/callsig/outcome.hh"),
+            Header(JEWELS_REPO, "jewels/callsig/outparam.hh"),
+            Header(JEWELS_REPO, "jewels/container/tap/soa.hh"),
+            Header(JEWELS_REPO, "jewels/memory/aligned_storage.hh"),
             Header(JEWELS_REPO, "jewels/memory/memory_resource.hh"),
+            Header(JEWELS_REPO, "jewels/memory/pointers.hh"),
+            Header(JEWELS_REPO, "jewels/meta/concepts.hh"),
             Header(JEWELS_REPO, "jewels/time/sync_time.hh"),
+            Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
             Header(CLK_REPO, "clockwork/dial/cond_messages_present.hh"),
             Header(CLK_REPO, "clockwork/dial/cond_time_since_last_exec.hh"),
             Header(CLK_REPO, "clockwork/dial/msg_input.hh"),
-            Header(CLK_REPO, "clockwork/pinion/publisher_handle.hh"),
+            Header(CLK_REPO, "clockwork/pinion/abstract_channel.hh"),
+            Header(CLK_REPO, "clockwork/dial/signal_aggregator.hh"),
+            Header(CLK_REPO, "clockwork/dsl/cog/common_cog_event_metrics_clk_cc.hh"),
+            Header(CLK_REPO, "clockwork/dsl/cog/common_cog_telemetry_metrics_clk_cc.hh"),
+            Header(CLK_REPO, "clockwork/dsl/cog/ten_nanosecond_clk_cc.hh"),
             Header(CLK_REPO, "clockwork/pinion/publishable.hh"),
+            Header(CLK_REPO, "clockwork/pinion/publisher_handle.hh"),
             Header(CLK_REPO, "clockwork/repr_iface.hh"),
+            Header(CLK_REPO, "clockwork/tags.hh"),
         },
     }
 
@@ -302,6 +318,7 @@ class CppChunk:
         preamble += self.context.render_includes() if render_includes else []
         # TODO(OI-1756): Remove readability-identifier-naming nolint
         preamble += ["// NOLINTBEGIN(readability-magic-numbers,readability-identifier-naming)"] if pragma_once else []
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         postamble = ["// NOLINTEND(readability-magic-numbers,readability-identifier-naming)"] if pragma_once else []
         return "".join(line + "\n" for line in itertools.chain(preamble, self.lines, postamble))
 
@@ -447,8 +464,15 @@ def as_cc_binary_with_embedded_py(
     )
 
 
-def write_to_file(
-    rendered_cpp_mod: CppModuleChunks, write_dir: Path, include_dir: Path, stem: str, current_repo: str
+def write_to_file(  # noqa: PLR0913 # too many args mitigated by kwonly args
+    rendered_cpp_mod: CppModuleChunks,
+    *,
+    write_dir: Path,
+    include_dir: Path,
+    stem: str,
+    current_repo: str,
+    iwyu_private_redirect: Header | None = None,
+    iwyu_friend_pattern: str | None = None,
 ) -> None:
     """Write cpp module chunks to a file.
 
@@ -458,6 +482,17 @@ def write_to_file(
         include_dir: The include path of the files relative to root_dir.
         stem: The stem for the filename of each output.
         current_repo: The repo for the current file being compiled.
+        iwyu_private_redirect: When provided, mark the generated header as
+            ``IWYU pragma: private`` and direct IWYU to suggest the given
+            header to consumers instead.  Used for sub-headers of the
+            split ``_cc`` family (``_cc_types.hh``, ``_cc_cog.hh``) so
+            external consumers are routed to the umbrella ``_cc.hh``.
+        iwyu_friend_pattern: Optional regex (ECMAScript flavor, as used
+            by ``IWYU pragma: friend``) of paths whose include of this
+            header should be permitted despite the private redirect.
+            Required whenever sibling generated headers in the same
+            module need to include this header directly to avoid an
+            include cycle through the umbrella.
     """
     header_path = (write_dir / stem).with_suffix(".hh")
     inline_path = (write_dir / stem).with_suffix(".inl")
@@ -470,6 +505,11 @@ def write_to_file(
     cpp_mod.inline_chunk.append(f'// IWYU pragma: private, include "{header_header.path}"')
     cpp_mod.inline_chunk.context.add_include(header_header)
     cpp_mod.implementation_chunk.context.add_include(header_header)
+
+    if iwyu_private_redirect is not None:
+        cpp_mod.header_chunk.append(f'// IWYU pragma: private, include "{iwyu_private_redirect.path}"')
+        if iwyu_friend_pattern is not None:
+            cpp_mod.header_chunk.append(f'// IWYU pragma: friend "{iwyu_friend_pattern}"')
 
     # The actual code we want to write to the file.
     cpp_mod.append(rendered_cpp_mod)

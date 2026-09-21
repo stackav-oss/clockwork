@@ -1,12 +1,56 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
 
 package(
     default_testonly = True,
     default_visibility = ["//clockwork/dsl/cog/tests:__subpackages__"],
+)
+
+clk(
+    name = "cog_metrics_test_cog_clk",
+    srcs = ["cog_metrics_test_cog.clk"],
+    outs = [
+        "cog_metrics_test_cog_clk_cc.cc",
+        "cog_metrics_test_cog_clk_cc.hh",
+        "cog_metrics_test_cog_clk_cc.inl",
+        "cog_metrics_test_cog_clk_cc_cog.cc",
+        "cog_metrics_test_cog_clk_cc_cog.hh",
+        "cog_metrics_test_cog_clk_cc_cog.inl",
+        "cog_metrics_test_cog_clk_cc_dial.cc",
+        "cog_metrics_test_cog_clk_cc_dial.hh",
+        "cog_metrics_test_cog_clk_cc_dial.inl",
+        "cog_metrics_test_cog_clk_cc_types.cc",
+        "cog_metrics_test_cog_clk_cc_types.hh",
+        "cog_metrics_test_cog_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
+        "//std:signals_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    deps = [
+        "//clockwork/dsl/cog:cog_execution_metrics_signals_clk",  #keep
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "cog_metrics_test_cog_clk_cc_impl",
+    srcs = ["cog_metrics_test_cog_clk_cc_impl.cc"],
+    deps = [
+        ":cog_metrics_test_cog_clk_cc_dial",
+        "//clockwork/pinion:publishable",
+    ],
 )
 
 clk(
@@ -16,9 +60,15 @@ clk(
         "copy_cog_clk_cc.cc",
         "copy_cog_clk_cc.hh",
         "copy_cog_clk_cc.inl",
+        "copy_cog_clk_cc_cog.cc",
+        "copy_cog_clk_cc_cog.hh",
+        "copy_cog_clk_cc_cog.inl",
         "copy_cog_clk_cc_dial.cc",
         "copy_cog_clk_cc_dial.hh",
         "copy_cog_clk_cc_dial.inl",
+        "copy_cog_clk_cc_types.cc",
+        "copy_cog_clk_cc_types.hh",
+        "copy_cog_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/dsl/tests/support:clk_hellomsg_clk_cc"],
     generate = [
@@ -34,6 +84,16 @@ cc_library(
     deps = [":copy_cog_clk_cc_dial"],
 )
 
+cc_library(
+    name = "mock_input_view",
+    hdrs = ["mock_input_view.hh"],
+    deps = [
+        "//clockwork/cog:cog_statistics",
+        "//clockwork/cog:input_view",
+        "//jewels/memory:memory_resource",
+    ],
+)
+
 clk(
     name = "rate_limited_cog_clk",
     srcs = ["rate_limited_cog.clk"],
@@ -41,9 +101,15 @@ clk(
         "rate_limited_cog_clk_cc.cc",
         "rate_limited_cog_clk_cc.hh",
         "rate_limited_cog_clk_cc.inl",
+        "rate_limited_cog_clk_cc_cog.cc",
+        "rate_limited_cog_clk_cc_cog.hh",
+        "rate_limited_cog_clk_cc_cog.inl",
         "rate_limited_cog_clk_cc_dial.cc",
         "rate_limited_cog_clk_cc_dial.hh",
         "rate_limited_cog_clk_cc_dial.inl",
+        "rate_limited_cog_clk_cc_types.cc",
+        "rate_limited_cog_clk_cc_types.hh",
+        "rate_limited_cog_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/dsl/tests/support:clk_hellomsg_clk_cc"],
     generate = [
@@ -66,9 +132,15 @@ clk(
         "skip_cog_clk_cc.cc",
         "skip_cog_clk_cc.hh",
         "skip_cog_clk_cc.inl",
+        "skip_cog_clk_cc_cog.cc",
+        "skip_cog_clk_cc_cog.hh",
+        "skip_cog_clk_cc_cog.inl",
         "skip_cog_clk_cc_dial.cc",
         "skip_cog_clk_cc_dial.hh",
         "skip_cog_clk_cc_dial.inl",
+        "skip_cog_clk_cc_types.cc",
+        "skip_cog_clk_cc_types.hh",
+        "skip_cog_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/dsl/tests/support:clk_hellomsg_clk_cc"],
     generate = [
@@ -82,4 +154,9 @@ cc_library(
     name = "skip_cog_clk_cc_impl",
     srcs = ["skip_cog_clk_cc_impl.cc"],
     deps = [":skip_cog_clk_cc_dial"],
+)
+
+py_library(
+    name = "test_helpers",
+    srcs = ["test_helpers.py"],
 )

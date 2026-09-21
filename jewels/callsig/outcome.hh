@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -15,7 +15,7 @@ concept EnumType = std::is_enum_v<T>;
 /// Forward declarations
 class BinaryOutcome;
 template <EnumType T, T... success_values>
-class Outcome;
+class Outcome; // IWYU pragma: keep
 
 ///
 /// Type traits for outcome types

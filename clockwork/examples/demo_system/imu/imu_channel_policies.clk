@@ -3,19 +3,18 @@
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
 use clockwork::logging::channel_type::{ChannelType};
 use clockwork::examples::demo_system::imu::imu_channels;
+use clockwork::examples::demo_system::imu::imu_message;
 
-// Defining this policy adds the channel to both the telemety log writer configuration and
-// the event log writer configuration. Setting the log type to event would only add the
-// channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
+// Defining this policy on an instance of a generic channel disables logging for that instance
 policy ChannelLoggingPolicy for imu_channels::RawImuChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::none;
 }
 
-// Defining this policy adds the channel to both the telemety log writer configuration and
+// Defining this policy adds instances of the generic channel to both the telemety log writer configuration and
 // the event log writer configuration. Setting the log type to event would only add the
 // channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
 policy ChannelLoggingPolicy for imu_channels::ImuChannel
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }

@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "jewels/time/sync_time.hh"
 
+#include <cstddef>
 #include <string_view>
 
 namespace clockwork::pinion

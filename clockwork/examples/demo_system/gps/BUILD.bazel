@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -36,9 +36,15 @@ clk(
         "gps_clk_cc.cc",
         "gps_clk_cc.hh",
         "gps_clk_cc.inl",
+        "gps_clk_cc_cog.cc",
+        "gps_clk_cc_cog.hh",
+        "gps_clk_cc_cog.inl",
         "gps_clk_cc_dial.cc",
         "gps_clk_cc_dial.hh",
         "gps_clk_cc_dial.inl",
+        "gps_clk_cc_types.cc",
+        "gps_clk_cc_types.hh",
+        "gps_clk_cc_types.inl",
         "gps_clk_exe.cc",
         "gps_clk_exe.hh",
         "gps_clk_exe.inl",
@@ -64,7 +70,10 @@ cc_library(
         ":gps_clk_cc_dial",
         ":gps_message_clk_cc",
         "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
     ],
 )
 
@@ -75,6 +84,9 @@ clk(
         "gps_message_clk_cc.cc",
         "gps_message_clk_cc.hh",
         "gps_message_clk_cc.inl",
+        "gps_message_clk_cc_types.cc",
+        "gps_message_clk_cc_types.hh",
+        "gps_message_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

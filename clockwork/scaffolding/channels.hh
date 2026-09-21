@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,9 +6,9 @@
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -32,7 +32,7 @@ constexpr static inline auto channel_connect_sleep_time = std::chrono::milliseco
 
 using ChannelMap = std::pmr::unordered_map<
   jewels::Uuid<common::EndpointInstanceId>,
-  std::shared_ptr<pinion::ShmChannel>,
+  std::shared_ptr<pinion::AbstractChannel>,
   jewels::UuidHasher<common::EndpointInstanceId>>;
 
 ///
@@ -48,7 +48,7 @@ using ChannelMap = std::pmr::unordered_map<
   std::span<const Tappy<common::PublishEndpoint<>>> descs,
   jewels::memory::MemoryResource memres,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
-  pinion::ShmChannelFactory& factory);
+  pinion::AbstractChannelFactory& factory);
 
 /// Setup dummy channels for endpoints that are not connected to other components
 ///
@@ -65,7 +65,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
   std::span<const Tappy<common::NotConnectedEndpoint>> endpoints,
   AbstractCasing& casing,
   jewels::memory::MemoryResource memres,
-  pinion::ShmChannelFactory& factory);
+  pinion::AbstractChannelFactory& factory);
 ///
 /// Create all the shared memory channels requested by a process description
 /// This assumes it is being used in a single process context and therefore all shm channels should be publishers.
@@ -78,7 +78,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   std::span<const Tappy<common::PublishEndpoint<>>> descs,
   std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>> published_channels,
   jewels::memory::MemoryResource memres,
-  pinion::ShmChannelFactory& factory);
+  pinion::AbstractChannelFactory& factory);
 
 ///
 /// Connect all channel subscribers
@@ -116,7 +116,7 @@ connect_subscribers(
 /// @param epoll manager to add channel notification callbacks to
 /// @throw RuntimeError if sanity checks fail
 ///
-void bind_channel_to_epoll(const std::shared_ptr<pinion::ShmChannel>& channel, AbstractEPollManager& epoll);
+void bind_channel_to_epoll(const std::shared_ptr<pinion::AbstractChannel>& channel, AbstractEPollManager& epoll);
 
 ///
 /// Add channels to the provided AbstractEPollManager instance

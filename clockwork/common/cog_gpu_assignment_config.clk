@@ -4,7 +4,8 @@
 use clockwork::common::process_description::{CogInstanceId};
 
 // An individual cog-gpu assignment
-schema CogGpuAssignment {
+schema CogGpuAssignment
+{
   fields
   {
     // The string UUID of the cog to be assigned to a gpu
@@ -13,9 +14,9 @@ schema CogGpuAssignment {
     #2 gpu_id: Int16;
   }
 }
-
 // Configuration for gpu assignments, per cog
-schema CogGpuAssignmentConfig {
+schema CogGpuAssignmentConfig
+{
   fields
   {
     // The list of cog gpu assignments

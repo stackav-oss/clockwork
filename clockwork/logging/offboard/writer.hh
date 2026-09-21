@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -22,6 +22,7 @@
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/writer_config.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -75,6 +76,9 @@ public:
   Writer(Writer&&) = delete;
   Writer& operator=(Writer&&) = delete;
 
+  /// @return True if the writer is open
+  [[nodiscard]] bool is_open() const;
+
   /// Open the writer
   /// @param[in] uri_str Log URI
   /// @param[in] config_str Writer config text proto string
@@ -89,9 +93,20 @@ public:
   /// @return LogError on failure
   [[nodiscard]] LogExpected<void> split_log_files();
 
-  /// Close the log
+  /// Close the log and write the stack_log_metadata.pbtxt file.
   /// @return Write metrics or LogError on failure
   [[nodiscard]] LogExpected<ChunkWriter::WriteMetrics> close();
+
+  /// Close the log and return the log metadata.
+  ///
+  /// It is up to the caller to write the log metadata to the log directory
+  ///
+  /// @param[out] write_metrics Write metrics
+  /// @param[out] log_metadata Log metadata
+  /// @return Success or LogError on failure
+  LogOutcome close(
+    jewels::Out<ChunkWriter::WriteMetrics> write_metrics,
+    jewels::Out<::clockwork::logging::offboard::v1::LogMetadata> log_metadata);
 
   /// Add a channel to the log
   /// @param[in] channel_metadata Logged channel metadata
@@ -102,8 +117,8 @@ public:
   /// @tparam T Channel message type
   /// @param[in] channel_name Channel name
   template <clockwork::TappyType T>
-  [[nodiscard]] LogExpected<void>
-  create_channel(std::string_view channel_name, ChannelType channel_type = ChannelType::regular);
+  [[nodiscard]] LogExpected<void> create_channel(
+    std::string_view channel_name, ChannelType channel_type = ChannelType::regular, bool is_amended = false);
 
   /// Write a message to the log
   /// @param[in] message Message to log
@@ -248,8 +263,12 @@ private:
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
 
-  /// Lite compressor
-  LiteCompressor lite_compressor_;
+  /// Map containing the lite compressors to use for logged channels
+  std::pmr::unordered_map<std::string_view, jewels::memory::NonNullSharedPtr<LiteCompressorInterface>>
+    lite_compressor_map_;
+
+  /// Default compressor for non-tachyon channels
+  jewels::memory::NonNullSharedPtr<LiteCompressorInterface> default_lite_compressor_;
 
   /// Message chunk index format
   MessageChunkIndexFormat message_chunk_index_format_;

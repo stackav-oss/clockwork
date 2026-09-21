@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Nanobind binding node."""
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import (
     clkenum,
     expr,
@@ -52,6 +52,7 @@ class NanobindBinding(node.CstNode[cst.NanobindBinding]):
         alias_name = get_span(alias_name_cst.child_value(), module.terminals) if alias_name_cst else None
         typespec: expr.Expr | node.DeferredLookup[typesys.Instantiation | clkenum.ClkEnum] | None = None
         if (identifier := child_typespec.maybe_identifier()) is not None:
+            # pyrefly: ignore[bad-assignment] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             typespec = node.DeferredLookup.make(
                 expected_type=InterfaceAlias | clkenum.ClkEnum,  # pyright: ignore[reportArgumentType]
                 cst_identifier=identifier,

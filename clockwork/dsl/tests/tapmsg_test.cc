@@ -1,10 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dsl/tests/support/tapmsg.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/container/tap/optional.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <type_traits>
 
 namespace

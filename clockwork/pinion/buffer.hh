@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/pinion/aligned_pointer.hh"
 #include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
 #include "jewels/math/power_of_two.hh"
@@ -20,45 +21,6 @@
 
 namespace clockwork::pinion
 {
-
-/// Describes the layout of the buffer.
-struct BufferLayout
-{
-  /// Size of the head index in bytes.
-  static constexpr auto head_size{sizeof(BufferIndex)};
-  /// Size of the tail index in bytes.
-  static constexpr auto tail_size{sizeof(BufferIndex)};
-  /// Size of the entire control block that trails the last slot.
-  static constexpr auto control_block_size{head_size + tail_size};
-
-  /// Alignment of the head index.
-  static constexpr auto head_alignment{std::atomic_ref<BufferIndex>::required_alignment};
-  /// Alignment of the tail index.
-  static constexpr auto tail_alignment{std::atomic_ref<BufferIndex>::required_alignment};
-
-  /// Number of slots in the buffer.
-  size_t num_slots;
-  /// Size of the message payload.
-  size_t message_size;
-  /// True if the channel is only published once
-  bool is_published_once;
-};
-
-/// Get the size of the buffer as a multiple of the alignment.
-/// @param layout Describes the layout of the buffer.
-constexpr size_t slot_stride(const BufferLayout& layout) noexcept;
-
-/// Get the size of the buffer in total bytes.
-/// @param layout Describes the layout of the buffer.
-constexpr size_t buffer_size(const BufferLayout& layout) noexcept;
-
-/// Get the offset to the head index in the control block.
-/// @param layout Describes the layout of the buffer.
-constexpr size_t head_offset(const BufferLayout& layout) noexcept;
-
-/// Get the offset to the tail index in the control block.
-/// @param layout Describes the layout of the buffer.
-constexpr size_t tail_offset(const BufferLayout& layout) noexcept;
 
 /// Iterator over the slots in a buffer.
 class BufferIterator : public boost::iterator_facade<BufferIterator, Slot, std::random_access_iterator_tag, Slot>
@@ -209,6 +171,27 @@ public:
   /// @return True if still available and false otherwise.
   [[nodiscard]] bool still_available(const BufferIterator& iterator) const;
 
+  /// Hide slots from subscribers.  This is used to reserve a slot for publishers to write to.
+  /// @pre count must be less than the number of slots.
+  /// @param count The number of slots to hide.
+  /// @return An error code on failure.
+  jewels::expected<BufferIndex, ReserveError> reserve(size_t count) noexcept;
+
+  /// Commit the reserved slot(s)
+  /// @param reserved_slot A previously reserved slot (the first in the range)
+  /// @return the current buffer tail
+  jewels::expected<void, WriteError> commit(BufferIndex reserved_slot) noexcept;
+
+  /// Commit a subset of the reserved slots, making only actual_count messages visible.
+  /// Remaining reserved slots are silently released without being published.
+  /// @param reserved_slot A previously reserved slot (the first in the range)
+  /// @param actual_count The number of slots to make visible (must be <= reserved count)
+  jewels::expected<void, WriteError> commit(BufferIndex reserved_slot, size_t actual_count) noexcept;
+
+  /// Discard a reserved slot.
+  /// @param reserved_slot A previously reserved slot.
+  jewels::expected<void, WriteError> discard(BufferIndex reserved_slot) noexcept;
+
 private:
   /// Get an atomic reference to the head index.
   [[nodiscard]] std::atomic_ref<BufferIndex> head_ref() const noexcept;
@@ -224,6 +207,9 @@ private:
 
   /// Layout of the buffer.
   BufferLayout layout_;
+
+  /// Whether or not a slot is currently reserved.
+  size_t reserved_{0UL};
 };
 
 namespace detail
@@ -238,5 +224,3 @@ uint64_t to_position(BufferIndex index, BufferLayout layout) noexcept;
 } // namespace detail
 
 } // namespace clockwork::pinion
-
-#include "clockwork/pinion/buffer.inl"

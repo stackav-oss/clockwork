@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/pinion/aligned_pointer.hh"
+#include "clockwork/pinion/device_ptr.hh"
 #include "jewels/math/power_of_two.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/meta/call.hh"
@@ -48,10 +49,10 @@ using ByteMatchingConstnessOf =
 template <typename T>
 class BaseSlot
 {
+public:
   template <typename U>
   using MaybeConst = std::conditional_t<std::is_const_v<T>, const U, U>;
 
-public:
   /// Alignment of the entire slot.
   static constexpr auto slot_alignment{64UL};
 
@@ -76,7 +77,8 @@ public:
   /// Create a slot from bytes and a message size.
   /// @param ptr A pointer to an underlying buffer.
   /// @param message_size The size of the message payload.
-  explicit BaseSlot(AlignedPtr<T, slot_alignment> ptr, size_t message_size) noexcept;
+  explicit BaseSlot(
+    AlignedPtr<T, slot_alignment> ptr, size_t message_size, DevicePtrFactory* dev_ptr_factory = nullptr) noexcept;
 
   // NOLINTNEXTLINE(google-explicit-constructor) allow implicit conversion to const
   BaseSlot(const BaseSlot<std::remove_const_t<T>>& other) noexcept
@@ -94,6 +96,9 @@ public:
   /// Access the message as bytes.
   [[nodiscard]] std::span<T> message() const noexcept;
 
+  /// Get a pointer to device memory.  May be null
+  [[nodiscard]] DevicePtr<MaybeConst<void>> device_ptr() const noexcept;
+
   /// Access the underlying bytes for the entire slot.
   [[nodiscard]] std::span<T> bytes() const noexcept;
 
@@ -107,6 +112,9 @@ private:
 
   /// Size of the message payload.
   size_t message_size_;
+
+  /// Optional functor for creating a view of this slot on a device
+  DevicePtrFactory* dev_ptr_factory_;
 };
 
 using Slot = BaseSlot<std::byte>;

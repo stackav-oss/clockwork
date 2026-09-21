@@ -1,0 +1,77 @@
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+#![cpp(namespace=clockwork::aligned_consumer_test)]
+
+use std::aligners::state;
+
+// A simple sensor message for testing
+schema TestMsg
+{
+  uuid: 11111111-1111-1111-1111-111111111111;
+  fields
+  {
+    // Observation timestamp
+    #0 observation_time: SyncTime;
+  }
+}
+
+// Output schema echoing what the consumer cog resolved from alignment
+schema ConsumerEchoMsg
+{
+  uuid: 0de19822-5a64-45ec-bf59-29268751c027;
+  fields
+  {
+    // Observation time from the resolved sensor message
+    #0 sensor_obs_time: SyncTime;
+    // Observation time from the resolved camera message
+    #1 camera_obs_time: SyncTime;
+    // Number of lidar messages in the batch
+    #2 lidar_count: UInt32;
+    // Whether radar was present in this alignment
+    #3 has_radar: Bool;
+  }
+}
+
+// A simple aligner for testing consumer cog wiring
+aligner SimpleAligner
+{
+  inputs
+  {
+    // Sensor input (required, non-batch, non-reuse)
+    sensor: Tappy<TestMsg>
+    {
+      max_msgs: 10;
+      arbitrary_selection: true;
+    }
+    // Camera input (required, non-batch, reuse)
+    camera: Tappy<TestMsg>
+    {
+      max_msgs: 10;
+      reuse: true;
+      arbitrary_selection: true;
+    }
+    // Lidar input (required, batch, non-reuse)
+    lidar: Tappy<TestMsg>
+    {
+      max_msgs: 20;
+      batch_size: [1, 5];
+      arbitrary_selection: true;
+    }
+    // Radar input (optional, non-batch, non-reuse)
+    radar: Tappy<TestMsg>
+    {
+      max_msgs: 10;
+      optional: true;
+      timeout: 200ms;
+      arbitrary_selection: true;
+    }
+  }
+
+  assume(is_strictly_increasing(sensor.observation_time));
+  assume(is_strictly_increasing(camera.observation_time));
+  assume(is_strictly_increasing(lidar.observation_time));
+  assume(is_strictly_increasing(radar.observation_time));
+
+  require(|sensor.observation_time - camera.observation_time| <= 500ms);
+  require(|sensor.observation_time - min(lidar.observation_time)| <= 500ms);
+  require(|sensor.observation_time - radar.observation_time| <= 500ms);
+}

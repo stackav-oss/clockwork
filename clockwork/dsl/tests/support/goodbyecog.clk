@@ -5,14 +5,14 @@ use clockwork::dsl::tests::support::hellomsg;
 // This is a maximally empty cog to test the empty cases.
 cog GoodbyeCog
 {
-    execution
-    {
-        execute when: init;
-    }
-    metrics_options
-    {
-        enabled: false;
-    }
+  execution
+  {
+    execute when: init;
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
 }
 
 cpp_target goodbyecog

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to configurations for subscribers to multi-publisher channels.
@@ -29,6 +29,6 @@ MultiSubscriberConfig: Final[type[multi_subscriber_config_proto.MultiSubscriberC
         MSC_MODULE.context,
         MSC_MODULE,
         "MultiSubscriberConfig",
-        max_publishers=1024,
+        max_publishers=2048,
     )[0]
 )

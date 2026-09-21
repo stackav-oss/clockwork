@@ -1,18 +1,20 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """IR nodes for Cog components."""
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
+    dfl,
     expr,
     interface,
     node,
@@ -23,13 +25,35 @@ from clockwork.dsl.ir import (
     typesys,
 )
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span
-from clockwork.dsl.ir.message_type import MessageTypeMixin, resolve_schema_interface
+from clockwork.dsl.ir.message_type import (
+    MessageTypeMixin,
+    resolve_parameterized_schema_interface,
+    resolve_schema_interface,
+)
 from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+    from typing import Self
 
-    from fltk.fegen.pyrt.terminalsrc import Span, TerminalSource
+    from fltk.fegen.pyrt.span_protocol import SpanProtocol
+    from fltk.fegen.pyrt.terminalsrc import TerminalSource
+
+
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+class CogComponent(typesys.NamedAttribute):
+    """Base class for cog components."""
+
+    @classmethod
+    @abstractmethod
+    def from_statement(
+        cls: type[Self],
+        definition: dfl.Definition | dfl.CstPassthrough[cst.Statement],
+        ctx: dfl.Context,
+        module: node.Module,
+        is_generic: bool = False,
+    ) -> Self:
+        """Construct an instance of this component from a statement."""
 
 
 @dataclass
@@ -42,14 +66,14 @@ class Condition:
 
         This is polymorphic and will return a child class of Condition.
         """
-        dispatcher: dict[
-            cst.ConditionSpec.Label,
-            Callable[[cst.ConditionSpec, node.Module], Condition],
-        ] = {
-            cst.ConditionSpec.Label.TIME_SINCE_LAST_EXEC: TimeSinceLastExec.from_cst,
-            cst.ConditionSpec.Label.ANY_MESSAGE: AnyMessagePresent.from_cst,
-            cst.ConditionSpec.Label.NEW_MESSAGE: NewMessagePresent.from_cst,
-        }
+        dispatcher = cast(
+            "dict[cst.ConditionSpec.Label, Callable[[cst.ConditionSpec, node.Module], Condition]]",
+            {
+                cst.ConditionSpec.Label.TIME_SINCE_LAST_EXEC: TimeSinceLastExec.from_cst,
+                cst.ConditionSpec.Label.ANY_MESSAGE: AnyMessagePresent.from_cst,
+                cst.ConditionSpec.Label.NEW_MESSAGE: NewMessagePresent.from_cst,
+            },
+        )
 
         # Check to protect against grammar change
         expected_num_children: Final = 2
@@ -57,7 +81,7 @@ class Condition:
             msg = f"Expecting {expected_num_children} children, but found {num_children}"
             raise RuntimeError(msg)
         cond_type = cst_cond.children[0][0]
-        if cond_type not in dispatcher:
+        if cond_type is None or cond_type not in dispatcher:
             msg = node.append_error_line(
                 cst_cond,
                 module,
@@ -249,6 +273,17 @@ class NewMessagePresent(MessagesPresent):
 
 
 @dataclass
+class DynamicTimer(Condition):
+    """A dynamic one-shot timer condition (used by aligner cogs).
+
+    Unlike TimeSinceLastExec which has a fixed periodic threshold,
+    a DynamicTimer is armed/disarmed at runtime by the generated aligner code.
+    This condition type is not user-declarable; it is only emitted
+    programmatically by the aligner cog generator.
+    """
+
+
+@dataclass
 class ConditionDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.ConditionDef]):
     """A named execution condition."""
 
@@ -267,15 +302,19 @@ class ConditionDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.
             raise ValueError(msg)
         cst_doc = cst_def.maybe_doc()
         doc = node.Doc.from_cst(cst_doc, module) if cst_doc else None
+        # fmt: off
         result = cls(
             module=module,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=get_span(cst_def.child_identifier().child_value(), module.terminals),
             cst_node=cst_def,
             doc=doc,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=scope,
             type_info=clkbuiltins.COG_CONDITION_TYPE,
             condition=Condition.from_cst(cst_def.child_condition_spec(), module),
         )
+        # fmt: on
         scope.define(result.name, result, module.terminals)
         return result
 
@@ -284,7 +323,7 @@ _DEFAULT_VIEW_MAX_MSGS = 1
 
 
 @dataclass
-class ViewParams(node.CstNode[cst.InputBlock]):
+class ViewParams(node.CstNode[cst.Block]):
     """Parameters for input views."""
 
     max_msgs: int | expr.Expr
@@ -294,9 +333,20 @@ class ViewParams(node.CstNode[cst.InputBlock]):
     safety_margin: int | expr.Expr | None
     copy_inputs: bool | expr.Expr
     is_optional: bool | expr.Expr = False
+    expose_seqno: bool = False
+    use_device_ptr: bool | expr.Expr = False
+    multi_connect: int | expr.Expr | None = None
+    # Names of view params explicitly set by the user (via ``try_handle_param``).
+    # Used to distinguish user-provided values from defaults for overlay and
+    # validation logic (e.g., per-upstream overrides, aligner ``max_msgs``).
+    _user_set: set[str] = field(default_factory=set)
+
+    def is_user_set(self, param_name: str) -> bool:
+        """Return True if ``param_name`` was explicitly set by the user."""
+        return param_name in self._user_set
 
     @classmethod
-    def make_default(cls: type[ViewParams], module: node.Module, cst_node: cst.InputBlock | None = None) -> ViewParams:
+    def make_default(cls: type[ViewParams], module: node.Module, cst_node: cst.Block | None = None) -> ViewParams:
         """Make a ViewParams with all values at defaults."""
         return ViewParams(
             module=module,
@@ -310,19 +360,20 @@ class ViewParams(node.CstNode[cst.InputBlock]):
         )
 
     @classmethod
-    def from_cst(cls: type[ViewParams], cst_node: cst.InputBlock, module: node.Module) -> ViewParams:
+    def from_cst(cls: type[ViewParams], cst_node: cst.Block, module: node.Module) -> ViewParams:
         """Construct view parameters from CST."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
         result = ViewParams.make_default(module, cst_node=cst_node)
         seen_params: set[str] = set()
-        for param_cst in cst_node.children_input_block_param():
+        for statement_cst in cst_node.children_statement():
+            param_cst = statement_cst.child_definition()
             result._handle_param(param_cst, seen_params)  # noqa: SLF001 (result is also a ViewParams)
         return result
 
     def _validate_max_msgs_param(
-        self, user_specified_max_msgs: int, name_span: Span, terminals: TerminalSource
+        self, user_specified_max_msgs: int, name_span: SpanProtocol, terminals: TerminalSource
     ) -> None:
         """If the user specified max_msgs, validate it.
 
@@ -345,10 +396,40 @@ class ViewParams(node.CstNode[cst.InputBlock]):
             )
             raise ValueError(msg)
 
-    def _handle_param(self, cst_node: cst.InputBlockParam, seen_params: set[str]) -> None:  # noqa: PLR0911 A large
-        # number of returns is reasonable because this is a factory type function.
+    _KNOWN_PARAMS: Final[frozenset[str]] = frozenset(
+        {
+            "max_msgs",
+            "manual_cursor",
+            "no_dial",
+            "skip_threshold",
+            "safety_margin",
+            "copy_inputs",
+            "connect_optional",
+            "use_device_ptr",
+            "multi_connect",
+        }
+    )
+
+    def try_handle_param(self, cst_node: cst.Definition, seen_params: set[str]) -> bool:  # noqa: PLR0911, C901 # Complexity from a branch for each param type
+        """Try to handle a view parameter from a CST node.
+
+        Returns True if the parameter was recognized and handled, False otherwise.
+        Duplicate parameter detection only applies to recognized parameters;
+        duplicates among unrecognized params are the caller's responsibility.
+
+        Args:
+            cst_node: The CST node for the parameter.
+            seen_params: Set of already-seen parameter names (updated in-place on success).
+
+        Returns:
+            True if the parameter was a known view parameter, False otherwise.
+        """
         assert self.module.terminals is not None
-        name = get_span(name_span := cst_node.child_param().child_value(), self.module.terminals)
+        name = get_span(name_span := cst_node.child_name().child_value(), self.module.terminals)
+
+        if name not in self._KNOWN_PARAMS:
+            return False
+
         if name in seen_params:
             msg = f"Parameter '{name}' specified more than once:\n" + format_line_with_error(
                 name_span,
@@ -362,35 +443,62 @@ class ViewParams(node.CstNode[cst.InputBlock]):
             typesys.unify(clkbuiltins.UINT32, value.type_info)
             self.max_msgs = value
             self._validate_max_msgs_param(self._resolve_max_msgs(), name_span, self.module.terminals)
-            return
+            self._user_set.add("max_msgs")
+            return True
         if name == "manual_cursor":
             typesys.unify(clkbuiltins.BOOL, value.type_info)
             self.manual_cursor = value
-            return
+            self._user_set.add("manual_cursor")
+            return True
         if name == "no_dial":
             typesys.unify(clkbuiltins.BOOL, value.type_info)
             self.no_dial = value
-            return
+            self._user_set.add("no_dial")
+            return True
         if name == "skip_threshold":
             typesys.unify(clkbuiltins.UINT64, value.type_info)
             self.skip_threshold = value
-            return
+            self._user_set.add("skip_threshold")
+            return True
         if name == "safety_margin":
             typesys.unify(clkbuiltins.UINT64, value.type_info)
             self.safety_margin = value
-            return
+            self._user_set.add("safety_margin")
+            return True
         if name == "copy_inputs":
             typesys.unify(clkbuiltins.BOOL, value.type_info)
 
             self.copy_inputs = value
-            return
+            self._user_set.add("copy_inputs")
+            return True
         if name == "connect_optional":
             typesys.unify(clkbuiltins.BOOL, value.type_info)
             self.is_optional = value
-            return
+            self._user_set.add("connect_optional")
+            return True
+        if name == "use_device_ptr":
+            typesys.unify(clkbuiltins.BOOL, value.type_info)
+            self.use_device_ptr = value
+            self._user_set.add("use_device_ptr")
+            return True
+        if name == "multi_connect":
+            typesys.unify(clkbuiltins.UINT64, value.type_info)
+            self.multi_connect = value
+            self._user_set.add("multi_connect")
+            return True
 
-        msg = f"Unsupported view parameter '{name}'"
-        raise NotImplementedError(msg)
+        return False
+
+    def _handle_param(self, cst_node: cst.Definition, seen_params: set[str]) -> None:
+        """Handle a view parameter, raising on unrecognized params.
+
+        For cog inputs, all params in the block must be view params.
+        """
+        if not self.try_handle_param(cst_node, seen_params):
+            assert self.module.terminals is not None
+            name = get_span(cst_node.child_name().child_value(), self.module.terminals)
+            msg = f"Unsupported view parameter '{name}'"
+            raise NotImplementedError(msg)
 
     def resolve(self) -> None:
         """Perform finalization of the view params IR."""
@@ -401,6 +509,11 @@ class ViewParams(node.CstNode[cst.InputBlock]):
         self._resolve_safety_margin()
         self._resolve_copy_inputs()
         self._resolve_is_optional()
+        self._resolve_use_device_ptr()
+        self._resolve_multi_connect()
+        if self.multi_connect is not None and self.no_dial:
+            msg = self.append_error_line("multi_connect and no_dial parameters are mutually exclusive.")
+            raise ValueError(msg)
 
     def _resolve_max_msgs(self) -> int:
         if isinstance(self.max_msgs, expr.Expr):
@@ -473,106 +586,265 @@ class ViewParams(node.CstNode[cst.InputBlock]):
                 raise TypeError(msg)
             self.is_optional = primitive.value_to_bool(result)
 
+    def _resolve_use_device_ptr(self) -> None:
+        if isinstance(self.use_device_ptr, expr.Expr):
+            result = self.use_device_ptr.evaluate()
+            if not isinstance(result, typesys.NamedValue):
+                msg = self.use_device_ptr.append_error_line(
+                    f"Expected a NamedValue (true or false) for parameter use_device_ptr, but got {type(result)}",
+                )
+                raise TypeError(msg)
+            self.use_device_ptr = primitive.value_to_bool(result)
+
+    def _resolve_multi_connect(self) -> None:
+        if isinstance(self.multi_connect, expr.Expr):
+            result = self.multi_connect.evaluate()
+            if not isinstance(result, primitive.DecimalValue):
+                msg = self.multi_connect.append_error_line(
+                    f"Expected a DecimalValue for parameter multi_connect, but got {type(result)}",
+                )
+                raise TypeError(msg)
+            self.multi_connect = primitive.unsigned_decimal_to_int(result)
+
 
 class MetricsLogType(Enum):
     """The type of metrics log."""
 
-    telemetry = 0
+    non_redundant_telemetry = 0
     event = 1
     none = 2
 
 
 @dataclass
-class OutputDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.OutputDef], MessageTypeMixin):
+class OutputDef(CogComponent, node.DocableEntity, node.CstNode[cst.Definition], MessageTypeMixin):
     """A definition of a Cog output."""
 
+    is_generic: bool
     log_type: MetricsLogType = MetricsLogType.none
     is_optional: bool = False
+    max_msgs_per_exec: int = 1
 
     @classmethod
-    def from_cst(
+    @override
+    def from_statement(
         cls: type[OutputDef],
-        cst_node: cst.OutputDef,
+        definition: dfl.Definition | dfl.CstPassthrough[cst.Statement],
+        ctx: dfl.Context,
         module: node.Module,
-        parent_scope: node.Scope,
+        is_generic: bool = False,
     ) -> OutputDef:
         """Construct an OutputDef IR node from a CST OutputDef node."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without TerminalSource"
             raise ValueError(msg)
-        cst_doc = cst_node.maybe_doc()
+
+        if not isinstance(definition, dfl.Definition):
+            msg = f"OutputDef cannot be constructed from {type(definition)}."
+            raise TypeError(ctx.format_error(dfl.get_expr_span(definition), msg))
+
+        cst_doc = definition.cst_node.maybe_doc()
         doc = node.Doc.from_cst(cst_doc, module) if cst_doc else None
-        name = get_span(cst_node.child_identifier().child_value(), terminals=module.terminals)
-        message_type = expr.Expr.from_cst(cst_node.child_output_type(), module)
+        message_type = definition.value
         typesys.unify(clkbuiltins.TYPE_TYPE, message_type.type_info)
 
-        is_optional = False
-        if (maybe_block := cst_node.maybe_output_block()) is not None:
-            for param in maybe_block.children_output_block_param():
-                if (maybe_optional := param.maybe_connect_optional()) is not None:
-                    is_optional = maybe_optional.child_boolean().maybe_true() is not None
+        params = {}
+        if definition.options is not None:
+            for statement in definition.options.statements:
+                if not isinstance(statement, dfl.Definition):
+                    msg = f"OutputDef params cannot be constructed from {type(statement)}."
+                    raise TypeError(ctx.format_error(dfl.get_expr_span(statement), msg))
 
+                _handle_output_param(statement.cst_node, params, ctx.scope, module)
+
+        # fmt: off
         result = cls(
             module=module,
-            cst_node=cst_node,
+            cst_node=definition.cst_node,
             doc=doc,
-            scope=parent_scope,
-            name=name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            scope=ctx.scope,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            name=definition.name,
             type_info=clkbuiltins.COG_OUTPUT_TYPE,
             message_type=message_type,
-            is_optional=is_optional,
+            is_generic=is_generic,
+            is_optional=params.get("connect_optional", False),
+            max_msgs_per_exec=params.get("max_msgs_per_exec", 1),
         )
-        parent_scope.define(name, result, module.terminals)
+        # fmt: on
+        ctx.scope.define(definition.name, result, module.terminals)
         return result
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
-        self.message_type = resolve_schema_interface(self.module.context, self.message_type)
+        if self.is_generic:
+            # Resolution is done done when the cog is instantiated
+            self.message_type = resolve_parameterized_schema_interface(self.module.context, self.message_type)
+        else:
+            self.message_type = resolve_schema_interface(self.module.context, self.message_type)
+
+
+def _handle_output_param(param: cst.Definition, params: dict[str, Any], scope: node.Scope, module: node.Module) -> None:
+    assert module.terminals is not None
+    param_name = get_span(name_span := param.child_name().child_value(), module.terminals)
+
+    if param_name in params:
+        msg = f"Parameter '{param_name}' specified more than once:\n" + format_line_with_error(
+            name_span,
+            module.terminals,
+            module.module_id,
+        )
+        raise ValueError(msg)
+
+    value = expr.Expr.from_cst(param.child_value(), module)
+    if param_name == "connect_optional":
+        typesys.unify(clkbuiltins.BOOL, value.type_info)
+        value = node.resolve_names(value, scope)
+        result = value.evaluate()
+        if not isinstance(result, typesys.NamedValue):
+            msg = (
+                f"Expected a NamedValue (true or false) for parameter connect_optional, but got {type(result)}: "
+                + format_line_with_error(
+                    param.span,
+                    module.terminals,
+                    module.module_id,
+                )
+            )
+            raise TypeError(msg)
+
+        params[param_name] = primitive.value_to_bool(result)
+    elif param_name == "max_msgs_per_exec":
+        typesys.unify(clkbuiltins.UINT64, value.type_info)
+        result = value.evaluate()
+        if not isinstance(result, primitive.DecimalValue):
+            msg = (
+                f"Expected an integer value for parameter max_msgs_per_exec, but got {type(result)}: "
+                + format_line_with_error(
+                    param.span,
+                    module.terminals,
+                    module.module_id,
+                )
+            )
+            raise TypeError(msg)
+
+        max_msgs_value = primitive.unsigned_decimal_to_int(result)
+        if max_msgs_value <= 1:
+            msg = (
+                "max_msgs_per_exec must be greater than 1. Omit max_msgs_per_exec entirely for single-message outputs.\n"
+                + format_line_with_error(param.span, module.terminals, module.module_id)
+            )
+            raise ValueError(msg)
+
+        params[param_name] = max_msgs_value
+    else:
+        msg = f"Unsupported cog output parameter '{param_name}'" + format_line_with_error(
+            param.span,
+            module.terminals,
+            module.module_id,
+        )
+        raise NotImplementedError(msg)
 
 
 @dataclass
-class InputDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.InputDef], MessageTypeMixin):
+class InputDef(CogComponent, node.DocableEntity, node.CstNode[cst.Definition], MessageTypeMixin):
     """A definition of a Cog input."""
 
     view_params: ViewParams
+    is_generic: bool
+    elements: list[InputDefElement] | None
 
     @classmethod
-    def from_cst(
+    @override
+    def from_statement(
         cls: type[InputDef],
-        cst_node: cst.InputDef,
+        definition: dfl.Definition | dfl.CstPassthrough[cst.Statement],
+        ctx: dfl.Context,
         module: node.Module,
-        parent_scope: node.Scope,
+        is_generic: bool = False,
     ) -> InputDef:
         """Construct an InputDef IR node from a CST InputDef node."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
-        cst_doc = cst_node.maybe_doc()
+
+        if not isinstance(definition, dfl.Definition):
+            msg = f"OutputDef cannot be constructed from {type(definition)}."
+            raise TypeError(ctx.format_error(dfl.get_expr_span(definition), msg))
+
+        cst_doc = definition.cst_node.maybe_doc()
         doc = node.Doc.from_cst(cst_doc, module) if cst_doc else None
-        view_params_cst = cst_node.maybe_input_block()
+        view_params_cst = definition.cst_node.maybe_block()
         view_params = (
             ViewParams.from_cst(view_params_cst, module) if view_params_cst else ViewParams.make_default(module)
         )
-        message_type = expr.Expr.from_cst(cst_node.child_input_type(), module)
+        message_type = definition.value
         typesys.unify(clkbuiltins.TYPE_TYPE, message_type.type_info)
-        name = get_span(cst_node.child_identifier().child_value(), terminals=module.terminals)
+        # fmt: off
         result = cls(
             module=module,
-            cst_node=cst_node,
+            cst_node=definition.cst_node,
             doc=doc,
-            name=name,
-            scope=parent_scope,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            name=definition.name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            scope=ctx.scope,
             message_type=message_type,
             type_info=clkbuiltins.COG_INPUT_TYPE,
             view_params=view_params,
+            is_generic=is_generic,
+            elements=None,
         )
-        parent_scope.define(name, result, module.terminals)
+        # fmt: on
+        ctx.scope.define(definition.name, result, module.terminals)
         return result
 
     def resolve(self) -> None:
         """Perform finalization of the IR."""
-        self.message_type = resolve_schema_interface(self.module.context, self.message_type)
+        if self.is_generic:
+            # Resolution is done done when the cog is instantiated
+            self.message_type = resolve_parameterized_schema_interface(self.module.context, self.message_type)
+        else:
+            self.message_type = resolve_schema_interface(self.module.context, self.message_type)
         self.view_params.resolve()
+        if isinstance(self.view_params.multi_connect, int):
+            self.elements = [
+                InputDefElement.from_input_def(self, index) for index in range(self.view_params.multi_connect)
+            ]
+
+
+@dataclass
+class InputDefElement(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.Definition], MessageTypeMixin):
+    """A definition of a Cog multi_connect input element."""
+
+    view_params: ViewParams
+    is_generic: bool
+    base_name: str
+    index: int
+
+    @classmethod
+    def from_input_def(
+        cls: type[InputDefElement],
+        input_def: InputDef,
+        index: int,
+    ) -> InputDefElement:
+        """Construct an element from an InputDef and index."""
+        # fmt: off
+        return cls(
+            module=input_def.module,
+            cst_node=input_def.cst_node,
+            doc=input_def.doc,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            name=input_def.name + f"__{index}",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            scope=input_def.scope,
+            message_type=input_def.message_type,
+            type_info=input_def.type_info,
+            view_params=input_def.view_params,
+            is_generic=input_def.is_generic,
+            base_name=input_def.name,
+            index=index,
+        )
+        # fmt: on
 
 
 @dataclass
@@ -728,3 +1000,106 @@ class MetricsOutputDef(typesys.NamedAttribute):
                 raise RuntimeError(msg)
             schema_list.append(generated_schema.schema.source)
         return schema_list
+
+
+@dataclass
+class CogAlignedInputDef(typesys.NamedAttribute, node.DocableEntity, node.CstNode[cst.Definition]):
+    """A cog input that subscribes to an aligner's alignment output and upstream channels.
+
+    Unlike a regular InputDef, this represents N+1 subscriptions: one for the alignment
+    message and one for each of the aligner's upstream inputs. The expansion into actual
+    endpoints happens at composition time.
+    """
+
+    aligned_type: expr.Expr | typesys.TypeDef
+    view_params: ViewParams
+    # Per-upstream consumer-view overrides, keyed by the aligner's upstream input name.
+    # Missing entries are auto-sized by the compiler from the aligner-side view.
+    upstream_view_overrides: dict[str, ViewParams] = field(default_factory=dict)
+
+    @classmethod
+    def from_cst(
+        cls: type[CogAlignedInputDef],
+        cst_node: cst.Definition,
+        module: node.Module,
+        parent_scope: node.Scope,
+    ) -> CogAlignedInputDef:
+        """Construct a CogAlignedInputDef IR node from a CST CogAlignedInputDef node."""
+        if module.terminals is None:
+            msg = "Cannot construct IR nodes from CST without a TerminalSource"
+            raise ValueError(msg)
+        name = get_span(cst_node.child_name().child_value(), terminals=module.terminals)
+        doc = node.Doc.maybe_from_cst(cst_node.maybe_doc(), module)
+        aligned_type = expr.Expr.from_cst(cst_node.child_value(), module)
+        typesys.unify(clkbuiltins.TYPE_TYPE, aligned_type.type_info)
+
+        view_params = ViewParams.make_default(module)
+        upstream_view_overrides: dict[str, ViewParams] = {}
+        block_cst = cst_node.maybe_block()
+        if block_cst is not None:
+            seen_params: set[str] = set()
+            for statement_cst in block_cst.children_statement():
+                if param_cst := statement_cst.maybe_definition():
+                    view_params._handle_param(param_cst, seen_params)  # noqa: SLF001 Part of the same library.
+
+            for statement_cst in block_cst.children_statement():
+                override_cst = statement_cst.maybe_block()
+                if override_cst is None:
+                    continue
+
+                upstream_name = get_span(
+                    override_cst.child_name().child_value(),
+                    terminals=module.terminals,
+                )
+                if upstream_name in upstream_view_overrides:
+                    msg = (
+                        f"Upstream override for '{upstream_name}' specified more than once:\n"
+                        + format_line_with_error(
+                            override_cst.child_name().child_value(),
+                            module.terminals,
+                            module.module_id,
+                        )
+                    )
+                    raise ValueError(msg)
+                override_params = ViewParams.from_cst(override_cst, module)
+                if override_params.multi_connect is not None:
+                    msg = "multi_connect option is not supported in aligned inputs." + format_line_with_error(
+                        override_cst.child_name().child_value(),
+                        module.terminals,
+                        module.module_id,
+                    )
+                    raise ValueError(msg)
+                upstream_view_overrides[upstream_name] = override_params
+        # fmt: off
+        result = cls(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            name=name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            scope=parent_scope,
+            doc=doc,
+            type_info=clkbuiltins.COG_ALIGNED_INPUT_TYPE,
+            aligned_type=aligned_type,
+            view_params=view_params,
+            upstream_view_overrides=upstream_view_overrides,
+            module=module,
+            cst_node=cst_node,
+        )
+        # fmt: on
+        parent_scope.define(name, result, module.terminals)
+        return result
+
+    def resolve(self) -> None:
+        """Evaluate the aligned type expression and resolve view params.
+
+        Does NOT validate that the expression evaluates to an Aligner —
+        that validation is performed by the compiler (which can import aligner.py).
+        """
+        if isinstance(self.aligned_type, expr.Expr):
+            evaluated = self.aligned_type.evaluate()
+            if not isinstance(evaluated, typesys.TypeDef):
+                msg = self.append_error_line("aligned_inputs type must be a type")
+                raise TypeError(msg)
+            self.aligned_type = evaluated
+        self.view_params.resolve()
+        for upstream_override in self.upstream_view_overrides.values():
+            upstream_override.resolve()

@@ -1,17 +1,22 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 #include "clockwork/diagnostics/reporter.hh"
 #include "clockwork/dsl/tests/support/goodbyecog_dial.hh"
 #include "clockwork/dsl/tests/support/hello_msg_onboard.hh"
 #include "clockwork/dsl/tests/support/hellocog_dial.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/time/sync_time.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <concepts>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 namespace clockwork::testing::concepts
 {
@@ -113,6 +118,19 @@ concept HasExecuteCog = requires(DialType& dial) {
 template <typename T>
 concept EmptyDialComponent = std::is_default_constructible_v<T> && std::is_empty_v<T>;
 
+template <typename T>
+// Detects a read-only accessor that returns a const reference but is not const-qualified.
+// Read-only state accessors must be const-qualified.
+concept HasConstReturningNonConstReadOnlyStateAccessor = requires {
+  static_cast<const clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>> & (T::*)()>(&T::get_ro_hello);
+};
+
+template <typename T>
+// Detects a read-only accessor that returns a mutable reference.
+// Read-only state accessors must never expose mutable state.
+concept HasMutableReturningNonConstReadOnlyStateAccessor =
+  requires { static_cast<clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>> & (T::*)()>(&T::get_ro_hello); };
+
 } // namespace clockwork::testing::concepts
 
 namespace clockwork::testing::cogs
@@ -133,6 +151,8 @@ TEST_CASE("HelloCog dial structures satisfy dial concepts")
 
 TEST_CASE("HelloCog dial specific type requirements")
 {
+  using HelloMsgTap = clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>>;
+
   // Test specific constructor signatures for HelloCog components
   static_assert(
     std::is_constructible_v<HelloCogDialResources, jewels::memory::ObjectPtr<jewels::memory::MemoryResource>>);
@@ -147,26 +167,33 @@ TEST_CASE("HelloCog dial specific type requirements")
                 jewels::memory::ObjectPtr<clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>>>,
                 jewels::memory::ObjectPtr<const clockwork::testing::CxxState>>);
 
-  // Test specific getter signatures
-  static_assert(std::is_same_v<
+  // Resource accessors are mutable-only.
+  static_assert(std::same_as<
                 decltype(&HelloCogDialResources::get_mem_hello),
                 jewels::memory::MemoryResource& (HelloCogDialResources::*)()>);
 
-  static_assert(std::is_same_v<
-                decltype(&HelloCogDialConfigs::get_cfg_hello),
-                const clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>>& (HelloCogDialConfigs::*)() const>);
+  static_assert(std::same_as<decltype(std::declval<const HelloCogDialConfigs&>().get_cfg_hello()), const HelloMsgTap&>);
 
-  static_assert(std::is_same_v<
-                decltype(&HelloCogDialStates::get_ro_hello),
-                const clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>>& (HelloCogDialStates::*)() const>);
+  // read-only state, so we get a const result regardless of whether the state object itself is const or non-const.
+  static_assert(std::same_as<decltype(std::declval<HelloCogDialStates&>().get_ro_hello()), const HelloMsgTap&>);
+  static_assert(std::same_as<decltype(std::declval<const HelloCogDialStates&>().get_ro_hello()), const HelloMsgTap&>);
 
-  static_assert(std::is_same_v<
-                decltype(&HelloCogDialStates::get_rw_hello),
-                clockwork::Tap<clockwork::Tachyon<clockwork::demo::HelloMsg>>& (HelloCogDialStates::*)()>);
+  // Both concepts detect forbidden read-only accessor signatures, so they must be false.
+  static_assert(!clockwork::testing::concepts::HasConstReturningNonConstReadOnlyStateAccessor<HelloCogDialStates>);
+  static_assert(!clockwork::testing::concepts::HasMutableReturningNonConstReadOnlyStateAccessor<HelloCogDialStates>);
 
-  static_assert(std::is_same_v<
-                decltype(&HelloCogDialStates::get_extern_hello),
-                const clockwork::testing::CxxState& (HelloCogDialStates::*)() const>);
+  // mutable state, so we get a mutable result if the state object is non-const, and a const result if the state object
+  // is const.
+  static_assert(std::same_as<decltype(std::declval<HelloCogDialStates&>().get_rw_hello()), HelloMsgTap&>);
+  static_assert(std::same_as<decltype(std::declval<const HelloCogDialStates&>().get_rw_hello()), const HelloMsgTap&>);
+
+  static_assert(std::same_as<
+                decltype(std::declval<const HelloCogDialStates&>().get_extern_hello()),
+                const clockwork::testing::CxxState&>);
+
+  // mutable / const state accessors
+  static_assert(std::same_as<decltype(std::declval<HelloCogDial&>().get_states()), HelloCogDialStates&>);
+  static_assert(std::same_as<decltype(std::declval<const HelloCogDial&>().get_states()), const HelloCogDialStates&>);
 }
 
 } // namespace clockwork::testing::cogs

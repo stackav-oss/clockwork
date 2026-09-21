@@ -1,11 +1,11 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python representation of Cog components."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from clockwork.dsl.ir import (
@@ -27,19 +27,23 @@ if TYPE_CHECKING:
 
 from clockwork.dsl.cpp import context, literal, typereg, types
 from clockwork.dsl.ir import (
+    aligner,
     clkbuiltins,
     cog,
+    cog_components,
     diagnostics,
     expr,
     extern_type,
     primitive,
     schema,
     schema_reg,
+    statement,
     typesys,
     units,
     uuid_reg,
 )
-from clockwork.dsl.ir.cog_components import Condition, NewMessagePresent, TimeSinceLastExec
+from clockwork.dsl.ir.cog_components import Condition, DynamicTimer, NewMessagePresent, TimeSinceLastExec
+from clockwork.dsl.ir.cog_parameters import CogParameterRef
 from clockwork.dsl.ir.diagnostics import COG_INFRA_DIAGS_GROUP_DEF_NAME, COG_INFRA_DIAGS_GROUP_NAME
 from clockwork.dsl.ir.module_id import CLK_REPO
 
@@ -62,10 +66,7 @@ class ConditionsStruct:
         compiler_context: CompilerContext,
         condition_defs: dict[str, cog.ConditionDef],
     ) -> ConditionsStruct:
-        """Create ConditionsStruct representation from IR.
-
-        Example: ConditionsStruct.from_ir(cog_ir.conditions)
-        """
+        """Create ConditionsStruct representation from IR."""
         conditions: dict[str, ConditionBase] = {}
         for condition_def in condition_defs.values():
             name = cls.name_for(condition_def)
@@ -76,6 +77,8 @@ class ConditionsStruct:
                 conditions[name] = AnyMessageCondition.from_ir(compiler_context, name, condition_def)
             elif isinstance(cond, NewMessagePresent):
                 conditions[name] = NewMessageCondition.from_ir(compiler_context, name, condition_def)
+            elif isinstance(cond, DynamicTimer):
+                conditions[name] = DynamicTimerCondition.from_ir(compiler_context, name, condition_def)
             else:
                 msg = f"Condition type for {name} is not supported."
                 raise NotImplementedError(msg)
@@ -129,6 +132,35 @@ class TimeSinceLastExecCondition(ConditionBase):
         return cls(
             identifier=name,
             time_ns=time_ns,
+            uuid=uuid_reg.lookup_uuid(compiler_context, condition_def),
+            cpp_type=cpp_type,
+        )
+
+
+@dataclass
+class DynamicTimerCondition(ConditionBase):
+    """Representation of DynamicTimer condition (for aligner optional input timeouts)."""
+
+    @classmethod
+    def from_ir(
+        cls: type[DynamicTimerCondition],
+        compiler_context: CompilerContext,
+        name: str,
+        condition_def: cog.ConditionDef,
+    ) -> DynamicTimerCondition:
+        """Create a DynamicTimerCondition from the IR."""
+        condition = condition_def.condition
+        assert isinstance(condition, DynamicTimer)
+
+        cpp_type = types.CppType(
+            includes=[context.Header(CLK_REPO, "clockwork/dial/cond_dynamic_timer.hh")],
+            type_name="DynamicTimerCondition",
+            cpp_namespace="clockwork",
+            const=True,
+        )
+
+        return cls(
+            identifier=name,
             uuid=uuid_reg.lookup_uuid(compiler_context, condition_def),
             cpp_type=cpp_type,
         )
@@ -218,10 +250,7 @@ class ResourcesStruct:
         compiler_context: CompilerContext,
         resource_defs: dict[str, cog.ResourceDef],
     ) -> ResourcesStruct:
-        """Create ResourcesStruct representation from IR.
-
-        Example: ResourcesStruct.from_ir(cog_ir.resources)
-        """
+        """Create ResourcesStruct representation from IR."""
         resources: dict[str, Resource] = {}
         for resource_def in resource_defs.values():
             resource = Resource.from_ir(compiler_context, resource_def)
@@ -272,10 +301,7 @@ class ConfigsStruct:
         compiler_context: CompilerContext,
         config_defs: dict[str, cog.ConfigDef],
     ) -> ConfigsStruct:
-        """Create ConfigsStruct representation from IR.
-
-        Example: ConfigsStruct.from_ir(cog_ir.configs)
-        """
+        """Create ConfigsStruct representation from IR."""
         configs: dict[str, Config] = {}
         for config_def in config_defs.values():
             config = Config.from_ir(compiler_context, config_def)
@@ -299,7 +325,7 @@ class Config:
     ) -> Config:
         """Create an Config."""
         msg_type = config_def.message_type
-        if isinstance(msg_type, schema_reg.InterfaceInfo):
+        if isinstance(msg_type, schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation):
             return cls._handle_schema_config(compiler_context, config_def)
         msg = f"Attempt to create an config for non-Interface type {type(msg_type)}: {msg_type}"
         raise NotImplementedError(msg)
@@ -308,14 +334,12 @@ class Config:
     def _handle_schema_config(
         cls: type[Config], compiler_context: CompilerContext, config_def: cog.ConfigDef
     ) -> Config:
-        if isinstance(config_def.message_type, expr.Expr) or isinstance(
-            config_def.message_type.interface_ir.typespec,
-            expr.Expr,
-        ):
-            msg = f"Attempt to generate dial config for unresolved schema: {config_def.message_type}"
-            raise NotImplementedError(msg)
+        assert isinstance(config_def.message_type, schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation)
         identifier = cls.name_for(config_def)
-        cpp_type = typereg.get_cpp_type(config_def.module.context, config_def.message_type.interface_ir.typespec)
+        if isinstance(config_def.message_type, schema_reg.InterfaceInfo):
+            cpp_type = typereg.get_cpp_type(config_def.module.context, config_def.message_type.interface_ir.typespec)
+        else:
+            cpp_type = typereg.get_cpp_type(config_def.module.context, config_def.message_type)
         cpp_type.const = True
         return cls(identifier=identifier, cpp_type=cpp_type, uuid=uuid_reg.lookup_uuid(compiler_context, config_def))
 
@@ -343,10 +367,7 @@ class StatesStruct:
         compiler_context: CompilerContext,
         state_defs: dict[str, cog.StateDef],
     ) -> StatesStruct:
-        """Create StatesStruct representation from IR.
-
-        Example: StatesStruct.from_ir(cog_ir.states)
-        """
+        """Create StatesStruct representation from IR."""
         states: dict[str, State] = {}
         for state_def in state_defs.values():
             state = State.from_ir(compiler_context, state_def)
@@ -360,7 +381,7 @@ class State:
 
     identifier: str
     cpp_type: types.CppType | types.CppTemplateType
-    msg_type: schema_reg.InterfaceInfo | extern_type.ExternType
+    msg_type: schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation | extern_type.ExternType
     read_only: bool
     uuid: UUID
 
@@ -385,12 +406,12 @@ class State:
                 msg = f"Attempt to generate dial state for unresolved schema: {state_def.message_type}"
                 raise NotImplementedError(msg)
             cpp_type = typereg.get_cpp_type(state_def.module.context, msg_type.interface_ir.typespec)
-        elif isinstance(msg_type, extern_type.ExternType):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        elif isinstance(msg_type, CogParameterRef | typesys.Instantiation):
             cpp_type = typereg.get_cpp_type(state_def.module.context, msg_type)
         else:
-            msg = f"Attempt to create an state for non-Interface type {type(msg_type)}: {msg_type}"
-            raise NotImplementedError(msg)
-        cpp_type.const = read_only
+            cpp_type = typereg.get_cpp_type(state_def.module.context, msg_type)
+        # NOTE: we copy the type here, otherwise const is set for everyone
+        cpp_type = replace(cpp_type, const=read_only)
         return cls(
             identifier=identifier, msg_type=state_def.message_type, cpp_type=cpp_type, read_only=read_only, uuid=uuid
         )
@@ -444,6 +465,9 @@ class MinMessagesEvaluator:
         match condition:
             case cog.TimeSinceLastExec():
                 return 0
+            case DynamicTimer():
+                # A timer firing doesn't guarantee any messages.
+                return 0
             case AnyMessagePresent() | NewMessagePresent():
                 if require_new_messages and isinstance(condition, AnyMessagePresent):
                     # We're looking for new messages and this condition doesn't guarantee the message will be new
@@ -486,10 +510,14 @@ class InputsStruct:
     Attributes:
         input_defs (dict): the cog.Inputs, e.g. Input IRs, compiled from in the DSL
         inputs (dict): Python object representation of the Input IRs
+        multi_connect_inputs (dict): Python object representation of the multi connect input IRs
+        aligned_inputs (list): AlignedInput groups from CogAlignedInputDef entries
     """
 
-    input_defs: dict[str, cog.InputDef]
+    input_defs: abc.Mapping[str, cog.InputDef | cog_components.InputDefElement]
     inputs: dict[str, Input]
+    multi_connect_inputs: dict[str, Input]
+    aligned_inputs: list[AlignedInput]
 
     @classmethod
     def from_ir(
@@ -497,16 +525,40 @@ class InputsStruct:
         compiler_context: CompilerContext,
         input_defs: dict[str, cog.InputDef],
         execution_spec: cog.ExecutionSpec,
+        expanded_aligned_input_defs: dict[str, cog.InputDef],
+        aligned_input_defs: dict[str, cog.CogAlignedInputDef] | None = None,
     ) -> InputsStruct:
-        """Create InputsStruct representation from IR.
-
-        Example: InputsStruct.from_ir(cog_ir.inputs)
-        """
+        """Create InputsStruct representation from IR."""
         inputs: dict[str, Input] = {}
+        multi_connect_inputs: dict[str, Input] = {}
         for input_def in input_defs.values():
-            ipt = Input.from_ir(compiler_context, input_def, execution_spec)
-            inputs[ipt.identifier] = ipt
-        return cls(input_defs=input_defs, inputs=inputs)
+            if input_def.elements:
+                input_elements = []
+                for element in input_def.elements:
+                    ipt = Input.from_ir(compiler_context, element, execution_spec, None)
+                    input_elements.append(ipt.identifier)
+                    inputs[ipt.identifier] = ipt
+                ipt = Input.from_ir(compiler_context, input_def, execution_spec, input_elements)
+                multi_connect_inputs[ipt.identifier] = ipt
+            else:
+                ipt = Input.from_ir(compiler_context, input_def, execution_spec, None)
+                inputs[ipt.identifier] = ipt
+
+        aligned: list[AlignedInput] = []
+        if aligned_input_defs:
+            aligned.extend(
+                AlignedInput.from_ir(
+                    compiler_context,
+                    aligned_def,
+                    execution_spec,
+                    expanded_aligned_input_defs,
+                )
+                for aligned_def in aligned_input_defs.values()
+            )
+
+        return cls(
+            input_defs=input_defs, inputs=inputs, multi_connect_inputs=multi_connect_inputs, aligned_inputs=aligned
+        )
 
 
 @dataclass
@@ -522,21 +574,26 @@ class Input:
     max_msgs: int
     skip_threshold: int | None
     manual_cursor: bool
+    expose_seqno: bool
+    use_device_ptr: bool
     no_dial: bool
     copy_inputs: bool
+    no_accessor: bool
+    input_elements: list[str] | None
     uuid: UUID
 
     @classmethod
     def from_ir(
         cls: type[Input],
         compiler_context: CompilerContext,
-        input_def: cog.InputDef,
+        input_def: cog.InputDef | cog_components.InputDefElement,
         execution_spec: cog.ExecutionSpec,
+        input_elements: list[str] | None,
     ) -> Input:
         """Create an Input."""
         msg_type = input_def.message_type
-        if isinstance(msg_type, schema_reg.InterfaceInfo):
-            return cls._handle_schema_input(compiler_context, input_def, execution_spec)
+        if isinstance(msg_type, schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation):
+            return cls._handle_schema_input(compiler_context, input_def, execution_spec, input_elements)
         msg = f"Attempt to create an input for non-Interface type {type(msg_type)}: {msg_type}"
         raise NotImplementedError(msg)
 
@@ -544,16 +601,19 @@ class Input:
     def _handle_schema_input(
         cls: type[Input],
         compiler_context: CompilerContext,
-        input_def: cog.InputDef,
+        input_def: cog.InputDef | cog_components.InputDefElement,
         execution_spec: cog.ExecutionSpec,
+        input_elements: list[str] | None,
     ) -> Input:
         """Create Input based on schema type."""
-        name = cls.name_for(input_def)
         if (
             isinstance(input_def.message_type, expr.Expr)
-            or isinstance(
-                input_def.message_type.interface_ir.typespec,
-                expr.Expr,
+            or (
+                isinstance(input_def.message_type, schema_reg.InterfaceInfo)
+                and isinstance(
+                    input_def.message_type.interface_ir.typespec,
+                    expr.Expr,
+                )
             )
             or isinstance(input_def.view_params.max_msgs, expr.Expr)
             or isinstance(input_def.view_params.safety_margin, expr.Expr)
@@ -561,16 +621,25 @@ class Input:
             or isinstance(input_def.view_params.skip_threshold, expr.Expr)
             or isinstance(input_def.view_params.no_dial, expr.Expr)
             or isinstance(input_def.view_params.copy_inputs, expr.Expr)
+            or isinstance(input_def.view_params.use_device_ptr, expr.Expr)
+            or isinstance(input_def.view_params.multi_connect, expr.Expr)
         ):
             msg = f"Attempt to generate dial input for unresolved schema: {input_def.message_type}"
             raise NotImplementedError(msg)
 
-        msg_type = typereg.get_cpp_type(input_def.module.context, input_def.message_type.interface_ir.typespec)
+        assert isinstance(input_def.message_type, schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation)
+        name = cls.name_for(input_def)
+        if isinstance(input_def.message_type, CogParameterRef | typesys.Instantiation):
+            msg_type = typereg.get_cpp_type(input_def.module.context, input_def.message_type)
+        else:
+            msg_type = typereg.get_cpp_type(input_def.module.context, input_def.message_type.interface_ir.typespec)
         max_msgs = input_def.view_params.max_msgs
         safety_margin = input_def.view_params.safety_margin
         manual_cursor = input_def.view_params.manual_cursor
+        expose_seqno = input_def.view_params.expose_seqno
+        use_device_ptr = input_def.view_params.use_device_ptr
         no_dial = input_def.view_params.no_dial
-
+        no_accessor = input_def.view_params.multi_connect is not None and input_elements is None
         min_msgs_evaluator = MinMessagesEvaluator(input_def.name, execution_spec)
         min_msgs = min_msgs_evaluator.get_min_messages()
         min_new_msgs = min_msgs_evaluator.get_min_new_messages()
@@ -582,7 +651,7 @@ class Input:
             )
             raise ValueError(msg)
 
-        template_name = "MessageInputDialWithCursorControl" if manual_cursor else "MessageInputDial"
+        template_name = "MessageInputDial"
 
         cpp_type = types.CppTemplateType(
             include=[context.Header(CLK_REPO, "clockwork/dial/msg_input.hh")],
@@ -593,6 +662,9 @@ class Input:
                 literal.int_to_cpp(max_msgs, clkbuiltins.UINT64),
                 literal.int_to_cpp(min_msgs, clkbuiltins.UINT64),
                 literal.int_to_cpp(min_new_msgs, clkbuiltins.UINT64),
+                types.CppValue(None, str(manual_cursor).lower()),
+                types.CppValue(None, str(expose_seqno).lower()),
+                types.CppValue(None, str(use_device_ptr).lower()),
             ],
             const=not manual_cursor,
         )
@@ -607,15 +679,216 @@ class Input:
             safety_margin=safety_margin,
             skip_threshold=input_def.view_params.skip_threshold,
             manual_cursor=manual_cursor,
+            expose_seqno=expose_seqno,
+            use_device_ptr=use_device_ptr,
             no_dial=no_dial,
             copy_inputs=input_def.view_params.copy_inputs,
+            no_accessor=no_accessor,
+            input_elements=input_elements,
             uuid=uuid_reg.lookup_uuid(compiler_context, input_def),
         )
 
     @classmethod
-    def name_for(cls: type[Input], input_def: cog.InputDef) -> str:
+    def name_for(cls: type[Input], input_def: cog.InputDef | cog_components.InputDefElement) -> str:
         """Produce the member variable name for the given input."""
         return input_def.name
+
+
+@dataclass
+class AlignedInput:
+    """Represents a group of aligned inputs from a CogAlignedInputDef.
+
+    The alignment message input is registered as a regular Input with no_dial=True
+    (it has a policy struct and endpoint but no dial accessor).
+    The upstream inputs are regular Input objects grouped here for dial nesting.
+    """
+
+    group_name: str
+    alignment_msg_input: Input
+    upstream_inputs: list[Input]
+    resolved_aligner_inputs: dict[str, aligner.ResolvedAlignerInput]
+
+    @classmethod
+    def from_ir(
+        cls: type[AlignedInput],
+        compiler_context: CompilerContext,
+        aligned_def: cog.CogAlignedInputDef,
+        execution_spec: cog.ExecutionSpec,
+        expanded_aligned_input_defs: dict[str, cog.InputDef],
+    ) -> AlignedInput:
+        """Create an AlignedInput from a CogAlignedInputDef."""
+        aligner_type = aligned_def.aligned_type
+        if not isinstance(aligner_type, aligner.Aligner):
+            msg = f"Expected Aligner, got {type(aligner_type).__name__}"
+            raise TypeError(msg)
+
+        if aligner_type.alignment_iface is None:
+            msg = f"Aligner '{aligner_type.name}' has no alignment interface (not fully resolved)"
+            raise RuntimeError(msg)
+
+        resolved = aligner_type.get_resolved()
+
+        alignment_iface_info = schema_reg.InterfaceInfo.make(aligner_type.alignment_iface)
+        alignment_msg_input = _make_alignment_msg_input(
+            compiler_context, aligned_def, alignment_iface_info, execution_spec
+        )
+
+        upstream_inputs: list[Input] = []
+        for aligner_input in aligner_type.inputs.values():
+            input_name = f"{aligned_def.name}.{aligner_input.name}"
+            consumer_input_def = expanded_aligned_input_defs[input_name]
+            upstream_input = _make_upstream_input(
+                aligned_def,
+                aligner_input,
+                consumer_input_def,
+                execution_spec,
+            )
+            upstream_inputs.append(upstream_input)
+
+        return cls(
+            group_name=aligned_def.name,
+            alignment_msg_input=alignment_msg_input,
+            upstream_inputs=upstream_inputs,
+            resolved_aligner_inputs=resolved.inputs,
+        )
+
+
+def _make_alignment_msg_input(
+    compiler_context: CompilerContext,
+    aligned_def: cog.CogAlignedInputDef,
+    alignment_iface_info: schema_reg.InterfaceInfo,
+    execution_spec: cog.ExecutionSpec,
+) -> Input:
+    """Create an Input for the alignment message subscription."""
+    name = aligned_def.name
+
+    msg_type = typereg.get_cpp_type(aligned_def.module.context, alignment_iface_info.interface_ir.typespec)
+
+    min_msgs_evaluator = MinMessagesEvaluator(name, execution_spec)
+    min_msgs = min_msgs_evaluator.get_min_messages()
+    min_new_msgs = min_msgs_evaluator.get_min_new_messages()
+
+    alignment_view_params = aligned_def.view_params
+    if isinstance(alignment_view_params.max_msgs, expr.Expr):
+        msg = f"Unresolved view params on aligned input '{aligned_def.name}'"
+        raise TypeError(msg)
+    max_msgs = alignment_view_params.max_msgs
+    manual_cursor = (
+        alignment_view_params.manual_cursor if isinstance(alignment_view_params.manual_cursor, bool) else False
+    )
+
+    cpp_type = types.CppTemplateType(
+        include=[context.Header(CLK_REPO, "clockwork/dial/msg_input.hh")],
+        template_name="MessageInputDial",
+        cpp_namespace="clockwork",
+        arguments=[
+            msg_type,
+            literal.int_to_cpp(max_msgs, clkbuiltins.UINT64),
+            literal.int_to_cpp(min_msgs, clkbuiltins.UINT64),
+            literal.int_to_cpp(min_new_msgs, clkbuiltins.UINT64),
+            types.CppValue(None, "true" if manual_cursor else "false"),
+            types.CppValue(None, "false"),
+            types.CppValue(None, "false"),  # use_device_ptr
+        ],
+        const=True,
+    )
+
+    return Input(
+        identifier=name,
+        msg_type=msg_type,
+        cpp_type=cpp_type,
+        min_msgs=min_msgs,
+        min_new_msgs=min_new_msgs,
+        max_msgs=max_msgs,
+        safety_margin=alignment_view_params.safety_margin
+        if not isinstance(alignment_view_params.safety_margin, expr.Expr)
+        else None,
+        skip_threshold=alignment_view_params.skip_threshold
+        if not isinstance(alignment_view_params.skip_threshold, expr.Expr)
+        else None,
+        manual_cursor=manual_cursor,
+        expose_seqno=False,
+        use_device_ptr=False,
+        no_dial=True,
+        copy_inputs=False,
+        no_accessor=False,
+        input_elements=None,
+        uuid=uuid_reg.lookup_uuid(compiler_context, aligned_def),
+    )
+
+
+def _make_upstream_input(
+    aligned_def: cog.CogAlignedInputDef,
+    aligner_input: aligner.AlignerInputDef,
+    consumer_input_def: cog.InputDef,
+    execution_spec: cog.ExecutionSpec,
+) -> Input:
+    """Create an Input for an upstream channel subscription within an aligned group."""
+    input_name = aligner_input.name
+    iface_info = aligner_input.get_interface_info()
+    msg_type = typereg.get_cpp_type(aligner_input.module.context, iface_info.interface_ir.typespec)
+
+    view_params = consumer_input_def.view_params
+    max_msgs = view_params.max_msgs
+    safety_margin = view_params.safety_margin
+    manual_cursor = view_params.manual_cursor
+    expose_seqno = view_params.expose_seqno
+    use_device_ptr = view_params.use_device_ptr
+
+    if (
+        isinstance(max_msgs, expr.Expr)
+        or isinstance(safety_margin, expr.Expr)
+        or isinstance(manual_cursor, expr.Expr)
+        or isinstance(view_params.skip_threshold, expr.Expr)
+        or isinstance(view_params.copy_inputs, expr.Expr)
+        or isinstance(use_device_ptr, expr.Expr)
+    ):
+        msg = f"Unresolved view params on aligner input '{aligner_input.name}'"
+        raise TypeError(msg)
+
+    skip_threshold = view_params.skip_threshold
+    copy_inputs = view_params.copy_inputs
+
+    min_msgs_evaluator = MinMessagesEvaluator(input_name, execution_spec)
+    min_msgs = min_msgs_evaluator.get_min_messages()
+    min_new_msgs = min_msgs_evaluator.get_min_new_messages()
+
+    cpp_type = types.CppTemplateType(
+        include=[context.Header(CLK_REPO, "clockwork/dial/msg_input.hh")],
+        template_name="MessageInputDial",
+        cpp_namespace="clockwork",
+        arguments=[
+            msg_type,
+            literal.int_to_cpp(max_msgs, clkbuiltins.UINT64),
+            literal.int_to_cpp(min_msgs, clkbuiltins.UINT64),
+            literal.int_to_cpp(min_new_msgs, clkbuiltins.UINT64),
+            types.CppValue(None, str(manual_cursor).lower()),
+            types.CppValue(None, str(expose_seqno).lower()),
+            types.CppValue(None, str(use_device_ptr).lower()),
+        ],
+        const=not manual_cursor,
+    )
+
+    upstream_uuid = uuid_reg.uuid_from_name(f"{aligned_def.value_key()}.{aligner_input.name}")
+
+    return Input(
+        identifier=input_name,
+        msg_type=msg_type,
+        cpp_type=cpp_type,
+        min_msgs=min_msgs,
+        min_new_msgs=min_new_msgs,
+        max_msgs=max_msgs,
+        safety_margin=safety_margin,
+        skip_threshold=skip_threshold,
+        manual_cursor=manual_cursor,
+        expose_seqno=expose_seqno,
+        use_device_ptr=use_device_ptr,
+        no_dial=False,
+        copy_inputs=copy_inputs,
+        no_accessor=False,
+        input_elements=None,
+        uuid=upstream_uuid,
+    )
 
 
 @dataclass
@@ -632,10 +905,7 @@ class OutputsStruct:
         output_defs: abc.Mapping[str, cog.OutputDef | cog.MetricsOutputDef | cog.ReportGroupDef],
         rate_limit_specs: dict[str, cog.RateLimitSpec],
     ) -> OutputsStruct:
-        """Create Outputs representation from IR.
-
-        Example: OutputsStruct.from_ir(context, cog_ir.outputs, cog_ir.rate_limits)
-        """
+        """Create Outputs representation from IR."""
         outputs: dict[str, Output] = {}
         for output_key, output_def in output_defs.items():
             if isinstance(output_def, cog.OutputDef):
@@ -658,6 +928,7 @@ class Output:
     rate_limit: cog.ResolvedRateLimitSpec | None
     uuid: UUID
     metrics_log_type: cog.MetricsLogType
+    max_msgs_per_exec: int = 1
     cog_metrics_output: bool = False  # True for MetricsOutputDef, False for OutputDef and ReportGroupDef
     is_report_group: bool = False  # True for ReportGroupDef, False for OutputDef and MetricsOutputDef
 
@@ -696,7 +967,7 @@ class Output:
     ) -> Output:
         """Create an Output."""
         msg_type = output_def.message_type
-        if isinstance(msg_type, schema_reg.InterfaceInfo):
+        if isinstance(msg_type, schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation):
             return cls._handle_schema_output(compiler_context, msg_type, output_def, rate_limit)
         msg = f"Attempt to create an output for non-Interface type {type(msg_type)}: {msg_type}"
         raise NotImplementedError(msg)
@@ -705,24 +976,31 @@ class Output:
     def _handle_schema_output(
         cls: type[Output],
         compiler_context: CompilerContext,
-        message_type: schema_reg.InterfaceInfo,
+        message_type: schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation,
         output_def: cog.OutputDef | cog.MetricsOutputDef | cog.ReportGroupDef,
         rate_limit: cog.RateLimitSpec | None,
     ) -> Output:
-        if isinstance(message_type, expr.Expr) or isinstance(
-            message_type.interface_ir.typespec,
-            expr.Expr,
-        ):
-            msg = f"Attempt to generate dial output for unresolved schema: {message_type}"
-            raise NotImplementedError(msg)
         identifier = cls.name_for(output_def)
-        msg_type = typereg.get_cpp_type(output_def.module.context, message_type.interface_ir.typespec)
+        if isinstance(message_type, CogParameterRef | typesys.Instantiation):
+            msg_type = typereg.get_cpp_type(output_def.module.context, message_type)
+        else:
+            if isinstance(message_type.interface_ir.typespec, expr.Expr):
+                msg = f"Attempt to generate dial output for unresolved schema: {message_type}"
+                raise NotImplementedError(msg)
+            msg_type = typereg.get_cpp_type(output_def.module.context, message_type.interface_ir.typespec)
+
+        # Build template arguments: Message type is always first
+        template_args: list[types.CppTypeExpr | types.CppValueExpr] = [msg_type]
+
+        # Add capacity as second template argument if output_def has max_msgs_per_exec > 1
+        if isinstance(output_def, cog.OutputDef) and output_def.max_msgs_per_exec > 1:
+            template_args.append(types.CppValue(value_type=None, value=str(output_def.max_msgs_per_exec)))
 
         cpp_type = types.CppTemplateType(
             include=[context.Header(CLK_REPO, "clockwork/pinion/publishable.hh")],
             template_name="Publishable",
             cpp_namespace="clockwork::pinion",
-            arguments=[msg_type],
+            arguments=template_args,
             const=False,
         )
 
@@ -733,6 +1011,7 @@ class Output:
             rate_limit=rate_limit.get_resolved() if rate_limit else None,
             uuid=uuid_reg.lookup_uuid(compiler_context, output_def),
             metrics_log_type=output_def.log_type,
+            max_msgs_per_exec=output_def.max_msgs_per_exec if isinstance(output_def, cog.OutputDef) else 1,
         )
 
     @classmethod
@@ -759,10 +1038,7 @@ class DiagnosticsStruct:
         compiler_context: CompilerContext,
         diagnostics_defs: dict[str, DiagnosticsDef],
     ) -> DiagnosticsStruct:
-        """Create DiagnosticsStruct representation from IR.
-
-        Example: DiagnosticsStruct.from_ir(cog_ir.diagnostics)
-        """
+        """Create DiagnosticsStruct representation from IR."""
         diagnostics: dict[str, Diagnostics] = {}
         for diagnostics_def in diagnostics_defs.values():
             item = Diagnostics.from_ir(compiler_context, diagnostics_def)
@@ -775,8 +1051,8 @@ class Diagnostics:
     """Represents the Diagnostics reporter of a C++ Dial."""
 
     identifier: str
-    group_id: str
-    instance_id: str | None
+    group_id: str | CogParameterRef
+    instance_id: str | CogParameterRef | None
     cpp_type: types.CppTemplateType  # For the dial common utils which expect a member of this name
     manager_type: types.CppTemplateType
     reporter_type: types.CppTemplateType
@@ -790,19 +1066,33 @@ class Diagnostics:
     ) -> Diagnostics:
         """Create Diagnostics representation from IR."""
         if diagnostics_def is None:  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+            # pyrefly: ignore[bad-return] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             return None
         if isinstance(diagnostics_def.group_id, expr.Expr) or isinstance(diagnostics_def.instance_id, expr.Expr):
             msg = "Attempt to generate dial state for unresolved diagnostics block"
             raise NotImplementedError(msg)
-        group_id_value = types.CppScopedValue(
-            scope=types.CppType(
-                includes=[diagnostics.REPORT_DEFS_HEADER, diagnostics.IMPL_HEADER],
-                type_name="SignalGroupId",
-                cpp_namespace="clockwork::diagnostics",
-            ),
-            header=[],
-            name=diagnostics_def.group_id,
-        )
+        if isinstance(diagnostics_def.group_id, CogParameterRef):
+            assert diagnostics_def.group_id.parameter_def.get_typeval() == clkbuiltins.STRING
+            group_id_value = types.CppScopedValue(
+                scope=types.CppTemplateType(
+                    include=[diagnostics.REPORT_DEFS_HEADER, diagnostics.IMPL_HEADER],
+                    template_name="SignalGroupIdParam",
+                    arguments=[types.CppValue(None, f"{diagnostics_def.group_id.parameter_def.param_name}")],
+                    cpp_namespace="clockwork::diagnostics",
+                ),
+                header=[],
+                name="value",
+            )
+        else:
+            group_id_value = types.CppScopedValue(
+                scope=types.CppType(
+                    includes=[diagnostics.REPORT_DEFS_HEADER, diagnostics.IMPL_HEADER],
+                    type_name="SignalGroupId",
+                    cpp_namespace="clockwork::diagnostics",
+                ),
+                header=[],
+                name=diagnostics_def.group_id,
+            )
         return cls.from_params(
             identifier=cls.name_for(diagnostics_def),
             group_type=group_id_value,
@@ -831,8 +1121,8 @@ class Diagnostics:
         cls: type[Diagnostics],
         identifier: str,
         group_type: types.CppTypeExpr | types.CppValueExpr,
-        group_id: str,
-        instance_id: str | None,
+        group_id: str | CogParameterRef,
+        instance_id: str | CogParameterRef | None,
         uuid: UUID,
     ) -> Diagnostics:
         """Create Diagnostics representation from parameters, to support classic and cog-infra diagnostics."""
@@ -884,6 +1174,7 @@ class SignalEntry:
     is_batched: bool
     post_aggregation: set[signal_ir.AggregationType]
     max_observations: int | None
+    presence_bit_index: int | None
 
     @classmethod
     def from_ir(
@@ -899,8 +1190,9 @@ class SignalEntry:
         signal_type = typereg.get_cpp_type(compiler_context, resolved_signal.signal_type)
 
         metadata_type: types.CppType | types.CppTemplateType | None = None
-        if resolved_signal.metadata is not None:
-            metadata_type = _get_cpp_type_for_metadata(compiler_context, resolved_signal.metadata)
+        effective_meta = entry.effective_metadata()
+        if effective_meta is not None:
+            metadata_type = _get_cpp_type_for_metadata(compiler_context, effective_meta)
 
         is_batched = (
             report_group.report_group_config is not None
@@ -912,6 +1204,10 @@ class SignalEntry:
             max_observations = report_group.report_group_config.max_observations
 
         post_aggregation = entry.effective_post_aggregation()
+        validity = report_group.get_signal_validity(entry.name)
+        presence_bit_index = (
+            validity.index if validity.source is report_group_module.SignalValiditySource.PRESENCE_BIT else None
+        )
 
         return cls(
             identifier=identifier,
@@ -923,6 +1219,7 @@ class SignalEntry:
             is_batched=is_batched,
             post_aggregation=post_aggregation,
             max_observations=max_observations,
+            presence_bit_index=presence_bit_index,
         )
 
     def has_pre_aggregation(self) -> bool:
@@ -976,7 +1273,10 @@ def _is_schema_type(type_info: typesys.TypeVal) -> bool:
     Schema types need to be wrapped in Tap<Tachyon<>> for use as signal metadata.
     """
     match type_info:
-        case schema.InstantiateStmt() | schema.Schema() | schema.InstantiatedSchema() | schema.ResolvedSchema():
+        case statement.InstantiateStmt():
+            assert isinstance(type_info.typespec, typesys.Instantiation)
+            return isinstance(type_info.typespec.instantiates, schema.Schema | schema.ResolvedSchema)
+        case schema.Schema() | schema.InstantiatedSchema() | schema.ResolvedSchema():
             return True
         case typesys.Instantiation():
             return isinstance(type_info.instantiates, schema.Schema | schema.ResolvedSchema)
@@ -988,7 +1288,7 @@ def _schema_to_tap_tachyon(schema_type: typesys.TypeVal) -> typesys.Instantiatio
     """Convert a schema type to a Tap<Tachyon<Schema>> instantiation."""
     # Normalize to ResolvedSchema or Instantiation
     match schema_type:
-        case schema.InstantiateStmt():
+        case statement.InstantiateStmt():
             assert isinstance(schema_type.typespec, typesys.Instantiation)
             schema_ir = schema.InstantiatedSchema.from_typespec(
                 schema_type.typespec
@@ -1058,8 +1358,6 @@ class SignalsStruct:
         """Create SignalsStruct representation from IR.
 
         Collects all signals from all report groups into a flat structure.
-
-        Example: SignalsStruct.from_ir(compiler_context, cog_ir.report_groups)
         """
         signals: dict[str, SignalEntry] = {}
         for rg_name, report_group in report_groups.items():

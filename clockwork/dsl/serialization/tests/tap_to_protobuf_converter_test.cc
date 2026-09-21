@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dsl/tests/support/better_than_inheritance.pb.h"
@@ -7,6 +7,7 @@
 #include "clockwork/dsl/tests/support/msg_with_au.hh"
 #include "clockwork/dsl/tests/support/msg_with_au_proto.pb.h"
 #include "clockwork/dsl/tests/support/proto_tester_onboard.pb.h"
+#include "clockwork/repr_iface.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/memory/memory_resource.hh"

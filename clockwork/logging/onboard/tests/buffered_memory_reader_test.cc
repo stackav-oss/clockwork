@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/onboard/buffered_memory_reader.hh"
@@ -19,7 +19,6 @@
 #include <ranges>
 #include <span>
 #include <sys/types.h>
-#include <type_traits>
 #include <vector>
 
 namespace clockwork_logging::onboard

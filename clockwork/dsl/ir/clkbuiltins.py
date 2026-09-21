@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Clockwork Builtins.
@@ -132,6 +132,7 @@ BUILTINS_MODULE: Final = node.Module(
 )
 
 
+# pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 TYPE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Type", type_info=cast("typesys.TypeVal", None))
 TYPE_TYPE.type_info = TYPE_TYPE
 
@@ -202,6 +203,13 @@ FIXED_ARRAY: Final = BuiltinSerializableGenericTypeDef(
     type_info=TYPE_TYPE,
 )
 
+BITSET: Final = BuiltinSerializableGenericTypeDef(
+    scope=BUILTINS_SCOPE,
+    name="Bitset",
+    parameters=(typesys.Parameter(name="size", type_bound=UINT64, default=None),),
+    type_info=TYPE_TYPE,
+)
+
 VAR_ARRAY: Final = BuiltinSerializableGenericTypeDef(
     scope=BUILTINS_SCOPE,
     name="VarArray",
@@ -256,6 +264,12 @@ OPTIONAL: Final = BuiltinSerializableGenericTypeDef(
     scope=BUILTINS_SCOPE,
     name="Optional",
     parameters=(typesys.Parameter(name="type", type_bound=TYPE_TYPE, default=None),),
+    type_info=TYPE_TYPE,
+)
+
+LIST: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE,
+    name="List",
     type_info=TYPE_TYPE,
 )
 
@@ -379,9 +393,15 @@ COG_STATE_INSTANCE_TYPE: Final = typesys.TypeDef(
 # compiler as the types of DSL constructs.
 #
 # keep-sorted start block=yes
+ALIGNER_INPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="AlignerInputEndpoint", type_info=TYPE_TYPE)
+ALIGNER_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Aligner", type_info=TYPE_TYPE)
 AUDIO_SOURCE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="AudioSource", type_info=TYPE_TYPE)
 BOX_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Box", type_info=TYPE_TYPE)
 CHANNEL_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Channel", type_info=TYPE_TYPE)
+COG_ALIGNED_INPUT_INSTANCE_TYPE: Final = typesys.TypeDef(
+    scope=BUILTINS_SCOPE, name="CogInstanceAlignedInputEndpoint", type_info=TYPE_TYPE
+)
+COG_ALIGNED_INPUT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="AlignedInputEndpoint", type_info=TYPE_TYPE)
 COG_CONDITION_INSTANCE_TYPE: Final = typesys.TypeDef(
     scope=BUILTINS_SCOPE, name="CogInstanceCondition", type_info=TYPE_TYPE
 )
@@ -412,6 +432,7 @@ COG_RESOURCE_INSTANCE_TYPE: Final = typesys.TypeDef(
     scope=BUILTINS_SCOPE, name="CogInstanceResourceEndpoint", type_info=TYPE_TYPE
 )
 COG_RESOURCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Resource", type_info=TYPE_TYPE)
+COG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Cog", type_info=TYPE_TYPE)
 CONFIG_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ConfigInstance", type_info=TYPE_TYPE)
 CPU_DOMAIN_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="CpuDomain", type_info=TYPE_TYPE)
 DIAGNOSTICS_INSTANCE_TYPE: Final = typesys.TypeDef(
@@ -420,14 +441,16 @@ DIAGNOSTICS_INSTANCE_TYPE: Final = typesys.TypeDef(
 ENUM_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="EnumTag", type_info=TYPE_TYPE)
 ETHERNET_LAN_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="EthernetLan", type_info=TYPE_TYPE)
 EXECUTABLE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Executable", type_info=TYPE_TYPE)
+INSTANTIATED_BOX: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="InstantiatedBox", type_info=TYPE_TYPE)
 MEMORY_RESOURCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="MemoryResource", type_info=TYPE_TYPE)
 POLICY_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="PolicyInstance", type_info=TYPE_TYPE)
 POLICY_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Policy", type_info=TYPE_TYPE)
-PROCESS_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Process", type_info=TYPE_TYPE)
+PROCESS_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ProcessType", type_info=TYPE_TYPE)
 REPORT_GROUP_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="ReportGroup", type_info=TYPE_TYPE)
 REPRESENTATION_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="RepresentationTag", type_info=TYPE_TYPE)
 SCHEMA_TAG_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="SchemaTag", type_info=TYPE_TYPE)
 SIGNAL_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Signal", type_info=TYPE_TYPE)
+SPEC_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="Spec", type_info=TYPE_TYPE)
 STATE_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="StateInstance", type_info=TYPE_TYPE)
 SYSTEM_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="System", type_info=TYPE_TYPE)
 UDP_SOCKET_ENDPOINT_INSTANCE_TYPE: Final = typesys.TypeDef(
@@ -435,37 +458,49 @@ UDP_SOCKET_ENDPOINT_INSTANCE_TYPE: Final = typesys.TypeDef(
 )
 UDP_SOCKET_ENDPOINT_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketEndpoint", type_info=TYPE_TYPE)
 UDP_SOCKET_INSTANCE_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="UdpSocketInstance", type_info=TYPE_TYPE)
+VOID_TYPE: Final = typesys.TypeDef(scope=BUILTINS_SCOPE, name="void", type_info=TYPE_TYPE)
 # keep-sorted end
 
 for typ in (
     # keep-sorted start
+    ALIGNER_TYPE,
     BITS,
+    BITSET,
     BOOL,
+    BOX_TYPE,
     BYTE,
     BYTES,
     CHANNEL_TYPE,
     COG_CONFIG_INSTANCE_TYPE,
     COG_INSTANCE_TYPE,
     COG_STATE_INSTANCE_TYPE,
+    COG_TYPE,
+    CPU_DOMAIN_TYPE,
     DURATION,
+    EXECUTABLE_TYPE,
     FALSE_VALUE,
     FIXED_ARRAY,
     FIXED_SOA,
     FLOAT32,
     FLOAT64,
+    INSTANTIATED_BOX,
     INT16,
     INT32,
     INT64,
     INT8,
+    LIST,
     NULLOPT_VALUE,
     OPTIONAL,
     POD,
+    PROCESS_TYPE,
     PROTOBUF,
     PROTOBUF_TO_TAP,
     REPORT_GROUP_TYPE,
     REPRESENTATION_TAG_TYPE,
     SCHEMA_TAG_TYPE,
     SIGNAL_TYPE,
+    SPEC_TYPE,
+    STATE_INSTANCE_TYPE,
     STRING,
     SYNC_TIME,
     TACHYON,

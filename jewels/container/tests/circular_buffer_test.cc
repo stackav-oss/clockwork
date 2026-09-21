@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/container/circular_buffer.hh"
@@ -23,6 +23,7 @@
 #include <memory_resource>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <type_traits>
 #include <utility>

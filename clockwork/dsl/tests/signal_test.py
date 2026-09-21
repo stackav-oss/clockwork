@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -306,3 +306,149 @@ signal single_signal : Float64;
     assert "SignalInstance" in result.value_key()
     assert "instance1" in result.value_key()
     assert "*" in wildcard_result.value_key()
+
+
+def test_bool_signal_rejects_numeric_pre_aggregation() -> None:
+    """Test that Bool signals reject numeric aggregation types in pre-aggregation."""
+    invalid_agg_cases = [
+        ("min", "min"),
+        ("max", "max"),
+        ("sum", "sum"),
+        ("mean", "mean"),
+    ]
+    for agg_value, expected_in_error in invalid_agg_cases:
+        source = f"""
+// Bool signal with invalid aggregation
+signal flag : Bool
+{{
+    pre_aggregation: ["{agg_value}"];
+}}
+"""
+        module_id = ModuleID(repo="", name="test_bool_agg")
+        fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+        with pytest.raises(TypeError) as exc_info:
+            compiler.compile_source_text(source, module_id, fs_importer)
+
+        error_text = str(exc_info.value)
+        assert expected_in_error in error_text, f"Expected '{expected_in_error}' in error for agg '{agg_value}'"
+        assert "Bool" in error_text
+
+
+def test_bool_signal_accepts_valid_pre_aggregation() -> None:
+    """Test that Bool signals accept non-numeric aggregation types."""
+    valid_agg_cases = ["value", "count", "first_value", "final_value"]
+    source = f"""
+// Bool signal with all valid aggregation types
+signal flag : Bool
+{{
+    pre_aggregation: [{", ".join(f'"{a}"' for a in valid_agg_cases)}];
+}}
+"""
+    module_id = ModuleID(repo="", name="test_bool_valid_agg")
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    module = compiler.compile_source_text(source, module_id, fs_importer)
+
+    signal_ir = module.inner_scope.names["flag"]
+    assert isinstance(signal_ir, signal.Signal)
+    assert len(signal_ir.pre_aggregation) == 4
+
+
+def test_enum_signal_rejects_numeric_pre_aggregation() -> None:
+    """Test that enum signals reject numeric aggregation types in pre-aggregation."""
+    invalid_agg_cases = [
+        ("min", "min"),
+        ("max", "max"),
+        ("sum", "sum"),
+        ("mean", "mean"),
+    ]
+    for agg_value, expected_in_error in invalid_agg_cases:
+        source = f"""
+// An example enumeration
+enum Status
+{{
+    values
+    {{
+        // Active state
+        #0 active default;
+        // Inactive state
+        #1 inactive;
+    }}
+}}
+
+// Enum signal with invalid aggregation
+signal state : Status
+{{
+    pre_aggregation: ["{agg_value}"];
+}}
+"""
+        module_id = ModuleID(repo="", name="test_enum_agg")
+        fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+        with pytest.raises(TypeError) as exc_info:
+            compiler.compile_source_text(source, module_id, fs_importer)
+
+        error_text = str(exc_info.value)
+        assert expected_in_error in error_text, f"Expected '{expected_in_error}' in error for agg '{agg_value}'"
+        assert "Status" in error_text
+
+
+def test_enum_signal_accepts_valid_pre_aggregation() -> None:
+    """Test that enum signals accept non-numeric aggregation types."""
+    source = """
+// An example enumeration
+enum Status
+{
+    values
+    {
+        // Active state
+        #0 active default;
+        // Inactive state
+        #1 inactive;
+    }
+}
+
+// Enum signal with all valid aggregation types
+signal state : Status
+{
+    pre_aggregation: ["value", "count", "first_value", "final_value"];
+}
+"""
+    module_id = ModuleID(repo="", name="test_enum_valid_agg")
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    module = compiler.compile_source_text(source, module_id, fs_importer)
+
+    signal_ir = module.inner_scope.names["state"]
+    assert isinstance(signal_ir, signal.Signal)
+    assert len(signal_ir.pre_aggregation) == 4
+
+
+def test_error_message_lists_valid_aggregations_for_enum() -> None:
+    """Test that the error message for enum signals includes the valid aggregation types."""
+    source = """
+// An example enumeration
+enum Priority
+{
+    values
+    {
+        // Low priority
+        #0 low default;
+        // High priority
+        #1 high;
+    }
+}
+
+// Enum signal with invalid aggregation
+signal prio : Priority
+{
+    pre_aggregation: ["min"];
+}
+"""
+    module_id = ModuleID(repo="", name="test_enum_error_msg")
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+    with pytest.raises(TypeError) as exc_info:
+        compiler.compile_source_text(source, module_id, fs_importer)
+
+    error_text = str(exc_info.value)
+    assert "min" in error_text

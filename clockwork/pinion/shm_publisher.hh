@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/mmap_region.hh"
@@ -29,12 +29,12 @@
 
 namespace clockwork::pinion
 {
-
 ///
 /// Represents a shared memory channel capable of publishing.
 /// It also allows local-only subscriber handles to be created that will use lighter-weight publish notifications.
 ///
-class ShmPublisher : public ShmChannel
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance) shared_from_this is non-interface multi-inherited but done via diamond
+class ShmPublisher : public ShmChannel, public AbstractPublisher
 {
 public:
   /// Minimum debug logging message interval
@@ -51,7 +51,7 @@ public:
   /// @param max_observers maximum size of the in-process observer collection
   /// @param max_clients maximum number of the socket connections
   /// @param resume_behavior determines whether/how a channel can be reconnected
-  static jewels::expected<ShmPublisher, Error> open(
+  static jewels::expected<std::shared_ptr<ShmPublisher>, Error> open(
     jewels::memory::MemoryResource memres,
     const jewels::filesystem::Directory& shm_dir,
     std::string_view socket_ns,
@@ -61,6 +61,25 @@ public:
     size_t max_observers,
     size_t max_clients,
     ResumeBehavior resume_behavior);
+
+  /// public for make_shared, use open() instead
+  ShmPublisher(
+    jewels::memory::MemoryResource memres,
+    std::string_view socket_ns,
+    std::string_view filename,
+    std::string_view channel_name,
+    BufferPtr buffer,
+    jewels::filesystem::MMapRegion map,
+    UnixSocket socket,
+    size_t max_observers,
+    size_t max_clients,
+    ResumeBehavior resume_behavior);
+
+  ~ShmPublisher() override = default;
+  ShmPublisher(const ShmPublisher&) = delete;
+  ShmPublisher(ShmPublisher&&) = delete;
+  ShmPublisher& operator=(const ShmPublisher&) = delete;
+  ShmPublisher& operator=(ShmPublisher&&) = delete;
 
   ///
   /// Adds the given observer to the internal PublisherHandle, if it hasn't been extracted
@@ -73,45 +92,43 @@ public:
   /// Return a reference to the local publisher handle
   /// Throws if called after `extract_publisher()`
   ///
-  PublisherHandle& publisher();
+  PublisherHandle& publisher() override;
 
   ///
   /// Moves the internal publisher to the caller, allowing the caller to exclusively own it.  As a result publisher
   /// based APIs on this class are disabled.
   /// @return the publisher handle or an error if it was already extracted
   ///
-  jewels::expected<PublisherHandle, jewels::MonoError> extract_publisher() noexcept;
+  jewels::expected<PublisherHandle, jewels::MonoError> extract_publisher() noexcept override;
 
   ///
   /// For use by the event loop, accepts pending connections on the listening socket
   /// @return true if all pending connections could be accepted, false if any were rejected
   ///
-  [[nodiscard]] bool on_connect_pending();
+  [[nodiscard]] bool on_connect_pending() override;
 
   ///
   /// Returns the number of clients connected to the socket
   /// @note This doesn't poll the sockets to ensure they are still connected
   ///
-  [[nodiscard]] size_t num_clients() const noexcept;
+  [[nodiscard]] size_t num_clients() const noexcept override;
 
   ///
   /// Handles epoll notifications
   ///
   void notify(AbstractEPollManager& epoll, int efd, uint32_t events) override;
 
-private:
-  ShmPublisher(
-    jewels::memory::MemoryResource memres,
-    std::string_view socket_ns,
-    std::string_view filename,
-    std::string_view channel_name,
-    BufferPtr buffer,
-    jewels::filesystem::MMapRegion map,
-    UnixSocket socket,
-    PublisherHandle publisher,
-    size_t max_clients,
-    ResumeBehavior resume_behavior);
+protected:
+  /// Reserve space for the next message(s).
+  /// @note There should only ever be one publisher calling this method.
+  /// @note After calling reserve, either commit or discard must be called before calling reserve again.
+  [[nodiscard]] jewels::expected<PublisherReservation, ReserveError>
+  reserve(size_t count, bool connected) noexcept override;
 
+  /// Notify all the channel's observers that messages were published
+  void notify(const Observer::Event& event) override;
+
+private:
   ///
   /// Bridge class that holds connected sockets and forwards notifications from the publisher to them
   ///
@@ -164,6 +181,7 @@ private:
   std::optional<PublisherHandle> publisher_;
   std::shared_ptr<jewels::LogCerrThrottle> log_cerr_throttle_;
   jewels::memory::pmr_unique_ptr<SocketClients> socket_clients_;
+  std::pmr::vector<jewels::memory::ObjectPtr<Observer>> observers_;
 };
 
 } // namespace clockwork::pinion

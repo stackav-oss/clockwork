@@ -48,7 +48,7 @@ cog PerceptionCog
   {
     aligner_state: Tappy<approx_aligner_config::ApproxAlignerState>
     {
-        mutable: true;
+      mutable: true;
     }
   }
 
@@ -91,14 +91,17 @@ box PerceptionBox
   new init_cog: PerceptionInitCog;
   new percept_cog: PerceptionCog;
 
-  new memory: HeapMemory(max_size=4'096);
-  new aligner_config: SerializedDataFile(representation=Protobuf<approx_aligner_config::ApproxAlignerConfig>, path="clockwork/examples/demo_system/perception/resources/approx_aligner_config.textproto");
-  new aligner_state: State(representation=Tachyon<approx_aligner_config::ApproxAlignerState>, memory_resource=memory);
+  new perception_memory: HeapMemory(max_size=4'096);
+  new aligner_config: SerializedDataFile(
+    representation=Protobuf<approx_aligner_config::ApproxAlignerConfig>,
+    path="clockwork/examples/demo_system/perception/resources/approx_aligner_config.textproto",
+  );
+  new aligner_state: State(representation=Tachyon<approx_aligner_config::ApproxAlignerState>);
 
   connect aligner_config to init_cog.aligner_config;
   connect init_cog.aligner_config_out to perception_channels::PerceptionAlignerConfigChannel;
 
-  connect memory to percept_cog.memory;
+  connect perception_memory to percept_cog.memory;
   connect aligner_config to percept_cog.aligner_config;
   connect aligner_state to percept_cog.aligner_state;
   connect localization_channels::PoseChannel to percept_cog.pose;

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -130,6 +130,32 @@ TEST_CASE("LogProcessor callbacks")
     REQUIRE(expected == actual);
   }
 
+  SECTION("one topic callback with logged message metadata")
+  {
+    const auto* topic = *topics.begin();
+    auto actual = std::map<std::string, std::vector<TestMsgRecord>>();
+
+    REQUIRE(LogProcessor(
+              std::make_unique<TestLogReader>(
+                "test_log", std::optional<LogInterval>{}, std::optional<RelativeInterval>{}, msgs),
+              {})
+              .add_tappy_msg_callback<MsgType>(
+                topic,
+                [&actual, &topic](const LoggedMessage& logged_message, const MsgType& msg)
+                {
+                  CHECK(logged_message.topic == topic);
+                  CHECK(
+                    logged_message.sequence_number ==
+                    static_cast<uint32_t>(logged_message.publish_time.get_nanoseconds()));
+                  CHECK(logged_message.log_time == logged_message.publish_time);
+                  actual[topic].push_back(TestMsgRecord{.publish_time = logged_message.publish_time, .msg = msg});
+                })
+              .process());
+
+    const auto expected = std::map<std::string, std::vector<TestMsgRecord>>({{topic, msgs.at(topic)}});
+    REQUIRE(expected == actual);
+  }
+
   SECTION("throw on bad message when configured")
   {
     const auto* topic = *topics.begin();
@@ -247,6 +273,7 @@ TEST_CASE("LogProcessor callbacks")
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
             clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+        .is_amended = false,
       });
     topic_result = processor.try_get_topic_metadata("/topic2");
     REQUIRE(topic_result);
@@ -262,6 +289,7 @@ TEST_CASE("LogProcessor callbacks")
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
             clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+        .is_amended = false,
       });
     REQUIRE_FALSE(processor.try_get_topic_metadata("INVALID_TOPIC"));
   }

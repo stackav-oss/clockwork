@@ -1,0 +1,45 @@
+diff --git BUILD.bazel BUILD.bazel
+index 0aead56..ce127ef 100644
+--- BUILD.bazel
++++ BUILD.bazel
+@@ -1,3 +1,5 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
+ cc_library(
+     name = "cpptrace",
+     srcs = glob([
+@@ -5,9 +7,9 @@ cc_library(
+         "src/**/*.cpp",
+     ]),
+     local_defines = [
+-        "CPPTRACE_GET_SYMBOLS_WITH_LIBDWARF",
++        "CPPTRACE_GET_SYMBOLS_WITH_LIBDL",
+         "CPPTRACE_DEMANGLE_WITH_CXXABI",
+-        "CPPTRACE_UNWIND_WITH_LIBUNWIND"
++        "CPPTRACE_UNWIND_WITH_UNWIND"
+     ],
+     hdrs = glob([
+         "include/cpptrace/*.hpp",
+@@ -17,10 +19,7 @@ cc_library(
+         "include",
+         "src"
+     ],
+-    deps = [
+-        "@libdwarf//:libdwarf",
+-        "@libunwind//:libunwind"
+-    ],
++    linkopts = ["-ldl"],
+     copts = [
+         "-Wall",
+         "-Wextra",
+diff --git MODULE.bazel MODULE.bazel
+index d2a952c..b43173d 100644
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -5,5 +5,6 @@
+ bazel_dep(name = "googletest", version = "1.14.0")
+ bazel_dep(name = "bazel_skylib", version = "1.7.1")
++bazel_dep(name = "rules_cc", version = "0.2.18")
+ bazel_dep(name = "rules_foreign_cc", version = "0.11.1")
+ bazel_dep(name = "zstd", version = "1.5.6")
+ bazel_dep(name = "zlib", version = "1.3.1")

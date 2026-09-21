@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Unimplemented Audio source IR node."""
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header
 from clockwork.dsl.ir import expr, node, typesys

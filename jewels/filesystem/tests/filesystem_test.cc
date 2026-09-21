@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/error_code.hh"
@@ -7,7 +7,10 @@
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/error_code_stringmakers.hh" // IWYU pragma: keep
+#include "jewels/testing/expected_stringmakers.hh"   // IWYU pragma: keep
 #include "jewels/testing/filesystem_wrapper.hh"
+#include "jewels/testing/path_stringmakers.hh" // IWYU pragma: keep
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -26,8 +29,11 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <thread>
 #include <type_traits>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -94,16 +100,17 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
   TestType filesys{memory_resource};
   filesys.set_verbosity(Filesystem::ErrorVerbosity::verbose);
 
+  constexpr std::string_view test_data = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
   using namespace std::literals;
   SECTION("Open")
   {
     const auto test_file_path = test_dir.get_path() / "TEST_FILE"sv;
-    const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     REQUIRE(filesys.open(test_file_path.string()) == jewels::unexpected(make_error_code(ENOENT)));
 
-    REQUIRE(create_test_file(
-      test_file_path.string(), std::as_bytes(std::span{expected_str.data(), expected_str.size()}), filesys));
+    REQUIRE(
+      create_test_file(test_file_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
 
     REQUIRE(filesys.open(test_file_path.string()));
 
@@ -119,31 +126,30 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
   SECTION("Read")
   {
     const auto test_file_path = test_dir.get_path() / "TEST_FILE"sv;
-    const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    REQUIRE(create_test_file(
-      test_file_path.string(), std::as_bytes(std::span{expected_str.data(), expected_str.size()}), filesys));
+    REQUIRE(
+      create_test_file(test_file_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
     auto open_result = filesys.open(test_file_path.string());
     REQUIRE(open_result);
 
-    std::string read_str(expected_str.size(), '\0');
+    std::string read_str(test_data.size(), '\0');
     REQUIRE(
       filesys.read(*open_result, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
       read_str.size());
-    REQUIRE(read_str == expected_str);
+    REQUIRE(read_str == test_data);
     REQUIRE(filesys.read(*open_result, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) == 0U);
     REQUIRE(
       filesys.read(*open_result, 1U, std::as_writable_bytes(std::span{read_str.data(), read_str.size() - 2U})) ==
       read_str.size() - 2U);
-    REQUIRE(read_str.substr(0, expected_str.size() - 2U) == expected_str.substr(1U, expected_str.size() - 2U));
+    REQUIRE(read_str.substr(0, test_data.size() - 2U) == test_data.substr(1U, test_data.size() - 2U));
     REQUIRE(
       filesys.read(
-        *open_result, expected_str.size() - 1U, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
+        *open_result, test_data.size() - 1U, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
       1U);
 
     REQUIRE(
       filesys.read(
-        *open_result, expected_str.size(), std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) == 0U);
+        *open_result, test_data.size(), std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) == 0U);
 
     if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
     {
@@ -157,13 +163,13 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
       filesys.inject_read_error(EBADMSG, 1U);
       REQUIRE(
         filesys.read(*open_result, 0U, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
-        expected_str.size());
+        test_data.size());
       REQUIRE(
         filesys.read(*open_result, 0U, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
         jewels::unexpected(make_error_code(EBADMSG)));
       REQUIRE(
         filesys.read(*open_result, 0U, std::as_writable_bytes(std::span{read_str.data(), read_str.size()})) ==
-        expected_str.size());
+        test_data.size());
     }
 
     const auto open_fd = **open_result;
@@ -194,32 +200,126 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
 
   SECTION("copy_file")
   {
-    const auto test_file_path1 = test_dir.get_path() / "TEST_FILE1";
-    const auto test_file_path2 = test_dir.get_path() / "TEST_FILE2";
-    const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    REQUIRE(create_test_file(
-      test_file_path1.string(), std::as_bytes(std::span{expected_str.data(), expected_str.size()}), filesys));
+    const auto get_permission_bits = [](const Path& path)
+    {
+      struct stat statbuf{};
+      REQUIRE(::stat(path.c_str(), &statbuf) == 0);
+      return static_cast<mode_t>(statbuf.st_mode & (static_cast<mode_t>(S_IRWXU) | S_IRWXG | S_IRWXO));
+    };
 
-    REQUIRE(filesys.copy_file(test_file_path1.string(), test_file_path2.string()));
-    auto read_result = read_test_file(test_file_path2.string(), filesys);
-    REQUIRE(read_result);
-    REQUIRE(*read_result == expected_str);
+    SECTION("copies data")
+    {
+      const auto test_file_path1 = test_dir.get_path() / "TEST_FILE1";
+      const auto test_file_path2 = test_dir.get_path() / "TEST_FILE2";
+      REQUIRE(create_test_file(
+        test_file_path1.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
+
+      REQUIRE(filesys.copy_file(test_file_path1.string(), test_file_path2.string()));
+      auto read_result = read_test_file(test_file_path2.string(), filesys);
+      REQUIRE(read_result);
+      REQUIRE(*read_result == test_data);
+    }
+
+    SECTION("copies entire file when block_size forces multiple sendfile calls")
+    {
+      const auto test_file_path1 = test_dir.get_path() / "TEST_FILE1_SMALL_BLOCK";
+      const auto test_file_path2 = test_dir.get_path() / "TEST_FILE2_SMALL_BLOCK";
+      constexpr size_t block_size = 7U;
+
+      REQUIRE(create_test_file(
+        test_file_path1.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
+
+      REQUIRE(filesys.copy_file(test_file_path1.string(), test_file_path2.string(), block_size));
+      auto read_result = read_test_file(test_file_path2.string(), filesys);
+      REQUIRE(read_result);
+      REQUIRE(*read_result == test_data);
+    }
+
+    SECTION("preserves executable bits while keeping destination owner writable")
+    {
+      const auto source_path = test_dir.get_path() / "EXECUTABLE_SOURCE";
+      const auto destination_path = test_dir.get_path() / "EXECUTABLE_COPY";
+
+      constexpr mode_t executable_read_only_mode = S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+      constexpr mode_t expected_destination_mode = executable_read_only_mode | S_IWUSR;
+
+      REQUIRE(
+        create_test_file(source_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
+      REQUIRE(::chmod(source_path.c_str(), executable_read_only_mode) == 0);
+
+      REQUIRE(filesys.copy_file(source_path.string(), destination_path.string()));
+
+      auto read_result = read_test_file(destination_path.string(), filesys);
+      REQUIRE(read_result);
+      REQUIRE(*read_result == test_data);
+      REQUIRE(get_permission_bits(destination_path) == expected_destination_mode);
+    }
+
+    SECTION("read-only source produces owner-writable destination")
+    {
+      const auto source_path = test_dir.get_path() / "READ_ONLY_SOURCE";
+      const auto destination_path = test_dir.get_path() / "READ_ONLY_COPY";
+
+      constexpr mode_t read_only_mode = S_IRUSR | S_IRGRP | S_IROTH;
+      constexpr mode_t expected_destination_mode = read_only_mode | S_IWUSR;
+
+      REQUIRE(
+        create_test_file(source_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
+      REQUIRE(::chmod(source_path.c_str(), read_only_mode) == 0);
+
+      REQUIRE(filesys.copy_file(source_path.string(), destination_path.string()));
+
+      auto read_result = read_test_file(destination_path.string(), filesys);
+      REQUIRE(read_result);
+      REQUIRE(*read_result == test_data);
+      REQUIRE(get_permission_bits(destination_path) == expected_destination_mode);
+
+      auto open_result = filesys.open(destination_path.string(), O_RDWR);
+      REQUIRE(open_result);
+      const std::string overwrite_str = "ZZ";
+      REQUIRE(
+        filesys.write(*open_result, 0U, std::as_bytes(std::span{overwrite_str.data(), overwrite_str.size()})) ==
+        overwrite_str.size());
+    }
+
+    SECTION("fails when destination directory is not writable")
+    {
+      if (::geteuid() == 0)
+      {
+        SUCCEED("Skipping permission denied check for root user");
+      }
+      else
+      {
+        const auto source_path = test_dir.get_path() / "SOURCE_FILE";
+        const auto destination_dir = test_dir.get_path() / "NO_WRITE_DIR";
+        const auto destination_path = destination_dir / "COPY_FILE";
+
+        REQUIRE(create_test_file(
+          source_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
+        REQUIRE(filesys.create_directory(destination_dir.string()));
+        REQUIRE(::chmod(destination_dir.c_str(), S_IRUSR | S_IXUSR) == 0);
+
+        REQUIRE(
+          filesys.copy_file(source_path.string(), destination_path.string()) ==
+          jewels::unexpected(make_error_code(EACCES)));
+
+        REQUIRE(::chmod(destination_dir.c_str(), S_IRWXU) == 0);
+      }
+    }
   }
 
   SECTION("Write")
   {
     const auto test_file_path = test_dir.get_path() / "TEST_FILE";
-    const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     auto open_result = filesys.open(test_file_path.string(), O_CREAT | O_EXCL | O_WRONLY);
     REQUIRE(open_result);
 
     REQUIRE(
-      filesys.write(*open_result, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
-      expected_str.size());
+      filesys.write(*open_result, std::as_bytes(std::span{test_data.data(), test_data.size()})) == test_data.size());
     auto read_result = read_test_file(test_file_path.string(), filesys);
     REQUIRE(read_result);
-    REQUIRE(*read_result == expected_str);
+    REQUIRE(*read_result == test_data);
 
     const std::string expected_str2 = "ABXXXXGHIJKLMNOPQRSTUVWXYZ";
     const std::string overwrite_str = "XXXX";
@@ -234,44 +334,41 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
     {
       filesys.inject_write_error(EBADMSG, 1U);
       REQUIRE(
-        filesys.write(*open_result, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
-        expected_str.size());
+        filesys.write(*open_result, std::as_bytes(std::span{test_data.data(), test_data.size()})) == test_data.size());
       REQUIRE(
-        filesys.write(*open_result, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
+        filesys.write(*open_result, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
         jewels::unexpected(make_error_code(EBADMSG)));
       REQUIRE(
-        filesys.write(*open_result, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
-        expected_str.size());
+        filesys.write(*open_result, std::as_bytes(std::span{test_data.data(), test_data.size()})) == test_data.size());
 
       filesys.inject_write_error(EBADMSG, 1U);
       REQUIRE(
-        filesys.write(*open_result, 0U, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
-        expected_str.size());
+        filesys.write(*open_result, 0U, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
+        test_data.size());
       REQUIRE(
-        filesys.write(*open_result, 0U, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
+        filesys.write(*open_result, 0U, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
         jewels::unexpected(make_error_code(EBADMSG)));
       REQUIRE(
-        filesys.write(*open_result, 0U, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
-        expected_str.size());
+        filesys.write(*open_result, 0U, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
+        test_data.size());
     }
 
     const auto open_fd = **open_result;
     REQUIRE(open_result->close());
     const FileDescriptor closed_fd{open_fd};
     REQUIRE(
-      filesys.write(closed_fd, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
+      filesys.write(closed_fd, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
       jewels::unexpected(make_error_code(EBADF)));
     REQUIRE(
-      filesys.write(closed_fd, 0U, std::as_bytes(std::span{expected_str.data(), expected_str.size()})) ==
+      filesys.write(closed_fd, 0U, std::as_bytes(std::span{test_data.data(), test_data.size()})) ==
       jewels::unexpected(make_error_code(EBADF)));
   }
 
   SECTION("SetPos/GetPos")
   {
     const auto test_file_path = test_dir.get_path() / "TEST_FILE";
-    const std::string expected_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    REQUIRE(create_test_file(
-      test_file_path.string(), std::as_bytes(std::span{expected_str.data(), expected_str.size()}), filesys));
+    REQUIRE(
+      create_test_file(test_file_path.string(), std::as_bytes(std::span{test_data.data(), test_data.size()}), filesys));
 
     auto open_result = filesys.open(test_file_path.string());
     REQUIRE(open_result);
@@ -279,15 +376,15 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
     REQUIRE(filesys.get_position(*open_result) == 0U);
     REQUIRE(filesys.set_position(*open_result, 1U));
     REQUIRE(filesys.get_position(*open_result) == 1U);
-    REQUIRE(filesys.set_position(*open_result, expected_str.size()));
-    REQUIRE(filesys.get_position(*open_result) == expected_str.size());
+    REQUIRE(filesys.set_position(*open_result, test_data.size()));
+    REQUIRE(filesys.get_position(*open_result) == test_data.size());
 
     if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
     {
       filesys.inject_lseek_error(EBADMSG, 1U);
-      REQUIRE(filesys.get_position(*open_result) == expected_str.size());
+      REQUIRE(filesys.get_position(*open_result) == test_data.size());
       REQUIRE(filesys.get_position(*open_result) == jewels::unexpected(make_error_code(EBADMSG)));
-      REQUIRE(filesys.get_position(*open_result) == expected_str.size());
+      REQUIRE(filesys.get_position(*open_result) == test_data.size());
 
       filesys.inject_lseek_error(EBADMSG, 1U);
       REQUIRE(filesys.set_position(*open_result, 0U));
@@ -314,7 +411,7 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
 
     if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
     {
-      filesys.inject_symlink_error(EBADMSG, 1U);
+      filesys.inject_link_error(EBADMSG, 1U);
       REQUIRE(filesys.create_symlink(test_file_path1.string(), test_file_path2.string()));
       REQUIRE(
         filesys.create_symlink(test_file_path1.string(), test_file_path2.string()) ==
@@ -327,6 +424,34 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
       REQUIRE(filesys.read_symlink(test_file_path2) == test_file_path1.string_view());
       REQUIRE(filesys.read_symlink(test_file_path2) == jewels::unexpected(make_error_code(EBADMSG)));
       REQUIRE(filesys.read_symlink(test_file_path2) == test_file_path1.string_view());
+
+      filesys.inject_unlink_error(EBADMSG, 1U);
+      REQUIRE(filesys.unlink(test_file_path2.string()));
+      REQUIRE(filesys.unlink(test_file_path2.string()) == jewels::unexpected(make_error_code(EBADMSG)));
+      REQUIRE(filesys.unlink(test_file_path2.string()) == jewels::unexpected(make_error_code(ENOENT)));
+    }
+  }
+
+  SECTION("Hardlink/Unlink")
+  {
+    const auto test_file_path1 = test_dir.get_path() / "TEST_FILE1";
+    const auto test_file_path2 = test_dir.get_path() / "TEST_FILE2";
+    REQUIRE(filesys.unlink(test_file_path2.string()) == jewels::unexpected(make_error_code(ENOENT)));
+    REQUIRE(create_test_file(test_file_path1.string(), {}, filesys));
+    REQUIRE(filesys.create_hardlink(test_file_path1.string_view(), test_file_path2.string_view()));
+    REQUIRE(filesys.exists(test_file_path2.string_view()) == true);
+    REQUIRE(filesys.unlink(test_file_path2.string()));
+
+    if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
+    {
+      filesys.inject_link_error(EBADMSG, 1U);
+      REQUIRE(filesys.create_hardlink(test_file_path1.string(), test_file_path2.string()));
+      REQUIRE(
+        filesys.create_hardlink(test_file_path1.string(), test_file_path2.string()) ==
+        jewels::unexpected(make_error_code(EBADMSG)));
+      REQUIRE(
+        filesys.create_hardlink(test_file_path1.string(), test_file_path2.string()) ==
+        jewels::unexpected(make_error_code(EEXIST)));
 
       filesys.inject_unlink_error(EBADMSG, 1U);
       REQUIRE(filesys.unlink(test_file_path2.string()));
@@ -349,6 +474,16 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
     REQUIRE(filesys.touch(test_file_path1.string()));
     const auto after_last_write_time = filesys.get_last_write_time(test_file_path1.string());
     REQUIRE(*before_last_write_time < *after_last_write_time);
+
+    if constexpr (std::is_same_v<TestType, Filesystem>)
+    {
+      const auto test_file_path2 = test_dir.get_path() / "TEST_DIR2//TEST_FILE2";
+      REQUIRE(filesys.touch(test_file_path2.string(), S_IRWXU));
+      struct stat statbuf{};
+      REQUIRE(::stat(test_file_path2.c_str(), &statbuf) == 0);
+      const auto expected_mode2 = S_IFREG | S_IRWXU;
+      REQUIRE(statbuf.st_mode == expected_mode2);
+    }
   }
 
   SECTION("create_temporary_directory")
@@ -759,6 +894,99 @@ TEMPLATE_TEST_CASE("Filesystem", "[filesystem]", Filesystem, FilesystemWrapper)
       REQUIRE(filesys.exists(test_file_child_path.string()) == false);
       REQUIRE(filesys.exists(test_dir_child_path.string()) == false);
     }
+  }
+
+  SECTION("Search Path")
+  {
+    using namespace std::literals;
+
+    {
+      const auto result = filesys.search_path("nonexistent-binary-xyz");
+      REQUIRE(!result);
+      REQUIRE(result.error() == make_error_code(ENOENT));
+    }
+
+    const auto bin_dir1 = test_dir.get_path() / "bin1"sv;
+    const auto bin_dir2 = test_dir.get_path() / "bin2"sv;
+    REQUIRE(filesys.create_directory(bin_dir1));
+    REQUIRE(filesys.create_directory(bin_dir2));
+
+    const auto path_value =
+      (std::pmr::string{bin_dir1.c_str(), memory_resource} + ":" + std::pmr::string{bin_dir2.c_str(), memory_resource});
+    REQUIRE(::setenv("PATH", path_value.c_str(), 1) == 0); // NOLINT(concurrency-mt-unsafe) test is single threaded
+
+    constexpr auto testapp = "testapp"sv;
+    const auto app_path1 = bin_dir1 / testapp;
+    REQUIRE(create_test_file(app_path1.string(), {}, filesys));
+
+    REQUIRE(::chmod(app_path1.c_str(), S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == 0);
+
+    // First directory can contain an app
+    const auto result1 = filesys.search_path(testapp);
+    REQUIRE(result1);
+    REQUIRE(result1.value().string() == app_path1.string());
+
+    // Second directory can contain an app
+    constexpr auto testapp2 = "testapp2"sv;
+    const auto app_path2 = bin_dir2 / testapp2;
+    REQUIRE(create_test_file(app_path2.string(), {}, filesys));
+    REQUIRE(::chmod(app_path2.c_str(), S_IRWXU) == 0);
+
+    const auto result2 = filesys.search_path(testapp2);
+    REQUIRE(result2);
+    REQUIRE(result2.value().string() == app_path2.string());
+
+    // Test that non-executable files are not returned
+    constexpr auto notexec = "notexec"sv;
+    const auto non_exec_path = bin_dir1 / notexec;
+    REQUIRE(create_test_file(non_exec_path.string(), {}, filesys));
+    // Don't set executable bit - permissions default to 0644
+
+    const auto result3 = filesys.search_path(notexec);
+    REQUIRE(!result3);
+    REQUIRE(result3.error() == make_error_code(ENOENT));
+
+    {
+      REQUIRE(::chmod(app_path1.c_str(), S_IRUSR | S_IWUSR | S_IRUSR | S_IXUSR) == 0); // 500 octal
+      REQUIRE(filesys.search_path(testapp));
+      REQUIRE(::chmod(app_path1.c_str(), S_IRUSR | S_IWUSR | S_IXGRP) == 0); // 050 octal
+      REQUIRE(filesys.search_path(testapp));
+      REQUIRE(::chmod(app_path1.c_str(), S_IRUSR | S_IWUSR | S_IXOTH) == 0); // 005 octal
+      REQUIRE(filesys.search_path(testapp));
+    }
+
+    // Test error responses
+    if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
+    {
+      // Found it previously, but now we can't access it
+      filesys.inject_search_path_error(EACCES, 0U);
+      const auto error_result = filesys.search_path(testapp);
+      REQUIRE(!error_result);
+      REQUIRE(error_result.error() == make_error_code(EACCES));
+
+      const auto success_result = filesys.search_path(testapp);
+      REQUIRE(success_result);
+    }
+
+    if constexpr (std::is_same_v<TestType, FilesystemWrapper>)
+    {
+      const auto injected_path = test_dir.get_path() / "injected" / "path"sv;
+      const auto injected_path_obj = filesystem::Path{injected_path.string(), memory_resource};
+
+      filesys.inject_search_path_result(injected_path_obj);
+
+      const auto result4 = filesys.search_path("any-binary");
+      REQUIRE(result4);
+      REQUIRE(result4.value().string() == injected_path.string());
+
+      // Second call should NOT return injected result (was cleared after first use)
+      const auto result5 = filesys.search_path("any-binary");
+      REQUIRE(!result5);
+      REQUIRE(result5.error() == make_error_code(ENOENT));
+    }
+
+    // Clean up environment
+    ::unsetenv("PATH"); // NOLINT(concurrency-mt-unsafe) thread is single threaded
   }
 }
 

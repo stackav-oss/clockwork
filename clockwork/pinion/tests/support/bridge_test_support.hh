@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,10 +6,11 @@
 #include "clockwork/pinion/detail/tcp_socket.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
 #include "clockwork/pinion/tcp_bridge_server.hh"
+#include "clockwork/pinion/tests/support/bridge_test_message_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/networking/socket_address.hh"
 
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +35,13 @@ static constexpr auto short_recv_timeout = std::chrono::milliseconds(1);
 
 /// Host name for a local socket
 static constexpr auto local_socket_host = std::string_view{"127.0.0.1"};
+
+/// Option to specify whether to send an acknowledgement after receiving a message
+enum class AckOption : uint8_t
+{
+  send_ack,
+  dont_send_ack,
+};
 
 /// Compare counters against the expected counters.
 ///
@@ -212,6 +220,7 @@ recv_and_unpack(int sock, const Msg& expected_message, std::chrono::nanoseconds 
 /// @param[in] expected_publish_time Expected publish timestamp
 /// @param[in] expected_commit_time Expected commit timestamp
 /// @param[in] recv_timeout Receive timeout
+/// @param[in] ack_option Option to specify whether to send an ack for the payload
 /// @return True on success
 template <typename Msg>
 [[nodiscard]] bool check_next_payload(
@@ -220,12 +229,14 @@ template <typename Msg>
   const Msg& expected_message,
   int64_t expected_publish_time,
   int64_t expected_commit_time,
+  AckOption ack_option = AckOption::send_ack,
   std::chrono::nanoseconds recv_timeout = default_recv_timeout);
 
 /// Receive a message and check the payload
 /// @tparam Msg Message type
 /// @param[in] sock Socket
 /// @param[in] expected_seqno Expected sequence number
+/// @param[in] ack_option Option to specify whether to send an ack for the payload
 /// @param[in] recv_timeout Receive timeout
 /// @return True on success
 template <typename Msg>
@@ -233,13 +244,14 @@ template <typename Msg>
   int sock,
   uint64_t expected_seqno,
   const Msg& expected_message,
+  AckOption ack_option = AckOption::send_ack,
   std::chrono::nanoseconds recv_timeout = default_recv_timeout);
 
 /// Make a random message payload
 /// @tparam message_size Message size
 /// @return Random message payload
 template <size_t message_size>
-[[nodiscard]] std::unique_ptr<std::array<std::byte, message_size>> make_random_message();
+[[nodiscard]] std::unique_ptr<Tappy<BridgeTestMessage<message_size>>> make_random_message();
 
 } // namespace clockwork::pinion::support
 

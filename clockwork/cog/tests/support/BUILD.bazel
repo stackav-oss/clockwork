@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -20,130 +20,17 @@ cc_library(
         "//clockwork/cog:cog_inputs",
         "//clockwork/cog:cog_memory_resources",
         "//clockwork/cog:cog_publishers",
-        "//clockwork/cog:cog_state",
         "//clockwork/cog:cog_states",
         "//clockwork/cog:cog_statistics",
         "//clockwork/cog:cog_timers",
-        "//clockwork/cog:detail",
-        "//clockwork/cog:simple_cog",
-        "//clockwork/common:abstract_cog",
         "//clockwork/common:process_description_clk_cc",
         "//clockwork/diagnostics:reporter",
-        "//clockwork/runners:online_cog_queue",
-        "//clockwork/runners:online_runner",
-        "//clockwork/runners:thread_pool",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
-        "//jewels/memory:pointers",
+        "//jewels/callsig:outcome",
+        "//jewels/meta:integer_sequence",
         "//jewels/std:expected",
         "//jewels/time:sync_time",
         "//jewels/uuid",
-        "@catch2//:catch2_main",
         "@gsl//:util",
-    ],
-)
-
-cc_library(
-    name = "legacy_unit_test_cogs",
-    srcs = [
-        "legacy_unit_test_cogs.cc",
-        "legacy_unit_test_cogs.inl",
-    ],
-    hdrs = ["legacy_unit_test_cogs.hh"],
-    data = [":legacy_unit_test_cogs_clk"],
-    deps = [
-        ":legacy_unit_test_cogs_dial",
-        ":legacy_unit_test_cogs_impl",
-        ":unit_test_messages_clk_cc",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/diagnostics:reporter",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-    alwayslink = True,
-)
-
-clk(
-    name = "legacy_unit_test_cogs_clk",
-    srcs = ["legacy_unit_test_cogs.clk"],
-    outs = [
-        "legacy_unit_test_cogs.cc",
-        "legacy_unit_test_cogs.hh",
-        "legacy_unit_test_cogs.inl",
-        "legacy_unit_test_cogs_dial.cc",
-        "legacy_unit_test_cogs_dial.hh",
-        "legacy_unit_test_cogs_dial.inl",
-        "legacy_unit_test_cogs_test.cc",
-        "legacy_unit_test_cogs_test.hh",
-        "legacy_unit_test_cogs_test.inl",
-    ],
-    deps = [
-        ":unit_test_configs_clk",
-        ":unit_test_messages_clk",
-        ":unit_test_states_clk",
-        "//clockwork/diagnostics:report_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
-    ],
-)
-
-cc_library(
-    name = "legacy_unit_test_cogs_dial",
-    srcs = [
-        "legacy_unit_test_cogs_dial.cc",
-        "legacy_unit_test_cogs_dial.inl",
-    ],
-    hdrs = ["legacy_unit_test_cogs_dial.hh"],
-    data = [":legacy_unit_test_cogs_clk"],
-    deps = [
-        ":unit_test_configs_clk_cc",
-        ":unit_test_cxx_state",
-        ":unit_test_messages_clk_cc",
-        ":unit_test_states_clk_cc",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/diagnostics:reporter",
-        "//clockwork/dial:include_common",
-    ],
-)
-
-cc_library(
-    name = "legacy_unit_test_cogs_impl",
-    srcs = ["legacy_unit_test_cogs_impl.cc"],
-    deps = [
-        ":legacy_unit_test_cogs_dial",
-        ":unit_test_configs_clk_cc",
-        ":unit_test_messages_clk_cc",
-        ":unit_test_states_clk_cc",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
-        "//jewels/memory:memory_resource",
-        "@catch2//:catch2_main",
-    ],
-)
-
-cc_library(
-    name = "legacy_unit_test_cogs_test",
-    srcs = [
-        "legacy_unit_test_cogs_test.cc",
-        "legacy_unit_test_cogs_test.inl",
-    ],
-    hdrs = ["legacy_unit_test_cogs_test.hh"],
-    data = [":legacy_unit_test_cogs_clk"],
-    deps = [
-        ":legacy_unit_test_cogs",
-        ":unit_test_cog",
-        "//clockwork/common/tests/support:dummy_cog_queue",
-        "//jewels/memory:memory_resource",
-        "//jewels/time:sync_time",
     ],
 )
 
@@ -154,6 +41,9 @@ clk(
         "mock_metrics_schemas_clk_cc.cc",
         "mock_metrics_schemas_clk_cc.hh",
         "mock_metrics_schemas_clk_cc.inl",
+        "mock_metrics_schemas_clk_cc_types.cc",
+        "mock_metrics_schemas_clk_cc_types.hh",
+        "mock_metrics_schemas_clk_cc_types.inl",
     ],
     cpp_deps = [
         "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
@@ -168,125 +58,9 @@ clk(
 )
 
 cc_library(
-    name = "unit_test_cog",
-    srcs = ["unit_test_cog.inl"],
-    hdrs = ["unit_test_cog.hh"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork/cog:cog_diagnostics",
-        "//clockwork/cog:cog_passthrough_observer",
-        "//clockwork/cog:cog_publishers",
-        "//clockwork/cog:cog_state",
-        "//clockwork/cog:cog_statistics",
-        "//clockwork/cog:interface",
-        "//clockwork/cog:time_since_last_exec_handler",
-        "//clockwork/cog:unit_test_support",
-        "//clockwork/common:abstract_cog",
-        "//clockwork/common:abstract_cog_queue",
-        "//clockwork/common:abstract_timer",
-        "//clockwork/common:cog_execution_error_clk_cc",
-        "//clockwork/common:forward",
-        "//clockwork/common:process_description_clk_cc",
-        "//clockwork/common/tests/support:dummy_timer",
-        "//clockwork/diagnostics:report_clk_cc",
-        "//clockwork/pinion:buffer",
-        "//clockwork/pinion:observer",
-        "//clockwork/pinion:publishable",
-        "//clockwork/pinion:publisher_handle",
-        "//clockwork/pinion:shm_channel_factory",
-        "//clockwork/pinion:shm_publisher",
-        "//clockwork/pinion:subscriber_handle",
-        "//jewels/callsig:outcome",
-        "//jewels/callsig:outparam",
-        "//jewels/container:compare",
-        "//jewels/filesystem:path",
-        "//jewels/log_cerr",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
-        "//jewels/std:expected",
-        "//jewels/testing:tmp_directory_guard",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-        "@fmt",
-    ],
-)
-
-clk(
-    name = "unit_test_cogs_clk",
-    srcs = ["unit_test_cogs.clk"],
-    outs = [
-        "unit_test_cogs_clk_cc.cc",
-        "unit_test_cogs_clk_cc.hh",
-        "unit_test_cogs_clk_cc.inl",
-        "unit_test_cogs_clk_cc_dial.cc",
-        "unit_test_cogs_clk_cc_dial.hh",
-        "unit_test_cogs_clk_cc_dial.inl",
-        "unit_test_cogs_clk_cc_test.cc",
-        "unit_test_cogs_clk_cc_test.hh",
-        "unit_test_cogs_clk_cc_test.inl",
-    ],
-    cpp_deps = [
-        ":unit_test_configs_clk_cc",
-        ":unit_test_states_clk_cc",
-        ":unit_test_messages_clk_cc",
-        "//clockwork/diagnostics:report_clk_cc",
-    ],
-    generate = [
-        "cpp",
-        "cpp_cog",
-        "cpp_test_cog",
-    ],
-    deps = [
-        ":unit_test_configs_clk",
-        ":unit_test_messages_clk",
-        ":unit_test_states_clk",
-        "//clockwork/diagnostics:report_clk",
-    ],
-)
-
-cc_library(
-    name = "unit_test_cogs_clk_cc_impl",
-    srcs = ["unit_test_cogs_clk_cc_impl.cc"],
-    deps = [
-        ":unit_test_cogs_clk_cc_dial",
-        ":unit_test_configs_clk_cc",
-        ":unit_test_messages_clk_cc",
-        ":unit_test_states_clk_cc",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
-        "//jewels/memory:memory_resource",
-        "@catch2//:catch2_main",
-    ],
-)
-
-clk(
-    name = "unit_test_configs_clk",
-    srcs = ["unit_test_configs.clk"],
-    outs = [
-        "unit_test_configs_clk_cc.cc",
-        "unit_test_configs_clk_cc.hh",
-        "unit_test_configs_clk_cc.inl",
-    ],
-    generate = ["cpp"],
-)
-
-cc_library(
     name = "unit_test_cxx_state",
     hdrs = ["unit_test_cxx_state.hh"],
     deps = ["//jewels/memory:memory_resource"],
-)
-
-clk(
-    name = "unit_test_messages_clk",
-    srcs = ["unit_test_messages.clk"],
-    outs = [
-        "unit_test_messages_clk_cc.cc",
-        "unit_test_messages_clk_cc.hh",
-        "unit_test_messages_clk_cc.inl",
-    ],
-    generate = ["cpp"],
 )
 
 clk(
@@ -296,6 +70,9 @@ clk(
         "unit_test_states_clk_cc.cc",
         "unit_test_states_clk_cc.hh",
         "unit_test_states_clk_cc.inl",
+        "unit_test_states_clk_cc_types.cc",
+        "unit_test_states_clk_cc_types.hh",
+        "unit_test_states_clk_cc_types.inl",
     ],
     cpp_deps = [":unit_test_cxx_state"],
     generate = ["cpp"],

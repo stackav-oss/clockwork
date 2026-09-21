@@ -1,12 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/dial/msg_input.hh"
+#include "clockwork/dial/include_common.hh"
 #include "clockwork/io/udp_sample_system/just_a_uint32_clk_cc.hh"
 #include "clockwork/io/udp_sample_system/ping_pong_clk_cc_dial.hh"
 #include "clockwork/io/var_packet_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "jewels/container/circular_buffer.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/memory/bits.hh"
 

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -43,7 +43,8 @@ struct TestIoConnection : public pinion::IoConnection
 
   /// Connect subscriber.  Succeeds the first time.
   jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, pinion::IoConnection::Error> connect_subscriber(
-    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/) final;
+    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/,
+    std::shared_ptr<pinion::AbstractChannel> /*subscriber*/) final;
 
   /// Whether or not the publisher is set.
   /// Needed to avoid changing the API just for a unit test.

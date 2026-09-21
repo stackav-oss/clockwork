@@ -1,16 +1,17 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/channel_observer_client.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <string_view>
@@ -24,13 +25,13 @@ class ChannelObserver final : public ::clockwork::pinion::Observer
 public:
   /// Constructor
   /// @param[in] memory_resource Memory resource
-  /// @param[in] buffer_ptr Pinion buffer pointer
+  /// @param[in] subscriber Pinion subscription
   /// @param[in] client_ptr Observer client pointer
   /// @param[in] channel_name Channel name
   /// @param[in] channel_type Channel type
   ChannelObserver(
     ::jewels::memory::MemoryResource memory_resource,
-    ::jewels::memory::ObjectPtr<::clockwork::pinion::Buffer> buffer_ptr,
+    std::shared_ptr<AbstractChannel> subscriber,
     ::jewels::memory::ObjectPtr<ChannelObserverClient> client_ptr,
     std::string_view channel_name,
     ::clockwork_logging::ChannelType channel_type);
@@ -53,7 +54,7 @@ private:
   ::jewels::memory::MemoryResource mem_res_;
 
   /// Pinion buffer pointer
-  ::jewels::memory::ObjectPtr<::clockwork::pinion::Buffer> buffer_ptr_;
+  std::shared_ptr<AbstractChannel> subscriber_;
 
   /// Client pointer
   ::jewels::memory::ObjectPtr<ChannelObserverClient> client_ptr_;

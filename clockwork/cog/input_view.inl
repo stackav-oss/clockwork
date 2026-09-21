@@ -4,11 +4,13 @@
 
 #include "clockwork/cog/cog_statistics.hh"
 #include "clockwork/dsl/cog/ten_nanosecond_type.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -17,14 +19,16 @@
 #include "jewels/time/sync_time.hh"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ranges>
 #include <span>
-#include <sys/types.h>
 #include <tuple>
 #include <typeinfo>
 #include <utility>
@@ -34,19 +38,19 @@ namespace clockwork
 {
 
 template <typename Policy>
-InputView<Policy>::InputView(pinion::SubscriberHandle subscriber, jewels::memory::MemoryResource resource) noexcept
-  : InputView<Policy>::InputView(subscriber, false, resource)
+InputView<Policy>::InputView(
+  std::shared_ptr<pinion::AbstractChannel> channel, jewels::memory::MemoryResource resource) noexcept
+  : InputView<Policy>::InputView(std::move(channel), false, resource)
 {
 }
 
 template <typename Policy>
 InputView<Policy>::InputView(
-  pinion::SubscriberHandle subscriber,
+  std::shared_ptr<pinion::AbstractChannel> channel,
   size_t metrics_batch_size,
   jewels::memory::MemoryResource resource,
   bool running_offline) noexcept
-  : subscriber_(std::move(subscriber)),
-    msg_view_buffer_{std::in_place, std::span(msg_view_storage_)},
+  : subscriber_(std::move(channel)),
     running_offline_(running_offline),
     input_metrics_{.event_metrics = std::pmr::vector<InputEventMetrics>(resource), .telemetry_metrics{}},
     skipped_safety_{false},
@@ -58,8 +62,7 @@ InputView<Policy>::InputView(
 template <typename Policy>
 InputView<Policy>::InputView(
   size_t metrics_batch_size, jewels::memory::MemoryResource resource, bool running_offline) noexcept
-  : subscriber_(std::nullopt),
-    msg_view_buffer_{std::in_place, std::span(msg_view_storage_)},
+  : subscriber_(nullptr),
     running_offline_(running_offline),
     input_metrics_{.event_metrics = std::pmr::vector<InputEventMetrics>(resource), .telemetry_metrics{}},
     skipped_safety_{false},
@@ -135,14 +138,15 @@ void InputView<Policy>::reset_metrics()
 }
 
 template <typename Policy>
+// NOLINTNEXTLINE(readability-function-cognitive-complexity) This just has a lot of steps
 auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewels::time::SyncTime current_time)
   -> jewels::expected<InputDialType, pinion::ProgressError>
 {
   // Populate the view buffer with the desired range. Copying the data if necessary.
   if (!subscriber_)
   {
-    const ViewType view{msg_view_buffer_};
-    return InputDialType(view, view.end(), view.end(), false);
+    const ViewType view{msg_view_storage_.data(), msg_count_};
+    return make_disconnected_dial(view);
   }
   auto available = subscriber_->available();
 
@@ -192,35 +196,46 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
   auto num_skipped = apply_skip_threshold(available, begin, end);
   skipped_count_ = num_skipped.value_or(0UL);
 
-  auto range = pinion::to_message_range<const MsgType>(std::ranges::subrange<pinion::SlotRef>(begin, end));
+  auto range = pinion::to_message_slot_range<const MsgType>(std::ranges::subrange<pinion::SlotRef>(begin, end));
   if (!range)
   {
     return jewels::unexpected{pinion::ProgressError{}};
   }
 
-  msg_view_buffer_.clear();
+  msg_count_ = 0;
 
-  if constexpr (copy_inputs)
   {
-
     size_t index = 0;
-    for (const auto& msg : *range)
+    for (const auto& msg_slot : *range)
     {
-      auto& copy = copy_inputs_storage_.at(index);
-      copy = msg;
-      msg_view_buffer_.emplace_back(&copy);
+      if constexpr (copy_inputs)
+      {
+
+        auto& copy = copy_inputs_storage_.at(index);
+        copy = msg_slot.msg;
+        msg_view_storage_[index].message = &copy;
+      }
+      else
+      {
+        msg_view_storage_[index].message = &msg_slot.msg;
+      }
+      if constexpr (expose_seqno)
+      {
+        msg_view_storage_[index].seqno = msg_slot.slot.header()->sequence_number;
+      }
+      if constexpr (use_device_ptr)
+      {
+        // The reinterpret cast is valid since to_message_slot_range already passed.
+        msg_view_storage_[index].device_ptr = reinterpret_pointer_cast<const MsgType>(msg_slot.slot.device_ptr());
+      }
+      metrics_seqnos_[index] = msg_slot.slot.header()->sequence_number;
       ++index;
     }
-  }
-  else
-  {
-    for (const auto& msg : *range)
-    {
-      msg_view_buffer_.emplace_back(&msg);
-    }
+    msg_count_ = index;
+    metrics_seqno_count_ = index;
   }
 
-  const ViewType view{msg_view_buffer_};
+  const ViewType view{msg_view_storage_.data(), msg_count_};
 
   // Ensure the cursor is in the view.
 
@@ -254,6 +269,8 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
     first_new_it = std::next(view.begin(), std::distance(begin, last_viewed_));
   }
 
+  metrics_cursor_position_ = static_cast<uint64_t>(std::distance(view.begin(), first_new_it));
+
   // Store the end iterator as the temporary last viewed value. This will be the value
   // we update the last_viewed_ iterator to when `commit()` is called.
 
@@ -264,10 +281,30 @@ auto InputView<Policy>::make_dial_input(PinionDifferenceType max_new_msgs, jewel
 
   if (num_skipped)
   {
-    return InputDialType(view, input_cursor_it, first_new_it, *num_skipped);
+    return make_dial_result(view, input_cursor_it, first_new_it, *num_skipped);
   }
 
-  return InputDialType(view, input_cursor_it, first_new_it);
+  return make_dial_result(view, input_cursor_it, first_new_it);
+}
+
+template <typename Policy>
+auto InputView<Policy>::make_disconnected_dial(const ViewType& view) -> InputDialType
+{
+  return InputDialType(view, view.end(), view.end(), false);
+}
+
+template <typename Policy>
+auto InputView<Policy>::make_dial_result(const ViewType& view, ViewIteratorType cursor, ViewIteratorType first_new)
+  -> InputDialType
+{
+  return InputDialType(view, cursor, first_new);
+}
+
+template <typename Policy>
+auto InputView<Policy>::make_dial_result(
+  const ViewType& view, ViewIteratorType cursor, ViewIteratorType first_new, size_t skip_count) -> InputDialType
+{
+  return InputDialType(view, cursor, first_new, skip_count);
 }
 
 template <typename Policy>
@@ -407,7 +444,7 @@ bool InputView<Policy>::almost_overrun() const
     return false;
   }
 
-  if (saved_begin_.is_sentinel() || !subscriber_ || subscriber_->buffer().is_published_once())
+  if (saved_begin_.is_sentinel() || !subscriber_ || subscriber_->layout().is_published_once)
   {
     return false;
   }
@@ -425,9 +462,10 @@ bool InputView<Policy>::almost_overrun() const
   }
 
   // Consider the cog fatally behind if the producer is within ten percent of the
-  // buffer size or two messages of the cog's view, whichever is greater.
+  // buffer size or two times the producer's maximum messages per cycle of the cog's view,
+  // whichever is greater.
   static constexpr double buffer_margin_factor{0.1};
-  static constexpr PinionDifferenceType min_margin{2};
+  const auto min_margin = static_cast<PinionDifferenceType>(subscriber_->layout().max_msgs_per_exec * 2U);
   const auto margin = std::max(
     static_cast<PinionDifferenceType>(static_cast<double>(subscriber_->layout().num_slots) * buffer_margin_factor),
     min_margin);
@@ -459,7 +497,14 @@ bool InputView<Policy>::almost_overrun() const
 template <typename Policy>
 bool InputView<Policy>::is_published_once_channel_invalid() const
 {
-  return subscriber_ && subscriber_->buffer().is_published_once() && subscriber_->buffer().get_publish_count() > 1U;
+  if (subscriber_ && subscriber_->layout().is_published_once)
+  {
+    if (subscriber_->get_publish_count() > 1)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <typename Policy>
@@ -478,6 +523,159 @@ template <typename Policy>
 size_t InputView<Policy>::last_skipped_count() const
 {
   return skipped_count_;
+}
+
+template <typename Policy>
+auto InputView<Policy>::prepare_aligned_view(jewels::Out<InputDialType> dial_out, uint64_t target_seqno)
+  -> AlignedLookupOutcome
+  requires(expose_seqno)
+{
+  // Binary search of seqno (sorted, monotonically increasing).
+  auto seqno_span =
+    std::views::transform(std::span(msg_view_storage_.data(), msg_count_), [](const auto& item) { return item.seqno; });
+  auto seqno_it = std::lower_bound(seqno_span.begin(), seqno_span.end(), target_seqno);
+
+  if (seqno_it == seqno_span.end() || *seqno_it != target_seqno)
+  {
+    if (msg_count_ == 0 || target_seqno > seqno_span.back())
+    {
+      return AlignedLookupResult::pending;
+    }
+    if constexpr (requires { Policy::name; })
+    {
+      jewels::log_cerr_warn(
+        "Stale aligned_view '{}' target={} stored=[{},{}] count={}",
+        Policy::name,
+        target_seqno,
+        seqno_span.front(),
+        seqno_span.back(),
+        msg_count_);
+    }
+    return AlignedLookupResult::stale;
+  }
+
+  auto offset = static_cast<size_t>(std::distance(seqno_span.begin(), seqno_it));
+
+  const ViewType view{msg_view_storage_.data() + offset, 1};
+
+  auto first_new =
+    (!aligned_cursor_seqno_.has_value() || target_seqno > *aligned_cursor_seqno_) ? view.begin() : view.end();
+
+  *dial_out = InputDialType(view, view.begin(), first_new);
+  return AlignedLookupResult::resolved;
+}
+
+template <typename Policy>
+auto InputView<Policy>::prepare_aligned_range(jewels::Out<InputDialType> dial_out, uint64_t begin_seq, uint64_t end_seq)
+  -> AlignedLookupOutcome
+  requires(expose_seqno)
+{
+  if (msg_count_ == 0)
+  {
+    return AlignedLookupResult::pending;
+  }
+
+  auto seqno_span =
+    std::views::transform(std::span(msg_view_storage_.data(), msg_count_), [](const auto& item) { return item.seqno; });
+
+  auto begin_it = std::lower_bound(seqno_span.begin(), seqno_span.end(), begin_seq);
+  if (begin_it == seqno_span.end() || *begin_it != begin_seq)
+  {
+    // Classify: if begin_seq is beyond the newest stored seqno, data hasn't arrived yet (pending).
+    // Otherwise it was evicted or is a gap within the stored range (stale).
+    if (begin_seq > seqno_span.back())
+    {
+      return AlignedLookupResult::pending;
+    }
+    if constexpr (requires { Policy::name; })
+    {
+      jewels::log_cerr_warn(
+        "Stale aligned_range_begin '{}' range=[{},{}] stored=[{},{}] count={}",
+        Policy::name,
+        begin_seq,
+        end_seq,
+        seqno_span.front(),
+        seqno_span.back(),
+        msg_count_);
+    }
+    return AlignedLookupResult::stale;
+  }
+
+  auto end_it = std::lower_bound(begin_it, seqno_span.end(), end_seq);
+  if (end_it == seqno_span.end() || *end_it != end_seq)
+  {
+    // begin is present but end is beyond the newest stored seqno (pending)
+    // or was evicted/gap (stale).
+    if (end_seq > seqno_span.back())
+    {
+      return AlignedLookupResult::pending;
+    }
+    if constexpr (requires { Policy::name; })
+    {
+      jewels::log_cerr_warn(
+        "Stale aligned_range_end '{}' range=[{},{}] stored=[{},{}] count={}",
+        Policy::name,
+        begin_seq,
+        end_seq,
+        seqno_span.front(),
+        seqno_span.back(),
+        msg_count_);
+    }
+    return AlignedLookupResult::stale;
+  }
+  auto past_end_it = std::next(end_it);
+  // past_end_it is one past the last inclusive element.
+  // Messages in our range are [begin_it, past_end_it), i.e., [begin_seq, end_seq].
+
+  auto offset = static_cast<size_t>(std::distance(seqno_span.begin(), begin_it));
+  auto count = static_cast<size_t>(std::distance(begin_it, past_end_it));
+
+  const ViewType view{msg_view_storage_.data() + offset, count};
+
+  auto first_new_seqno_it =
+    aligned_cursor_seqno_.has_value() ? std::upper_bound(begin_it, past_end_it, *aligned_cursor_seqno_) : begin_it;
+  auto first_new_offset = std::distance(begin_it, first_new_seqno_it);
+  auto first_new = std::next(view.begin(), first_new_offset);
+
+  *dial_out = InputDialType(view, view.begin(), first_new);
+  return AlignedLookupResult::resolved;
+}
+
+template <typename Policy>
+auto InputView<Policy>::prepare_empty_aligned_view() -> InputDialType
+  requires(expose_seqno)
+{
+  const ViewType view{msg_view_storage_.data(), 0};
+  return make_dial_result(view, view.begin(), view.end());
+}
+
+template <typename Policy>
+void InputView<Policy>::advance_aligned_cursor(uint64_t seqno)
+  requires(expose_seqno)
+{
+  if (!aligned_cursor_seqno_.has_value() || seqno > *aligned_cursor_seqno_)
+  {
+    aligned_cursor_seqno_ = seqno;
+  }
+}
+
+template <typename Policy>
+void InputView<Policy>::reset_saved_state()
+{
+  saved_begin_ = {};
+  saved_end_ = {};
+}
+
+template <typename Policy>
+std::span<const uint64_t> InputView<Policy>::get_metrics_sequence_numbers() const
+{
+  return {metrics_seqnos_.data(), metrics_seqno_count_};
+}
+
+template <typename Policy>
+uint64_t InputView<Policy>::get_metrics_cursor_position() const
+{
+  return metrics_cursor_position_;
 }
 
 } // namespace clockwork

@@ -1,11 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/serialization/cpp/clk_enum_type.hh"
 
 #include "clockwork/serialization/cpp/clk_type.hh"
+#include "clockwork/serialization/cpp/metadata_versions.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
 #include "jewels/memory/bits.hh"
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -15,8 +18,10 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
+#include <memory_resource>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -44,9 +49,13 @@ class ClkValueEnumUpgrader : public ClkTypeUpgrader
 {
 public:
   /// Constructor
+  /// @param[in] memory_resource Memory resource
   /// @param[in] src_fqn Source enum FQN
   /// @param[in] value_map Map from source enum value to destination enum value
-  ClkValueEnumUpgrader(std::string_view src_fqn, std::unordered_map<SrcValueType, DestValueType> value_map) noexcept;
+  ClkValueEnumUpgrader(
+    const jewels::memory::MemoryResource& memory_resource,
+    std::string_view src_fqn,
+    std::pmr::unordered_map<SrcValueType, DestValueType> value_map) noexcept;
 
   ~ClkValueEnumUpgrader() noexcept override = default;
 
@@ -60,16 +69,18 @@ public:
 
 private:
   /// Source type FQN
-  std::string src_fqn_;
+  std::pmr::string src_fqn_;
 
   /// Map from source enum value to destination enum value
-  std::unordered_map<SrcValueType, DestValueType> value_map_;
+  std::pmr::unordered_map<SrcValueType, DestValueType> value_map_;
 };
 
 template <typename SrcValueType, typename DestValueType>
 ClkValueEnumUpgrader<SrcValueType, DestValueType>::ClkValueEnumUpgrader(
-  std::string_view src_fqn, std::unordered_map<SrcValueType, DestValueType> value_map) noexcept
-  : src_fqn_(src_fqn), value_map_(std::move(value_map))
+  const jewels::memory::MemoryResource& memory_resource,
+  std::string_view src_fqn,
+  std::pmr::unordered_map<SrcValueType, DestValueType> value_map) noexcept
+  : src_fqn_(src_fqn, memory_resource), value_map_(std::move(value_map))
 {
 }
 
@@ -99,10 +110,13 @@ class ClkBitFlagToBitFlagEnumUpgrader : public ClkTypeUpgrader
 
 public:
   /// Constructor
+  /// @param[in] memory_resource
   /// @param[in] src_fqn Source enum FQN
   /// @param[in] value_map Map from source enum value to destination enum value
   ClkBitFlagToBitFlagEnumUpgrader(
-    std::string_view src_fqn, const std::unordered_map<SrcValueType, DestValueType>& value_map);
+    const jewels::memory::MemoryResource& memory_resource,
+    std::string_view src_fqn,
+    const std::pmr::unordered_map<SrcValueType, DestValueType>& value_map);
 
   ~ClkBitFlagToBitFlagEnumUpgrader() noexcept override = default;
 
@@ -116,10 +130,10 @@ public:
 
 private:
   /// Source type FQN
-  std::string src_fqn_;
+  std::pmr::string src_fqn_;
 
   /// Map from source enum value to destination enum value
-  std::vector<std::pair<UnsignedSrcValueType, UnsignedDestValueType>> value_map_;
+  std::pmr::vector<std::pair<UnsignedSrcValueType, UnsignedDestValueType>> value_map_;
 
   /// Value source value bit mask
   UnsignedSrcValueType valid_src_value_mask_{0U};
@@ -130,8 +144,10 @@ private:
 
 template <typename SrcValueType, typename DestValueType>
 ClkBitFlagToBitFlagEnumUpgrader<SrcValueType, DestValueType>::ClkBitFlagToBitFlagEnumUpgrader(
-  std::string_view src_fqn, const std::unordered_map<SrcValueType, DestValueType>& value_map)
-  : src_fqn_(src_fqn)
+  const jewels::memory::MemoryResource& memory_resource,
+  std::string_view src_fqn,
+  const std::pmr::unordered_map<SrcValueType, DestValueType>& value_map)
+  : src_fqn_(src_fqn, memory_resource), value_map_(memory_resource)
 {
   value_map_.reserve(value_map.size());
   bool found_default = false;
@@ -205,10 +221,13 @@ class ClkBitFlagToValueEnumUpgrader : public ClkTypeUpgrader
 
 public:
   /// Constructor
+  /// @param[in] memory_resource Memory resource
   /// @param[in] src_fqn Source enum FQN
   /// @param[in] value_map Map from source enum value to destination enum value
   ClkBitFlagToValueEnumUpgrader(
-    std::string_view src_fqn, const std::unordered_map<SrcValueType, DestValueType>& value_map);
+    const jewels::memory::MemoryResource& memory_resource,
+    std::string_view src_fqn,
+    const std::pmr::unordered_map<SrcValueType, DestValueType>& value_map);
 
   ~ClkBitFlagToValueEnumUpgrader() noexcept override = default;
 
@@ -222,10 +241,10 @@ public:
 
 private:
   /// Source type FQN
-  std::string src_fqn_;
+  std::pmr::string src_fqn_;
 
   /// Map from source enum value to destination enum value
-  std::vector<std::pair<UnsignedSrcValueType, DestValueType>> value_map_;
+  std::pmr::vector<std::pair<UnsignedSrcValueType, DestValueType>> value_map_;
 
   /// Value source value bit mask
   UnsignedSrcValueType valid_src_value_mask_{0U};
@@ -236,8 +255,10 @@ private:
 
 template <typename SrcValueType, typename DestValueType>
 ClkBitFlagToValueEnumUpgrader<SrcValueType, DestValueType>::ClkBitFlagToValueEnumUpgrader(
-  std::string_view src_fqn, const std::unordered_map<SrcValueType, DestValueType>& value_map)
-  : src_fqn_(src_fqn)
+  const jewels::memory::MemoryResource& memory_resource,
+  std::string_view src_fqn,
+  const std::pmr::unordered_map<SrcValueType, DestValueType>& value_map)
+  : src_fqn_(src_fqn, memory_resource), value_map_(memory_resource)
 {
   value_map_.reserve(value_map.size());
   bool found_default = false;
@@ -306,7 +327,7 @@ class ClkEnumValue
 {
 public:
   /// Constructor
-  ClkEnumValue(int32_t num, int64_t value, std::string_view name);
+  ClkEnumValue(int32_t num, int64_t value, std::pmr::string name);
 
   ~ClkEnumValue() = default;
 
@@ -335,11 +356,11 @@ private:
   int64_t value_;
 
   /// Enum value name
-  std::string name_;
+  std::pmr::string name_;
 };
 
-ClkEnumValue::ClkEnumValue(int32_t num, int64_t value, std::string_view name)
-  : num_(num), value_(value), name_(name)
+ClkEnumValue::ClkEnumValue(int32_t num, int64_t value, std::pmr::string name)
+  : num_(num), value_(value), name_(std::move(name))
 {
 }
 
@@ -440,28 +461,28 @@ public:
   [[nodiscard]] const EnumUuid& get_uuid() const noexcept;
 
   /// @return Enum value map
-  [[nodiscard]] const std::unordered_map<int32_t, ClkEnumValue>& get_values() const noexcept;
+  [[nodiscard]] const std::pmr::unordered_map<int32_t, ClkEnumValue>& get_values() const noexcept;
 
   /// @return Enum value map
-  [[nodiscard]] std::unordered_map<int32_t, ClkEnumValue>& get_values() noexcept;
+  [[nodiscard]] std::pmr::unordered_map<int32_t, ClkEnumValue>& get_values() noexcept;
 
   /// @return Set of values that have been removed from the current enum
-  [[nodiscard]] const std::set<int32_t>& get_removed() const noexcept;
+  [[nodiscard]] const std::pmr::set<int32_t>& get_removed() const noexcept;
 
   /// @return Set of values that have been removed from the current enum
-  [[nodiscard]] std::set<int32_t>& get_removed() noexcept;
+  [[nodiscard]] std::pmr::set<int32_t>& get_removed() noexcept;
 
   /// @return Map from old to new value numbers for values modified in the current enum
-  [[nodiscard]] const std::map<int32_t, int32_t>& get_became() const noexcept;
+  [[nodiscard]] const std::pmr::map<int32_t, int32_t>& get_became() const noexcept;
 
   /// @return Map from old to new value numbers for values modified in the current enum
-  [[nodiscard]] std::map<int32_t, int32_t>& get_became() noexcept;
+  [[nodiscard]] std::pmr::map<int32_t, int32_t>& get_became() noexcept;
 
   /// @return Enum options
-  [[nodiscard]] const std::set<ClkEnumOption>& get_options() const noexcept;
+  [[nodiscard]] const std::pmr::set<ClkEnumOption>& get_options() const noexcept;
 
   /// @return Enum options
-  [[nodiscard]] std::set<ClkEnumOption>& get_options() noexcept;
+  [[nodiscard]] std::pmr::set<ClkEnumOption>& get_options() noexcept;
 
   /// @see ClkType::use_memcpy_for_array_upgrade
   [[nodiscard]] bool use_memcpy_for_array_upgrade(const ClkType& src_type) override;
@@ -497,22 +518,22 @@ private:
   EnumUuid uuid_;
 
   /// Map from value number to value definition
-  std::unordered_map<int32_t, ClkEnumValue> values_;
+  std::pmr::unordered_map<int32_t, ClkEnumValue> values_;
 
   /// Enum options
-  std::set<ClkEnumOption> options_;
+  std::pmr::set<ClkEnumOption> options_;
 
   /// Set of values that have been removed from the current enum
-  std::set<int32_t> removed_;
+  std::pmr::set<int32_t> removed_;
 
   /// Map from old to new field numbers for fields modified in the current schema
-  std::map<int32_t, int32_t> became_;
+  std::pmr::map<int32_t, int32_t> became_;
 
   /// Cached results of checks whether to use memcpy for upgrade
-  std::unordered_map<size_t, bool> use_memcpy_cache_;
+  std::pmr::unordered_map<size_t, bool> use_memcpy_cache_;
 
   /// Cache of checks for unexpected schema changes
-  std::unordered_set<size_t> unexpected_schema_changes_cache_;
+  std::pmr::unordered_set<size_t> unexpected_schema_changes_cache_;
 };
 
 ClkEnumType::ClkEnumType(
@@ -522,12 +543,17 @@ ClkEnumType::ClkEnumType(
   size_t value_type_index,
   int32_t version,
   const EnumUuid& uuid)
-  : ClkType(fqn, ClkTypeId::clk_enum, type_index),
+  : ClkType(factory->get_memory_resource(), fqn, ClkTypeId::clk_enum, type_index, factory->get_metadata_version()),
     factory_(factory),
     value_type_index_(value_type_index),
     value_type_(factory_->get_clk_type(value_type_index_)),
     version_(version),
-    uuid_(uuid)
+    uuid_(uuid),
+    values_(factory->get_memory_resource()),
+    options_(factory->get_memory_resource()),
+    became_(factory->get_memory_resource()),
+    use_memcpy_cache_(factory->get_memory_resource()),
+    unexpected_schema_changes_cache_(factory->get_memory_resource())
 {
 }
 
@@ -561,42 +587,42 @@ ClkEnumType::ClkEnumType(
   return uuid_;
 }
 
-[[nodiscard]] const std::unordered_map<int32_t, ClkEnumValue>& ClkEnumType::get_values() const noexcept
+[[nodiscard]] const std::pmr::unordered_map<int32_t, ClkEnumValue>& ClkEnumType::get_values() const noexcept
 {
   return values_;
 }
 
-[[nodiscard]] std::unordered_map<int32_t, ClkEnumValue>& ClkEnumType::get_values() noexcept
+[[nodiscard]] std::pmr::unordered_map<int32_t, ClkEnumValue>& ClkEnumType::get_values() noexcept
 {
   return values_;
 }
 
-[[nodiscard]] const std::set<int32_t>& ClkEnumType::get_removed() const noexcept
+[[nodiscard]] const std::pmr::set<int32_t>& ClkEnumType::get_removed() const noexcept
 {
   return removed_;
 }
 
-[[nodiscard]] std::set<int32_t>& ClkEnumType::get_removed() noexcept
+[[nodiscard]] std::pmr::set<int32_t>& ClkEnumType::get_removed() noexcept
 {
   return removed_;
 }
 
-[[nodiscard]] const std::map<int32_t, int32_t>& ClkEnumType::get_became() const noexcept
+[[nodiscard]] const std::pmr::map<int32_t, int32_t>& ClkEnumType::get_became() const noexcept
 {
   return became_;
 }
 
-[[nodiscard]] std::map<int32_t, int32_t>& ClkEnumType::get_became() noexcept
+[[nodiscard]] std::pmr::map<int32_t, int32_t>& ClkEnumType::get_became() noexcept
 {
   return became_;
 }
 
-[[nodiscard]] const std::set<ClkEnumOption>& ClkEnumType::get_options() const noexcept
+[[nodiscard]] const std::pmr::set<ClkEnumOption>& ClkEnumType::get_options() const noexcept
 {
   return options_;
 }
 
-[[nodiscard]] std::set<ClkEnumOption>& ClkEnumType::get_options() noexcept
+[[nodiscard]] std::pmr::set<ClkEnumOption>& ClkEnumType::get_options() noexcept
 {
   return options_;
 }
@@ -649,7 +675,7 @@ ClkEnumType::ClkEnumType(
          uuid_ == src_enum_type.uuid_ && version_ == src_enum_type.version_ && values_ == src_enum_type.values_;
 }
 
-void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*allow_changes*/, std::string_view name)
+void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool allow_changes, std::string_view name)
 {
   if (const auto inserted = unexpected_schema_changes_cache_.insert(src_type.get_type_index()).second; !inserted)
   {
@@ -657,13 +683,17 @@ void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*
   }
   if (src_type.get_type_id() != ClkTypeId::clk_enum)
   {
-    throw ClkTypeUpgradeError(
-      fmt::format(
-        "Cannot upgrade {} from non-enum type {} ({}) to {}",
-        name,
-        src_type.get_fqn(),
-        src_type.get_type_id(),
-        get_fqn()));
+    if (!allow_changes)
+    {
+      throw ClkTypeUpgradeError(
+        fmt::format(
+          "Cannot upgrade {} from non-enum type {} ({}) to {}",
+          name,
+          src_type.get_fqn(),
+          src_type.get_type_id(),
+          get_fqn()));
+    }
+    return;
   }
   auto& src_enum = dynamic_cast<ClkEnumType&>(src_type);
   if (src_enum.get_uuid() != get_uuid())
@@ -692,7 +722,13 @@ void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*
     src_enum.get_value_type(), src_enum.get_version() != get_version(), get_fqn());
   check_for_unexpected_value_changes(src_enum);
   check_for_unexpected_history_changes(
-    src_enum.get_became(), src_enum.get_removed(), became_, removed_, src_enum.get_version() != version_, get_fqn());
+    get_memory_resource(),
+    src_enum.get_became(),
+    src_enum.get_removed(),
+    became_,
+    removed_,
+    src_enum.get_version() != version_,
+    get_fqn());
   if (src_enum.get_version() == version_ && src_enum.get_options() != options_)
   {
     throw ClkTypeUpgradeError(fmt::format("Unsupported change to enum options for {} without changing version", name));
@@ -701,8 +737,9 @@ void ClkEnumType::check_for_unexpected_schema_changes(ClkType& src_type, bool /*
 
 void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum)
 {
-  const auto src_values_view = std::ranges::views::keys(src_enum.get_values());
-  std::unordered_set<int32_t> added_values{src_values_view.begin(), src_values_view.end()};
+  const auto values_view = std::ranges::views::keys(values_);
+  std::pmr::unordered_set<int32_t> added_values(get_memory_resource());
+  added_values.insert(values_view.begin(), values_view.end());
   for (const auto& src_value : std::ranges::views::values(src_enum.get_values()))
   {
     int32_t dest_value_num = src_value.get_num();
@@ -766,7 +803,9 @@ void ClkEnumType::check_for_unexpected_value_changes(const ClkEnumType& src_enum
       }
     }
   }
-  if (!added_values.empty() && src_enum.get_version() == version_)
+  if (
+    !added_values.empty() && src_enum.get_version() == version_ &&
+    get_metadata_version() >= enforce_version_change_when_adding_fields_and_values_version)
   {
     const auto& dest_value = values_.at(*added_values.begin());
     throw ClkTypeUpgradeError(
@@ -806,7 +845,7 @@ public:
   /// Make an initializer function to initialize this type to the specified value
   /// @param[in] value Initial enum value
   /// @return Initializer function
-  [[nodiscard]] std::unique_ptr<ClkValueInitializer>
+  [[nodiscard]] std::shared_ptr<ClkValueInitializer>
   make_value_initializer(const metadata::InitialValue& value) const override;
 
   /// @see ClkType::make_upgrader
@@ -832,14 +871,16 @@ private:
 };
 
 template <typename ValueType>
-[[nodiscard]] std::unique_ptr<ClkValueInitializer>
+[[nodiscard]] std::shared_ptr<ClkValueInitializer>
 ClkEnumTypeImpl<ValueType>::make_value_initializer(const metadata::InitialValue& value) const
 {
   if constexpr (std::is_unsigned_v<ValueType>)
   {
-    return std::make_unique<ClkEnumInitializer<ValueType>>(static_cast<ValueType>(value.unsigned_value()));
+    return jewels::memory::make_pmr_shared<ClkEnumInitializer<ValueType>>(
+      get_memory_resource(), static_cast<ValueType>(value.unsigned_value()));
   }
-  return std::make_unique<ClkEnumInitializer<ValueType>>(static_cast<ValueType>(value.signed_value()));
+  return jewels::memory::make_pmr_shared<ClkEnumInitializer<ValueType>>(
+    get_memory_resource(), static_cast<ValueType>(value.signed_value()));
 }
 
 template <typename ValueType>
@@ -854,7 +895,10 @@ ClkEnumTypeImpl<ValueType>::make_upgrader(const ClkType& src_type)
   if (use_memcpy_for_array_upgrade(src_type))
   {
     return jewels::memory::make_non_null_from_ref(
-      *upgrader_cache.emplace(src_type.get_type_index(), std::make_shared<ClkMemcpyUpgrader>(get_size()))
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_pmr_shared<ClkMemcpyUpgrader>(get_memory_resource(), get_size()))
          .first->second);
   }
   if (src_type.get_type_id() != ClkTypeId::clk_enum)
@@ -980,7 +1024,7 @@ template <typename SrcValueType>
 [[nodiscard]] std::shared_ptr<ClkTypeUpgrader>
 ClkEnumTypeImpl<ValueType>::make_enum_type_upgrader(const ClkEnumTypeImpl<SrcValueType>& src_type) const
 {
-  std::unordered_map<SrcValueType, ValueType> value_map;
+  std::pmr::unordered_map<SrcValueType, ValueType> value_map(get_memory_resource());
   for (const auto& src_value : std::ranges::views::values(src_type.get_values()))
   {
     int32_t dest_value_num = src_value.get_num();
@@ -1008,11 +1052,14 @@ ClkEnumTypeImpl<ValueType>::make_enum_type_upgrader(const ClkEnumTypeImpl<SrcVal
   {
     if (get_options().contains(ClkEnumOption::flag))
     {
-      return std::make_shared<ClkBitFlagToBitFlagEnumUpgrader<SrcValueType, ValueType>>(src_type.get_fqn(), value_map);
+      return jewels::memory::make_pmr_shared<ClkBitFlagToBitFlagEnumUpgrader<SrcValueType, ValueType>>(
+        get_memory_resource(), get_memory_resource(), src_type.get_fqn(), value_map);
     }
-    return std::make_shared<ClkBitFlagToValueEnumUpgrader<SrcValueType, ValueType>>(src_type.get_fqn(), value_map);
+    return jewels::memory::make_pmr_shared<ClkBitFlagToValueEnumUpgrader<SrcValueType, ValueType>>(
+      get_memory_resource(), get_memory_resource(), src_type.get_fqn(), value_map);
   }
-  return std::make_shared<ClkValueEnumUpgrader<SrcValueType, ValueType>>(src_type.get_fqn(), std::move(value_map));
+  return jewels::memory::make_pmr_shared<ClkValueEnumUpgrader<SrcValueType, ValueType>>(
+    get_memory_resource(), get_memory_resource(), src_type.get_fqn(), std::move(value_map));
 }
 
 template <typename ValueType>
@@ -1020,21 +1067,23 @@ template <typename SrcValueType>
 [[nodiscard]] std::shared_ptr<ClkTypeUpgrader>
 ClkEnumTypeImpl<ValueType>::make_integer_type_upgrader(std::string_view src_fqn) const
 {
-  std::unordered_map<SrcValueType, ValueType> value_map;
+  std::pmr::unordered_map<SrcValueType, ValueType> value_map(get_memory_resource());
   for (const auto& value : std::ranges::views::values(get_values()))
   {
     value_map.emplace(static_cast<SrcValueType>(value.get_value()), static_cast<ValueType>(value.get_value()));
   }
   if (get_options().contains(ClkEnumOption::flag))
   {
-    return std::make_shared<ClkBitFlagToBitFlagEnumUpgrader<SrcValueType, ValueType>>(src_fqn, value_map);
+    return jewels::memory::make_pmr_shared<ClkBitFlagToBitFlagEnumUpgrader<SrcValueType, ValueType>>(
+      get_memory_resource(), get_memory_resource(), src_fqn, value_map);
   }
-  return std::make_shared<ClkValueEnumUpgrader<SrcValueType, ValueType>>(src_fqn, std::move(value_map));
+  return jewels::memory::make_pmr_shared<ClkValueEnumUpgrader<SrcValueType, ValueType>>(
+    get_memory_resource(), get_memory_resource(), src_fqn, std::move(value_map));
 }
 
 /// Create a clockwork enum type from an enum protobuf
 template <typename ValueType>
-std::unique_ptr<ClkType> make_clk_enum_type_from_proto(
+std::shared_ptr<ClkType> make_clk_enum_type_from_proto(
   jewels::memory::ObjectPtr<ClkTypeFactory> factory,
   const metadata::ClkEnumType& enum_proto,
   size_t type_index,
@@ -1048,7 +1097,8 @@ std::unique_ptr<ClkType> make_clk_enum_type_from_proto(
   EnumUuid uuid{};
   std::memcpy(uuid.uuid.data(), enum_proto.enum_uuid().data(), sizeof(EnumUuid));
   const auto value_type_index = static_cast<size_t>(enum_proto.underlying_type_id());
-  auto clk_enum = std::make_unique<ClkEnumTypeImpl<ValueType>>(
+  auto clk_enum = jewels::memory::make_pmr_shared<ClkEnumTypeImpl<ValueType>>(
+    factory->get_memory_resource(),
     factory,
     maybe_strong_type_fqn.value_or(enum_proto.fqn()),
     type_index,
@@ -1060,7 +1110,8 @@ std::unique_ptr<ClkType> make_clk_enum_type_from_proto(
     clk_enum->get_values().emplace(
       std::piecewise_construct,
       std::forward_as_tuple(value_proto.num()),
-      std::forward_as_tuple(value_proto.num(), value_proto.value(), value_proto.name()));
+      std::forward_as_tuple(
+        value_proto.num(), value_proto.value(), std::pmr::string{value_proto.name(), factory->get_memory_resource()}));
   }
   if ((static_cast<std::make_unsigned_t<int32_t>>(enum_proto.options()) & 1U) != 0U)
   {
@@ -1083,7 +1134,7 @@ std::unique_ptr<ClkType> make_clk_enum_type_from_proto(
 } // namespace
 
 // NOLINTNEXTLINE(misc-no-recursion) Types are defined recursively
-[[nodiscard]] std::unique_ptr<ClkType> ClkEnumTypeFactoryPlugin::make_clk_type(
+[[nodiscard]] std::shared_ptr<ClkType> ClkEnumTypeFactoryPlugin::make_clk_type(
   jewels::memory::ObjectPtr<ClkTypeFactory> factory,
   const metadata::TypeDesc& type_proto,
   size_t type_index,

@@ -1,10 +1,11 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate ProcessDescriptions from Process IR."""
 
 from __future__ import annotations
 
+import enum
 import json
 from csv import DictWriter
 from dataclasses import asdict, dataclass
@@ -16,6 +17,7 @@ from clockwork.dsl.bazel.simple_launch_targets import MergeSimplelaunchConfig, c
 from clockwork.dsl.bazel.targets import Label
 from clockwork.dsl.composition import (
     bridgegen,
+    channel_config,
     diagnostics_config,
     gen_channel_allocation_report,
     gen_channel_spy_configs,
@@ -25,11 +27,15 @@ from clockwork.dsl.composition import (
     gen_multi_subscriber_configs,
     gen_signal_metadata_configs,
     genpd,
+    journal_topology,
+    journal_topology_file_config,
     launchgen,
     logger_config,
     pdf,
+    realtime_playback_generation,
     signal_metadata_config,
     system,
+    system_metadata,
 )
 from clockwork.dsl.ir.module_id import CLK_REPO
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
@@ -53,6 +59,7 @@ class GeneratedSystemFiles:
     event_logger_config_files: list[Path]
     bridge_config_files: list[Path]
     simplelaunch_config_files: list[Path]
+    simplelaunch_runner_config_files: list[Path]
     multi_subscriber_config_files: list[Path]
     channel_publisher_config_files: list[Path]
     channel_allocation_report_files: list[Path]
@@ -61,6 +68,9 @@ class GeneratedSystemFiles:
     logged_channel_metadata_files: list[Path]
     metrics_channel_metadata_files: list[Path]
     signal_metadata_files: list[Path]
+    system_metadata_files: list[Path]
+    journal_topology_files: list[Path]
+    realtime_playback_conversion_config_files: list[Path]
 
     def all_files(self) -> Iterator[Path]:
         """Yield all files of all types."""
@@ -69,6 +79,7 @@ class GeneratedSystemFiles:
         yield from self.event_logger_config_files
         yield from self.bridge_config_files
         yield from self.simplelaunch_config_files
+        yield from self.simplelaunch_runner_config_files
         yield from self.multi_subscriber_config_files
         yield from self.channel_publisher_config_files
         yield from self.channel_allocation_report_files
@@ -77,6 +88,9 @@ class GeneratedSystemFiles:
         yield from self.logged_channel_metadata_files
         yield from self.metrics_channel_metadata_files
         yield from self.signal_metadata_files
+        yield from self.system_metadata_files
+        yield from self.journal_topology_files
+        yield from self.realtime_playback_conversion_config_files
 
 
 @dataclass
@@ -119,6 +133,7 @@ class PdfJsonEncoder(json.JSONEncoder):
         **kwargs: object,
     ) -> None:
         """Initialize the encoder with logger and signal metadata entities."""
+        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         super().__init__(*args, **kwargs)
         self.logger_entities = logger_entities
         self.signal_metadata_entities = signal_metadata_entities
@@ -128,6 +143,7 @@ class PdfJsonEncoder(json.JSONEncoder):
         """Default encoder."""
         # Build enum types list
         enum_types: list[type] = [
+            channel_config.ChannelType,
             pdf.DataSourceType,
             pdf.MemoryResourceType,
             pdf.NotConnectedEndpointType,
@@ -142,7 +158,9 @@ class PdfJsonEncoder(json.JSONEncoder):
         if isinstance(o, UUID):
             # if the obj is uuid, we simply return the value of uuid
             return o.hex
-        if isinstance(o, tuple(enum_types)):
+        # In some cases, tachyon_dyn is creating parallel enum types which fail the isinstance check so
+        # check if the meta type is an enum too
+        if isinstance(o, tuple(enum_types)) or isinstance(type(o), enum.EnumMeta):
             return o.value
         return json.JSONEncoder.default(self, o)
 
@@ -174,7 +192,10 @@ def gen_system(
     """Generate system description files for a system target."""
     include_dir = BazelPathResolver().to_buildtime_path(system_target_ir.module.module_id).parent
     logical_system = system.make_system(
-        [system_target_ir.box_instance], system_target_ir.module, system_target_ir.require_logging_policies
+        [system_target_ir.box_instance],
+        system_target_ir.module,
+        system_target_ir.require_logging_policies,
+        system_target_ir.use_simplelaunch,
     )
     return gen_system_from_logical_system(
         include_dir=include_dir,
@@ -270,15 +291,18 @@ def _generate_process_descriptions(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = pd_path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
+                    # fmt: off
                     json.dump(
                         asdict(process_desc),
                         json_file,
                         indent=2,
+                        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                         cls=make_pdf_json_encoder_factory(
                             logger_config.get_entities(logical_system.module.context),
                             signal_metadata_config.get_entities(logical_system.module.context),
                         ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
                     )
+                    # fmt: on
 
     return result_paths
 
@@ -331,26 +355,32 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 event_json_path = event_path.with_suffix(".json")
                 with event_json_path.open("w", encoding="utf-8") as event_json_file:
+                    # fmt: off
                     json.dump(
                         asdict(obj=logger_configs.events_config),
                         event_json_file,
                         indent=2,
+                        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                         cls=make_pdf_json_encoder_factory(
                             logger_config.get_entities(physical_system.system.module.context),
                             signal_metadata_config.get_entities(physical_system.system.module.context),
                         ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
                     )
+                    # fmt: on
                 telemetry_json_path = telemetry_path.with_suffix(".json")
                 with telemetry_json_path.open("w", encoding="utf-8") as telemetry_json_file:
+                    # fmt: off
                     json.dump(
                         asdict(obj=logger_configs.telemetry_config),
                         telemetry_json_file,
                         indent=2,
+                        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                         cls=make_pdf_json_encoder_factory(
                             logger_config.get_entities(physical_system.system.module.context),
                             signal_metadata_config.get_entities(physical_system.system.module.context),
                         ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
                     )
+                    # fmt: on
 
     # Generate logged channel metadata
     logged_channel_metadata = gen_logger_configs.gen_logged_channel_metadata(physical_system)
@@ -384,15 +414,18 @@ def _generate_logger_configs(  # noqa: PLR0913 (mitigated by kwonly args)
             if write_json_files:
                 json_path = path.with_suffix(".json")
                 with json_path.open("w", encoding="utf-8") as json_file:
+                    # fmt: off
                     json.dump(
                         asdict(obj=channel_publisher_config),
                         json_file,
                         indent=2,
+                        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
                         cls=make_pdf_json_encoder_factory(
                             logger_config.get_entities(physical_system.system.module.context),
                             signal_metadata_config.get_entities(physical_system.system.module.context),
                         ),  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
                     )
+                    # fmt: on
 
     return event_logger_files, telemetry_logger_files, log_reader_files, logged_channel_metadata_files
 
@@ -449,26 +482,65 @@ def _generate_simplelaunch_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     physical_system: system.PhysicalSystem,
     output_targets: OutputTargetsByDomain,
     simplelaunch_configs: dict[UUID, Config],
+    system_fqn: str,
     system_key: str,
     write_files: bool,
-) -> list[Path]:
+    write_json_files: bool,
+) -> tuple[list[Path], list[Path]]:
     """Generate simplelaunch configuration files."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
+
     simplelaunch_files: list[Path] = []
+    simplelaunch_runner_files: list[Path] = []
+
+    runner_configs = launchgen.gen_simplelaunch_runner_configs(physical_system)
 
     for domain_uuid, phys_domain in physical_system.cpu_domains.items():
         name = _get_name_from_system_key(system_key, phys_domain.logical.name)
-        file_name = Path(f"{name}_simplelaunch_config.textproto")
-        local_path = include_dir / file_name
-        path = root_dir / local_path
-        simplelaunch_files.append(path)
         config = simplelaunch_configs[domain_uuid]
+        if domain_uuid in runner_configs:
+            runner_config = runner_configs[domain_uuid]
+            runner_config_file_name = Path(f"{name}_simplelaunch_runner_config.tachyon")
+            runner_config_local_path = include_dir / runner_config_file_name
+            runner_config_path = root_dir / runner_config_local_path
+            simplelaunch_runner_files.append(runner_config_path)
 
-        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.srcs).append(file_name)
+            config.runner_config_path = launchgen.gen_simplelaunch_runner_config_path(
+                system_fqn,
+                phys_domain,
+                "simplelaunch_runner_config.tachyon",
+            )
+
+            cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.data).append(
+                runner_config_file_name
+            )
+
+            if write_files:
+                write_tachyon_to_file(obj=runner_config, filename=runner_config_path)
+                if write_json_files:
+                    json_path = root_dir / include_dir / f"{name}_simplelaunch_runner_config.json"
+                    with json_path.open("w", encoding="utf-8") as json_file:
+                        json.dump(
+                            asdict(obj=runner_config),
+                            json_file,
+                            indent=2,
+                            cls=json_encoder_factory,  # pyrefly: ignore[bad-argument-type] (complaining about factory type; type stub is wrong)
+                        )
+
+        config_file_name = Path(f"{name}_simplelaunch_config.textproto")
+        config_local_path = include_dir / config_file_name
+        config_path = root_dir / config_local_path
+        simplelaunch_files.append(config_path)
+
+        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.srcs).append(config_file_name)
 
         if write_files:
-            launchgen.write_simplelaunch_config_to_file(config, path)
+            launchgen.write_simplelaunch_config_to_file(config, config_path)
 
-    return simplelaunch_files
+    return simplelaunch_files, simplelaunch_runner_files
 
 
 def _generate_multi_subscriber_configs(  # noqa: PLR0913 (mitigated by kwonly args)
@@ -640,6 +712,86 @@ def _generate_metrics_channel_metadata_configs(  # noqa: PLR0913 (mitigated by k
     return metrics_channel_metadata_files
 
 
+def _generate_system_metadata_configs(  # noqa: PLR0913 (mitigated by kwonly args)
+    *,
+    include_dir: Path,
+    root_dir: Path,
+    physical_system: system.PhysicalSystem,
+    output_targets: OutputTargetsByDomain,
+    system_key: str,
+    write_files: bool,
+    write_json_files: bool,
+) -> list[Path]:
+    """Generate the system metadata configuration file."""
+    json_encoder_factory = make_pdf_json_encoder_factory(
+        logger_config.get_entities(physical_system.system.module.context),
+        signal_metadata_config.get_entities(physical_system.system.module.context),
+    )
+    system_metadata_files: list[Path] = []
+
+    # Metadata is system wide, not per domain
+    metadata = system_metadata.SystemMetadata(
+        system_target_name=physical_system.system.module.module_id.name.split("::")[-1]
+    )
+
+    # Write the config file once per domain to include in simplelaunch data
+    for domain_uuid in physical_system.cpu_domains:
+        phys_domain = physical_system.cpu_domains[domain_uuid]
+        name = _get_name_from_system_key(system_key, phys_domain.logical.name)
+        file_name = Path(f"{name}_system_metadata.tachyon")
+        local_path = include_dir / file_name
+        path = root_dir / local_path
+        system_metadata_files.append(path)
+
+        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.data).append(file_name)
+
+        if write_files:
+            write_tachyon_to_file(
+                obj=metadata,
+                filename=path,
+            )
+            if write_json_files:
+                json_path = path.with_suffix(".json")
+                with json_path.open("w", encoding="utf-8") as json_file:
+                    json.dump(
+                        asdict(obj=metadata),
+                        json_file,
+                        indent=2,
+                        cls=json_encoder_factory,  # pyright: ignore[reportArgumentType] (complaining about factory type; type stub is wrong)
+                    )
+
+    return system_metadata_files
+
+
+def _generate_journal_topology_configs(  # noqa: PLR0913 (mitigated by kwonly args)
+    *,
+    include_dir: Path,
+    root_dir: Path,
+    logical_system: system.LogicalSystem,
+    output_targets: OutputTargetsByDomain,
+    system_fqn: str,
+    system_key: str,
+    write_files: bool,
+) -> list[Path]:
+    """Generate identical journal topology configuration files for every domain."""
+    topology_config = journal_topology_file_config.JournalTopologyFileConfig(
+        contents=journal_topology.render_journal_topology(
+            logical_system=logical_system,
+            system_target_name=system_fqn,
+        )
+    )
+    topology_files: list[Path] = []
+    for domain_uuid, domain in logical_system.cpu_domains.items():
+        name = _get_name_from_system_key(system_key, domain.name)
+        file_name = Path(f"{name}_journal_topology.tachyon")
+        path = root_dir / include_dir / file_name
+        topology_files.append(path)
+        cast("list[Path | Label]", output_targets[domain_uuid].simple_launch_config.data).append(file_name)
+        if write_files:
+            write_tachyon_to_file(topology_config, path)
+    return topology_files
+
+
 def _generate_signal_metadata_configs(  # noqa: PLR0913 (mitigated by kwonly args)
     *,
     include_dir: Path,
@@ -733,7 +885,7 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
     physical_system = system.make_physical_system(logical_system)
     system.add_metrics_logging_observers(physical_system)
     simplelaunch_configs: dict[UUID, Config] = {domain_uuid: Config() for domain_uuid in logical_system.cpu_domains}
-    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [], [], [], [])
+    result = GeneratedSystemFiles([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
     process_descs = genpd.gen_pd_sys(physical_system)
 
     # Initialize output targets
@@ -751,6 +903,17 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         write_files=write_files,
         write_json_files=write_json_files,
     )
+
+    if logical_system.realtime_playback_assignments:
+        file_name = Path(f"{make_filename_from_value_key(system_key)}_realtime_playback_config.tachyon")
+        path = root_dir / include_dir / file_name
+        conversion_config = realtime_playback_generation.make_conversion_config(
+            logical_system,
+            process_descs,
+        )
+        result.realtime_playback_conversion_config_files.append(path)
+        if write_files:
+            write_tachyon_to_file(conversion_config, path)
 
     # Generate logger configurations
     (
@@ -782,14 +945,16 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
     )
 
     # Generate simplelaunch configurations
-    result.simplelaunch_config_files = _generate_simplelaunch_configs(
+    result.simplelaunch_config_files, result.simplelaunch_runner_config_files = _generate_simplelaunch_configs(
         include_dir=include_dir,
         root_dir=root_dir,
         physical_system=physical_system,
         output_targets=output_targets,
         simplelaunch_configs=simplelaunch_configs,
+        system_fqn=system_fqn,
         system_key=system_key,
         write_files=write_files,
+        write_json_files=write_json_files,
     )
 
     # Generate multi-subscriber configurations
@@ -855,6 +1020,26 @@ def gen_system_from_logical_system(  # noqa: PLR0913 (mitigated by kwonly args)
         system_key=system_key,
         write_files=write_files,
         write_json_files=write_json_files,
+    )
+
+    result.system_metadata_files = _generate_system_metadata_configs(
+        include_dir=include_dir,
+        root_dir=root_dir,
+        physical_system=physical_system,
+        output_targets=output_targets,
+        system_key=system_key,
+        write_files=write_files,
+        write_json_files=write_json_files,
+    )
+
+    result.journal_topology_files = _generate_journal_topology_configs(
+        include_dir=include_dir,
+        root_dir=root_dir,
+        logical_system=logical_system,
+        output_targets=output_targets,
+        system_fqn=system_fqn,
+        system_key=system_key,
+        write_files=write_files,
     )
 
     return result, output_targets, physical_system

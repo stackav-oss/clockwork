@@ -1,7 +1,6 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "jewels/meta/overloaded.hh"
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -15,9 +14,7 @@
 #include <chrono>
 #include <cstdint>
 #include <new>
-#include <optional>
 #include <string>
-#include <variant>
 
 namespace nb = nanobind;
 namespace clockwork
@@ -28,46 +25,8 @@ namespace chrono = std::chrono;
 using SyncTime = jewels::time::SyncTime;
 using Duration = chrono::nanoseconds;
 
-using float_or_int = std::variant<double, int64_t>;
-
 namespace
 {
-
-Duration nanoseconds_arg_to_duration(std::optional<float_or_int> maybe_nanoseconds)
-{
-  if (!maybe_nanoseconds.has_value())
-  {
-    return chrono::nanoseconds(0);
-  }
-
-  return std::visit(
-    jewels::meta::Overloaded{
-      [](int64_t nanoseconds) { return chrono::nanoseconds(nanoseconds); },
-      [](double nanoseconds) { return chrono::nanoseconds(static_cast<int64_t>(nanoseconds)); },
-    },
-    maybe_nanoseconds.value());
-}
-
-Duration seconds_arg_to_duration(std::optional<float_or_int> maybe_seconds)
-{
-  if (!maybe_seconds.has_value())
-  {
-    return chrono::nanoseconds(0);
-  }
-
-  return std::visit(
-    jewels::meta::Overloaded{
-      [](int64_t seconds)
-      {
-        return chrono::duration_cast<chrono::nanoseconds>(chrono::duration<int64_t, chrono::seconds::period>{seconds});
-      },
-      [](double seconds)
-      {
-        return chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double, chrono::seconds::period>{seconds});
-      },
-    },
-    maybe_seconds.value());
-}
 
 /// Generic function facilitating the std::chrono::time_point operator- overloads
 template <typename TimePoint, typename Other>
@@ -105,20 +64,24 @@ nb::class_<SyncTime> bind_sync_time(nb::handle scope)
   return nb::class_<SyncTime>(scope, "SyncTime")
     .def(
       "__init__",
-      [](
-        SyncTime& self,
-        const std::optional<float_or_int> duration_s = std::nullopt,
-        const std::optional<float_or_int> duration_ns = std::nullopt)
+      [](SyncTime& self, double seconds)
       {
         new (&self) SyncTime();
-        self += nanoseconds_arg_to_duration(duration_ns);
-        self += seconds_arg_to_duration(duration_s);
+        self += chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double, chrono::seconds::period>{seconds});
       },
       nb::kw_only(),
-      nb::arg("seconds").none() = std::nullopt,
-      nb::arg("nanoseconds").none() = std::nullopt,
-      "Construct a SyncTime from seconds (float) and nanoseconds (int) since epoch, which are converted and then added "
-      "together.")
+      nb::arg("seconds"),
+      "Construct a SyncTime from float seconds since epoch.")
+    .def(
+      "__init__",
+      [](SyncTime& self, int64_t nanoseconds)
+      {
+        new (&self) SyncTime();
+        self = jewels::time::sync_time_from_ns(nanoseconds);
+      },
+      nb::kw_only(),
+      nb::arg("nanoseconds") = 0,
+      "Construct a SyncTime from integer nanoseconds since epoch.")
     .def(nb::init<const SyncTime&>(), "Copy constructor.")
     .def(
       "to_ns",
@@ -165,16 +128,24 @@ nb::class_<Duration> bind_duration(nb::handle scope)
   return nb::class_<Duration>(scope, "Duration")
     .def(
       "__init__",
-      [](Duration& self, const std::optional<float_or_int> duration_s, const std::optional<float_or_int> duration_ns)
+      [](Duration& self, double seconds)
       {
         new (&self) chrono::nanoseconds();
-        self += nanoseconds_arg_to_duration(duration_ns);
-        self += seconds_arg_to_duration(duration_s);
+        self = chrono::duration_cast<chrono::nanoseconds>(chrono::duration<double, chrono::seconds::period>{seconds});
       },
       nb::kw_only(),
-      nb::arg("seconds").none() = std::nullopt,
-      nb::arg("nanoseconds").none() = std::nullopt,
-      "Construct a Duration from seconds (float) and nanoseconds (int), which are converted and then added together.")
+      nb::arg("seconds"),
+      "Construct a Duration from float seconds.")
+    .def(
+      "__init__",
+      [](Duration& self, int64_t nanoseconds)
+      {
+        new (&self) chrono::nanoseconds();
+        self = chrono::nanoseconds(nanoseconds);
+      },
+      nb::kw_only(),
+      nb::arg("nanoseconds") = 0,
+      "Construct a Duration from integer nanoseconds.")
     .def(nb::init<const Duration&>(), "Copy constructor.")
     .def(
       "to_s",

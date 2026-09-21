@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/runners/timerfd_timer.hh"
@@ -66,9 +66,11 @@ void TimerfdTimer::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
   uint64_t event_count = 0;
   while (read(*descriptor_, &event_count, sizeof(event_count)) > 0)
   {
+    jewels::time::SyncTime current_time{};
     {
       const std::scoped_lock lock(mutex_);
-      auto earliness = when_ - jewels::time::SyncClock::now();
+      current_time = jewels::time::SyncClock::now();
+      auto earliness = when_ - current_time;
       if (earliness.count() > 0)
       {
         if (!set_timer(when_, period_))
@@ -83,7 +85,7 @@ void TimerfdTimer::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
     {
       if (observer_ != nullptr)
       {
-        observer_->notify({.current_time = jewels::time::SyncClock::now()});
+        observer_->notify({.current_time = current_time});
       }
     }
   }

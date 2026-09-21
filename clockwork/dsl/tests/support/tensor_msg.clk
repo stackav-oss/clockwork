@@ -1,0 +1,28 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::testing)]
+
+// Some strong type.
+#[cpp(type_namespace=clockwork::external, type_header="clockwork/dsl/tests/support/extern_type.hh", type_factory=make)]
+strong_type ExternalStrongType
+{
+  underlying_type: UInt32;
+}
+
+// Doc.
+schema TensorMessage
+{
+  fields
+  {
+    // A tensor.
+    #0 tensor0: Tensor<Float32, [5, 6, 7], TensorLayout::column_major>;
+
+    // Another tensor.
+    #1 tensor1: Tensor<Int16, [5, 6, 7]>;
+
+    // A tensor with a custom stride list.
+    #2 tensor2: Tensor<Bool, [5, 6, 7], [42, 7, 1]>;
+
+    // A tensor with a strong type for an element.
+    #3 tensor3: Tensor<ExternalStrongType, [1, 2, 3]>;
+  }
+}

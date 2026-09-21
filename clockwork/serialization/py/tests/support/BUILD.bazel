@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -12,6 +12,9 @@ clk(
         "broken_schema_v1_clk_cc.cc",
         "broken_schema_v1_clk_cc.hh",
         "broken_schema_v1_clk_cc.inl",
+        "broken_schema_v1_clk_cc_types.cc",
+        "broken_schema_v1_clk_cc_types.hh",
+        "broken_schema_v1_clk_cc_types.inl",
         "broken_schema_v1_clk_nb.cc",
         "broken_schema_v1_clk_nb.hh",
         "broken_schema_v1_clk_nb.inl",
@@ -32,6 +35,9 @@ clk(
         "broken_schema_v2_clk_cc.cc",
         "broken_schema_v2_clk_cc.hh",
         "broken_schema_v2_clk_cc.inl",
+        "broken_schema_v2_clk_cc_types.cc",
+        "broken_schema_v2_clk_cc_types.hh",
+        "broken_schema_v2_clk_cc_types.inl",
         "broken_schema_v2_clk_nb.cc",
         "broken_schema_v2_clk_nb.hh",
         "broken_schema_v2_clk_nb.inl",
@@ -52,6 +58,9 @@ clk(
         "simple_schema_v1_clk_cc.cc",
         "simple_schema_v1_clk_cc.hh",
         "simple_schema_v1_clk_cc.inl",
+        "simple_schema_v1_clk_cc_types.cc",
+        "simple_schema_v1_clk_cc_types.hh",
+        "simple_schema_v1_clk_cc_types.inl",
         "simple_schema_v1_clk_nb.cc",
         "simple_schema_v1_clk_nb.hh",
         "simple_schema_v1_clk_nb.inl",
@@ -72,6 +81,9 @@ clk(
         "simple_schema_v2_clk_cc.cc",
         "simple_schema_v2_clk_cc.hh",
         "simple_schema_v2_clk_cc.inl",
+        "simple_schema_v2_clk_cc_types.cc",
+        "simple_schema_v2_clk_cc_types.hh",
+        "simple_schema_v2_clk_cc_types.inl",
         "simple_schema_v2_clk_nb.cc",
         "simple_schema_v2_clk_nb.hh",
         "simple_schema_v2_clk_nb.inl",

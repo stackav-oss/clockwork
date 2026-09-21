@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -11,6 +11,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace clockwork
 {
@@ -64,11 +65,12 @@ struct ApproxAlignerPolicies
   using ValueType = typename std::tuple_element_t<0, std::tuple<InputPolicies...>>::ValueType;
   using ValuePtrsArray = std::array<const ValueType*, input_count>;
   template <typename InputPolicy>
-  using InputType = MessageInputDialWithCursorControl<
+  using InputType = MessageInputDial<
     typename InputPolicy::MsgType,
     InputPolicy::max_msgs,
     InputPolicy::min_msgs,
-    InputPolicy::min_new_msgs>;
+    InputPolicy::min_new_msgs,
+    true>;
   using InputTuple = std::tuple<InputType<InputPolicies>&...>;
   using InputItTuple = std::tuple<typename InputType<InputPolicies>::IteratorType...>;
   using IndexArray = std::array<ssize_t, input_count>;

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -24,6 +24,7 @@ def compiler_context() -> CompilerContext:
 
 @pytest.fixture()
 def typeval() -> typesys.TypeVal:
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     return MockType(type_info=cast("typesys.TypeVal", None))
 
 
@@ -56,13 +57,16 @@ def test_register_entity(compiler_context: CompilerContext, typeval: typesys.Typ
 def test_register_multiple_entities(compiler_context: CompilerContext) -> None:
     """Make sure can register multiple non-conflicting entities."""
     num_to_register = 10
+    # fmt: off
     vals_uuids = [
         (
+            # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             MockType(type_info=cast("typesys.TypeVal", None)),
             uuid5(uuid_reg._UUID_NAMESPACE, f"hell_world:{i}"),
         )
         for i in range(num_to_register)
     ]
+    # fmt: on
     # Register
     for typeval, uuid in vals_uuids:
         uuid_reg.register_uuid(compiler_context, typeval, uuid)
@@ -80,6 +84,7 @@ def test_conflict(compiler_context: CompilerContext) -> None:
     """Test key and uuid conflict detection."""
     name1 = "hello_world:1"
     id1 = uuid5(uuid_reg._UUID_NAMESPACE, name1)
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     val1 = MockType(type_info=cast("typesys.TypeVal", None))
     uuid_reg.register_uuid(compiler_context, val1, id1)
 
@@ -93,6 +98,7 @@ def test_conflict(compiler_context: CompilerContext) -> None:
     # Conflicting UUID val1
     name3 = name1
     id3 = uuid5(uuid_reg._UUID_NAMESPACE, name3)
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     val3 = MockType(type_info=cast("typesys.TypeVal", None))
     with pytest.raises(RuntimeError, match=r"UUID .* already exists."):
         uuid_reg.register_uuid(compiler_context, val3, id3)
@@ -102,13 +108,16 @@ def test_lookup_uuid(compiler_context: CompilerContext) -> None:
     """Test UUID lookup."""
     # Manually create entries for the registry
     num_to_register = 5
+    # fmt: off
     entity_uuid = [
         (
+            # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             MockType(type_info=cast("typesys.TypeVal", None)),
             uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),
         )
         for i in range(num_to_register)
     ]
+    # fmt: on
 
     registry = compiler_context[uuid_reg.UUID_REGISTRY_KEY]
     for entity, uuid in entity_uuid:
@@ -123,6 +132,7 @@ def test_lookup_uuid(compiler_context: CompilerContext) -> None:
         assert uuid_reg.lookup_uuid(compiler_context, entity) == uuid
 
     # Look for non-existent key
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     bad_entity = MockType(type_info=cast("typesys.TypeVal", None))
     with pytest.raises(RuntimeError, match=r"Entity with key .* does not exist .*"):
         uuid_reg.lookup_uuid(compiler_context, bad_entity.value_key())
@@ -134,13 +144,16 @@ def test_lookup_entity(compiler_context: CompilerContext) -> None:
     """Test entity lookup."""
     # Manually create entries for the registry
     num_to_register = 5
+    # fmt: off
     uuid_entity = [
         (
             uuid5(uuid_reg._UUID_NAMESPACE, f"hello_world:{i}"),
+            # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             MockType(type_info=cast("typesys.TypeVal", None)),
         )
         for i in range(num_to_register)
     ]
+    # fmt: on
 
     registry = compiler_context[uuid_reg.UUID_REGISTRY_KEY]
     for uuid, entity in uuid_entity:
@@ -164,10 +177,12 @@ def test_import_from() -> None:
     context2 = CompilerContext("context2")
 
     # Add different entries to each context
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     entity1 = MockType(type_info=cast("typesys.TypeVal", None))
     uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "entity1")
     uuid_reg.register_uuid(context1, entity1, uuid1)
 
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     entity2 = MockType(type_info=cast("typesys.TypeVal", None))
     uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "entity2")
     uuid_reg.register_uuid(context2, entity2, uuid2)
@@ -191,6 +206,7 @@ def test_import_from_conflicts() -> None:
     context2 = CompilerContext("context2")
 
     # Same entity with different UUIDs
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     entity = MockType(type_info=cast("typesys.TypeVal", None))
     uuid1 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid1")
     uuid2 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid2")
@@ -211,7 +227,9 @@ def test_import_from_conflicts() -> None:
     context3 = CompilerContext("context3")
     context4 = CompilerContext("context4")
 
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     entity3 = MockType(type_info=cast("typesys.TypeVal", None))
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     entity4 = MockType(type_info=cast("typesys.TypeVal", None))
     uuid3 = uuid5(uuid_reg._UUID_NAMESPACE, "uuid3")
 

@@ -1,9 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/shm_channel.hh"
 
 #include "clockwork/pinion/detail/socket_common.hh"
+#include "clockwork/pinion/slot_ref.hh"
+#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/container/bounded_string.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
@@ -17,10 +19,14 @@
 #include <cerrno>
 #include <climits>
 #include <fcntl.h>
+#include <iterator>
+#include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <system_error>
 #include <unistd.h>
 #include <utility>
@@ -84,9 +90,14 @@ create_shm_file(const jewels::filesystem::Directory& shm_dir, std::string_view n
       "Failed to guarantee size of new buffer '{}': {}", name, jewels::filesystem::ErrorCode(result));
     return jewels::unexpected(ShmChannel::Error::fatal);
   }
+  const auto null_terminated_name = jewels::container::BoundedString<NAME_MAX>::try_make(name);
+  if (!null_terminated_name)
+  {
+    jewels::log_cerr_error("Failed to null terminate {} character name '{}'", name.size(), name);
+    return jewels::unexpected(ShmChannel::Error::fatal);
+  }
   // Give the tmpfile a name
-  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage) TODO(DX-1794): Port to a null terminated type.
-  result = linkat_anon(file->descriptor(), shm_dir.descriptor(), name.data(), AT_SYMLINK_FOLLOW);
+  result = linkat_anon(file->descriptor(), shm_dir.descriptor(), null_terminated_name->data(), AT_SYMLINK_FOLLOW);
   if (result == 0)
   {
     // Successfully named the tmpfile, so return it
@@ -118,10 +129,17 @@ jewels::expected<jewels::filesystem::File, ShmChannel::Error> open_shm_file(
   ShmChannel::ResumeBehavior resume_behavior)
 {
   struct stat statbuf = {};
+
+  const auto null_terminated_name = jewels::container::BoundedString<NAME_MAX>::try_make(name);
+  if (!null_terminated_name)
+  {
+    jewels::log_cerr_error("Failed to null terminate {} character name '{}'", name.size(), name);
+    return jewels::unexpected(ShmChannel::Error::fatal);
+  }
+
   while (true)
   {
-    // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage) TODO(DX-1794): Port to a null terminated type
-    const int result = ::fstatat(shm_dir.descriptor(), name.data(), &statbuf, AT_SYMLINK_NOFOLLOW);
+    const int result = ::fstatat(shm_dir.descriptor(), null_terminated_name->data(), &statbuf, AT_SYMLINK_NOFOLLOW);
     if (result == 0)
     {
       // The file exists, so attempt to use it as-is
@@ -284,6 +302,31 @@ ShmChannel::ShmChannel(
 
 ShmChannel::~ShmChannel() = default;
 
+const BufferLayout& ShmChannel::layout() const noexcept
+{
+  return buffer_->layout();
+}
+
+std::ranges::subrange<SlotRef> ShmChannel::available() const
+{
+  auto buffer = jewels::memory::make_non_null_from_ref(*buffer_);
+  // Assigning to variables to make evaluation order explicit because
+  // for this range calling begin() and end() use atomic operations.
+  // Begin should be called before end. Worst case, publisher adds new
+  // messages causing begin to update between the calls of begin and
+  // end.  This same thing can also happen after this function
+  // returns.  Users should always check still_available to make sure
+  // data is valid regardless.
+  const auto begin = SlotRef(buffer, std::begin(*buffer));
+  const auto end = SlotRef(buffer, std::end(*buffer));
+  return std::ranges::subrange<SlotRef>{begin, end};
+}
+
+size_t ShmChannel::get_publish_count() const noexcept
+{
+  return buffer()->get_publish_count();
+}
+
 SubscriberHandle ShmChannel::make_subscriber()
 {
   return SubscriberHandle{jewels::memory::make_non_null_from_ref(*buffer_)};
@@ -292,6 +335,11 @@ SubscriberHandle ShmChannel::make_subscriber()
 int ShmChannel::socket() const noexcept
 {
   return socket_.descriptor();
+}
+
+bool ShmChannel::handshake()
+{
+  return true;
 }
 
 void ShmChannel::set_socket(UnixSocket socket) noexcept
@@ -309,12 +357,27 @@ jewels::memory::ObjectPtr<Buffer> ShmChannel::buffer() const noexcept
   return socket_ns_;
 }
 
+[[nodiscard]] const std::pmr::string& ShmChannel::scope() const noexcept
+{
+  return socket_ns_;
+}
+
 [[nodiscard]] const std::pmr::string& ShmChannel::filename() const noexcept
 {
   return filename_;
 }
 
+[[nodiscard]] const std::pmr::string& ShmChannel::identifier() const noexcept
+{
+  return filename_;
+}
+
 [[nodiscard]] const std::pmr::string& ShmChannel::channel_name() const noexcept
+{
+  return channel_name_;
+}
+
+[[nodiscard]] const std::pmr::string& ShmChannel::name() const noexcept
 {
   return channel_name_;
 }

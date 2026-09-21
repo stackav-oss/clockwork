@@ -1,12 +1,18 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/logging/writers/channel_message_rates_clk_cc.hh"
 #include "clockwork/logging/writers/logger.hh"
 #include "clockwork/logging/writers/logger_clk_cc_dial.hh"
 #include "clockwork/logging/writers/logger_config_clk_cc.hh"
+#include "clockwork/logging/writers/logger_status_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
+#include "jewels/uuid/uuid.hh"
 
 namespace clockwork_logging
 {

@@ -1,9 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/shm_publisher.hh"
 
+#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/detail/socket_common.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/file_descriptor.hh"
@@ -14,7 +16,6 @@
 #include <cerrno>
 #include <iterator>
 #include <memory>
-#include <stdexcept>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <tuple>
@@ -24,7 +25,7 @@ namespace clockwork::pinion
 {
 
 // NOLINTNEXTLINE(readability-function-size) TODO OI-2956 Refactor ShmChannel
-jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
+jewels::expected<std::shared_ptr<ShmPublisher>, ShmChannel::Error> ShmPublisher::open(
   jewels::memory::MemoryResource memres,
   const jewels::filesystem::Directory& shm_dir,
   std::string_view socket_ns,
@@ -47,16 +48,14 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
   {
     return jewels::unexpected(buffer_map.error());
   }
-  /// When creating the publisher add 1 to the max_observers to account for the socket observer that this will add
-  PublisherHandle publisher_handle{
-    jewels::memory::make_non_null_from_ref(*std::get<1>(*buffer_map)), 1 + max_observers, memres};
   /// Listen after the shared memory area has been created so subscribers won't connect and then fail to open
   if (const auto listen_result = socket->listen(static_cast<int>(max_clients)); !listen_result)
   {
     jewels::log_cerr_error("Failed to listen on socket: {}", jewels::filesystem::ErrorCode(listen_result.error()));
     return jewels::unexpected(Error::fatal);
   }
-  return ShmPublisher(
+  return jewels::memory::make_pmr_shared<ShmPublisher>(
+    memres,
     memres,
     socket_ns,
     filename,
@@ -64,7 +63,7 @@ jewels::expected<ShmPublisher, ShmChannel::Error> ShmPublisher::open(
     std::move(std::get<BufferPtr>(*buffer_map)),
     std::move(std::get<jewels::filesystem::MMapRegion>(*buffer_map)),
     std::move(*socket),
-    std::move(publisher_handle),
+    max_observers,
     max_clients,
     resume_behavior);
 }
@@ -78,20 +77,20 @@ ShmPublisher::ShmPublisher(
   BufferPtr buffer,
   jewels::filesystem::MMapRegion map,
   UnixSocket socket,
-  PublisherHandle publisher,
+  size_t max_observers,
   size_t max_clients,
   ResumeBehavior resume_behavior)
   : ShmChannel(
       memres, std::move(buffer), std::move(map), std::move(socket), socket_ns, filename, channel_name, resume_behavior),
-    publisher_(std::move(publisher)),
+    publisher_(jewels::memory::make_non_null_from_ref(*this)),
     log_cerr_throttle_(jewels::memory::make_pmr_shared<jewels::LogCerrThrottle>(memres, min_log_cerr_interval)),
     socket_clients_(
-      jewels::memory::make_pmr_unique<SocketClients>(memres, memres, channel_name, max_clients, log_cerr_throttle_))
+      jewels::memory::make_pmr_unique<SocketClients>(memres, memres, channel_name, max_clients, log_cerr_throttle_)),
+    observers_(memres)
 {
-  if (!publisher_->add_observer(jewels::memory::make_non_null_from_ref(*socket_clients_)))
-  {
-    throw std::runtime_error("Failed to add socket observer to PublisherHandle");
-  }
+  /// When creating the publisher add 1 to the max_observers to account for the socket observer that this will add
+  observers_.reserve(max_observers + 1);
+  observers_.emplace_back(jewels::memory::make_non_null_from_ref(*socket_clients_));
 }
 
 PublisherHandle& ShmPublisher::publisher()
@@ -113,11 +112,12 @@ jewels::expected<PublisherHandle, jewels::MonoError> ShmPublisher::extract_publi
 
 bool ShmPublisher::add_observer(jewels::memory::ObjectPtr<Observer> observer) noexcept
 {
-  if (!publisher_)
+  if (observers_.size() < observers_.capacity())
   {
-    return false;
+    observers_.emplace_back(observer);
+    return true;
   }
-  return publisher_->add_observer(observer);
+  return false;
 }
 
 size_t ShmPublisher::num_clients() const noexcept
@@ -169,6 +169,27 @@ void ShmPublisher::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint32_t
   }
 }
 
+jewels::expected<PublisherReservation, ReserveError> ShmPublisher::reserve(size_t count, bool connected) noexcept
+{
+  const auto result = buffer()->reserve(count);
+  if (!result)
+  {
+    return jewels::unexpected{result.error()};
+  }
+  return {
+    jewels::in_place,
+    PublisherReservation{
+      jewels::memory::make_non_null_from_ref(*static_cast<Observer*>(this)), buffer(), *result, count, connected}};
+}
+
+void ShmPublisher::notify(const Observer::Event& event)
+{
+  for (auto observer : observers_)
+  {
+    observer->notify(event);
+  }
+}
+
 ShmPublisher::SocketClients::SocketClients(
   jewels::memory::MemoryResource resource,
   std::string_view channel_name,
@@ -203,9 +224,9 @@ bool ShmPublisher::SocketClients::add(UnixSocket client)
 }
 
 std::pmr::vector<UnixSocket>::iterator
-ShmPublisher::SocketClients::notify_client(const Event& event, std::pmr::vector<UnixSocket>::iterator iter)
+ShmPublisher::SocketClients::notify_client(const Event& /*event*/, std::pmr::vector<UnixSocket>::iterator iter)
 {
-  NotifyMsg msg{.tail = event.tail, .head = event.head};
+  NotifyMsg msg{.placeholder = std::byte{}};
   const auto result = ::send(iter->descriptor(), &msg, sizeof(msg), 0);
   if (result == -1)
   {

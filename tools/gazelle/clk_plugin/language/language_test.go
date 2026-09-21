@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package language
@@ -45,6 +45,28 @@ func TestFindEmptyRules_Success(t *testing.T) {
 		rule.NewRule(common.ClkRule, "file1_clk"),
 		rule.NewRule(common.ClkRule, "file2_clk"),
 	}, actualEmpty)
+}
+
+// TestFindEmptyRules_KeepRuleWhenSrcProducedByCopyFile verifies that a clk() rule whose
+// source file is produced by a copy_file rule (via its singular "out" attr) is not
+// incorrectly marked as empty even when the source file does not exist on disk.
+func TestFindEmptyRules_KeepRuleWhenSrcProducedByCopyFile(t *testing.T) {
+	copyFileRule := rule.NewRule("copy_file", "copy_file1_clk")
+	copyFileRule.SetAttr("out", "file1.clk")
+
+	clkRule := rule.NewRule(common.ClkRule, "file1_clk")
+	clkRule.SetAttr("generate", []string{"cpp_exe"})
+	clkRule.SetAttr("srcs", []string{"file1.clk"})
+
+	rulesInExistingBuildFile := []*rule.Rule{copyFileRule, clkRule}
+
+	// No .clk files exist on disk in this directory — they are all generated.
+	rulesFromSourceFiles := []*rule.Rule{}
+
+	actualEmpty := findEmptyRules(rulesInExistingBuildFile, rulesFromSourceFiles)
+
+	// The clk() rule must NOT be marked as empty because its src is covered by copy_file's out.
+	assert.Empty(t, actualEmpty)
 }
 
 func makeClkRule(name, source string) *rule.Rule {

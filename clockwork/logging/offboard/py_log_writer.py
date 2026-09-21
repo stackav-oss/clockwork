@@ -1,8 +1,10 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python log reader library."""
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 
 from clockwork.logging.offboard.nb_log_writer_impl import (
@@ -66,4 +68,20 @@ class LogWriter(_LogWriterNanobindWrapper):
         """
         buffer = bytearray(message.get_tachyon_constraint().size)
         message.serialize_tachyon(memoryview(buffer))
-        super().write(channel_name, sequence_number, log_time, transmit_time, b"", memoryview(buffer))  # pyright: ignore[reportArgumentType] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        super().write(channel_name, sequence_number, log_time, transmit_time, b"", memoryview(buffer))
+
+
+@contextmanager
+def log_writer(out_uri: str, config: str) -> Generator[LogWriter, None, None]:
+    """Context manager for LogWriter.
+
+    Args:
+        out_uri: Output URI for the log
+        config: Configuration for the log writer
+    """
+    writer = LogWriter()
+    writer.open(out_uri, config)
+    try:
+        yield writer
+    finally:
+        writer.close()

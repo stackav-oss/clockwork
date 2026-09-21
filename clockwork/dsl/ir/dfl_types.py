@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """DFL Trait System.
@@ -38,8 +38,8 @@ from clockwork.dsl.ir.cst_util import get_span as get_span_text
 from typing_extensions import Self, override
 
 if TYPE_CHECKING:
-    from clockwork.dsl import clockwork_cst as cst
-    from fltk.fegen.pyrt.terminalsrc import Span
+    from clockwork.dsl import clockwork_cst_protocol as cst
+    from fltk.fegen.pyrt.span_protocol import SpanProtocol
 
 
 class CollectionType(typesys.TypeVal):
@@ -101,7 +101,7 @@ class ResolvedTraitDef:
     fqn: str
     type_params: tuple[ResolvedTraitTypeParam, ...] = ()
     associated_types: tuple[str, ...] = ()
-    span: Span | None = None
+    span: SpanProtocol | None = None
 
 
 @dataclass
@@ -120,7 +120,7 @@ class ResolvedTraitImpl:
     for_type: typesys.TypeVal
     type_args: dict[str, typesys.TypeVal] = field(default_factory=dict)
     associated_types: dict[str, typesys.TypeVal] = field(default_factory=dict)
-    span: Span | None = None
+    span: SpanProtocol | None = None
 
 
 @dataclass
@@ -157,7 +157,7 @@ class TraitDef(typesys.NamedValue):
     module: node.Module | None = None
     type_params: tuple[TraitTypeParam, ...] = ()
     associated_types: tuple[str, ...] = ()
-    span: Span | None = None
+    span: SpanProtocol | None = None
     resolved: ResolvedTraitDef | None = field(default=None, repr=False)
 
     @classmethod
@@ -279,7 +279,7 @@ class TraitImpl:
     for_type_expr: expr.Expr
     type_arg_exprs: list[expr.Expr] = field(default_factory=list)
     associated_type_exprs: dict[str, expr.Expr] = field(default_factory=dict)
-    span: Span | None = None
+    span: SpanProtocol | None = None
     resolved: ResolvedTraitImpl | None = field(default=None, repr=False)
 
     @classmethod

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,11 +6,13 @@
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/memory/memory_resource.hh"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -27,11 +29,13 @@ public:
   /// @param[in] maybe_log_interval The interval to read from the log
   /// @param[in] maybe_relative_interval The interval to read from the log relative to the sart of the log
   /// @param[in] decompress_option Option for whether to decompress lite-compressed messages found in the log
+  /// @param[in] chunk_reader_factory Offboard chunk reader factory
   OffboardLogReader(
     std::string_view log_uri,
     std::optional<LogInterval> maybe_log_interval,
     std::optional<RelativeInterval> maybe_relative_interval,
-    DecompressOption decompress_option);
+    DecompressOption decompress_option,
+    std::shared_ptr<offboard::ChunkReaderWriterFactory<>> chunk_reader_factory);
 
   ~OffboardLogReader() override;
   OffboardLogReader(const OffboardLogReader&) = delete;
@@ -80,7 +84,7 @@ public:
   /// Read the next message out of the log.
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] std::optional<LoggedMessage> next_message() override;
+  [[nodiscard]] std::optional<LoggedMessage> next_message_impl() override;
 
 private:
   /// Memory resource

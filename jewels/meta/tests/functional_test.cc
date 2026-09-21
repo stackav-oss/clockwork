@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/meta/functional.hh"
@@ -26,10 +26,10 @@ TEST_CASE("KeepIf")
 
 TEST_CASE("Apply")
 {
-  using TestTypes = Types<int, bool, float>;
+  using TestTypes = Types<int, char, float>;
   using VectorTypes = Apply<std::vector, TestTypes>::type;
 
-  STATIC_REQUIRE(std::is_same_v<VectorTypes, Types<std::vector<int>, std::vector<bool>, std::vector<float>>>);
+  STATIC_REQUIRE(std::is_same_v<VectorTypes, Types<std::vector<int>, std::vector<char>, std::vector<float>>>);
 }
 
 TEST_CASE("AsTuple")

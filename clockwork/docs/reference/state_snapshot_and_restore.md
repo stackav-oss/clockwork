@@ -115,6 +115,58 @@ See the "Handling Missing Snapshots" section below for details.
 
 Note that unlike for snapshots, the data source is connected to the state instance rather than to a cog endpoint.
 
+### External C++ state snapshots
+
+An external C++ state declares the Tachyon representation used for its snapshots in the DSL:
+
+```clockwork
+extern_type MyState
+{
+  serialized_form
+  {
+    representation: Tachyon<MyStateSnapshot>;
+  }
+}
+```
+
+The C++ type supplies the matching `Serializable<T>` specialization.
+Its `SerializedType` must be the declared `Tappy<MyStateSnapshot>` representation, and `deserialize` receives the bytes from the snapshot channel:
+
+```cpp
+struct MyState
+{
+  explicit MyState(jewels::memory::MemoryResource /*memory_resource*/) {}
+  int32_t value{0};
+};
+
+template <>
+struct clockwork::Serializable<MyState>
+{
+  using SerializedType = clockwork::Tappy<MyStateSnapshot>;
+
+  static jewels::BinaryOutcome serialize(
+    jewels::Out<SerializedType> snapshot, const MyState& state);
+  static jewels::BinaryOutcome deserialize(
+    jewels::Out<MyState> state, const SerializedType& snapshot);
+};
+```
+
+The snapshot channel must use `Tachyon<MyStateSnapshot>` and the state instance retains its memory resource:
+
+```clockwork
+channel MyStateSnapshotChannel
+{
+  message_type: Tachyon<MyStateSnapshot>;
+  max_num_messages: 1;
+}
+
+new my_state: State(representation=MyState, memory_resource=memory);
+apply TakeSnapshots(channel=MyStateSnapshotChannel, interval=1s) to my_cog.state;
+```
+
+Offline restoration uses a `FirstMessage` source connected directly to the external state.
+Clockwork validates the snapshot representation ID and exact byte size before allocating the state and calling `deserialize`, so a failed conversion aborts initialization without registering a partial state.
+
 ### Loading State from Files
 
 To restore state from a file on disk, use `SerializedDataFile`:

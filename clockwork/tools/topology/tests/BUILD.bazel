@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -19,6 +19,7 @@ py_test(
         ":__test__",
     ],
     data = [
+        ":test_logging_topology_summary",
         ":test_system_multi_node_topology_summary",
         ":test_system_multi_route_topology_summary",
     ],
@@ -27,8 +28,14 @@ py_test(
         ":__test__",
         "//clockwork/tests/support:py_test_utils",
         "//clockwork/tools/topology",
+        "//clockwork/tools/topology:summarize",
         "@clockwork_pip//pytest",
     ],
+)
+
+topology_summary(
+    name = "test_logging_topology_summary",
+    system_target = "//clockwork/dsl/composition/tests/support:simplesys_clk",
 )
 
 topology_summary(

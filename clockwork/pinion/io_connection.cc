@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/io_connection.hh"
@@ -12,7 +12,8 @@ namespace clockwork::pinion
 
 jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
 IoConnection::connect_subscriber(
-  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/)
+  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/,
+  std::shared_ptr<pinion::AbstractChannel> /*subscriber*/) // NOLINT(performance-unnecessary-value-param) virtual base
 {
   return jewels::unexpected{Error::unsupported};
 }

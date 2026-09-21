@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "jewels/memory/error.hh"
+#include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/std/expected.hh"
 
 #include <gsl/pointers> // IWYU pragma: export
@@ -28,8 +29,17 @@ template <class T>
 using NonNullSharedPtr = NonNullPtr<std::shared_ptr<T>>;
 
 /// A unique pointer which cannot be null.
-template <class T>
-using NonNullUniquePtr = NonNullPtr<std::unique_ptr<T>>;
+/// @tparam T Object type associated with the unique pointer.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+/// @tparam Alloc Allocator type
+template <class T, bool enable_polymorphic_deletion = false, class Alloc = std::allocator<void>>
+using NonNullUniquePtr = NonNullPtr<unique_ptr<T, enable_polymorphic_deletion, Alloc>>;
+
+/// A pmr unique pointer which cannot be null.
+/// @tparam T Object type associated with the unique pointer.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+template <class T, bool enable_polymorphic_deletion = false>
+using NonNullPmrUniquePtr = NonNullPtr<pmr_unique_ptr<T, enable_polymorphic_deletion>>;
 
 /// Make an `ObjectPtr` from a reference.
 /// @tparam T The type of `object`.
@@ -51,16 +61,6 @@ template <class T>
 /// @returns Either an `NonNullPtr` or a `MemoryError` if `ptr` is `nullptr`.
 template <class Ptr>
 [[nodiscard]] jewels::expected<NonNullPtr<Ptr>, MemoryError> try_make_non_null(Ptr ptr) noexcept;
-
-/// Make a non-null unique pointer via std::make_unique
-/// @tparam T The type of the `object`.
-/// @tparam Args Constructor arguments.
-/// @param[in] args Constructor arguments.
-/// @return Non-null unique pointer to allocated instance.
-/// @throws Any exceptions thrown by the constructor.
-/// @throws std::bad_alloc if the allocation fails.
-template <typename T, typename... Args>
-[[nodiscard]] NonNullUniquePtr<T> make_unique(Args&&... args);
 
 /// Make a non-null shared pointer via std::make_shared
 /// @tparam T The type of the `object`.

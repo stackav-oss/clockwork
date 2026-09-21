@@ -31,10 +31,10 @@ cpp_target test_message
 
 py_target py_test_message
 {
-    interface Tappy<TestMessage>;
+  interface Tappy<TestMessage>;
 }
 
 nanobind_target test_message_clk_nb
 {
-    binding Tappy<TestMessage>;
+  binding Tappy<TestMessage>;
 }

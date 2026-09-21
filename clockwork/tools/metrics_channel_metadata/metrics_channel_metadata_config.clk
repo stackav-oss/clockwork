@@ -4,6 +4,8 @@
 use[] clockwork::common::constants;
 use clockwork::common::process_description;
 
+MAX_COG_INSTANCE_PATH_SIZE: UInt64 = 1023;
+
 // Metrics channel metadata
 schema MetricsChannelMetadata
 {
@@ -24,10 +26,15 @@ schema MetricsChannelMetadata
     #2 metrics_channel_uuid: Uuid<process_description::EndpointInstanceId>;
 
     // Cog Path
-    #3 cog_path: VarString<max_channel_name_size>;
+    #3 cog_path: VarString<MAX_COG_INSTANCE_PATH_SIZE>;
 
     // Cog Instance Path
     #4 cog_instance_path: VarString<max_channel_name_size>;
+  }
+
+  history
+  {
+    version: 5;
   }
 }
 
@@ -46,14 +53,12 @@ schema MetricsChannelMetadataReport
   fields
   {
     // Metrics channel metadata
-    #3 metrics_channels: VarArray<
-      MetricsChannelMetadata<max_channel_name_size>,
-      max_num_channels>;
+    #3 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size>, max_num_channels>;
   }
   history
   {
     version: 3;
-    legacy_became: [2->3];
+    legacy_became: [2 -> 3];
   }
 }
 
@@ -72,17 +77,14 @@ schema MetricsChannelMetadataConfig
     #4 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #5 max_schema_definition_size = 30000;
+    #5 max_schema_definition_size = constants::MAX_SCHEMA_DEFINITION_SIZE;
   }
 
   fields
   {
 
     // Metrics channel metadata
-    #3 metrics_channels: VarArray<
-      MetricsChannelMetadata<
-        max_channel_name_size=max_channel_name_size>,
-      max_num_channels>;
+    #3 metrics_channels: VarArray<MetricsChannelMetadata<max_channel_name_size=max_channel_name_size>, max_num_channels>;
 
     // Schema name
     #6 metrics_metadata_report_schema_name: VarString<max_schema_name_size>;
@@ -93,8 +95,8 @@ schema MetricsChannelMetadataConfig
 
   history
   {
-    version: 7;
-    legacy_became: [2->3];
+    version: 8;
+    legacy_became: [2 -> 3];
   }
 }
 

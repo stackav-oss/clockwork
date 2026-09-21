@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
@@ -23,6 +23,20 @@ namespace clockwork::serialization
 /// @param[in] value_size Optional element size in bytes
 /// @return Offset to the flag value in the optional storage
 [[nodiscard]] size_t optional_has_value_offset(size_t value_size);
+
+/// Load the size field from a variable length SOA instance
+/// @param[in] soa_span SOA instance span
+/// @param[in] size_offset SOA size offset
+/// @param[in] size_length SOA size length
+/// @return Number of elements in the SOA
+[[nodiscard]] size_t load_soa_size(std::span<const std::byte> soa_span, size_t size_offset, size_t size_length);
+
+/// Store the size into the size field of a variable length SOA instance
+/// @param[in] soa_span SOA instance span
+/// @param[in] size_offset SOA size offset
+/// @param[in] size_length SOA size length
+/// @param[in] size_value Number of elements in the SOA
+void store_soa_size(std::span<std::byte> soa_span, size_t size_offset, size_t size_length, size_t size_value);
 
 /// Layout information for a single field in an SoA structure
 struct FieldLayoutInfo
@@ -70,7 +84,7 @@ public:
   ClkBuiltInTypeFactoryPlugin& operator=(ClkBuiltInTypeFactoryPlugin&&) = delete;
 
   /// @see ClkTypeFactoryPlugin::make_clk_type
-  [[nodiscard]] std::unique_ptr<ClkType> make_clk_type(
+  [[nodiscard]] std::shared_ptr<ClkType> make_clk_type(
     jewels::memory::ObjectPtr<ClkTypeFactory> factory,
     const metadata::TypeDesc& type_proto,
     size_t type_index,

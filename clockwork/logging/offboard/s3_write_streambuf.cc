@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/s3_write_streambuf.hh"
 
 #include <span>
+#include <string>
 
 // IWYU pragma: no_include <bits/types/__mbstate_t.h>
 
@@ -12,7 +13,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <utility>
 
 namespace clockwork_logging::offboard

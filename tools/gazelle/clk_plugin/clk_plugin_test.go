@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package clk_plugin
@@ -72,6 +72,9 @@ clk(
         "avocado_clk_cc.cc",
         "avocado_clk_cc.hh",
         "avocado_clk_cc.inl",
+        "avocado_clk_cc_types.cc",
+        "avocado_clk_cc_types.hh",
+        "avocado_clk_cc_types.inl",
     ],
     cpp_deps = [":common_foods_clk_cc"],
     generate = ["cpp"],
@@ -90,6 +93,9 @@ clk(
         "avocado_util_clk_cc.cc",
         "avocado_util_clk_cc.hh",
         "avocado_util_clk_cc.inl",
+        "avocado_util_clk_cc_types.cc",
+        "avocado_util_clk_cc_types.hh",
+        "avocado_util_clk_cc_types.inl",
         "avocado_util_clk_py.py",
     ],
     cpp_deps = [
@@ -120,6 +126,9 @@ clk(
         "common_foods_clk_cc.cc",
         "common_foods_clk_cc.hh",
         "common_foods_clk_cc.inl",
+        "common_foods_clk_cc_types.cc",
+        "common_foods_clk_cc_types.hh",
+        "common_foods_clk_cc_types.inl",
         "common_foods_clk_proto.proto",
     ],
     generate = [
@@ -135,6 +144,9 @@ clk(
         "inedible_foods_clk_cc.cc",
         "inedible_foods_clk_cc.hh",
         "inedible_foods_clk_cc.inl",
+        "inedible_foods_clk_cc_types.cc",
+        "inedible_foods_clk_cc_types.hh",
+        "inedible_foods_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

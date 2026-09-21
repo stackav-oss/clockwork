@@ -1,8 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/units/degrees.hh"
-#include "jewels/units/magnitude.hh"
 #include "jewels/units/quantity.hh"
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -39,6 +39,7 @@ cc_library(
         "//clockwork/logging:log_timestamp",
         "//clockwork/logging:message_encoding_clk_cc",
         "//clockwork/logging:schema_encoding_clk_cc",
+        "//clockwork/logging/offboard:chunk_writer",
         "//clockwork/logging/offboard:types",
         "//clockwork/logging/offboard:writer",
         "//clockwork/logging/offboard/tests/support:test_support",

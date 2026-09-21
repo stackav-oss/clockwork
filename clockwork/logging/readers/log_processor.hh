@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -49,7 +49,10 @@ public:
   /// Constructor
   /// @param[in] reader Log reader
   /// @param[in] topic_filter Optional topic filter, if not set all topics are read
-  LogProcessor(std::unique_ptr<AbstractLogReader> reader, std::function<bool(std::string_view)> topic_filter);
+  LogProcessor(
+    std::unique_ptr<AbstractLogReader> reader,
+    std::function<bool(std::string_view)> topic_filter,
+    std::function<bool(std::string_view, uint32_t)> sequence_number_filter = {});
 
   ~LogProcessor();
   LogProcessor(const LogProcessor&) = delete;
@@ -80,6 +83,19 @@ public:
   LogProcessor& add_tappy_callback(
     std::string_view topic,
     std::function<void(const LogTimestamp& publish_time, const T&)> callback,
+    DeserializationErrorBehavior error_behavior = DeserializationErrorBehavior::throw_exception)
+    requires clockwork::TappyType<T>;
+
+  /// Add a callback to receive the raw logged message metadata and deserialized tachyon message.
+  /// @tparam T Message type
+  /// @param[in] topic The topic to add the callback to.
+  /// @param[in] callback The callback to invoke on new messages.
+  /// @param[in] error_behavior Error handling behavior (keep going or throw exception)
+  /// @return Reference to this class.
+  template <typename T>
+  LogProcessor& add_tappy_msg_callback(
+    std::string_view topic,
+    std::function<void(const LoggedMessage&, const T&)> callback,
     DeserializationErrorBehavior error_behavior = DeserializationErrorBehavior::throw_exception)
     requires clockwork::TappyType<T>;
 
@@ -172,6 +188,8 @@ private:
   std::unique_ptr<LogReader> reader_;
   /// Topic filter, if not set all topics are read
   std::function<bool(std::string_view)> topic_filter_;
+  /// Sequence number filter, if not set all messages are read.
+  std::function<bool(std::string_view, uint32_t)> sequence_number_filter_;
   /// Map of callbacks registered per topic
   std::map<std::string, std::vector<LoggedMessageCallback>> callbacks_;
   /// Flag set when processing has been stopped

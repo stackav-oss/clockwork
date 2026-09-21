@@ -1,10 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/approx_aligner_policies.hh"
 #include "clockwork/dial/tests/support/approx_aligner_fixture.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,4 +1,5 @@
-#![generate(cpp)]
+#![generate(cpp, py)]
 #![cpp(namespace=clockwork::common)]
 
-MAX_CHANNEL_NAME_SIZE: UInt64 = 350;
+MAX_CHANNEL_NAME_SIZE: UInt64 = 380;
+MAX_SCHEMA_DEFINITION_SIZE: UInt64 = 43000;

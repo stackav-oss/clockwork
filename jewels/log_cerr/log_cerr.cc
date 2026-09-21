@@ -1,14 +1,19 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/log_cerr/log_cerr.hh"
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/detect_log_color_mode.hh"
 #include "jewels/log_cerr/detect_log_threshold.hh"
 #include "jewels/log_cerr/log_time.hh"
+#include "jewels/rate_limiter/time_bucket.hh"
 
+#include <atomic>
 #include <compare>
 #include <cstdint>
+#include <iostream>
 
 namespace jewels
 {
@@ -65,6 +70,11 @@ void set_log_time_clock(const ::jewels::LogClockPtr& log_clock)
 {
   // Implemented here to access file-scoped global_log_time_clock
   global_log_time_clock_ptr = log_clock;
+}
+
+bool is_log_time_clock_set()
+{
+  return static_cast<bool>(global_log_time_clock_ptr);
 }
 
 } // namespace impl

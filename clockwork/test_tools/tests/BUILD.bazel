@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -40,11 +40,13 @@ cc_test(
         "//clockwork/logging:nolint_helper",
         "//clockwork/logging/log_playback:end_of_log_clk_cc",
         "//clockwork/logging/log_playback:log_message_fetcher",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
+        "//clockwork/logging/offboard:chunk_writer",
         "//clockwork/logging/offboard:types",
         "//clockwork/logging/offboard:writer",
         "//clockwork/logging/readers:offboard_log_reader",
         "//clockwork/logging/readers:types",
-        "//clockwork/logging/writers:deterministic_log_writer",
+        "//clockwork/logging/writers:persistent_log_entry",
         "//clockwork/scaffolding:offline_scaffolding",  #keep
         "//clockwork/test_tools:clockwork_system_runner",
         "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config_clk_cc",

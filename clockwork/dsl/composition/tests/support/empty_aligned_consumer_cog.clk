@@ -1,0 +1,26 @@
+#![generate(cpp, cpp_cog, cpp_test_cog)]
+#![cpp(namespace=clockwork::testing::empty_aligned_consumer)]
+
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner::{SimpleAligner, TestMsg, ConsumerEchoMsg};
+
+// A cog with an ordinary trigger whose aligned input group may be empty.
+cog EmptyAlignedConsumerCog
+{
+  inputs
+  {
+    raw_data: Tappy<TestMsg>;
+  }
+  aligned_inputs
+  {
+    aligned: SimpleAligner;
+  }
+  outputs
+  {
+    echo: Tappy<ConsumerEchoMsg>;
+  }
+  execution
+  {
+    condition new_raw_data: new_message(raw_data);
+    execute when: new_raw_data;
+  }
+}

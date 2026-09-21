@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -7,7 +7,7 @@
 from pathlib import Path
 
 import pytest
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.cpp.context import CppContext
 from clockwork.dsl.ir import compiler, importer, parse, schema
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID

@@ -1,0 +1,9 @@
+#![generate()]
+
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+use jewels::simplelaunch::simplelaunch_channels;
+
+policy ChannelLoggingPolicy for simplelaunch_channels::SimplelaunchStatus
+{
+  log_type = LogType::redundant_telemetry;
+}

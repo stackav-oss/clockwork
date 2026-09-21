@@ -1,36 +1,36 @@
 // Test message
 schema TestMessage
 {
-    uuid: 520e8158-5fa7-4121-a764-9ab39aa7bf3b;
-    fields
-    {
-        // A test string
-        #1 message_string: VarString<240>;
-    }
+  uuid: 520e8158-5fa7-4121-a764-9ab39aa7bf3b;
+  fields
+  {
+    // A test string
+    #1 message_string: VarString<240>;
+  }
 }
 
 // Test state
 schema CogState
 {
-    uuid: a349e6d6-ca14-4651-89a0-2272ded060d0;
-    fields
-    {
-        // A string
-        #1 state_string: VarString<240>;
-    }
+  uuid: a349e6d6-ca14-4651-89a0-2272ded060d0;
+  fields
+  {
+    // A string
+    #1 state_string: VarString<240>;
+  }
 }
 
 cpp_target test_message
 {
-    options
-    {
-        namespace clockwork::test;
-    }
-    schema TestMessage;
+  options
+  {
+    namespace clockwork::test;
+  }
+  schema TestMessage;
 
-    representation Tachyon<TestMessage>;
-    interface Tappy<TestMessage>;
-    schema CogState;
-    representation Tachyon<CogState>;
-    interface Tap<Tachyon<CogState>>;
+  representation Tachyon<TestMessage>;
+  interface Tappy<TestMessage>;
+  schema CogState;
+  representation Tachyon<CogState>;
+  interface Tap<Tachyon<CogState>>;
 }

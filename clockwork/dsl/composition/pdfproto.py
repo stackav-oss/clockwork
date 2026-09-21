@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to Process Description Files (PDF)."""
@@ -12,6 +12,8 @@ from clockwork.serialization.py.protocol import Tachyon
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from clockwork.dsl.composition.channel_config_proto import ChannelType
 
 
 class MemoryResourceType(Protocol):
@@ -63,8 +65,11 @@ class DataSourceTypeEnum(Protocol):
     log_first_message: DataSourceType
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ProcessDescription(Tachyon["ProcessDescription"]):
+# fmt: on
     """Describes the clockwork graph for a particular process."""
 
     process_id: UUID
@@ -82,16 +87,22 @@ class ProcessDescription(Tachyon["ProcessDescription"]):
     data_sources: list[DataSource]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class PubSubGraph(Tachyon["PubSubGraph"]):
+# fmt: on
     """Description of publishers, subscribers, and the connections between them."""
 
     publish_endpoints: list[PublishEndpoint]
     connections: list[PubSubConnection]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class CogInstanceDescription(Tachyon["CogInstanceDescription"]):
+# fmt: on
     """Protocol for dynamic CogInstanceDescription dataclass."""
 
     cog_class_id: UUID
@@ -100,16 +111,22 @@ class CogInstanceDescription(Tachyon["CogInstanceDescription"]):
     instance_path_name: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class EndpointInstanceDescription(Tachyon["EndpointInstanceDescription"]):
+# fmt: on
     """Typing protocol for dynamic EndpointInstanceDescription dataclass."""
 
     endpoint_class_id: UUID
     endpoint_instance_id: UUID
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class PublishEndpoint(Tachyon["PublishEndpoint"]):
+# fmt: on
     """Additional information about a publish endpoint.
 
     We need information about both local and remote publishers.  For local
@@ -123,64 +140,90 @@ class PublishEndpoint(Tachyon["PublishEndpoint"]):
     num_subscribers: int
     channel_name: str
     is_bulk_data: bool
+    channel_type: ChannelType
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class PinionBufferLayout(Tachyon["PinionBufferLayout"]):
+# fmt: on
     """Describes layout of a Pinion buffer."""
 
     num_slots: int
     message_size: int
     is_published_once: bool
+    max_msgs_per_exec: int = 1
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class PubSubConnection(Tachyon["PubSubConnection"]):
+# fmt: on
     """Describes a link between a publisher/subscriber pair."""
 
     subscriber_process_id: UUID
     subscriber_id: UUID
     publisher_id: UUID
+    subscriber_key: str
+    publisher_key: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class StateGraph(Tachyon["StateGraph"]):
+# fmt: on
     """Describes state instances and how they connect to Cog instances."""
 
     state_instances: list[StateInstanceDescription]
     connections: list[StateConnection]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class StateInstanceDescription(Tachyon["StateInstanceDescription"]):
+# fmt: on
     """Describes a specific instance of persistent state."""
 
     representation_id: UUID
     state_instance_id: UUID
     instance_path_name: str
+    snapshot_representation_id: UUID | None
     maybe_buffer_layout: PinionBufferLayout | None
     maybe_memory_resource: UUID | None
     init_data_source: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class StateConnection(Tachyon["StateConnection"]):
+# fmt: on
     """A connection between a state instance and a state endpoint on a Cog."""
 
     state_id: UUID
     endpoint_id: UUID
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ConfigGraph(Tachyon["ConfigGraph"]):
+# fmt: on
     """Describes Config instances and their connections to Cog instances."""
 
     config_instances: list[ConfigInstanceDescription]
     connections: list[ConfigConnection]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ConfigInstanceDescription(Tachyon["ConfigInstanceDescription"]):
+# fmt: on
     """Describes a Config instance."""
 
     config_instance_id: UUID
@@ -188,16 +231,22 @@ class ConfigInstanceDescription(Tachyon["ConfigInstanceDescription"]):
     init_data_source: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ConfigConnection(Tachyon["ConfigConnection"]):
+# fmt: on
     """Connection between a Config instance and an endpoint on a Cog instance."""
 
     config_id: UUID
     endpoint_id: UUID
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class DataSource(Tachyon["DataSource"]):
+# fmt: on
     """Describes a data source for config or state initialization."""
 
     representation_id: UUID
@@ -206,8 +255,11 @@ class DataSource(Tachyon["DataSource"]):
     fallback_source: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class MemoryResource(Tachyon["MemoryResource"]):
+# fmt: on
     """Represents a distinct memory resource to instantiate."""
 
     memory_resource_id: UUID
@@ -216,32 +268,44 @@ class MemoryResource(Tachyon["MemoryResource"]):
     resource_max_size: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class MemoryResourceConnection(Tachyon["MemoryResourceConnection"]):
+# fmt: on
     """Connection between a MemoryResource instance and an endpoint on a Cog instance."""
 
     memory_resource_id: UUID
     endpoint_id: UUID
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class MemoryResourceGraph(Tachyon["MemoryResourceGraph"]):
+# fmt: on
     """Describes MemoryResource instances and their connections to Cog instances."""
 
     memory_resources: list[MemoryResource]
     connections: list[MemoryResourceConnection]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class TimerInstanceDescription(Tachyon["TimerInstanceDescription"]):
+# fmt: on
     """An instance of a Cog timer."""
 
     timer_id: UUID
     instance_path_name: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class IoConnectionInstanceDescription(Tachyon["IoConnectionInstanceDescription"]):
+# fmt: on
     """An instance of an IO Connection."""
 
     class_id: UUID
@@ -251,8 +315,11 @@ class IoConnectionInstanceDescription(Tachyon["IoConnectionInstanceDescription"]
     instance_path_name: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class NotConnectedEndpoint(Tachyon["NotConnectedEndpoint"]):
+# fmt: on
     """Describes an endpoint that is not connected to any publisher or subscriber."""
 
     endpoint_id: UUID
@@ -260,8 +327,11 @@ class NotConnectedEndpoint(Tachyon["NotConnectedEndpoint"]):
     buffer_layout: PinionBufferLayout
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class SnapshotConfig(Tachyon["SnapshotConfig"]):
+# fmt: on
     """Configuration for snapshotting a state or config endpoint.
 
     For state snapshots (TakeSnapshots policy), at least one of interval_ns or cycles must be set.

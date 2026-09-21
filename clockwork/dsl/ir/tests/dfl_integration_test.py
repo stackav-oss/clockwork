@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl import clockwork_parser as parser
 from clockwork.dsl import compiler_context
-from clockwork.dsl.ir import clkbuiltins, compiler, dfl, dfl_analysis, dfl_types, node, primitive, typesys
+from clockwork.dsl.ir import clkbuiltins, compiler, dfl, dfl_analysis, dfl_types, node, parse, primitive, typesys
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.tests.support.py_test_utils import fix_clockwork_path
@@ -54,10 +54,9 @@ def _parse_dfl_expr(source: str) -> tuple[cst.DflExpr, terminalsrc.TerminalSourc
     """Parse a DFL expression string."""
     terminals = terminalsrc.TerminalSource(source)
     clk_parser = parser.Parser(terminalsrc=terminals)
-    result = clk_parser.apply__parse_dfl_expr(0)
+    result = parse.parse_rule(clk_parser, "dfl_expr", cst.DflExpr)
     assert result is not None, f"Parse failed: {source}"
     assert result.pos == len(source), f"Parse incomplete: {source}"
-    assert isinstance(result.result, cst.DflExpr)
     return result.result, terminals
 
 

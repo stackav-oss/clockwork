@@ -1,13 +1,21 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/tcp_bridge_server.hh"
 
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/onboard/types.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
+#include "clockwork/pinion/detail/socket_common.hh"
 #include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
+#include "clockwork/serialization/cpp/tachyon_lite_compressor.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
@@ -32,9 +40,11 @@
 #include <ranges>
 #include <ratio>
 #include <span>
+#include <stdexcept>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <utility>
 
 namespace clockwork::pinion
@@ -43,11 +53,22 @@ namespace clockwork::pinion
 namespace
 {
 
-/// TCP bridge send timeout interval
-constexpr auto bridge_server_send_timeout = std::chrono::seconds(1);
-
 /// Number of chunks to use when breaking up a message for bulk transfer
 constexpr size_t num_bulk_data_chunks = 20U;
+
+/// Get the receive acknowledgement timeout to use for a client connection
+/// @param[in] mode Bridge server mode
+/// @param[in] is_bulk_data True if the connection does bulk transfers
+/// @return Time to wait for an ack from the client before closing a connection
+[[nodiscard]] std::chrono::nanoseconds get_recv_ack_timeout(TcpBridgeServer::Mode mode, bool is_bulk_data)
+{
+  if (mode == TcpBridgeServer::Mode::unit_test)
+  {
+    return TcpBridgeServer::bridge_server_unit_test_recv_ack_timeout;
+  }
+  return is_bulk_data ? TcpBridgeServer::bridge_server_bulk_recv_ack_timeout
+                      : TcpBridgeServer::bridge_server_recv_ack_timeout;
+}
 
 } // namespace
 
@@ -56,21 +77,24 @@ TcpBridgeServer::TcpBridgeServer(TcpBridgeServerParams& params)
     epoll_(std::move(params.epoll)),
     channel_name_(params.channel_name, params.memres),
     is_bulk_data_(params.is_bulk_data),
-    subscriber_(std::move(params.subscriber)),
+    uuid_str_(std::move(params.uuid_str)),
+    layout_(params.layout),
+    channel_factory_(std::move(params.channel_factory)),
     listen_socket_(std::move(params.listen_socket)),
     listen_port_(params.listen_port),
     clients_(params.max_clients, nullptr, params.memres),
     diagnostics_state_(std::move(params.diagnostics_state)),
     server_counters_mutex_(jewels::memory::make_pmr_shared<std::mutex>(params.memres)),
     server_counters_(jewels::memory::make_pmr_shared<TcpBridgeClientServerCounters>(params.memres)),
-    mode_(params.mode)
+    mode_(params.mode),
+    lite_compressor_(std::move(params.lite_compressor))
 {
 }
 
 std::shared_ptr<TcpBridgeServer> TcpBridgeServer::make(
   jewels::memory::MemoryResource memres,
   const Tappy<TcpBridgeServerConfig>& config,
-  SubscriberHandle subscriber,
+  std::shared_ptr<AbstractChannelFactory> channel_factory,
   jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
   std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state,
   Mode mode)
@@ -108,17 +132,43 @@ std::shared_ptr<TcpBridgeServer> TcpBridgeServer::make(
     return {};
   }
 
+  std::shared_ptr<clockwork_logging::LiteCompressorInterface> lite_compressor;
+  if (config.get_schema_encoding() == clockwork_logging::SchemaEncoding::clockwork_tachyon)
+  {
+    try
+    {
+      lite_compressor = serialization::TachyonLiteCompressor::make_compressor(
+        memres, config.get_channel_name(), config.get_schema_definition());
+    }
+    catch (const std::runtime_error& exc)
+    {
+      jewels::log_cerr_warn("failed create lite compressor for {}, using default", config.get_channel_name());
+      lite_compressor = jewels::memory::make_pmr_shared<clockwork_logging::LiteCompressor>(memres, memres);
+    }
+  }
+  else
+  {
+    lite_compressor = jewels::memory::make_pmr_shared<clockwork_logging::LiteCompressor>(memres, memres);
+  }
   TcpBridgeServerParams server_params{
     .memres = memres,
     .epoll = epoll,
     .channel_name = config.get_channel_name(),
     .is_bulk_data = config.get_is_bulk_data(),
-    .subscriber = std::move(subscriber),
+    .uuid_str = config.get_publisher_id().to_string(memres),
+    .layout =
+      BufferLayout{
+        .num_slots = config.get_buffer_layout().get_num_slots(),
+        .message_size = config.get_buffer_layout().get_message_size(),
+        .is_published_once = config.get_buffer_layout().get_is_published_once(),
+      },
+    .channel_factory = std::move(channel_factory),
     .listen_socket = std::move(*listen_socket),
     .listen_port = ::ntohs(actual_addr.sin_port),
     .max_clients = config.get_num_clients(),
     .diagnostics_state = std::move(diagnostics_state),
     .mode = mode,
+    .lite_compressor = std::move(lite_compressor),
   };
 
   auto bridge_server = jewels::memory::make_pmr_shared<TcpBridgeServer>(memres, server_params);
@@ -145,25 +195,6 @@ void TcpBridgeServer::notify(AbstractEPollManager& /*epoll*/, int /*efd*/, uint3
   }
 }
 
-void TcpBridgeServer::notify(const Observer::Event& /*event*/)
-{
-  if (mode_ != Mode::overrun_test)
-  {
-    forced_notify();
-  }
-}
-
-void TcpBridgeServer::forced_notify()
-{
-  for (auto& client : clients_)
-  {
-    if (client)
-    {
-      client->notify();
-    }
-  }
-}
-
 [[nodiscard]] std::string_view TcpBridgeServer::channel_name() const
 {
   return channel_name_;
@@ -171,7 +202,7 @@ void TcpBridgeServer::forced_notify()
 
 [[nodiscard]] TcpBridgeClientServerCounters TcpBridgeServer::get_and_reset_counters()
 {
-  std::lock_guard guard{*server_counters_mutex_};
+  const std::lock_guard guard{*server_counters_mutex_};
   TcpBridgeClientServerCounters result = *server_counters_;
   *server_counters_ = {};
   return result;
@@ -198,7 +229,7 @@ void TcpBridgeServer::accept_client()
     if (!empty_slot)
     {
       // Client list is full. Reject the new one.
-      jewels::log_cerr_warn("Client list if full, rejecting connection from client for channel {}", channel_name_);
+      jewels::log_cerr_warn("Client list is full, rejecting connection from client for channel {}", channel_name_);
       return;
     }
 
@@ -214,6 +245,20 @@ void TcpBridgeServer::accept_client()
       return;
     }
 
+    auto subscriber_result = channel_factory_->open_subscriber(uuid_str_, channel_name_, layout_, 1);
+    if (!subscriber_result)
+    {
+      jewels::log_cerr_error(
+        "Could not create subscriber '{}': {}", channel_name_, wise_enum::to_string(subscriber_result.error()));
+      return;
+    }
+
+    if (!set_nonblocking(subscriber_result.value()->socket(), false))
+    {
+      jewels::log_cerr_error("Failed to make unix socket blocking for '{}'", channel_name_);
+      return;
+    }
+
     auto client = jewels::memory::make_pmr_shared<Client>(
       memres_,
       Client::ClientArgs{
@@ -221,11 +266,12 @@ void TcpBridgeServer::accept_client()
         .channel_name = channel_name_,
         .is_bulk_data = is_bulk_data_,
         .client_fd = std::move(client_fd),
-        .subscriber = jewels::memory::make_non_null_from_ref(subscriber_),
+        .subscriber = *std::move(subscriber_result),
         .diagnostics_state = diagnostics_state_,
         .server_counters_mutex = server_counters_mutex_,
         .server_counters = server_counters_,
         .mode = mode_,
+        .lite_compressor = lite_compressor_->clone(),
       });
 
     clients_[*empty_slot] = std::move(client);
@@ -269,10 +315,12 @@ TcpBridgeServer::Client::Client(ClientArgs args)
     diagnostics_state_(std::move(args.diagnostics_state)),
     server_counters_mutex_(std::move(args.server_counters_mutex)),
     server_counters_(std::move(args.server_counters)),
-    lite_compressor_(args.memres),
+    lite_compressor_(std::move(args.lite_compressor)),
     send_buffer_(args.memres),
     last_send_time_(jewels::time::SteadyClock::now()),
-    mode_(args.mode)
+    last_ack_recv_time_(jewels::time::SteadyClock::now()),
+    mode_(args.mode),
+    recv_ack_timeout_(get_recv_ack_timeout(mode_, is_bulk_data_))
 {
   worker_thread_ = std::thread([this]() { worker_thread_main(); });
 }
@@ -288,9 +336,7 @@ TcpBridgeServer::Client::~Client()
 
 void TcpBridgeServer::Client::request_stop()
 {
-  std::lock_guard guard{worker_mutex_};
-  worker_stop_requested_ = true;
-  worker_cv_.notify_all();
+  worker_stop_requested_.store(true, std::memory_order_relaxed);
 }
 
 [[nodiscard]] bool TcpBridgeServer::Client::is_running() const
@@ -298,86 +344,156 @@ void TcpBridgeServer::Client::request_stop()
   return worker_is_running_.load(std::memory_order_acquire);
 }
 
-void TcpBridgeServer::Client::notify()
-{
-  std::lock_guard guard{worker_mutex_};
-  worker_notify_flag_ = true;
-  worker_cv_.notify_all();
-}
-
 void TcpBridgeServer::Client::worker_thread_main()
 {
+  while (!subscriber_->handshake())
+  {
+    constexpr auto handshake_retry_interval = std::chrono::milliseconds(100);
+    jewels::log_cerr_info("Waiting for subscriber initialization to complete ({})", subscriber_->name());
+    std::this_thread::sleep_for(handshake_retry_interval);
+  }
   send_messages();
   send_null_header();
   while (client_fd_)
   {
-    const auto wakeup_time =
-      last_send_time_ + (is_waiting_for_ack() ? tcp_bridge_null_header_interval : tcp_bridge_keep_alive_interval);
-    if (jewels::time::SteadyClock::now() >= wakeup_time)
-    {
-      send_null_header();
-      continue;
-    }
-
-    std::unique_lock guard{worker_mutex_};
-    worker_cv_.wait_until(guard, wakeup_time, [this]() { return worker_stop_requested_ || worker_notify_flag_; });
-    if (worker_stop_requested_)
+    const auto prev_is_waiting_for_ack = is_waiting_for_ack();
+    const auto notify_timeout =
+      prev_is_waiting_for_ack ? bridge_server_fast_notify_timeout : bridge_server_notify_timeout;
+    bool was_notified{};
+    if (!jewels::ok(receive_notify(notify_timeout, jewels::Out{was_notified})))
     {
       break;
     }
-    const bool was_notified = worker_notify_flag_;
-    worker_notify_flag_ = false;
-    guard.unlock();
-
-    if (mode_ != Mode::overrun_test || was_notified)
+    if (worker_stop_requested_.load(std::memory_order_relaxed))
     {
-      send_messages();
+      break;
     }
+
     receive_acknowledgements();
+    if (!client_fd_)
+    {
+      break;
+    }
+
+    bool message_sent = was_notified ? send_messages() : false;
+    if (!client_fd_)
+    {
+      break;
+    }
+
+    if (jewels::time::SteadyClock::now() - last_ack_recv_time_ > recv_ack_timeout_)
+    {
+      // Client stopped sending acks, close the cnnection and let the client reconnect
+      client_fd_.forced_close();
+      jewels::log_cerr_error(
+        "Client has stopped sending acknowledgements for channel {}, closing connection", channel_name_);
+      diagnostics_state_->increment_closed_socket_count();
+      break;
+    }
+
+    if (!message_sent && (is_waiting_for_ack() || !prev_is_waiting_for_ack))
+    {
+      send_null_header();
+    }
   }
   worker_is_running_.store(false, std::memory_order_release);
 }
 
-void TcpBridgeServer::Client::send_messages()
+jewels::BinaryOutcome
+TcpBridgeServer::Client::receive_notify(std::chrono::nanoseconds timeout, jewels::Out<bool> was_notified)
 {
+  const auto timeout_sec = std::chrono::duration_cast<std::chrono::seconds>(timeout);
+  const auto timeout_usec = std::chrono::duration_cast<std::chrono::microseconds>(timeout - timeout_sec);
+  ::timeval recv_timeout{.tv_sec = timeout_sec.count(), .tv_usec = timeout_usec.count()};
+  if (::setsockopt(subscriber_->socket(), SOL_SOCKET, SO_RCVTIMEO, &recv_timeout, sizeof(::timeval)) == -1)
+  {
+    client_fd_.forced_close();
+    jewels::log_cerr_error(
+      "Failed to set socket timoeout on notify socket for {}: {}", channel_name_, jewels::filesystem::ErrorCode(errno));
+    diagnostics_state_->increment_closed_socket_count();
+    return jewels::failure;
+  }
+
+  ShmChannel::NotifyMsg msg{};
+  ssize_t result = ::recv(subscriber_->socket(), &msg, sizeof(msg), MSG_TRUNC);
+  if (result == sizeof(msg))
+  {
+    *was_notified = true;
+    return jewels::success;
+  }
+  if (result == -1)
+  {
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
+    {
+      *was_notified = false;
+      return jewels::success;
+    }
+    jewels::log_cerr_error(
+      "Failed to receieve notify from publisher for {}: {}", channel_name_, jewels::filesystem::ErrorCode(errno));
+    if (errno != EINTR && errno != ENOMEM)
+    {
+      // Close the client connection and let the client reconnect
+      client_fd_.forced_close();
+      diagnostics_state_->increment_closed_socket_count();
+      return jewels::failure;
+    }
+    *was_notified = false;
+    return jewels::success;
+  }
+  if (result == 0)
+  {
+    jewels::log_cerr_info("Read end of file on notify socket for {}. Closing socket.", channel_name_);
+  }
+  else
+  {
+    jewels::log_cerr_error(
+      "Read invalid message size on notify socket for {}: got {} expected {}. Closing socket.",
+      channel_name_,
+      result,
+      sizeof(msg));
+  }
+  client_fd_.forced_close();
+  diagnostics_state_->increment_closed_socket_count();
+  return jewels::failure;
+}
+
+[[nodiscard]] bool TcpBridgeServer::Client::send_messages()
+{
+  bool message_sent = false;
   const auto subscriber_available = subscriber_->available();
+
   if (last_message_.is_sentinel())
   {
     last_message_ =
       subscriber_available.empty() ? subscriber_available.begin() : std::prev(std::end(subscriber_available));
   }
 
-  while (client_fd_)
+  auto available = available_starting_from(subscriber_available, last_message_);
+  if (!available)
   {
-    auto available = pinion::available_starting_from(subscriber_available, last_message_);
-    if (!available)
+    switch (available.error())
     {
-      switch (available.error())
-      {
-      case ProgressError::fell_behind:
-      {
-        // We fell behind somehow. Fast foward.
-        jewels::log_cerr_error(
-          "Dropping {} messages for channel {}",
-          std::distance(last_message_, std::prev(std::end(subscriber_available))),
-          channel_name_);
-        diagnostics_state_->increment_drop_count(
-          static_cast<size_t>(std::distance(last_message_, std::prev(std::end(subscriber_available)))));
-        available = {subscriber_available};
-        last_message_ = std::prev(std::end(subscriber_available));
-      }
-      break;
-      case ProgressError::in_the_future:
-        diagnostics_state_->increment_progress_errors();
-        return;
-      }
-    }
-
-    if (last_message_ == available->end())
+    case ProgressError::fell_behind:
     {
-      break;
+      // We fell behind somehow. Fast foward.
+      jewels::log_cerr_error(
+        "Dropping {} messages for channel {}",
+        std::distance(last_message_, std::prev(std::end(subscriber_available))),
+        channel_name_);
+      diagnostics_state_->increment_drop_count(
+        static_cast<size_t>(std::distance(last_message_, std::prev(std::end(subscriber_available)))));
+      available = {subscriber_available};
+      last_message_ = std::prev(std::end(subscriber_available));
     }
+    break;
+    case ProgressError::in_the_future:
+      diagnostics_state_->increment_progress_errors();
+      return message_sent;
+    }
+  }
 
+  while (client_fd_ && last_message_ != available->end())
+  {
     auto slot = *last_message_;
 
     current_receive_time_ = jewels::time::SyncClock::now();
@@ -389,17 +505,8 @@ void TcpBridgeServer::Client::send_messages()
     std::span<const std::span<const std::byte>> compressed_spans;
     uint64_t counts_checksum{};
     uint64_t data_checksum{};
-    lite_compressor_.compress(
-      jewels::Out{compressed_spans},
-      jewels::Out{counts_checksum},
-      jewels::Out{data_checksum},
-      slot.message(),
-      is_bulk_data_ ? clockwork_logging::LiteCompressor::CompressionMode::yield_processor
-                    : clockwork_logging::LiteCompressor::CompressionMode::minimum_latency);
-
-    last_sequence_number_ = sequence_number;
-    maybe_unacked_sequence_number_ = sequence_number;
-    current_compression_end_time_ = jewels::time::SyncClock::now();
+    lite_compressor_->compress(
+      jewels::Out{compressed_spans}, jewels::Out{counts_checksum}, jewels::Out{data_checksum}, slot.message());
 
     const auto send_buffer_size = clockwork_logging::onboard::data_spans_size(compressed_spans);
     send_buffer_.resize(sizeof(TcpMessageHeader) + send_buffer_size + sizeof(TcpMessageTail));
@@ -409,10 +516,14 @@ void TcpBridgeServer::Client::send_messages()
     if (!last_message_.is_valid())
     {
       jewels::log_cerr_error("Detected overrun while compressing message for channel {}", channel_name_);
-      diagnostics_state_->increment_drop_count();
-      ++last_message_;
-      continue;
+      // We will have been notified since we were overrun. Let the next call to send_messages will
+      // handle jumping to the end of the available messages.
+      return message_sent;
     }
+
+    last_sequence_number_ = sequence_number;
+    maybe_unacked_sequence_number_ = sequence_number;
+    current_compression_end_time_ = jewels::time::SyncClock::now();
 
     const auto payload = std::span{send_buffer_};
 
@@ -442,8 +553,10 @@ void TcpBridgeServer::Client::send_messages()
     {
       // Increment the last message iterator
       ++last_message_;
+      message_sent = true;
     }
   }
+  return message_sent;
 }
 
 [[nodiscard]] bool TcpBridgeServer::Client::send_payload_chunk(std::span<std::byte> payload)
@@ -562,7 +675,18 @@ void TcpBridgeServer::Client::send_bulk_payload(
 void TcpBridgeServer::Client::send_null_header()
 {
   TcpMessageHeader header{};
-  header.body.payload_type = maybe_unacked_sequence_number_ ? PayloadType::null_header : PayloadType::keep_alive;
+  if (maybe_unacked_sequence_number_)
+  {
+    header.body.payload_type = PayloadType::null_header;
+    std::lock_guard guard{*server_counters_mutex_};
+    ++server_counters_->null_header_count;
+  }
+  else
+  {
+    header.body.payload_type = PayloadType::keep_alive;
+    std::lock_guard guard{*server_counters_mutex_};
+    ++server_counters_->keep_alive_count;
+  }
   header.body.sequence_number = maybe_unacked_sequence_number_.value_or(last_sequence_number_);
   header.checksum = clockwork_logging::compute_xxh3_checksum(std::as_bytes(jewels::as_single_item_span(header.body)));
   const auto payload = std::as_writable_bytes(jewels::as_single_item_span(header));
@@ -584,10 +708,6 @@ void TcpBridgeServer::Client::receive_acknowledgements()
   while (true)
   {
     uint8_t ack_byte{};
-    // This is a false positive for two reasons:
-    // 1) We are not holding worker_mutex_ because it is unlocked before this method is called.
-    // 2) This call to recv will not block because flags is set to MSG_DONTWAIT.
-    // NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection) False positive, see above
     auto bytes_received = ::recv(*client_fd_, &ack_byte, 1U, MSG_DONTWAIT);
     if (bytes_received == 1)
     {
@@ -595,6 +715,7 @@ void TcpBridgeServer::Client::receive_acknowledgements()
       {
         maybe_unacked_sequence_number_ = std::nullopt;
       }
+      last_ack_recv_time_ = jewels::time::SteadyClock::now();
       continue;
     }
     if (bytes_received == 0)

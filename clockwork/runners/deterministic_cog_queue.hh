@@ -1,11 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/cog_envelope.hh"
+#include "clockwork/common/forward.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
+#include "jewels/time/sync_time.hh"
 
 #include <chrono>
 #include <list>
@@ -47,7 +50,7 @@ public:
 
   ///
   /// Attempt to push a Cog onto the queue. If there is already
-  /// an envelope for this cog in the queue then do nothing.
+  /// an envelope for this cog in the queue, retain the earliest ready time.
   /// @param[in] envelope The cog envelope to push onto the queue.
   ///
   void push(CogEnvelope envelope) override;
@@ -64,6 +67,14 @@ public:
   /// @returns The next item on the queue if any.
   ///
   PopResult peek();
+
+  /// Remove the envelope that would be returned by peek().
+  void remove_next();
+
+  /// Update the publisher throttle deadline for a queued Cog.
+  /// @param[in] cog The throttled Cog.
+  /// @param[in] throttled_until The next eligibility deadline.
+  void set_throttled_until(jewels::memory::ObjectPtr<AbstractCog> cog, jewels::time::SyncTime throttled_until);
   ///
   /// Get the queue statistics.
   ///
@@ -76,7 +87,13 @@ public:
   [[nodiscard]] bool is_offline() const override;
 
 private:
-  std::pmr::list<CogEnvelope> queue_;
+  using Queue = std::pmr::list<CogEnvelope>;
+  using QueueIterator = Queue::iterator;
+
+  /// Find the envelope that is eligible first after publisher throttling.
+  QueueIterator find_next();
+
+  Queue queue_;
 };
 
 } // namespace clockwork

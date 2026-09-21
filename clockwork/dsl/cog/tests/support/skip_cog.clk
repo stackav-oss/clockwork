@@ -6,17 +6,17 @@ use clockwork::dsl::tests::support::clk_hellomsg;
 // Doc.
 cog SkipCog
 {
-    inputs
+  inputs
+  {
+    input_a: Tappy<clk_hellomsg::HelloMsg>;
+    input_b: Tappy<clk_hellomsg::HelloMsg>
     {
-        input_a: Tappy<clk_hellomsg::HelloMsg>;
-        input_b: Tappy<clk_hellomsg::HelloMsg>
-        {
-            skip_threshold: 5;
-        }
+      skip_threshold: 5;
     }
-    execution
-    {
-        condition periodic: time_since_last_exec(10ms);
-        execute when: periodic;
-    }
+  }
+  execution
+  {
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
 }

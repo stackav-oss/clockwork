@@ -232,7 +232,6 @@ So for example, when loading configuration data in textproto format, this is aut
 
 See [the Protobuf representation documentation](reference/repr_iface.md#proto_target-blocks) for details on how to use Protobuf in Clockwork.
 
-
 #### Backward compatibility
 
 Unlike ROS, the Clockwork schema language is designed for backward compatibility as schemas evolve over time, but this has not yet been fully implemented in the Clockwork MVP.

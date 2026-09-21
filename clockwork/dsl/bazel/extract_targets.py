@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """A library for extracting bazel targets from a clockwork module."""
@@ -65,6 +65,7 @@ def extract_bazel_targets(
             all_outs.extend([Path(x.name) for x in generated_files.diagnostics_database_config_files])
             all_outs.extend([Path(x.name) for x in generated_files.logged_channel_metadata_files])
             all_outs.extend([Path(x.name) for x in generated_files.metrics_channel_metadata_files])
+            all_outs.extend([Path(x.name) for x in generated_files.realtime_playback_conversion_config_files])
 
     clk_target.outs = all_outs
 

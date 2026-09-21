@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Static analysis utilities for DFL expressions.
@@ -15,7 +15,13 @@ Functions:
 
 from __future__ import annotations
 
+import itertools
+from typing import TYPE_CHECKING
+
 from clockwork.dsl.ir import dfl
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def free_vars(expr: dfl.Expr) -> frozenset[str]:
@@ -123,3 +129,104 @@ def refs_in_expr(expr: dfl.Expr) -> list[dfl.Ref]:
         List of all Ref nodes found, in depth-first order.
     """
     return dfl.find_refs(expr)
+
+
+def _collect_statements(
+    node: dfl.Expr,
+    child_results: list[list[dfl.Statement]],
+) -> list[dfl.Statement]:
+    result: list[dfl.Statement] = []
+    match node:
+        case dfl.CstPassthrough() | dfl.CondExpr() | dfl.Match() | dfl.IfElse():
+            result.append(node)
+        case dfl.Definition(name=name, value=value, options=options, cst_node=cst_node, span=span, ctx=ctx):
+            if options is not None:
+                result.append(
+                    dfl.Definition(
+                        name=name,
+                        value=value,
+                        options=dfl.Block(
+                            name=options.name,
+                            statements=list(itertools.chain.from_iterable(child_results)),
+                            span=options.span,
+                            ctx=options.ctx,
+                        ),
+                        cst_node=cst_node,
+                        span=span,
+                        ctx=ctx,
+                    )
+                )
+            else:
+                result.append(node)
+        case dfl.Block(name=name, span=span, ctx=ctx):
+            if name is None:
+                for children in child_results:
+                    result.extend(children)
+            else:
+                result.append(
+                    dfl.Block(
+                        name=name, statements=list(itertools.chain.from_iterable(child_results)), span=span, ctx=ctx
+                    )
+                )
+
+    return result
+
+
+def flatten_blocks(statement: dfl.Statement) -> dfl.Statement:
+    """Flatten the statements from nested anonymous blocks into their parents.
+
+    Args:
+        statement: The statement to start flattening from.
+
+    Returns:
+        The flattened block.
+    """
+    match statement:
+        case dfl.Block(name=name, span=span, ctx=ctx):
+            statements = dfl.fold_expr(_collect_statements, statement)
+            return dfl.Block(
+                name=name,
+                statements=statements,
+                span=span,
+                ctx=ctx,
+            )
+        case dfl.Definition(name=name, value=value, options=options, cst_node=cst_node, span=span, ctx=ctx):
+            new_options = options
+            if options is not None:
+                statements = dfl.fold_expr(_collect_statements, options)
+                new_options = dfl.Block(name=options.name, statements=statements, span=span, ctx=ctx)
+            return dfl.Definition(
+                name=name,
+                value=value,
+                options=new_options,
+                cst_node=cst_node,
+                span=span,
+                ctx=ctx,
+            )
+        case _:
+            return statement
+
+
+def find_with_pred(expr: dfl.Expr, predicate: Callable[[dfl.Expr], bool]) -> list[dfl.Expr]:
+    """Extract all expressions in an expression tree that match a predicate.
+
+    Args:
+        expr: The expression to search.
+        predicate: The predicate to check nodes with.
+
+    Returns:
+        List of matching nodes found in the expression tree, in depth-first order.
+
+    """
+
+    def collect_matching(node: dfl.Expr, child_results: list[list[dfl.Expr]]) -> list[dfl.Expr]:
+        result: list[dfl.Expr] = []
+        for children in child_results:
+            result.extend(children)
+
+        if predicate(node):
+            result.append(node)
+
+        return result
+
+    return dfl.fold_expr(collect_matching, expr)

@@ -1,9 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "jewels/units/magnitude.hh"
 #include "jewels/units/quantity.hh"
 
 #include <au/au.hh>            // IWYU pragma: export

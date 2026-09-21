@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
@@ -8,12 +8,14 @@
 #include "clockwork/scaffolding/data_source_loader.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/path.hh"
+#include "jewels/memory/instrumented_pmr_resource.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
@@ -29,6 +31,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <unistd.h>
 #include <vector>
 
@@ -68,7 +71,7 @@ TEST_CASE("setup_configs")
   const jewels::testing::TmpDirectoryGuard tmpdir_obj;
   const jewels::filesystem::Directory tmpdir{tmpdir_obj.get_path().c_str()};
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "config_test_memres");
   const jewels::memory::MemoryResource sysres{memory};
   const jewels::memory::MemoryResource cfgres{std::pmr::new_delete_resource()};
   FirstMessageCache first_message_cache{std::pmr::new_delete_resource()};
@@ -80,7 +83,9 @@ TEST_CASE("setup_configs")
     std::vector<Tappy<common::DataSource<>>> data_sources;
     auto result = setup_configs(descs, data_sources, sysres, cfgres, first_message_cache, casing);
     REQUIRE(result);
-    CHECK(memory.peak() == 0);
+    jewels::memory::MemoryResourceMetrics metrics;
+    memory.get_memory_resource_metrics(jewels::Out{metrics});
+    CHECK(metrics.peak_allocated == 0);
   }
 
   SECTION("basic")

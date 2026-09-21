@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/tcp_bridge_client.hh"
@@ -6,11 +6,11 @@
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_common.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
 #include "clockwork/pinion/error.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
@@ -34,7 +34,6 @@
 #include <cstdint>
 #include <optional>
 #include <ranges>
-#include <ratio>
 #include <span>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -53,7 +52,7 @@ constexpr auto bridge_client_connect_interval = std::chrono::seconds(1);
 constexpr auto bridge_client_connect_timeout = std::chrono::seconds(1);
 
 /// TCP bridge receive timeout interval
-constexpr auto bridge_client_recv_timeout = std::chrono::seconds(1);
+constexpr auto bridge_client_recv_timeout = std::chrono::seconds(2);
 
 } // namespace
 
@@ -89,7 +88,7 @@ std::shared_ptr<TcpBridgeClient> TcpBridgeClient::make(
   const jewels::memory::MemoryResource& memres,
   const Tappy<TcpBridgeClientConfig>& config,
   PublisherHandle publisher,
-  SubscriberHandle subscriber,
+  std::shared_ptr<pinion::AbstractChannel> subscriber,
   std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state)
 {
   auto server_addr =
@@ -105,7 +104,7 @@ std::shared_ptr<TcpBridgeClient> TcpBridgeClient::make(
   }
 
   uint64_t min_sequence_number = 0U;
-  const auto current_messages = subscriber.available();
+  const auto current_messages = subscriber->available();
   if (!current_messages.empty())
   {
     min_sequence_number = current_messages.back().header()->sequence_number + 1U;
@@ -136,13 +135,9 @@ std::shared_ptr<TcpBridgeClient> TcpBridgeClient::make(
   return bridge_client;
 }
 
-int TcpBridgeClient::socket_fd() const
+bool TcpBridgeClient::is_connected() const noexcept
 {
-  if (!socket_)
-  {
-    return -1;
-  }
-  return socket_->descriptor();
+  return (state_ != State::disconnected);
 }
 
 [[nodiscard]] std::string_view TcpBridgeClient::channel_name() const
@@ -162,7 +157,7 @@ void TcpBridgeClient::worker_thread_main()
 {
   while (!stop_requested_.load(std::memory_order_acquire))
   {
-    switch (state_)
+    switch (state_.load(std::memory_order_acquire))
     {
     case State::idle:
       payload_ = std::as_writable_bytes(jewels::as_single_item_span(header_));
@@ -225,14 +220,7 @@ void TcpBridgeClient::send_acknowledgement()
 
 void TcpBridgeClient::start_connect()
 {
-  if (!initial_connect_)
-  {
-    std::this_thread::sleep_for(bridge_client_connect_interval);
-  }
-  else
-  {
-    initial_connect_ = false;
-  }
+  std::this_thread::sleep_for(bridge_client_connect_interval);
 
   const auto local_address = jewels::networking::SocketAddress::create_any_address(0);
   auto connect_result = TcpSocket::create_connect_async(server_address_, local_address);
@@ -289,7 +277,7 @@ void TcpBridgeClient::complete_connect()
     return;
   }
   jewels::log_cerr_info("Connected to server for channel {}", channel_name_);
-  const auto current_messages = subscriber_.available();
+  const auto current_messages = subscriber_->available();
   if (!current_messages.empty())
   {
     min_sequence_number_ = current_messages.back().header()->sequence_number + 1U;
@@ -341,7 +329,7 @@ void TcpBridgeClient::receive_from_socket()
     return;
   }
 
-  auto bytes_received = ::recv(socket_->descriptor(), payload_.data(), payload_.size(), 0);
+  auto bytes_received = ::recv(socket_->descriptor(), payload_.data(), payload_.size(), MSG_WAITALL);
   if (bytes_received > 0)
   {
     // Advance the cursor so we can receive the rest later.
@@ -397,6 +385,15 @@ void TcpBridgeClient::receive_from_socket()
 
   if (header_.body.payload_type == PayloadType::null_header || header_.body.payload_type == PayloadType::keep_alive)
   {
+    const std::lock_guard guard{mutex_};
+    if (header_.body.payload_type == PayloadType::null_header)
+    {
+      ++client_counters_.null_header_count;
+    }
+    else
+    {
+      ++client_counters_.keep_alive_count;
+    }
     return ValidateHeaderResult::null_header;
   }
 
@@ -487,7 +484,7 @@ void TcpBridgeClient::receive_message()
       return;
     }
 
-    auto slot = reservation->slot();
+    auto slot = reservation->slots().front();
     const auto receive_end_time = jewels::time::SyncClock::now();
     if (const auto decompress_outcome = lite_compressor_.decompress(
           tail.counts_checksum,

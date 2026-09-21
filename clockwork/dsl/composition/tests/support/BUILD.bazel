@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 load("//clockwork:rules.bzl", "clk")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
@@ -7,9 +7,360 @@ load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 package(default_testonly = True)
 
 exports_files([
+    "aligned_consumer_aligner.clk",
+    "aligned_consumer_cog.clk",
+    "combined_aligned_consumer_cog.clk",
+    "empty_aligned_consumer_cog.clk",
+    "multiple_aligned_consumer_cog.clk",
+    "secondary_consumer_aligner.clk",
+    "cog_metrics_signals_test_system.clk",
+    "realtime_playback_system_boxes.clk",
+    "realtime_playback_system_target.clk",
     "signals_test_system_target.clk",
     "signals_test_system.clk",
 ])
+
+clk(
+    name = "aligned_consumer_aligner_clk",
+    srcs = ["aligned_consumer_aligner.clk"],
+    outs = [
+        "aligned_consumer_aligner_clk_cc.cc",
+        "aligned_consumer_aligner_clk_cc.hh",
+        "aligned_consumer_aligner_clk_cc.inl",
+        "aligned_consumer_aligner_clk_cc_cog.cc",
+        "aligned_consumer_aligner_clk_cc_cog.hh",
+        "aligned_consumer_aligner_clk_cc_cog.inl",
+        "aligned_consumer_aligner_clk_cc_dial.cc",
+        "aligned_consumer_aligner_clk_cc_dial.hh",
+        "aligned_consumer_aligner_clk_cc_dial.inl",
+        "aligned_consumer_aligner_clk_cc_impl.cc",
+        "aligned_consumer_aligner_clk_cc_impl.hh",
+        "aligned_consumer_aligner_clk_cc_impl.inl",
+        "aligned_consumer_aligner_clk_cc_test.cc",
+        "aligned_consumer_aligner_clk_cc_test.hh",
+        "aligned_consumer_aligner_clk_cc_test.inl",
+        "aligned_consumer_aligner_clk_cc_types.cc",
+        "aligned_consumer_aligner_clk_cc_types.hh",
+        "aligned_consumer_aligner_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/aligner:timer_control",  # keep
+        "//clockwork/cog:dynamic_timer_handler",  # keep
+        "//std/aligners:state_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_aligner",
+        "cpp_test_cog",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//std/aligners:state_clk"],
+)
+
+clk(
+    name = "aligned_consumer_boxes_clk",
+    srcs = ["aligned_consumer_boxes.clk"],
+    outs = [
+        "aligned_consumer_boxes_clk_cc.cc",
+        "aligned_consumer_boxes_clk_cc.hh",
+        "aligned_consumer_boxes_clk_cc.inl",
+        "aligned_consumer_boxes_clk_cc_types.cc",
+        "aligned_consumer_boxes_clk_cc_types.hh",
+        "aligned_consumer_boxes_clk_cc_types.inl",
+        "aligned_consumer_boxes_clk_exe.cc",
+        "aligned_consumer_boxes_clk_exe.hh",
+        "aligned_consumer_boxes_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":aligned_consumer_cog_clk_cc",
+        "//std/aligners:state_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp_exe",
+        "cpp",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk",
+        ":aligned_consumer_cog_clk",
+        "//std/aligners:state_clk",
+    ],
+)
+
+cc_library(
+    name = "aligned_consumer_boxes_clk_exe_lib",
+    srcs = [
+        "aligned_consumer_boxes_clk_exe.cc",
+        "aligned_consumer_boxes_clk_exe.inl",
+    ],
+    hdrs = ["aligned_consumer_boxes_clk_exe.hh"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":aligned_consumer_cog_clk_cc",
+        ":aligned_consumer_cog_clk_cc_impl",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//std/aligners:state_clk_cc",
+    ],
+)
+
+clk(
+    name = "aligned_consumer_channel_policies_clk",
+    srcs = ["aligned_consumer_channel_policies.clk"],
+    generate = ["none"],
+    deps = [
+        ":aligned_consumer_boxes_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "aligned_consumer_cog_clk",
+    srcs = ["aligned_consumer_cog.clk"],
+    outs = [
+        "aligned_consumer_cog_clk_cc.cc",
+        "aligned_consumer_cog_clk_cc.hh",
+        "aligned_consumer_cog_clk_cc.inl",
+        "aligned_consumer_cog_clk_cc_cog.cc",
+        "aligned_consumer_cog_clk_cc_cog.hh",
+        "aligned_consumer_cog_clk_cc_cog.inl",
+        "aligned_consumer_cog_clk_cc_dial.cc",
+        "aligned_consumer_cog_clk_cc_dial.hh",
+        "aligned_consumer_cog_clk_cc_dial.inl",
+        "aligned_consumer_cog_clk_cc_test.cc",
+        "aligned_consumer_cog_clk_cc_test.hh",
+        "aligned_consumer_cog_clk_cc_test.inl",
+        "aligned_consumer_cog_clk_cc_types.cc",
+        "aligned_consumer_cog_clk_cc_types.hh",
+        "aligned_consumer_cog_clk_cc_types.inl",
+    ],
+    cpp_combo_test_aligner_deps = [":aligned_consumer_aligner_clk_cc_test"],
+    cpp_deps = [":aligned_consumer_aligner_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+        "cpp_combo_test",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [":aligned_consumer_aligner_clk"],
+)
+
+cc_library(
+    name = "aligned_consumer_cog_clk_cc_impl",
+    srcs = ["aligned_consumer_cog_clk_cc_impl.cc"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":aligned_consumer_cog_clk_cc_dial",
+        "//clockwork/cog:include_common",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+    ],
+)
+
+clk(
+    name = "aligned_consumer_system_clk",
+    srcs = ["aligned_consumer_system.clk"],
+    outs = [
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_allocations.csv",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_publisher_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_spy_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_event_logger_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_journal_topology.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_metrics_channel_metadata_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_signal_metadata_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_simplelaunch_config.textproto",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_system_metadata.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_telemetry_logger_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.diagnostics_database_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.logged_channel_metadata.pbbin",
+        "clockwork.clockwork.dsl.composition.tests.support.aligned_consumer_system.aligned_consumer_system.proc.tachyon",
+    ],
+    visibility = [
+        "//clockwork/dsl/composition/tests:__pkg__",
+        "//clockwork/tests:__pkg__",
+        "//clockwork/tools/journal_file_generator/tests:__pkg__",
+    ],
+    deps = [
+        ":aligned_consumer_boxes_clk",
+        ":aligned_consumer_channel_policies_clk",
+    ],
+)
+
+clk(
+    name = "aligned_noinput_consumer_cog_clk",
+    srcs = ["aligned_noinput_consumer_cog.clk"],
+    outs = [
+        "aligned_noinput_consumer_cog_clk_cc.cc",
+        "aligned_noinput_consumer_cog_clk_cc.hh",
+        "aligned_noinput_consumer_cog_clk_cc.inl",
+        "aligned_noinput_consumer_cog_clk_cc_cog.cc",
+        "aligned_noinput_consumer_cog_clk_cc_cog.hh",
+        "aligned_noinput_consumer_cog_clk_cc_cog.inl",
+        "aligned_noinput_consumer_cog_clk_cc_dial.cc",
+        "aligned_noinput_consumer_cog_clk_cc_dial.hh",
+        "aligned_noinput_consumer_cog_clk_cc_dial.inl",
+        "aligned_noinput_consumer_cog_clk_cc_test.cc",
+        "aligned_noinput_consumer_cog_clk_cc_test.hh",
+        "aligned_noinput_consumer_cog_clk_cc_test.inl",
+        "aligned_noinput_consumer_cog_clk_cc_types.cc",
+        "aligned_noinput_consumer_cog_clk_cc_types.hh",
+        "aligned_noinput_consumer_cog_clk_cc_types.inl",
+    ],
+    cpp_combo_test_aligner_deps = [":aligned_consumer_aligner_clk_cc_test"],
+    cpp_deps = [":aligned_consumer_aligner_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+        "cpp_combo_test",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [":aligned_consumer_aligner_clk"],
+)
+
+cc_library(
+    name = "aligned_noinput_consumer_cog_clk_cc_impl",
+    srcs = ["aligned_noinput_consumer_cog_clk_cc_impl.cc"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":aligned_noinput_consumer_cog_clk_cc_dial",
+        "//clockwork/cog:include_common",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "alignedconsumertestcpu.textproto",
+    srcs = [
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_allocations.csv",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_publisher_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_spy_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_event_logger_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_journal_topology.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_metrics_channel_metadata_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_signal_metadata_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_system_metadata.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_telemetry_logger_config.tachyon",
+        "aligned_consumer_system.aligned_consumer_system.diagnostics_database_config.tachyon",
+        "clockwork.clockwork.dsl.composition.tests.support.aligned_consumer_system.aligned_consumer_system.proc.tachyon",
+        ":aligned_consumer_boxes_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "cog_metrics_signals_test_system_clk",
+    srcs = ["cog_metrics_signals_test_system.clk"],
+    outs = [
+        "cog_metrics_signals_test_system_clk_cc.cc",
+        "cog_metrics_signals_test_system_clk_cc.hh",
+        "cog_metrics_signals_test_system_clk_cc.inl",
+        "cog_metrics_signals_test_system_clk_cc_cog.cc",
+        "cog_metrics_signals_test_system_clk_cc_cog.hh",
+        "cog_metrics_signals_test_system_clk_cc_cog.inl",
+        "cog_metrics_signals_test_system_clk_cc_dial.cc",
+        "cog_metrics_signals_test_system_clk_cc_dial.hh",
+        "cog_metrics_signals_test_system_clk_cc_dial.inl",
+        "cog_metrics_signals_test_system_clk_cc_types.cc",
+        "cog_metrics_signals_test_system_clk_cc_types.hh",
+        "cog_metrics_signals_test_system_clk_cc_types.inl",
+        "cog_metrics_signals_test_system_clk_exe.cc",
+        "cog_metrics_signals_test_system_clk_exe.hh",
+        "cog_metrics_signals_test_system_clk_exe.inl",
+    ],
+    cpp_deps = [
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
+        "//std:signals_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//clockwork/dsl/cog:cog_execution_metrics_signals_clk",  #keep
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "cog_metrics_signals_test_system_clk_cc_impl",
+    srcs = ["cog_metrics_signals_test_system_clk_cc_impl.cc"],
+    visibility = ["//visibility:public"],
+    deps = [":cog_metrics_signals_test_system_clk_cc_dial"],
+)
+
+clk(
+    name = "combined_aligned_consumer_cog_clk",
+    srcs = ["combined_aligned_consumer_cog.clk"],
+    outs = [
+        "combined_aligned_consumer_cog_clk_cc.cc",
+        "combined_aligned_consumer_cog_clk_cc.hh",
+        "combined_aligned_consumer_cog_clk_cc.inl",
+        "combined_aligned_consumer_cog_clk_cc_cog.cc",
+        "combined_aligned_consumer_cog_clk_cc_cog.hh",
+        "combined_aligned_consumer_cog_clk_cc_cog.inl",
+        "combined_aligned_consumer_cog_clk_cc_dial.cc",
+        "combined_aligned_consumer_cog_clk_cc_dial.hh",
+        "combined_aligned_consumer_cog_clk_cc_dial.inl",
+        "combined_aligned_consumer_cog_clk_cc_test.cc",
+        "combined_aligned_consumer_cog_clk_cc_test.hh",
+        "combined_aligned_consumer_cog_clk_cc_test.inl",
+        "combined_aligned_consumer_cog_clk_cc_types.cc",
+        "combined_aligned_consumer_cog_clk_cc_types.hh",
+        "combined_aligned_consumer_cog_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":secondary_consumer_aligner_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+    ],
+    visibility = [
+        "//clockwork/dsl/cog/tests:__pkg__",
+        "//clockwork/dsl/composition/tests:__pkg__",
+    ],
+    deps = [
+        ":aligned_consumer_aligner_clk",
+        ":secondary_consumer_aligner_clk",
+    ],
+)
+
+cc_library(
+    name = "combined_aligned_consumer_cog_clk_cc_impl",
+    srcs = ["combined_aligned_consumer_cog_clk_cc_impl.cc"],
+    visibility = [
+        "//clockwork/dsl/cog/tests:__pkg__",
+        "//clockwork/dsl/composition/tests:__pkg__",
+    ],
+    deps = [":combined_aligned_consumer_cog_clk_cc_dial"],
+)
 
 merge_simplelaunch_config(
     name = "cpu1.textproto",
@@ -26,8 +377,11 @@ merge_simplelaunch_config(
         "simplesys.system1.Cpu1_channel_allocations.csv",
         "simplesys.system1.Cpu1_channel_spy_config.tachyon",
         "simplesys.system1.Cpu1_event_logger_config.tachyon",
+        "simplesys.system1.Cpu1_journal_topology.tachyon",
         "simplesys.system1.Cpu1_metrics_channel_metadata_config.tachyon",
         "simplesys.system1.Cpu1_signal_metadata_config.tachyon",
+        "simplesys.system1.Cpu1_simplelaunch_runner_config.tachyon",
+        "simplesys.system1.Cpu1_system_metadata.tachyon",
         "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
         ":exe",
@@ -48,12 +402,59 @@ merge_simplelaunch_config(
         "simplesys.system1.Cpu2_channel_allocations.csv",
         "simplesys.system1.Cpu2_channel_spy_config.tachyon",
         "simplesys.system1.Cpu2_event_logger_config.tachyon",
+        "simplesys.system1.Cpu2_journal_topology.tachyon",
         "simplesys.system1.Cpu2_metrics_channel_metadata_config.tachyon",
         "simplesys.system1.Cpu2_signal_metadata_config.tachyon",
+        "simplesys.system1.Cpu2_simplelaunch_runner_config.tachyon",
+        "simplesys.system1.Cpu2_system_metadata.tachyon",
         "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
         ":exe",
         "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+clk(
+    name = "empty_aligned_consumer_cog_clk",
+    srcs = ["empty_aligned_consumer_cog.clk"],
+    outs = [
+        "empty_aligned_consumer_cog_clk_cc.cc",
+        "empty_aligned_consumer_cog_clk_cc.hh",
+        "empty_aligned_consumer_cog_clk_cc.inl",
+        "empty_aligned_consumer_cog_clk_cc_cog.cc",
+        "empty_aligned_consumer_cog_clk_cc_cog.hh",
+        "empty_aligned_consumer_cog_clk_cc_cog.inl",
+        "empty_aligned_consumer_cog_clk_cc_dial.cc",
+        "empty_aligned_consumer_cog_clk_cc_dial.hh",
+        "empty_aligned_consumer_cog_clk_cc_dial.inl",
+        "empty_aligned_consumer_cog_clk_cc_test.cc",
+        "empty_aligned_consumer_cog_clk_cc_test.hh",
+        "empty_aligned_consumer_cog_clk_cc_test.inl",
+        "empty_aligned_consumer_cog_clk_cc_types.cc",
+        "empty_aligned_consumer_cog_clk_cc_types.hh",
+        "empty_aligned_consumer_cog_clk_cc_types.inl",
+    ],
+    cpp_deps = [":aligned_consumer_aligner_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [":aligned_consumer_aligner_clk"],
+)
+
+cc_library(
+    name = "empty_aligned_consumer_cog_clk_cc_impl",
+    srcs = ["empty_aligned_consumer_cog_clk_cc_impl.cc"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":empty_aligned_consumer_cog_clk_cc_dial",
+        "//clockwork/dial:include_common",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:slot",
+        "//jewels/container:compare",
     ],
 )
 
@@ -102,8 +503,10 @@ merge_simplelaunch_config(
         "logsimsys.logsim_system1.LogSimCpu_channel_publisher_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_journal_topology.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_system_metadata.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
         "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
         ":logsim_exe",
@@ -124,9 +527,11 @@ clk(
         "logsimsys.logsim_system1.LogSimCpu_channel_publisher_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_channel_spy_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_event_logger_config.tachyon",
+        "logsimsys.logsim_system1.LogSimCpu_journal_topology.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_simplelaunch_config.textproto",
+        "logsimsys.logsim_system1.LogSimCpu_system_metadata.tachyon",
         "logsimsys.logsim_system1.LogSimCpu_telemetry_logger_config.tachyon",
         "logsimsys.logsim_system1.diagnostics_database_config.tachyon",
         "logsimsys.logsim_system1.logged_channel_metadata.pbbin",
@@ -141,15 +546,167 @@ clk(
 )
 
 clk(
+    name = "memory_resource_test_boxes_clk",
+    srcs = ["memory_resource_test_boxes.clk"],
+    compile = False,
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = ["//clockwork/dsl/tests/support:clk_hellocog_clk"],
+)
+
+clk(
+    name = "memory_resource_test_system_clk",
+    srcs = ["memory_resource_test_system.clk"],
+    compile = False,
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [":memory_resource_test_boxes_clk"],
+)
+
+clk(
+    name = "multiple_aligned_consumer_cog_clk",
+    srcs = ["multiple_aligned_consumer_cog.clk"],
+    outs = [
+        "multiple_aligned_consumer_cog_clk_cc.cc",
+        "multiple_aligned_consumer_cog_clk_cc.hh",
+        "multiple_aligned_consumer_cog_clk_cc.inl",
+        "multiple_aligned_consumer_cog_clk_cc_cog.cc",
+        "multiple_aligned_consumer_cog_clk_cc_cog.hh",
+        "multiple_aligned_consumer_cog_clk_cc_cog.inl",
+        "multiple_aligned_consumer_cog_clk_cc_dial.cc",
+        "multiple_aligned_consumer_cog_clk_cc_dial.hh",
+        "multiple_aligned_consumer_cog_clk_cc_dial.inl",
+        "multiple_aligned_consumer_cog_clk_cc_test.cc",
+        "multiple_aligned_consumer_cog_clk_cc_test.hh",
+        "multiple_aligned_consumer_cog_clk_cc_test.inl",
+        "multiple_aligned_consumer_cog_clk_cc_types.cc",
+        "multiple_aligned_consumer_cog_clk_cc_types.hh",
+        "multiple_aligned_consumer_cog_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":secondary_consumer_aligner_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk",
+        ":secondary_consumer_aligner_clk",
+    ],
+)
+
+cc_library(
+    name = "multiple_aligned_consumer_cog_clk_cc_impl",
+    srcs = ["multiple_aligned_consumer_cog_clk_cc_impl.cc"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        ":multiple_aligned_consumer_cog_clk_cc_dial",
+        "//clockwork/dial:include_common",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:slot",
+        "//jewels/container:compare",
+    ],
+)
+
+clk(
+    name = "realtime_playback_system_boxes_clk",
+    srcs = ["realtime_playback_system_boxes.clk"],
+    generate = ["none"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk",
+        "//clockwork/logging/realtime_playback:realtime_playback_policy_clk",
+        "//clockwork/logging/realtime_playback:realtime_playback_stream_kind_clk",
+    ],
+)
+
+clk(
+    name = "realtime_playback_system_target_clk",
+    srcs = ["realtime_playback_system_target.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.composition.tests.support.realtime_playback_system_target.RealtimePlaybackSystem.process_one.tachyon",
+        "clockwork.clockwork.dsl.composition.tests.support.realtime_playback_system_target.RealtimePlaybackSystem.process_two.tachyon",
+        "clockwork.clockwork.dsl.composition.tests.support.realtime_playback_system_target.RealtimePlaybackSystem_realtime_playback_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_channel_allocations.csv",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_channel_publisher_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_channel_spy_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_event_logger_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_metrics_channel_metadata_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_signal_metadata_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_simplelaunch_config.textproto",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_system_metadata.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainOne_telemetry_logger_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_channel_allocations.csv",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_channel_publisher_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_channel_spy_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_event_logger_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_metrics_channel_metadata_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_signal_metadata_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_simplelaunch_config.textproto",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_system_metadata.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.DomainTwo_telemetry_logger_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.diagnostics_database_config.tachyon",
+        "realtime_playback_system_target.RealtimePlaybackSystem.logged_channel_metadata.pbbin",
+    ],
+    generate = ["none"],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [":realtime_playback_system_boxes_clk"],
+)
+
+clk(
+    name = "secondary_consumer_aligner_clk",
+    srcs = ["secondary_consumer_aligner.clk"],
+    outs = [
+        "secondary_consumer_aligner_clk_cc.cc",
+        "secondary_consumer_aligner_clk_cc.hh",
+        "secondary_consumer_aligner_clk_cc.inl",
+        "secondary_consumer_aligner_clk_cc_cog.cc",
+        "secondary_consumer_aligner_clk_cc_cog.hh",
+        "secondary_consumer_aligner_clk_cc_cog.inl",
+        "secondary_consumer_aligner_clk_cc_dial.cc",
+        "secondary_consumer_aligner_clk_cc_dial.hh",
+        "secondary_consumer_aligner_clk_cc_dial.inl",
+        "secondary_consumer_aligner_clk_cc_impl.cc",
+        "secondary_consumer_aligner_clk_cc_impl.hh",
+        "secondary_consumer_aligner_clk_cc_impl.inl",
+        "secondary_consumer_aligner_clk_cc_types.cc",
+        "secondary_consumer_aligner_clk_cc_types.hh",
+        "secondary_consumer_aligner_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":aligned_consumer_aligner_clk_cc",
+        "//std/aligners:state_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_aligner",
+    ],
+    visibility = ["//clockwork/dsl/composition/tests:__pkg__"],
+    deps = [
+        ":aligned_consumer_aligner_clk",
+        "//std/aligners:state_clk",
+    ],
+)
+
+clk(
     name = "signals_test_system_clk",
     srcs = ["signals_test_system.clk"],
     outs = [
         "signals_test_system_clk_cc.cc",
         "signals_test_system_clk_cc.hh",
         "signals_test_system_clk_cc.inl",
+        "signals_test_system_clk_cc_cog.cc",
+        "signals_test_system_clk_cc_cog.hh",
+        "signals_test_system_clk_cc_cog.inl",
         "signals_test_system_clk_cc_dial.cc",
         "signals_test_system_clk_cc_dial.hh",
         "signals_test_system_clk_cc_dial.inl",
+        "signals_test_system_clk_cc_types.cc",
+        "signals_test_system_clk_cc_types.hh",
+        "signals_test_system_clk_cc_types.inl",
         "signals_test_system_clk_exe.cc",
         "signals_test_system_clk_exe.hh",
         "signals_test_system_clk_exe.inl",
@@ -199,9 +756,11 @@ clk(
         "signals_test_system_target.SignalTestSystem.TestCpu_channel_allocations.csv",
         "signals_test_system_target.SignalTestSystem.TestCpu_channel_spy_config.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_event_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_journal_topology.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_metrics_channel_metadata_config.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_signal_metadata_config.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_simplelaunch_config.textproto",
+        "signals_test_system_target.SignalTestSystem.TestCpu_system_metadata.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_telemetry_logger_config.tachyon",
         "signals_test_system_target.SignalTestSystem.diagnostics_database_config.tachyon",
         "signals_test_system_target.SignalTestSystem.logged_channel_metadata.pbbin",
@@ -224,18 +783,24 @@ clk(
         "simplesys.system1.Cpu1_channel_allocations.csv",
         "simplesys.system1.Cpu1_channel_spy_config.tachyon",
         "simplesys.system1.Cpu1_event_logger_config.tachyon",
+        "simplesys.system1.Cpu1_journal_topology.tachyon",
         "simplesys.system1.Cpu1_metrics_channel_metadata_config.tachyon",
         "simplesys.system1.Cpu1_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu1_simplelaunch_config.textproto",
+        "simplesys.system1.Cpu1_simplelaunch_runner_config.tachyon",
+        "simplesys.system1.Cpu1_system_metadata.tachyon",
         "simplesys.system1.Cpu1_telemetry_logger_config.tachyon",
         "simplesys.system1.Cpu2.clockwork.clockwork.dsl.composition.tests.support.simplesys.MultiChan1_config.tachyon",
         "simplesys.system1.Cpu2_bridge_config.tachyon",
         "simplesys.system1.Cpu2_channel_allocations.csv",
         "simplesys.system1.Cpu2_channel_spy_config.tachyon",
         "simplesys.system1.Cpu2_event_logger_config.tachyon",
+        "simplesys.system1.Cpu2_journal_topology.tachyon",
         "simplesys.system1.Cpu2_metrics_channel_metadata_config.tachyon",
         "simplesys.system1.Cpu2_signal_metadata_config.tachyon",
         "simplesys.system1.Cpu2_simplelaunch_config.textproto",
+        "simplesys.system1.Cpu2_simplelaunch_runner_config.tachyon",
+        "simplesys.system1.Cpu2_system_metadata.tachyon",
         "simplesys.system1.Cpu2_telemetry_logger_config.tachyon",
         "simplesys.system1.diagnostics_database_config.tachyon",
         "simplesys.system1.logged_channel_metadata.pbbin",
@@ -260,8 +825,10 @@ merge_simplelaunch_config(
         "signals_test_system_target.SignalTestSystem.TestCpu_channel_allocations.csv",
         "signals_test_system_target.SignalTestSystem.TestCpu_channel_spy_config.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_event_logger_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_journal_topology.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_metrics_channel_metadata_config.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_signal_metadata_config.tachyon",
+        "signals_test_system_target.SignalTestSystem.TestCpu_system_metadata.tachyon",
         "signals_test_system_target.SignalTestSystem.TestCpu_telemetry_logger_config.tachyon",
         "signals_test_system_target.SignalTestSystem.diagnostics_database_config.tachyon",
         ":signals_test_system_clk_exe",

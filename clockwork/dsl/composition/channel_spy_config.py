@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to channel spy configurations.
@@ -32,7 +32,7 @@ PublishedChannelMetadata: Final[type[channel_spy_config_proto.PublishedChannelMe
         "PublishedChannelMetadata",
         max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_schema_name_size=511,
-        max_schema_definition_size=30000,
+        max_schema_definition_size=constants.MAX_SCHEMA_DEFINITION_SIZE,
     )[0]
 )
 
@@ -43,6 +43,6 @@ ChannelSpyConfig: Final[type[channel_spy_config_proto.ChannelSpyConfig]] = tachy
     "ChannelSpyConfig",
     max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
     max_schema_name_size=511,
-    max_schema_definition_size=30000,
+    max_schema_definition_size=constants.MAX_SCHEMA_DEFINITION_SIZE,
     max_num_channels=2048,
 )[0]

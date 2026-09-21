@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -22,6 +22,9 @@ clk(
         "end_of_log_clk_cc.cc",
         "end_of_log_clk_cc.hh",
         "end_of_log_clk_cc.inl",
+        "end_of_log_clk_cc_types.cc",
+        "end_of_log_clk_cc_types.hh",
+        "end_of_log_clk_cc_types.inl",
         "end_of_log_clk_nb.cc",
         "end_of_log_clk_nb.hh",
         "end_of_log_clk_nb.inl",
@@ -51,7 +54,7 @@ cc_library(
         "//clockwork/logging/readers:abstract_log_reader",
         "//clockwork/logging/readers:log_reader_factory",
         "//clockwork/logging/readers:types",
-        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/runners:channel_publisher",
         "//jewels/callsig:outcome",
         "//jewels/container:compare",

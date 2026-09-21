@@ -1,10 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/deterministic_runner.hh"
 #include "jewels/callsig/outcome.hh"
@@ -34,7 +34,7 @@ namespace clockwork
 {
 using ShmPublisherMap = std::pmr::unordered_map<
   jewels::Uuid<::clockwork::common::EndpointInstanceId>,
-  std::shared_ptr<::clockwork::pinion::ShmPublisher>,
+  std::shared_ptr<::clockwork::pinion::AbstractPublisher>,
   jewels::UuidHasher<::clockwork::common::EndpointInstanceId>>;
 
 /// Struct representing the data+metadata to be published on the channel
@@ -175,7 +175,8 @@ private:
 
   /// Map of UUIDs to channel publishers.
   ShmPublisherMap channels_;
-  std::pmr::unordered_map<std::pmr::string, std::shared_ptr<::clockwork::pinion::ShmPublisher>> channel_publishers_;
+  std::pmr::unordered_map<std::pmr::string, std::shared_ptr<::clockwork::pinion::AbstractPublisher>>
+    channel_publishers_;
 
   /// Get the next available message for a known publisher.
   /// @return The next message info or nullopt if there is none.

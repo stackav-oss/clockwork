@@ -1,0 +1,87 @@
+diff --git appimage/appimage.bzl appimage/appimage.bzl
+index 593c023..e04f170 100644
+--- appimage/appimage.bzl
++++ appimage/appimage.bzl
+@@ -81,6 +81,7 @@ _ATTRS = {
+     "build_args": attr.string_list(),
+     "data": attr.label_list(allow_files = True, doc = "Any additional data that will be made available inside the appimage"),
+     "env": attr.string_dict(doc = "Runtime environment variables. See https://bazel.build/reference/be/common-definitions#common-attributes-tests"),
++    "preserve_working_directory": attr.bool(default = False, doc = "Preserve the user's working directory when running the appimage", mandatory = False),
+     "_mkappimage": attr.label(default = "//appimage/private:mkappimage", executable = True, cfg = "exec"),
+ }
+ 
+diff --git appimage/BUILD appimage/BUILD
+index 13a6cc4..7a84b56 100644
+--- appimage/BUILD
++++ appimage/BUILD
+@@ -3,6 +3,16 @@ load("//:deps.bzl", "ARCHS")
+ 
+ package(default_visibility = ["//visibility:public"])
+ 
++filegroup(
++    name = "appimage_impl_hash_inputs",
++    srcs = [
++        "appimage.bzl",
++        "defs.bzl",
++        "toolchain.bzl",
++        "//appimage/private:hash_inputs",
++    ],
++)
++
+ bzl_library(
+     name = "defs",
+     srcs = ["defs.bzl"],
+
+diff --git appimage/private/BUILD appimage/private/BUILD
+index 8b0f54a..c849756 100644
+--- appimage/private/BUILD
++++ appimage/private/BUILD
+@@ -2,6 +2,17 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+ load("@rules_python//python:defs.bzl", "py_binary")
+ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+ 
++filegroup(
++    name = "hash_inputs",
++    srcs = [
++        "mkappdir.py",
++        "mkappimage.sh",
++        "mkapprun.bzl",
++        "runfiles.bzl",
++    ],
++    visibility = ["//appimage:__pkg__"],
++)
++
+ bzl_library(
+     name = "mkapprun",
+     srcs = ["mkapprun.bzl"],
+
+diff --git appimage/private/mkapprun.bzl appimage/private/mkapprun.bzl
+index 6fcc44b..41722b1 100644
+--- appimage/private/mkapprun.bzl
++++ appimage/private/mkapprun.bzl
+@@ -68,16 +68,20 @@ def _make_apprun_setup_content(ctx):
+     apprun_lines.append("unset TEST_SRCDIR")
+ 
+     # Explicitly set RUNFILES_DIR to the runfiles dir of the binary instead of the appimage rule itself
+-    apprun_lines.append('thisdir="${0%/*}"')  # Same as "$(dirname "$0")"
++    apprun_lines.append('thisdir="$(cd "${0%/*}" && pwd)"')  # Same as "$(dirname "$0")"
+     apprun_lines.append('workdir="$thisdir/%s"' % get_workdir(ctx))
+     apprun_lines.append('RUNFILES_DIR="${workdir%/*}"')  # Get parent directory of workdir
+     apprun_lines.append("export RUNFILES_DIR")
+ 
+-    # Run under runfiles
+-    apprun_lines.append('cd "$workdir"')
++    if ctx.attr.preserve_working_directory:
++        # Run under user's working directory
++        apprun_lines.append('cd "${BUILD_WORKING_DIRECTORY:-${OLDPWD:-$PWD}}"')
++    else:
++        # Run under runfiles
++        apprun_lines.append('cd "$workdir"')
+ 
+-    # Launch the actual binary
+-    apprun_lines.append('exec "./%s" "$@"' % get_entrypoint(ctx))
++     # Launch the actual binary
++    apprun_lines.append('exec "$thisdir/%s" "$@"' % get_entrypoint(ctx))
+ 
+     return "\n".join(apprun_lines) + "\n"
+ 

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Policy IR nodes."""
@@ -10,9 +10,9 @@ from copy import copy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.compiler_context import CompilerContext, ContextKey
-from clockwork.dsl.ir import clkbuiltins, expr, node, schema, statement, typesys
+from clockwork.dsl.ir import clkbuiltins, expr, node, pubsub, schema, statement, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
 
@@ -28,7 +28,7 @@ POLICY_DATA_TYPE: Final = typesys.TypeDef(
 class PolicyClass(node.DocableEntity, typesys.NamedValue, typesys.CallableEntity):
     """IR Node representing a resolved policy class."""
 
-    target_bound: Sequence[typesys.TypeVal]
+    target_bound: typesys.TypeVal
     schema: schema.InstantiatedSchema
     source: PolicyDef | None
 
@@ -51,7 +51,10 @@ class PolicyClass(node.DocableEntity, typesys.NamedValue, typesys.CallableEntity
             type_info=POLICY_DATA_TYPE,
             policy_class=self,
             data=schema.SchemaInstance.from_args(
-                schema_ir=self.schema, args=kw_args, error_report_node=ir_node, error_report_module=module
+                schema_ir=self.schema,
+                args=kw_args,
+                error_report_node=ir_node.cst_node if ir_node else None,
+                error_report_module=module,
             ),
             source=ir_node,
         )
@@ -61,7 +64,7 @@ class PolicyClass(node.DocableEntity, typesys.NamedValue, typesys.CallableEntity
 class PolicyDef(node.CstNode[cst.PolicyDef], node.DocableEntity, typesys.NamedValue, typesys.CallableEntity):
     """IR Node representing a policy class definition ("def policy")."""
 
-    target_bound: Sequence[typesys.TypeVal] | expr.Expr
+    target_bound: typesys.TypeVal | expr.Expr
     schema: schema.InstantiatedSchema | expr.Expr
     resolved: PolicyClass | None
 
@@ -108,7 +111,7 @@ class PolicyDef(node.CstNode[cst.PolicyDef], node.DocableEntity, typesys.NamedVa
             raise TypeError(msg)
         assert isinstance(typespec, schema.Schema | typesys.Instantiation)
         self.schema = schema.InstantiatedSchema.from_typespec(typespec)
-        self.target_bound = (target_bound,)
+        self.target_bound = target_bound
         self.resolved = PolicyClass(
             name=self.name,
             scope=self.scope,
@@ -153,8 +156,22 @@ class PolicyData:
 
     policy_class: PolicyClass
     data: schema.SchemaInstance
-    target: typesys.Value
+    target: typesys.Value | pubsub.InstantiatedChannel
     source: PolicyInstance | node.CstNode[cst.Expr] | None
+
+
+def _target_matches_bound(target: typesys.Value, target_bound: typesys.TypeVal) -> bool:
+    """Check if a target matches the policy's target bound.
+
+    Uses concrete_type_info to resolve through generic indirection so that policies
+    can bind to parameterized (generic) entities such as cogs and channels.
+    """
+    try:
+        typesys.unify(target.concrete_type_info(), target_bound)
+    except TypeError:
+        return False
+
+    return True
 
 
 @dataclass
@@ -214,18 +231,17 @@ class PolicyInstance(node.CstNode[cst.Policy], node.DocableEntity, typesys.Value
             msg = self.policy_class.append_error_line(f"Expected a policy class, but got {policy}")
             raise TypeError(msg)
         target = self.target.evaluate()
-        if target.type_info not in policy_class.target_bound:
-            expected_type = (
-                f"{policy_class.target_bound[0]}"
-                if len(policy_class.target_bound) == 1
-                else f"one of {policy_class.target_bound}"
+        if isinstance(target, statement.ImmutableBinding):
+            target = target.value
+        if not _target_matches_bound(target, policy_class.target_bound):
+            msg = self.target.append_error_line(
+                f"Expected {policy_class.target_bound.value_key()} but got {target.type_info}"
             )
-            msg = self.target.append_error_line(f"Expected {expected_type} but got {target.type_info}")
             raise TypeError(msg)
         schema_instance = schema.SchemaInstance.from_unresolved_bindings(
             policy_class.schema,
             self.bindings,
-            self,
+            self.cst_node,
             self.module,
         )
         self.policy_class = policy_class
@@ -239,7 +255,10 @@ class PolicyInstance(node.CstNode[cst.Policy], node.DocableEntity, typesys.Value
         if not isinstance(self.policy_class, PolicyClass) or isinstance(self.target, expr.Expr) or self.data is None:
             msg = self.append_error_line("Attempt to access unresolved policy")
             raise RuntimeError(msg)
-        self.resolved = PolicyData(policy_class=self.policy_class, data=self.data, target=self.target, source=self)
+        resolved_target = self.target
+        if isinstance(self.target, typesys.Instantiation) and isinstance(self.target.instantiates, pubsub.Channel):
+            resolved_target = pubsub.InstantiatedChannel.from_instantiation(self.target)
+        self.resolved = PolicyData(policy_class=self.policy_class, data=self.data, target=resolved_target, source=self)
         return self.resolved
 
 
@@ -277,16 +296,12 @@ class PolicyContext:
                     f"Original definition in {existing.source.module.inner_scope.uniq_path}"
                 )
             raise ValueError(msg)
-        if policy.target.type_info not in policy.policy_class.target_bound:
-            expected_type = (
-                f"{policy.policy_class.target_bound[0]}"
-                if len(policy.policy_class.target_bound) == 1
-                else f"one of {policy.policy_class.target_bound}"
-            )
-            msg = f"Expected {expected_type} but got {policy.target.type_info}"
+        if not _target_matches_bound(policy.target, policy.policy_class.target_bound):
+            msg = f"Expected {policy.policy_class.target_bound.value_key()} but got {policy.target.type_info}"
             if policy.source:
                 msg = policy.source.append_error_line(msg)
             raise TypeError(msg)
+
         policy_reg[key] = policy
 
     def _merge_registry(self, other_reg: dict[str, PolicyData]) -> None:
@@ -324,7 +339,7 @@ def bind_policy_data(module: node.Module, policy_data: UnboundPolicyData, target
 def try_bind_policy_data(module: node.Module, policy_data: UnboundPolicyData, target: typesys.Value) -> bool:
     """Bind policy data to a target if the target is of the right type."""
     context = module.context[_POLICY_KEY]
-    if target.type_info not in policy_data.policy_class.target_bound:
+    if not _target_matches_bound(target, policy_data.policy_class.target_bound):
         return False
     bound = PolicyData(
         policy_class=policy_data.policy_class, data=policy_data.data, target=target, source=policy_data.source
@@ -334,12 +349,29 @@ def try_bind_policy_data(module: node.Module, policy_data: UnboundPolicyData, ta
 
 
 def lookup_policy(module: node.Module, policy_class: PolicyClass, target: typesys.Value) -> PolicyData | None:
-    """Look up a policy for a target."""
+    """Look up a policy for a target.
+
+    For InstantiatedChannel targets, this function also checks for policies
+    defined on the generic channel and inherits them if no policy is directly
+    defined for the instantiation.
+    """
     context = module.context[_POLICY_KEY]
-    try:
-        return context.registry[policy_class.value_key()][target.value_key()]
-    except KeyError:
+    policy_reg = context.registry.get(policy_class.value_key())
+    if policy_reg is None:
         return None
+
+    # Direct lookup
+    target_key = target.value_key()
+    if target_key in policy_reg:
+        return policy_reg[target_key]
+
+    # For InstantiatedChannel, fall back to the generic channel's policy
+    if isinstance(target, pubsub.InstantiatedChannel):
+        generic_key = target.channel.value_key()
+        if generic_key in policy_reg:
+            return policy_reg[generic_key]
+
+    return None
 
 
 def lookup_all_policies(module: node.Module, policy_class: PolicyClass) -> Iterable[PolicyData]:

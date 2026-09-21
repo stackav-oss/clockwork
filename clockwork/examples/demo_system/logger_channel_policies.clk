@@ -1,0 +1,12 @@
+#![generate()]
+
+use clockwork::examples::demo_system::logger_channels::{SignalMetadata};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
+
+// Signal metadata policy
+policy ChannelLoggingPolicy for SignalMetadata
+{
+  log_type = LogType::non_redundant_telemetry;
+  channel_type = ChannelType::persistent;
+}

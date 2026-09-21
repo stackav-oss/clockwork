@@ -1,8 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
 #include "clockwork/repr_iface.hh"
@@ -12,7 +13,7 @@
 #include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -38,7 +39,7 @@ TEST_CASE("setup_snapshot_configs")
   const pinion::support::TmpShmNamespace tmp_namespace;
   auto channel_factory = tmp_namespace.make_factory();
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "snapshot_test_memres");
   const jewels::memory::MemoryResource memres{&memory};
 
   // Create endpoint IDs (use EndpointInstanceId as per schema)

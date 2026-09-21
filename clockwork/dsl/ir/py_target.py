@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """CppTarget-related IR nodes."""
@@ -10,7 +10,7 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.bazel import clk_targets
 from clockwork.dsl.bazel.py_targets import PyLibrary
 from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label
@@ -23,6 +23,7 @@ from clockwork.dsl.ir import (
     primitive,
     schema,
     schema_reg,
+    statement,
     strongtypes,
     typesys,
 )
@@ -63,9 +64,9 @@ def _render_py_constant(binding: ImmutableBinding) -> str:
         value_str = "False"
     elif binding.value is clkbuiltins.TRUE_VALUE:
         value_str = "True"
-    elif isinstance(binding.value, primitive.StringLiteral):
+    elif isinstance(binding.value, primitive.StringValue):
         value_str = f'"{binding.value.value}"'
-    elif isinstance(binding.value, primitive.DecimalLiteral):
+    elif isinstance(binding.value, primitive.DecimalValue):
         value_str = str(binding.value.value)
     else:
         msg = f"Converting {type(binding.value)} to a python value is unsupported."
@@ -106,7 +107,7 @@ class PyGeneratedEntities:
     schemas: list[schema.Schema] = field(default_factory=list)
     enums: list[clkenum.ClkEnum] = field(default_factory=list)
     constants: list[ImmutableBinding] = field(default_factory=list)
-    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+    schema_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
 
 
 @dataclass
@@ -144,16 +145,16 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
 
         use_v2 = bool(cst_node.maybe_py_target_v2_flag())
 
-        for statement in cst_node.children_py_target_statement():
-            if representation_cst := statement.maybe_cpp_representation():
+        for statement_ir in cst_node.children_py_target_statement():
+            if representation_cst := statement_ir.maybe_cpp_representation():
                 representations.append(ReprInstantiation.from_cst(representation_cst, module))
-            elif interface_cst := statement.maybe_cpp_interface():
+            elif interface_cst := statement_ir.maybe_cpp_interface():
                 interface = InterfaceInstantiation.from_cst(interface_cst, module)
                 interfaces.append(interface)
-            elif enum_cst := statement.maybe_cpp_enum():
+            elif enum_cst := statement_ir.maybe_cpp_enum():
                 enum = EnumTarget.from_cst(enum_cst, module)
                 enums.append(enum)
-            elif constant_cst := statement.maybe_target_constant():
+            elif constant_cst := statement_ir.maybe_target_constant():
                 constant_lookup = node.DeferredLookup.make(
                     expected_type=ImmutableBinding,
                     cst_identifier=constant_cst.child_constant_name(),
@@ -167,19 +168,21 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
                     )
                     raise ValueError(msg)
                 constants[constant_lookup.identifier] = constant_lookup
-            elif python_cog_dial_cst := statement.maybe_py_python_cog_dial():
+            elif python_cog_dial_cst := statement_ir.maybe_py_python_cog_dial():
                 python_cog_dial = PythonCogDial.from_cst(python_cog_dial_cst, module)
                 python_cog_dials.append(python_cog_dial)
             else:
-                msg = node.append_error_line(statement, module, "Unrecognized statement within py_target")
+                msg = node.append_error_line(statement_ir, module, "Unrecognized statement within py_target")
                 raise NotImplementedError(msg)
 
+        # fmt: off
         return cls(
             module=module,
             cst_node=cst_node,
             doc=doc,
             name=name,
             scope=module.inner_scope,
+            # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             representations=representations,
             interfaces=interfaces,
             enums=enums,
@@ -187,6 +190,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
             python_cog_dials=python_cog_dials,
             use_v2=use_v2,
         )
+        # fmt: on
 
     @classmethod
     def from_generate_py(cls: type[PyTarget], module: node.Module, entities: PyGeneratedEntities) -> PyTarget:
@@ -202,7 +206,7 @@ class PyTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.PyTarget])
         representations: list[ReprInstantiation | ResolvedReprInstantiation] = []
         interfaces: list[InterfaceInstantiation] = []
 
-        for instantiation in entities.instantiations:
+        for instantiation in entities.schema_instantiations:
             assert isinstance(instantiation.typespec, typesys.Instantiation)
             assert isinstance(instantiation.typespec.instantiates, schema.Schema)
             representations.append(ResolvedReprInstantiation.from_schema(instantiation.typespec, module))
@@ -478,7 +482,7 @@ def _render_parameter(
     assert param.type_bound == clkbuiltins.TYPE_TYPE
     lookup_module: node.Module | None = None
     param_args = None
-    if isinstance(arg, schema.InstantiateStmt):
+    if isinstance(arg, statement.InstantiateStmt):
         assert isinstance(arg.typespec, typesys.Instantiation)
         assert isinstance(arg.typespec.instantiates, schema.Schema)
         param_args = _render_scope_lookup_arguments(arg.typespec, module, module_lookups)

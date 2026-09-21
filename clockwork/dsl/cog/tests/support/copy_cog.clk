@@ -6,20 +6,20 @@ use clockwork::dsl::tests::support::clk_hellomsg;
 // Doc.
 cog CopyCog
 {
-    inputs
+  inputs
+  {
+    input_a: Tappy<clk_hellomsg::HelloMsg>
     {
-        input_a: Tappy<clk_hellomsg::HelloMsg>
-        {
-            copy_inputs: false;
-        }
-        input_b: Tappy<clk_hellomsg::HelloMsg>
-        {
-            copy_inputs: true;
-        }
+      copy_inputs: false;
     }
-    execution
+    input_b: Tappy<clk_hellomsg::HelloMsg>
     {
-        condition periodic: time_since_last_exec(10ms);
-        execute when: periodic;
+      copy_inputs: true;
     }
+  }
+  execution
+  {
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
 }

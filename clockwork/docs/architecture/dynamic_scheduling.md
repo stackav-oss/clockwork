@@ -43,4 +43,4 @@ This is applied at the process level, not the Cog level, and affects all Cogs in
 ### Execution metrics and monitoring
 
 The dynamic executor collects extensive execution statistics, such as the duration of each Cog execution, the amount of time each Cog instance spends waiting in the execution queue, and the number of times each Cog instance is skipped due to lock contention.
-These metrics are logged for offline analysis and can also be used to trigger faults at runtime if needed.
+These [metrics](../reference/cog_metrics.md) are logged for offline analysis and can also be used to trigger faults at runtime if needed.

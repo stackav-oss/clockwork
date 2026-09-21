@@ -1,8 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/tap/constants.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/meta/concepts.hh"
@@ -13,9 +15,19 @@
 #include <cstddef>
 #include <span>
 #include <type_traits>
+#include <utility>
 
 namespace jewels::tap
 {
+
+/// Tag selecting a callsig overload where a legacy return-type-only overload remains available.
+struct CallsigTag
+{
+  explicit constexpr CallsigTag() = default;
+};
+
+/// Select a callsig overload while preserving a deprecated legacy overload.
+inline constexpr CallsigTag callsig{};
 
 namespace detail
 {
@@ -116,14 +128,15 @@ public:
   using size_type = size_t;
   using difference_type = std::ptrdiff_t;
 
-  VarArrayInterface& operator=(const VarArrayInterface& other) noexcept = default;
+  constexpr VarArrayInterface& operator=(const VarArrayInterface& other) noexcept = default;
 
-  VarArrayInterface& operator=(VarArrayInterface&& other) noexcept = default;
+  constexpr VarArrayInterface& operator=(VarArrayInterface&& other) noexcept = default;
 
   /// Must have a trivial destructor.
   ~VarArrayInterface() = default;
 
-  /// Access an element by index.
+  /// Access an element by index for generic STL-compatible code.
+  /// Code that names VarArray should use the outcome overload.
   /// @throws An exception for out of bounds access.
   /// @param index The position to access.
   /// @return A qualified reference to the element.
@@ -132,62 +145,83 @@ public:
   [[nodiscard]] const_reference at(size_t index) const;
   /// @}
 
+  /// Access an element by index without throwing.
+  /// @return failure when index is out of bounds; the output is unchanged on failure.
+  /// @{
+  jewels::BinaryOutcome at(jewels::Out<pointer> value_out, size_t index) noexcept;
+  jewels::BinaryOutcome at(jewels::Out<const_pointer> value_out, size_t index) const noexcept;
+  /// @}
+
   /// Access without bounds checking.
   /// @param index The position to access.
   /// @return A qualified reference to the element.
-  [[nodiscard]] reference operator[](size_t index);
-  [[nodiscard]] const_reference operator[](size_t index) const;
+  [[nodiscard]] constexpr reference operator[](size_t index) noexcept;
+  [[nodiscard]] constexpr const_reference operator[](size_t index) const noexcept;
 
   /// Access iterators.
   /// @return An iterator.
   /// @{
-  [[nodiscard]] iterator begin();
-  [[nodiscard]] const_iterator begin() const;
-  [[nodiscard]] iterator end();
-  [[nodiscard]] const_iterator end() const;
+  [[nodiscard]] constexpr iterator begin() noexcept;
+  [[nodiscard]] constexpr const_iterator begin() const noexcept;
+  [[nodiscard]] constexpr iterator end() noexcept;
+  [[nodiscard]] constexpr const_iterator end() const noexcept;
   /// @}
 
   /// Get the current size.
   /// @return The size.
-  [[nodiscard]] constexpr size_type size() const;
+  [[nodiscard]] constexpr size_type size() const noexcept;
 
   /// Get the capacity.
   /// @return The capacity.
-  [[nodiscard]] constexpr size_type capacity() const;
+  [[nodiscard]] constexpr size_type capacity() const noexcept;
 
   /// Remove all elements.
-  constexpr void clear();
+  constexpr void clear() noexcept;
 
   /// Pointer to the storage buffer.
   /// @return A qualified pointer to the start of the buffer.
   /// @{
-  [[nodiscard]] pointer data();
-  [[nodiscard]] const_pointer data() const;
+  [[nodiscard]] constexpr pointer data() noexcept;
+  [[nodiscard]] constexpr const_pointer data() const noexcept;
   /// @}
 
-  /// Reserve space in the container.
-  /// For compatibility with generic code.
+  /// Reserve space in the container for generic STL-compatible code.
+  /// Code that names VarArray should use try_reserve.
   void reserve(size_t new_capacity);
 
-  /// Resize the container if possible.
+  /// Reserve space without throwing.
+  jewels::BinaryOutcome try_reserve(size_t new_capacity) const noexcept;
+
+  /// Resize the container for generic STL-compatible code.
+  /// Code that names VarArray should use try_resize.
   /// @throws std::length_error if the size exceeds the capacity.
   /// @param new_size The resulting size of the container.
   void resize(size_t new_size);
 
-  /// Resize the container if possible.
+  /// Resize without originating an exception when the requested size exceeds capacity.
+  jewels::BinaryOutcome try_resize(size_t new_size) noexcept(std::is_nothrow_default_constructible_v<Value>);
+
+  /// Resize the container for generic STL-compatible code.
+  /// Code that names VarArray should use try_resize.
   /// @throws std::length_error if the size exceeds the capacity.
   /// @param new_size The resulting size of the container.
   /// @param new_value A value to set any new elements to if the size grows.
   void resize(size_t new_size, const_reference new_value);
 
-  /// Insert a new element
+  /// Resize without originating an exception when the requested size exceeds capacity.
+  jewels::BinaryOutcome
+  try_resize(size_t new_size, const_reference new_value) noexcept(std::is_nothrow_copy_constructible_v<Value>);
+
+  /// Insert a new element for generic STL-compatible code.
+  /// Code that names VarArray should use try_emplace_back.
   /// @throws std::length_error if a new element would result in a size
   /// exceeding the capacity.
   /// @param args A pack of args to construct the new value from.
   template <class... Args>
   void push_back(Args&&... args);
 
-  /// Insert a new element
+  /// Insert a new element for generic STL-compatible code.
+  /// Code that names VarArray should use try_emplace_back.
   /// @throws std::length_error if a new element would result in a size
   /// exceeding the capacity.
   /// @param args A pack of args to construct the new value from.
@@ -195,79 +229,90 @@ public:
   template <class... Args>
   reference emplace_back(Args&&... args);
 
-  /// Try to insert a new element.
+  /// Insert a new element without originating an exception when full.
+  /// @param value_out Optional pointer to the inserted element on success.
+  template <class... Args>
+  jewels::BinaryOutcome try_emplace_back(jewels::OptionalOut<pointer> value_out, Args&&... args) noexcept(
+    std::is_nothrow_constructible_v<Value, Args...>);
+
+  /// Legacy iterator-returning form retained for migration. Prefer the callsig overload.
   /// @param args A pack of args to construct the new value from.
   /// @param Return an iterator to the new element or an error code on failure.
   template <class... Args>
   [[nodiscard]] jewels::expected<iterator, jewels::MonoError> try_emplace_back(Args&&... args);
 
-  /// Remove the last element.
+  /// Remove the last element for generic STL-compatible code.
+  /// Code that names VarArray should use try_pop_back(callsig).
   void pop_back();
 
-  /// Try to remove the last element.
+  /// Remove the last element without throwing.
+  jewels::BinaryOutcome try_pop_back(CallsigTag /*tag*/) noexcept;
+
+  /// Legacy boolean form retained for migration. Prefer try_pop_back(callsig).
   /// @return True if an element was removed.
   [[nodiscard]] bool try_pop_back();
 
   /// Return true if the container is full.
   /// @return True if full and false otherwise.
-  [[nodiscard]] constexpr bool full() const;
+  [[nodiscard]] constexpr bool full() const noexcept;
 
   /// Return true if the container is empty.
   /// @return True if empty and false otherwise.
-  [[nodiscard]] constexpr bool empty() const;
+  [[nodiscard]] constexpr bool empty() const noexcept;
 
   /// Erase the element at pos.
   /// @{
-  iterator erase(iterator pos);
-  iterator erase(const_iterator pos);
+  iterator erase(iterator pos) noexcept(std::is_nothrow_move_assignable_v<Value>);
+  iterator erase(const_iterator pos) noexcept(std::is_nothrow_move_assignable_v<Value>);
   /// @}
 
   /// Erase a range of elements [first, last).
   /// @{
-  iterator erase(iterator first, iterator last);
-  iterator erase(const_iterator first, const_iterator last);
+  iterator erase(iterator first, iterator last) noexcept(std::is_nothrow_move_assignable_v<Value>);
+  iterator erase(const_iterator first, const_iterator last) noexcept(std::is_nothrow_move_assignable_v<Value>);
   /// @}
 
-  /// Insert an element at pos.
+  /// Insert an element at pos for generic STL-compatible code.
+  /// Code that names VarArray should use try_insert.
   /// @throws std::length_error if a new element would result in a size
   /// exceeding the capacity.
   template <class NewValue>
   iterator insert(iterator pos, NewValue&& new_value);
 
-  /// Insert a range of elements at pos.
+  template <class NewValue>
+  jewels::BinaryOutcome try_insert(jewels::Out<iterator> result_out, iterator pos, NewValue&& new_value) noexcept(
+    std::is_nothrow_move_assignable_v<Value> && std::is_nothrow_assignable_v<Value&, NewValue&&>);
+
+  /// Insert a range of elements at pos for generic STL-compatible code.
+  /// Code that names VarArray should use try_insert.
   /// @throws std::length_error if the resulting size would exceeding
   /// the capacity.
   template <class InputIter>
   iterator insert(iterator pos, InputIter first, InputIter last);
 
+  template <class InputIter>
+  jewels::BinaryOutcome try_insert(jewels::Out<iterator> result_out, iterator pos, InputIter first, InputIter last);
+
   /// Attempts to set the array to the contents of the provided span
   /// @return true if successful, false if the span's length the fixed_capacity
-  [[nodiscard]] constexpr bool try_set(std::span<const value_type> other) noexcept;
+  constexpr jewels::BinaryOutcome
+  try_set(std::span<const value_type> other, CallsigTag /*tag*/) noexcept(std::is_nothrow_copy_assignable_v<Value>);
+
+  /// Legacy boolean form retained for migration. Prefer try_set(values, callsig).
+  [[nodiscard]] constexpr bool
+  try_set(std::span<const value_type> other) noexcept(std::is_nothrow_copy_assignable_v<Value>);
 
   /// Get a span to the elements.
   /// @return A span.
   /// @{
-  [[nodiscard]] std::span<value_type> span();
-  [[nodiscard]] std::span<const value_type> span() const;
+  [[nodiscard]] constexpr std::span<value_type> span() noexcept;
+  [[nodiscard]] constexpr std::span<const value_type> span() const noexcept;
   /// @}
 
 protected:
-  /// Common implementation for resize.
-  /// @throws std::length_error if the size exceeds the capacity.
-  /// @params new_size The size to resize to.
-  /// @params args Either an empty pack or a const_reference.
-  template <class... Args>
-    requires(sizeof...(Args) <= 1 && (sizeof...(Args) == 0 || (std::is_same_v<Args, Value> && ...)))
-  void resize_impl(size_t new_size, const Args&... args);
-
-  /// Assumes the capacity is adequate for the insertion.  Does not
-  /// validate size and therefore does not throw.
-  template <class InputIter>
-  iterator insert_impl(iterator pos, InputIter first, InputIter last) noexcept;
-
   /// Zero out any elements no longer used.
   /// @param count The number of elements at the end to wipe.
-  void wipe(size_t count);
+  constexpr void wipe(size_t count) noexcept;
 
   /// Get the fields from the derived class.
   /// @return The fields.
@@ -292,7 +337,7 @@ public:
   /// Copy the contents of the vector.
   /// @{
   VarArray(const VarArray& other) noexcept = default;
-  VarArray& operator=(const VarArray&) = default;
+  constexpr VarArray& operator=(const VarArray&) noexcept = default;
   /// @}
 
   /// Types are trivially destructible and likely will not benefit
@@ -300,7 +345,7 @@ public:
   /// will benefit from move semantics.
   /// @{
   VarArray(VarArray&& other) noexcept = default;
-  VarArray& operator=(VarArray&& other) = default;
+  VarArray& operator=(VarArray&& other) noexcept = default;
   /// @}
 
   /// Must have a trivial destructor.
@@ -326,14 +371,16 @@ private:
 /// @param[in] rhs The right hand side array.
 /// @return true if the strings are equal
 template <typename T, size_t fixed_capacity>
-bool operator==(const VarArray<T, fixed_capacity>& lhs, const VarArray<T, fixed_capacity>& rhs);
+constexpr bool operator==(const VarArray<T, fixed_capacity>& lhs, const VarArray<T, fixed_capacity>& rhs) noexcept(
+  noexcept(std::declval<const T&>() == std::declval<const T&>()));
 
 /// Compare two VarArray for inequlity
 /// @param[in] lhs The left hand side array.
 /// @param[in] rhs The right hand side array.
 /// @return true if the strings are not equal
 template <typename T, size_t fixed_capacity>
-bool operator!=(const VarArray<T, fixed_capacity>& lhs, const VarArray<T, fixed_capacity>& rhs);
+constexpr bool operator!=(const VarArray<T, fixed_capacity>& lhs, const VarArray<T, fixed_capacity>& rhs) noexcept(
+  noexcept(std::declval<const T&>() == std::declval<const T&>()));
 
 } // namespace jewels::tap
 

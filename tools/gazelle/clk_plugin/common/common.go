@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 // Package common contains any code used by two or more packages. It avoid circular dependencies.
@@ -18,6 +18,8 @@ const ClkRule = "clk"
 const ClkCppTarget = "cpp"
 const ClkCppCogTarget = "cpp_cog"
 const ClkCppTestCogTarget = "cpp_test_cog"
+const ClkCppAlignerTarget = "cpp_aligner"
+const ClkCppComboTestTarget = "cpp_combo_test"
 const ClkCppExeTarget = "cpp_exe"
 const ClkPyTarget = "py"
 const ClkPyCogTarget = "py_cog"
@@ -31,6 +33,8 @@ var AllGenerateTargets = []string{
 	ClkCppTarget,
 	ClkCppCogTarget,
 	ClkCppTestCogTarget,
+	ClkCppAlignerTarget,
+	ClkCppComboTestTarget,
 	ClkCppExeTarget,
 	ClkPyTarget,
 	ClkPyCogTarget,

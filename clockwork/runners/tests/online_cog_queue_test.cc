@@ -1,21 +1,23 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/cog_envelope.hh"
-#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/common/tests/support/test_cog.hh"
 #include "clockwork/runners/online_cog_queue.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <chrono>
 #include <compare>
+#include <cstddef>
 #include <memory_resource>
 #include <string_view>
 
@@ -144,9 +146,10 @@ public:
     return {};
   }
 
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
-    return jewels::unexpected(CogExecutionError::not_ready);
+    return CogPrepareResult::not_ready;
   }
 
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
@@ -154,6 +157,154 @@ public:
     return {};
   }
 };
+
+/// Test Cog that is publisher-throttled until a fixed deadline and ready afterward.
+class PublisherThrottledCog : public AbstractCog
+{
+public:
+  PublisherThrottledCog(jewels::memory::ObjectPtr<AbstractCogQueue> queue, const jewels::time::SyncTime throttled_until)
+    : AbstractCog(queue), throttled_until_(throttled_until)
+  {
+  }
+
+  [[nodiscard]] std::string_view get_name() const override
+  {
+    return "clockwork::PublisherThrottledCog";
+  }
+
+  jewels::expected<void, jewels::MonoError> prime(jewels::time::SyncTime /*start_time*/) override
+  {
+    return {};
+  }
+
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> throttled_until_out, const jewels::time::SyncTime current_time) override
+  {
+    ++prepare_count_;
+    if (current_time < throttled_until_)
+    {
+      *throttled_until_out = throttled_until_;
+      return CogPrepareResult::publisher_throttled;
+    }
+    return CogPrepareResult::ready;
+  }
+
+  jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
+  {
+    return {};
+  }
+
+  [[nodiscard]] size_t prepare_count() const
+  {
+    return prepare_count_;
+  }
+
+private:
+  jewels::time::SyncTime throttled_until_;
+  size_t prepare_count_{};
+};
+
+/// Test Cog that reports one lock-contention outcome before becoming ready.
+class ContendedCog : public AbstractCog
+{
+public:
+  ContendedCog(jewels::memory::ObjectPtr<AbstractCogQueue> queue, const CogPrepareResult contention_result)
+    : AbstractCog(queue), contention_result_(contention_result)
+  {
+  }
+
+  [[nodiscard]] std::string_view get_name() const override
+  {
+    return "clockwork::ContendedCog";
+  }
+
+  jewels::expected<void, jewels::MonoError> prime(jewels::time::SyncTime /*start_time*/) override
+  {
+    return {};
+  }
+
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
+  {
+    if (!reported_contention_)
+    {
+      reported_contention_ = true;
+      return contention_result_;
+    }
+    return CogPrepareResult::ready;
+  }
+
+  jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
+  {
+    return {};
+  }
+
+private:
+  CogPrepareResult contention_result_;
+  bool reported_contention_{};
+};
+
+TEST_CASE("lock contention remains distinct and retains the queue node", "OnlineCogQueue")
+{
+  auto queue = OnlineCogQueue(jewels::memory::MemoryResource(std::pmr::new_delete_resource()));
+  const auto contention_result =
+    GENERATE(CogPrepareResult::states_lock_contention, CogPrepareResult::reentry_lock_contention);
+  auto cog = ContendedCog(jewels::memory::make_non_null_from_ref(queue), contention_result);
+  const auto envelope = CogEnvelope{
+    .ready_time = jewels::time::SyncTime{std::chrono::seconds{1}},
+    .cog = jewels::memory::make_non_null_from_ref(cog),
+  };
+  queue.push(envelope);
+
+  CHECK_FALSE(queue.pop(std::chrono::nanoseconds::zero()));
+  CHECK(queue.stats().size == 1);
+  const auto result = queue.pop(std::chrono::nanoseconds::zero());
+  REQUIRE(result);
+  CHECK(result->cog == envelope.cog);
+  CHECK(queue.stats().size == 0);
+}
+
+TEST_CASE("publisher-throttled Cogs retain FIFO position and make deadline progress", "OnlineCogQueue")
+{
+  using namespace std::chrono_literals;
+  auto queue = OnlineCogQueue(jewels::memory::MemoryResource(std::pmr::new_delete_resource()));
+  const auto deadline = jewels::time::SyncClock::now() + 40ms;
+  auto throttled_cog = PublisherThrottledCog(jewels::memory::make_non_null_from_ref(queue), deadline);
+  auto ready_cog = TestCog(jewels::memory::make_non_null_from_ref(queue));
+  const auto throttled_env = CogEnvelope{
+    .ready_time = deadline - 1s,
+    .cog = jewels::memory::make_non_null_from_ref(throttled_cog),
+  };
+  const auto ready_env = CogEnvelope{
+    .ready_time = deadline - 500ms,
+    .cog = jewels::memory::make_non_null_from_ref(ready_cog),
+  };
+  queue.push(throttled_env);
+  queue.push(ready_env);
+
+  // A later runnable Cog progresses around the retained throttled FIFO node.
+  const auto later_result = queue.pop(0ns);
+  REQUIRE(later_result);
+  CHECK(later_result->cog == ready_env.cog);
+  CHECK(queue.stats().size == 1);
+  CHECK(throttled_cog.prepare_count() == 1);
+
+  // Duplicate and stale notifications do not prepare the Cog before its deadline.
+  queue.notify();
+  CHECK_FALSE(queue.pop(0ns));
+  CHECK(throttled_cog.prepare_count() == 1);
+
+  // The queue's timed-wait fallback wakes at the deadline even without a working private timer.
+  const auto wait_start = jewels::time::SyncClock::now();
+  const auto throttled_result = queue.pop(200ms);
+  const auto execution_time = jewels::time::SyncClock::now();
+  REQUIRE(throttled_result);
+  CHECK(throttled_result->cog == throttled_env.cog);
+  CHECK(execution_time >= deadline);
+  CHECK(execution_time - wait_start < 200ms);
+  CHECK(throttled_cog.prepare_count() == 2);
+  CHECK(queue.stats().size == 0);
+}
 
 TEST_CASE("not_ready cogs are removed from queue", "OnlineCogQueue")
 {

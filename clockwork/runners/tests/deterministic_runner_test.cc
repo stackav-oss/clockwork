@@ -1,19 +1,20 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
-#include "clockwork/common/cog_execution_error_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_runner.hh"
 #include "clockwork/runners/deterministic_timer.hh"
 #include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/cli/exit_condition_signal.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -153,18 +154,19 @@ public:
     add_to_ready_queue(event.current_time);
   }
 
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
     auto reentry_lock = std::unique_lock(reentry_mutex_, std::defer_lock);
 
     if (!reentry_lock.try_lock())
     {
-      return jewels::unexpected(CogExecutionError::reentry_lock_contention);
+      return CogPrepareResult::reentry_lock_contention;
     }
 
     reentry_lock_ = std::move(reentry_lock);
 
-    return {};
+    return CogPrepareResult::ready;
   }
 
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams params) override
@@ -184,6 +186,52 @@ private:
   jewels::memory::ObjectPtr<pinion::SubscriberHandle> subscriber_;
   std::deque<std::pair<int, int64_t>>& events_;
   int id_;
+};
+
+class ThrottledCog final : public AbstractCog
+{
+public:
+  explicit ThrottledCog(jewels::memory::ObjectPtr<AbstractCogQueue> queue)
+    : AbstractCog(queue)
+  {
+  }
+
+  [[nodiscard]] std::string_view get_name() const override
+  {
+    return "clockwork::ThrottledCog";
+  }
+
+  jewels::expected<void, jewels::MonoError> prime(jewels::time::SyncTime /*start_time*/) override
+  {
+    return {};
+  }
+
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> throttled_until_out, jewels::time::SyncTime current_time) override
+  {
+    ++prepare_count;
+    if (prepare_count == 1U)
+    {
+      *throttled_until_out = current_time + std::chrono::milliseconds{10};
+      return CogPrepareResult::publisher_throttled;
+    }
+    if (execute_count == 0U)
+    {
+      return CogPrepareResult::ready;
+    }
+    return CogPrepareResult::not_ready;
+  }
+
+  jewels::expected<void, CogExecutionError> execute(CogExecuteParams params) override
+  {
+    ++execute_count;
+    execution_time = params.start_time;
+    return {};
+  }
+
+  size_t prepare_count{};
+  size_t execute_count{};
+  jewels::time::SyncTime execution_time{};
 };
 
 TEST_CASE("execute", "[DeterministicRunner]")
@@ -301,6 +349,43 @@ TEST_CASE("execute", "[DeterministicRunner]")
     REQUIRE(jewels::ok(runner.start(start_time, end_time, exit)));
     REQUIRE(events.empty());
   }
+}
+
+TEST_CASE("a throttled Cog coalesces duplicate deterministic notifications", "[DeterministicRunner]")
+{
+  using namespace std::chrono_literals;
+
+  constexpr auto start_time = jewels::time::SyncTime{3000ms};
+  constexpr auto throttle_deadline = start_time + 10ms;
+  auto resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  auto queue = std::make_shared<DeterministicCogQueue>(resource);
+  auto cog = std::make_shared<ThrottledCog>(jewels::memory::make_non_null_from_ref(*queue));
+  auto throttle_timer = std::make_shared<DeterministicTimer>();
+  REQUIRE(jewels::ok(cog->set_publisher_throttle_timer(throttle_timer)));
+
+  queue->push({.ready_time = start_time, .cog = jewels::memory::make_non_null_from_ref(*cog)});
+  queue->push({.ready_time = start_time + 1ms, .cog = jewels::memory::make_non_null_from_ref(*cog)});
+
+  std::pmr::vector<std::shared_ptr<AbstractTimer>> timers{resource};
+  timers.emplace_back(throttle_timer);
+  DeterministicRunner runner(
+    DeterministicRunnerConfig{
+      .resource = resource,
+      .cogs = {},
+      .timers = timers,
+      .queue = queue,
+      .start_time = start_time,
+      .end_time = start_time + 20ms,
+      .channel_publisher = nullptr,
+      .cog_to_gpu_id = {},
+      .playback_speed = 0.0});
+
+  jewels::cli::SignalExitCondition exit;
+  REQUIRE(jewels::ok(runner.start(start_time, start_time + 20ms, exit)));
+  CHECK(cog->prepare_count == 2U);
+  CHECK(cog->execute_count == 1U);
+  CHECK(cog->execution_time == throttle_deadline);
+  CHECK(queue->stats().size == 0U);
 }
 
 } // namespace

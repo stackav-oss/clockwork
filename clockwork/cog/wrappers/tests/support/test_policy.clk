@@ -1,0 +1,19 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cogs::params_testing)]
+
+// Schema for ChannelLoggingPolicy
+schema TestPolicySchema
+{
+  fields
+  {
+    // The type of channel (regular vs persistent)
+    #0 test_bool: Bool = true;
+  }
+}
+
+// Policy for configuring logging per-channel
+def policy TestCogPolicy
+{
+  binds_to: Cog;
+  schema: TestPolicySchema;
+}

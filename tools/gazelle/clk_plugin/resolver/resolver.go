@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package resolver
@@ -211,14 +211,34 @@ func setOutsAttr(r *rule.Rule, thisLabel label.Label, generates []string) {
 			outs = append(outs, thisLabel.Name+"_cc.cc")
 			outs = append(outs, thisLabel.Name+"_cc.hh")
 			outs = append(outs, thisLabel.Name+"_cc.inl")
+			outs = append(outs, thisLabel.Name+"_cc_types.cc")
+			outs = append(outs, thisLabel.Name+"_cc_types.hh")
+			outs = append(outs, thisLabel.Name+"_cc_types.inl")
 		} else if generate == common.ClkCppCogTarget {
 			outs = append(outs, thisLabel.Name+"_cc_dial.cc")
 			outs = append(outs, thisLabel.Name+"_cc_dial.hh")
 			outs = append(outs, thisLabel.Name+"_cc_dial.inl")
+			outs = append(outs, thisLabel.Name+"_cc_cog.cc")
+			outs = append(outs, thisLabel.Name+"_cc_cog.hh")
+			outs = append(outs, thisLabel.Name+"_cc_cog.inl")
 		} else if generate == common.ClkCppTestCogTarget {
-			outs = append(outs, thisLabel.Name+"_cc_test.cc")
-			outs = append(outs, thisLabel.Name+"_cc_test.hh")
-			outs = append(outs, thisLabel.Name+"_cc_test.inl")
+			if slices.Contains(generates, common.ClkCppCogTarget) ||
+				slices.Contains(generates, common.ClkPyCogTarget) ||
+				slices.Contains(generates, common.ClkCppAlignerTarget) {
+				outs = append(outs, thisLabel.Name+"_cc_test.cc")
+				outs = append(outs, thisLabel.Name+"_cc_test.hh")
+				outs = append(outs, thisLabel.Name+"_cc_test.inl")
+			}
+		} else if generate == common.ClkCppAlignerTarget {
+			outs = append(outs, thisLabel.Name+"_cc_dial.cc")
+			outs = append(outs, thisLabel.Name+"_cc_dial.hh")
+			outs = append(outs, thisLabel.Name+"_cc_dial.inl")
+			outs = append(outs, thisLabel.Name+"_cc_cog.cc")
+			outs = append(outs, thisLabel.Name+"_cc_cog.hh")
+			outs = append(outs, thisLabel.Name+"_cc_cog.inl")
+			outs = append(outs, thisLabel.Name+"_cc_impl.cc")
+			outs = append(outs, thisLabel.Name+"_cc_impl.hh")
+			outs = append(outs, thisLabel.Name+"_cc_impl.inl")
 		} else if generate == common.ClkCppExeTarget || generate == common.ClkPyExeTarget {
 			outs = append(outs, thisLabel.Name+"_exe.cc")
 			outs = append(outs, thisLabel.Name+"_exe.hh")
@@ -236,6 +256,9 @@ func setOutsAttr(r *rule.Rule, thisLabel label.Label, generates []string) {
 		} else if generate == common.ClkPyTarget {
 			outs = append(outs, thisLabel.Name+"_py.py")
 		} else if generate == common.ClkPyCogTarget {
+			outs = append(outs, thisLabel.Name+"_cc_cog.cc")
+			outs = append(outs, thisLabel.Name+"_cc_cog.hh")
+			outs = append(outs, thisLabel.Name+"_cc_cog.inl")
 			outs = append(outs, thisLabel.Name+"_cc_dial.cc")
 			outs = append(outs, thisLabel.Name+"_cc_dial.hh")
 			outs = append(outs, thisLabel.Name+"_cc_dial.inl")
@@ -245,6 +268,8 @@ func setOutsAttr(r *rule.Rule, thisLabel label.Label, generates []string) {
 			outs = append(outs, thisLabel.Name+"_py_dial.py")
 		} else if generate == common.ClkGoProtoTarget {
 			// No extra outs for go_proto
+		} else if generate == common.ClkCppComboTestTarget {
+			// No extra outs — cpp_combo_test modifies cpp_test_cog behavior
 		} else {
 			log.Panic("Invalid clockwork generate target: ", generate)
 		}
@@ -261,11 +286,15 @@ func clkImportsToLabelStrings(thisLabel label.Label, clkImports []common.ClkImpo
 	var clkLabelsAsStrings []string
 	for _, clkImport := range clkImports {
 		clkLabel := importPathToLabel(clkImport)
+		if clkLabel.Repo == "" {
+			// Gazelle 0.47 names the main repository on consuming labels.
+			clkLabel.Repo = thisLabel.Repo
+		}
 		// Try to use a relative label if possible
 		clkLabel = clkLabel.Rel(thisLabel.Repo, thisLabel.Pkg)
 		clkLabelsAsStrings = append(clkLabelsAsStrings, clkLabel.String())
 	}
-	return clkLabelsAsStrings
+	return util.SSliceDedup(clkLabelsAsStrings)
 }
 
 var _ resolve.Resolver = &ClkResolver{}

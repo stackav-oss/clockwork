@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -6,13 +6,14 @@
 
 from __future__ import annotations
 
-import re
+import struct
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from clockwork.dsl.compiler_context import CompilerContext
-from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, schema, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, primitive, schema, typesys
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.dsl.serialization import tachyon_reg
@@ -66,6 +67,63 @@ def test_time() -> None:
     synctime.serializer(py, memoryview(buffer))
     assert buffer == tachyon
     assert synctime.deserializer(memoryview(tachyon)) == py
+
+
+def test_bitset_serialization() -> None:
+    context = CompilerContext()
+    bitset = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.BITSET,
+        arguments={"size": primitive.DecimalValue(type_info=clkbuiltins.UINT64, value=Decimal(10))},
+    )
+    serdes = tachyon_dyn.serdes_for_type(context, bitset)
+    assert serdes is not None
+    assert serdes.constraint == tachyon_reg.FieldConstraint(size=2, alignment=1)
+    buffer = bytearray(2)
+    serdes.serializer(0x281, memoryview(buffer))
+    assert buffer == b"\x81\x02"
+    assert serdes.deserializer(memoryview(buffer)) == 0x281
+    assert serdes.deserializer(memoryview(b"\x81\xfe")) == 0x281
+    with pytest.raises(ValueError, match="Bitset<10> value"):
+        serdes.serializer(-1, memoryview(buffer))
+    with pytest.raises(ValueError, match="Bitset<10> value"):
+        serdes.serializer(1 << 10, memoryview(buffer))
+
+
+def test_registry_merges_equivalent_generic_serdes_from_independent_modules(
+    fs_importer: FilesystemImporter,
+) -> None:
+    """Equivalent built-in generic SerDes merge across independently compiled modules."""
+    source = """
+// Schema containing an optional primitive.
+schema OptionalSchema
+{
+  fields
+  {
+    // Optional value.
+    #0 value: Optional<UInt64>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<OptionalSchema>;
+}
+"""
+    left_module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "optional_left"), fs_importer)
+    right_module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "optional_right"), fs_importer)
+
+    tachyon_dyn.get_schema_dataclass(left_module.context, left_module, "OptionalSchema")
+    tachyon_dyn.get_schema_dataclass(right_module.context, right_module, "OptionalSchema")
+
+    merged_context = CompilerContext("optional_parent")
+    merged_context.import_from(left_module.context)
+    merged_context.import_from(right_module.context)
 
 
 def test_hellomsg(fs_importer: FilesystemImporter) -> None:
@@ -154,6 +212,7 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     msg2 = TapMsg.deserialize_tachyon(memoryview(bytes(buffer)))
     assert msg2 == msg
     msg.optional = 13
+    # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     msg.array_of_array = []
     msg.array_of_schema.append(SubMsg(field=3))
     msg.serialize_tachyon(memoryview(buffer))
@@ -161,9 +220,7 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     assert msg2 == msg
 
     msg.array_of_schema.append(SubMsg(field=3))
-    with pytest.raises(
-        ValueError, match=re.escape("Object <class 'types.TapMsg'> failed to serialize array_of_schema")
-    ):
+    with pytest.raises(ValueError, match=r"Object <class '[\w.]+\.TapMsg'> failed to serialize array_of_schema"):
         msg.serialize_tachyon(memoryview(buffer))
 
 
@@ -818,3 +875,52 @@ cpp_target test_cpp
     assert container2.points.x == [1.0, 2.0]
     assert container2.points.y == [10.0, 20.0]
     assert container2.points.z == [100.0, 200.0]
+
+
+def test_tensor(fs_importer: FilesystemImporter) -> None:
+    """Test basic Tensor serialization and deserialization."""
+    source = """
+// A message
+schema TensorMessage
+{
+  fields
+  {
+    // A tensor
+    #0 tensor: Tensor<Float32, [2, 3,4]>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<TensorMessage>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "tensor_serdes"), importer=fs_importer)
+
+    container_schema = module.inner_scope.lookup("TensorMessage")
+    assert isinstance(container_schema, schema.Schema)
+    tensor_msg_class = tachyon_dyn.serdes_for_type(module.context, container_schema).type_
+
+    msg = tensor_msg_class()
+    assert msg.tensor.data == [0.0] * 24
+
+    msg.tensor.data = list(range(24))
+    buffer = bytearray(tensor_msg_class.get_tachyon_constraint().size)
+    msg.serialize_tachyon(memoryview(buffer))
+    msg2 = tensor_msg_class.deserialize_tachyon(memoryview(bytes(buffer)))
+    assert msg2.tensor == msg.tensor
+
+    # Seriealization should fail if the size doesn't match
+    msg.tensor.data = [1, 2, 3]
+    with pytest.raises(ValueError, match=r"failed to serialize tensor"):
+        msg.serialize_tachyon(memoryview(buffer))
+
+    # Seriealization should fail if the buffer elements are the wrong type
+    msg.tensor.data = ["wrong"] * 24
+    with pytest.raises(struct.error, match=r"failed to serialize tensor"):
+        msg.serialize_tachyon(memoryview(buffer))

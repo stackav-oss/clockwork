@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -11,9 +11,10 @@ from typing import Final
 from unittest.mock import MagicMock
 
 import pytest
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl import compiler_context
-from clockwork.dsl.ir import clkbuiltins, cog, compiler, expr, node, parse, primitive, typesys
+from clockwork.dsl.ir import aligner, box, clkbuiltins, cog, compiler, expr, node, parse, primitive, typesys
+from clockwork.dsl.ir.cog_components import CogAlignedInputDef
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
@@ -40,16 +41,63 @@ def hellocog_ir(fs_importer: FilesystemImporter) -> cog.Cog:
 
 
 def test_cog_inputs(hellocog_ir: cog.Cog) -> None:
-    assert len(hellocog_ir.inputs) == 3
+    assert not hellocog_ir.is_generic()
+    assert len(hellocog_ir.inputs) == 4
     latest = hellocog_ir.inputs["latest_hello"]
     multi_publisher_hello = hellocog_ir.inputs["multi_publisher_hello"]
+    multi_connect_hello = hellocog_ir.inputs["multi_connect_hello"]
     history = hellocog_ir.inputs["history_of_hellos"]
 
     assert latest.doc is None
     assert multi_publisher_hello.doc == node.Doc(
         module=hellocog_ir.module, cst_node=None, value="Multi-publisher input"
     )
+    assert multi_connect_hello.doc == node.Doc(module=hellocog_ir.module, cst_node=None, value="Multi-connect input")
+    assert isinstance(multi_connect_hello.elements, list)
+    assert len(multi_connect_hello.elements) == 2
+    assert multi_connect_hello.elements[0].name == "multi_connect_hello__0"
+    assert multi_connect_hello.elements[1].name == "multi_connect_hello__1"
     assert history.doc == node.Doc(module=hellocog_ir.module, cst_node=None, value="Make sure larger views work")
+
+
+@pytest.fixture()
+def param_cog_ir(fs_importer: FilesystemImporter) -> cog.Cog:
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/parameterized_box.clk")),
+        importer=fs_importer,
+    )
+    cog_ir = module.inner_scope.lookup("ParamTestCog")
+    assert isinstance(cog_ir, cog.Cog)
+    return cog_ir
+
+
+def test_cog_parameters(param_cog_ir: cog.Cog) -> None:
+    assert param_cog_ir.is_generic()
+    assert len(param_cog_ir.parameters) == 6
+
+    assert "group_id" in param_cog_ir.parameters
+    group_id = param_cog_ir.parameters["group_id"]
+    assert group_id.get_typeval() is clkbuiltins.STRING
+
+    assert "instance_id" in param_cog_ir.parameters
+    instance_id = param_cog_ir.parameters["instance_id"]
+    assert instance_id.get_typeval() is clkbuiltins.STRING
+
+    assert "config_type" in param_cog_ir.parameters
+    config_type = param_cog_ir.parameters["config_type"]
+    assert config_type.get_typeval() is clkbuiltins.TYPE_TYPE
+
+    assert "state_type" in param_cog_ir.parameters
+    state_type = param_cog_ir.parameters["state_type"]
+    assert state_type.get_typeval() is clkbuiltins.TYPE_TYPE
+
+    assert "input_type" in param_cog_ir.parameters
+    input_type = param_cog_ir.parameters["input_type"]
+    assert input_type.get_typeval() is clkbuiltins.TYPE_TYPE
+
+    assert "output_type" in param_cog_ir.parameters
+    output_type = param_cog_ir.parameters["output_type"]
+    assert output_type.get_typeval() is clkbuiltins.TYPE_TYPE
 
 
 def test_invalid_messages_condition() -> None:
@@ -159,7 +207,7 @@ cog SkipCog
     }
 }
 """
-    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 and ::String are disjoint"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "skip_threshold_bad_type"), importer=fs_importer)
 
     source = """
@@ -253,6 +301,76 @@ cog PlainCog
     no_copy_cog.resolve()
     assert "message_in" in no_copy_cog.inputs
     assert not no_copy_cog.inputs["message_in"].view_params.copy_inputs
+
+
+def test_use_device_ptr(fs_importer: FilesystemImporter) -> None:
+    """Test syntax for device pointer."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog YesUseDevicePtrCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            use_device_ptr: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+// Doc.
+cog NoUseDevicePtrCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>
+        {
+            use_device_ptr: false;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+// Doc.
+cog DefaultCog
+{
+    inputs
+    {
+        message_in: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "use_device_ptr_test"), importer=fs_importer)
+    yes_cog = module.inner_scope.lookup("YesUseDevicePtrCog")
+    assert isinstance(yes_cog, cog.Cog)
+    no_cog = module.inner_scope.lookup("NoUseDevicePtrCog")
+    assert isinstance(no_cog, cog.Cog)
+    default_cog = module.inner_scope.lookup("DefaultCog")
+    assert isinstance(default_cog, cog.Cog)
+    default_cog.resolve()
+    assert "message_in" in default_cog.inputs
+    assert not default_cog.inputs["message_in"].view_params.use_device_ptr
+    yes_cog.resolve()
+    assert "message_in" in yes_cog.inputs
+    assert yes_cog.inputs["message_in"].view_params.use_device_ptr
+    no_cog.resolve()
+    assert "message_in" in no_cog.inputs
+    assert not no_cog.inputs["message_in"].view_params.use_device_ptr
 
 
 def test_optional_inputs_and_outputs(fs_importer: FilesystemImporter) -> None:
@@ -384,7 +502,7 @@ cog CopyCog
     }
 }
 """
-    with pytest.raises(TypeError, match=r"Type inference failed: ::Bool != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::Bool and ::String are disjoint"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "copy_inputs_bad_type"), importer=fs_importer)
 
 
@@ -638,7 +756,7 @@ cog SafeCog
     }
 }
 """
-    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 != ::String"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::UInt64 and ::String are disjoint"):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "safety_margin_bad_type"), importer=fs_importer)
 
     source = """
@@ -790,9 +908,7 @@ cog RateLimitCog
 """
     with pytest.raises(
         TypeError,
-        match=re.escape(
-            "Expected time literal for rate limit period, but got <class 'clockwork.dsl.clockwork_cst.Literal'>"
-        ),
+        match=re.escape("Expected time literal for rate limit period, but got literal"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_bad_period_type"), importer=fs_importer)
 
@@ -819,6 +935,29 @@ cog RateLimitCog
         match=re.escape("Outputs can only have one rate limit, but got multiple for foo"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_too_many"), importer=fs_importer)
+
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog RateLimitCog
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        rate limit foo: 0 every 1s;
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Rate limit must be positive, but got 0"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "rate_limit_zero"), importer=fs_importer)
 
 
 def test_metrics_options(fs_importer: FilesystemImporter) -> None:
@@ -875,3 +1014,738 @@ cog DisabledMetricsCog
     disabled_metrics_cog = module.inner_scope.lookup("DisabledMetricsCog")
     assert isinstance(disabled_metrics_cog, cog.Cog)
     assert not disabled_metrics_cog.metrics_options.metrics_enabled
+
+
+def test_cog_metrics_policy_compiles(fs_importer: FilesystemImporter) -> None:
+    """Test that CogEventMetricsPolicy and CogTelemetryMetricsPolicy can be applied to a cog."""
+    source = """
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+
+// Doc.
+cog MyCog
+{
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+// Telemetry metrics policy for MyCog
+policy CogTelemetryMetricsPolicy for MyCog
+{
+}
+
+// Event metrics policy for MyCog
+policy CogEventMetricsPolicy for MyCog
+{
+}
+"""
+    compiler.compile_source_text(source, ModuleID(CLK_REPO, "cog_metrics_policy_test"), importer=fs_importer)
+
+
+_ALIGNED_INPUTS_PREAMBLE = """\
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::aligned_input_test)]
+use clockwork::dsl::tests::support::clk_hellomsg::{HelloMsg};
+
+// Sensor schema
+schema SensorData {
+    uuid: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa;
+    fields {
+        // Timestamp
+        #0 timestamp: SyncTime;
+    }
+}
+
+// Pose schema
+schema PoseData {
+    uuid: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb;
+    fields {
+        // Timestamp
+        #0 timestamp: SyncTime;
+    }
+}
+
+// First aligner
+aligner SensorAligner {
+    inputs {
+        // Sensor data
+        sensor: Tappy<SensorData>
+        {
+            max_msgs: 10;
+            arbitrary_selection: true;
+        }
+    }
+}
+
+// Second aligner
+aligner PoseAligner {
+    inputs {
+        // Pose data
+        pose: Tappy<PoseData>
+        {
+            max_msgs: 10;
+            arbitrary_selection: true;
+        }
+    }
+}
+"""
+
+
+class TestAlignedInputs:
+    """Tests for aligned_inputs block on cogs."""
+
+    def test_aligned_inputs_comprehensive(self, fs_importer: FilesystemImporter) -> None:
+        """Test aligned inputs: parsing, doc, scope, exec conditions, mixed with regular inputs, multiple aligners."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// A consumer cog with regular inputs, multiple aligned inputs, and exec conditions
+cog ConsumerCog
+{
+    inputs
+    {
+        raw_data: Tappy<HelloMsg>;
+    }
+    aligned_inputs
+    {
+        // Aligned sensor data
+        sensor_aligned: SensorAligner;
+        // Aligned pose data
+        pose_aligned: PoseAligner;
+    }
+    execution
+    {
+        condition new_sensor: new_message(sensor_aligned);
+        execute when: new_sensor;
+    }
+}
+"""
+        )
+        module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_aligned_comprehensive"), fs_importer)
+        cog_ir = module.inner_scope.lookup("ConsumerCog")
+        assert isinstance(cog_ir, cog.Cog)
+
+        assert len(cog_ir.inputs) == 1
+        assert "raw_data" in cog_ir.inputs
+
+        assert len(cog_ir.aligned_inputs) == 2
+        assert "sensor_aligned" in cog_ir.aligned_inputs
+        assert "pose_aligned" in cog_ir.aligned_inputs
+
+        sensor_input = cog_ir.aligned_inputs["sensor_aligned"]
+        assert isinstance(sensor_input, CogAlignedInputDef)
+        assert isinstance(sensor_input.aligned_type, aligner.Aligner)
+        assert sensor_input.aligned_type.name == "SensorAligner"
+
+        pose_input = cog_ir.aligned_inputs["pose_aligned"]
+        assert isinstance(pose_input.aligned_type, aligner.Aligner)
+        assert pose_input.aligned_type.name == "PoseAligner"
+
+        assert sensor_input.doc is not None
+        assert "sensor" in sensor_input.doc.value.lower()
+
+        assert isinstance(cog_ir.inner_scope.lookup("sensor_aligned", recursive=False), CogAlignedInputDef)
+        assert isinstance(cog_ir.inner_scope.lookup("pose_aligned", recursive=False), CogAlignedInputDef)
+
+        # Verify expanded class-level InputDefs are created for each upstream aligner input
+        assert len(cog_ir.expanded_aligned_input_defs) == 2
+        assert "sensor_aligned.sensor" in cog_ir.expanded_aligned_input_defs
+        assert "pose_aligned.pose" in cog_ir.expanded_aligned_input_defs
+
+    def test_init_cog_rejection(self, fs_importer: FilesystemImporter) -> None:
+        """Test init cog with aligned_inputs block raises error."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// An init cog with aligned inputs (should fail)
+cog BadInitCog
+{
+    aligned_inputs
+    {
+        // Aligned data
+        aligned: SensorAligner;
+    }
+    execution
+    {
+        execute when: init;
+    }
+}
+"""
+        )
+        with pytest.raises(ValueError, match="may not have message inputs"):
+            compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_init_aligned"), fs_importer)
+
+    def test_non_aligner_type_rejected(self, fs_importer: FilesystemImporter) -> None:
+        """Test aligned_inputs with a non-aligner type raises error."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// A cog using a schema in aligned_inputs (should fail)
+cog BadCog
+{
+    aligned_inputs
+    {
+        // Not an aligner
+        wrong: SensorData;
+    }
+    execution
+    {
+        condition c: new_message(wrong);
+        execute when: c;
+    }
+}
+"""
+        )
+        with pytest.raises(TypeError, match="aligned_inputs type must be an aligner"):
+            compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_non_aligner_type"), fs_importer)
+
+
+class TestAlignedInputUpstreamOverrides:
+    """Tests for per-upstream consumer-view overrides on ``aligned_inputs`` blocks."""
+
+    def _consumer_input(
+        self, source: str, module_id: str, cog_name: str, input_name: str, fs_importer: FilesystemImporter
+    ) -> cog.InputDef:
+        """Compile and return the expanded consumer-side InputDef for ``input_name``."""
+        module = compiler.compile_source_text(source, ModuleID(CLK_REPO, module_id), fs_importer)
+        cog_ir = module.inner_scope.lookup(cog_name)
+        assert isinstance(cog_ir, cog.Cog)
+        return cog_ir.expanded_aligned_input_defs[input_name]
+
+    def test_consumer_max_msgs_auto_sized(self, fs_importer: FilesystemImporter) -> None:
+        """Default consumer ``max_msgs`` is auto-sized to ``max(n+1, ceil(1.2*n))``."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// Consumer without overrides — expects auto-sized upstream view
+cog AutoSizedConsumer
+{
+    aligned_inputs
+    {
+        // No overrides — consumer view is auto-sized from the aligner's max_msgs
+        sensor_aligned: SensorAligner;
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        )
+        # Aligner max_msgs = 10 -> consumer default = max(11, ceil(12)) = 12.
+        upstream = self._consumer_input(
+            source, "test_auto_sized", "AutoSizedConsumer", "sensor_aligned.sensor", fs_importer
+        )
+        assert upstream.view_params.max_msgs == 12
+
+    def test_upstream_override_sets_max_msgs(self, fs_importer: FilesystemImporter) -> None:
+        """An explicit ``max_msgs`` override wins over the auto-sized default."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// Consumer with explicit per-upstream max_msgs override
+cog OverrideConsumer
+{
+    aligned_inputs
+    {
+        // Override upstream max_msgs to 300
+        sensor_aligned: SensorAligner
+        {
+            max_msgs: 4;
+            sensor
+            {
+                max_msgs: 300;
+            }
+        }
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        )
+        upstream = self._consumer_input(
+            source, "test_override_max", "OverrideConsumer", "sensor_aligned.sensor", fs_importer
+        )
+        assert upstream.view_params.max_msgs == 300
+
+    def test_upstream_override_below_aligner_rejected(self, fs_importer: FilesystemImporter) -> None:
+        """Consumer ``max_msgs`` below the aligner's value is rejected."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// Consumer requesting fewer messages than the aligner keeps
+cog TooSmallConsumer
+{
+    aligned_inputs
+    {
+        // Aligner has max_msgs=10; requesting 3 is invalid
+        sensor_aligned: SensorAligner
+        {
+            sensor
+            {
+                max_msgs: 3;
+            }
+        }
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        )
+        with pytest.raises(ValueError, match="less than the aligner's max_msgs=10"):
+            compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_override_too_small"), fs_importer)
+
+    def test_unknown_upstream_rejected(self, fs_importer: FilesystemImporter) -> None:
+        """An override for an unknown upstream name is rejected at IR construction."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// Consumer referencing an upstream that does not exist on the aligner
+cog BadUpstreamConsumer
+{
+    aligned_inputs
+    {
+        // SensorAligner only has `sensor`; `nonexistent` is invalid
+        sensor_aligned: SensorAligner
+        {
+            nonexistent
+            {
+                max_msgs: 20;
+            }
+        }
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        )
+        with pytest.raises(ValueError, match="unknown upstream 'nonexistent'"):
+            compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_unknown_upstream"), fs_importer)
+
+    def test_duplicate_upstream_override_rejected(self, fs_importer: FilesystemImporter) -> None:
+        """Two override blocks for the same upstream are rejected."""
+        source = (
+            _ALIGNED_INPUTS_PREAMBLE
+            + """
+// Consumer with two override blocks for the same upstream
+cog DupConsumer
+{
+    aligned_inputs
+    {
+        // Duplicate `sensor` overrides
+        sensor_aligned: SensorAligner
+        {
+            sensor
+            {
+                max_msgs: 20;
+            }
+            sensor
+            {
+                max_msgs: 30;
+            }
+        }
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        )
+        with pytest.raises(ValueError, match="specified more than once"):
+            compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_duplicate_upstream"), fs_importer)
+
+    def test_non_max_msgs_field_inherits_from_aligner(self, fs_importer: FilesystemImporter) -> None:
+        """Fields the user does not override on the upstream inherit from the aligner view."""
+        # The aligner view enables copy_inputs; consumer should inherit it.
+        source = """\
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::aligned_input_inherit_test)]
+use clockwork::dsl::tests::support::clk_hellomsg::{HelloMsg};
+
+// Sensor schema
+schema SensorData
+{
+    uuid: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa;
+    fields
+    {
+        // Timestamp
+        #0 timestamp: SyncTime;
+    }
+}
+
+// Aligner that sets copy_inputs on its upstream view
+aligner SensorAligner
+{
+    inputs
+    {
+        // Sensor data with copy_inputs
+        sensor: Tappy<SensorData>
+        {
+            max_msgs: 10;
+            copy_inputs: true;
+            arbitrary_selection: true;
+        }
+    }
+}
+
+// Consumer that only overrides max_msgs
+cog InheritingConsumer
+{
+    aligned_inputs
+    {
+        // Only override max_msgs; copy_inputs should inherit from the aligner
+        sensor_aligned: SensorAligner
+        {
+            sensor
+            {
+                max_msgs: 50;
+            }
+        }
+    }
+    execution
+    {
+        condition s: new_message(sensor_aligned);
+        execute when: s;
+    }
+}
+"""
+        upstream = self._consumer_input(
+            source, "test_inherit_fields", "InheritingConsumer", "sensor_aligned.sensor", fs_importer
+        )
+        assert upstream.view_params.max_msgs == 50
+        assert upstream.view_params.copy_inputs is True
+
+
+def test_invalid_output_option(fs_importer: FilesystemImporter) -> None:
+    """Test rate limit errors."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog UnknownOutputOption
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>
+        {
+            not_real: true;
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+"""
+    with pytest.raises(
+        NotImplementedError,
+        match=re.escape("Unsupported cog output parameter 'not_real'"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "invalid_output_option"), importer=fs_importer)
+
+
+def test_missing_python_dial(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog MissingPythonDial
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+    python
+    {
+        impl: "foo";
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Missing required python option 'dial'"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "missing_python_dial"), importer=fs_importer)
+
+
+def test_missing_python_impl(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog MissingPythonImpl
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+    python
+    {
+        dial: "foo";
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Missing required python option 'impl'"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "missing_python_impl"), importer=fs_importer)
+
+
+def test_missing_sim_duration(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog MissingSimDuration
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+    simulation_options
+    {
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Missing required simluation option 'execution_duration'"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "missing_sim_duration"), importer=fs_importer)
+
+
+def test_unexpcted_resource_type(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog UnexpectedResourceType
+{
+    resources
+    {
+        resource_a: wrong;
+    }
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+"""
+    with pytest.raises(
+        NotImplementedError,
+        match=re.escape("Cog resource 'resource_a' has unsupported type "),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "unexpected_resource_type"), importer=fs_importer)
+
+
+def test_missing_exec_when(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog MissingExecuteWhen
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Cog is missing required 'execute when' statement"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "missing_exec_when"), importer=fs_importer)
+
+
+def test_multiple_exec_when(fs_importer: FilesystemImporter) -> None:
+    """Test missing python options."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+// Doc.
+cog MissingExecuteWhen
+{
+    outputs
+    {
+        foo: Tappy<HelloMsg>;
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+        execute when: periodic;
+    }
+}
+"""
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Cogs must have exactly one 'execute when' statement"),
+    ):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "multiple_exec_when"), importer=fs_importer)
+
+
+def test_cog_conditional_statements(fs_importer: FilesystemImporter) -> None:
+    """Test conditional statements in cogs."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg::{HelloMsg};
+use std::traits;
+
+// Doc.
+cog ConditionalCog
+{
+    parameters
+    {
+        mode: String;
+    }
+    resources
+    {
+        if mode == "useful" then
+        {
+            memres: persistent;
+        }
+        else
+        {
+        }
+    }
+    configs
+    {
+        if mode == "useful" then
+        {
+            hello_config: Tappy<HelloMsg>;
+        }
+        else
+        {
+        }
+    }
+    states
+    {
+        if mode == "useful" then
+        {
+            hello_state: Tappy<HelloMsg>;
+        }
+        else
+        {
+        }
+    }
+    inputs
+    {
+        if mode == "useful" then
+        {
+            hello_in: Tappy<HelloMsg>;
+        }
+        else
+        {
+        }
+    }
+    outputs
+    {
+        if mode == "useful" then
+        {
+            hello_out: Tappy<HelloMsg>;
+        }
+        else
+        {
+        }
+    }
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+box TheBox
+{
+    new useful_cog: ConditionalCog<mode="useful">;
+    new useless_cog: ConditionalCog<mode="useless">;
+}
+
+cpp_target cog_conditional_statements_clk_cc
+{
+    options
+    {
+        namespace clockwork::testing;
+    }
+    instantiate ConditionalCog<mode="useful">;
+    instantiate ConditionalCog<mode="useless">;
+}
+"""
+    module = compiler.compile_source_text(
+        source, ModuleID(CLK_REPO, "cog_conditional_statements"), importer=fs_importer
+    )
+    cog_ir = module.inner_scope.lookup("ConditionalCog")
+    assert isinstance(cog_ir, cog.Cog)
+    # All of ConditionalCog's components contain statements that reference
+    # parameters. So, they shouldn't exist as useable entities until
+    # instantiation time.
+    assert len(cog_ir.resources) == 0
+    assert len(cog_ir.configs) == 0
+    assert len(cog_ir.states) == 0
+    assert len(cog_ir.inputs) == 0
+    assert len(cog_ir.outputs) == 0
+    assert len(cog_ir.guarded_components) == 5
+
+    box_template = module.inner_scope.lookup("TheBox")
+    assert isinstance(box_template, box.BoxTemplate)
+    the_box = box_template.make_instance(
+        cst_node=None, module=module, scope=module.inner_scope, name="thebox", doc=None
+    )
+    resolved_box = the_box.get_resolved()
+    assert len(resolved_box.instances) == 2
+
+    useful_cog = resolved_box.instances[0]
+    assert isinstance(useful_cog, cog.CogInstance)
+    assert isinstance(useful_cog.cog_class, cog.InstantiatedCog)
+    assert "memres" in useful_cog.cog_class.resources
+    assert "hello_config" in useful_cog.cog_class.configs
+    assert "hello_state" in useful_cog.cog_class.states
+    assert "hello_in" in useful_cog.cog_class.inputs
+    assert "hello_out" in useful_cog.cog_class.outputs
+
+    useless_cog = resolved_box.instances[1]
+    assert isinstance(useless_cog, cog.CogInstance)
+    assert isinstance(useless_cog.cog_class, cog.InstantiatedCog)
+    assert "memres" not in useless_cog.cog_class.resources
+    assert "hello_config" not in useless_cog.cog_class.configs
+    assert "hello_state" not in useless_cog.cog_class.states
+    assert "hello_in" not in useless_cog.cog_class.inputs
+    assert "hello_out" not in useless_cog.cog_class.outputs

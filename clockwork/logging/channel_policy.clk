@@ -5,56 +5,56 @@ use clockwork::logging::channel_type::{ChannelType};
 // The type of logging requested (event vs telemetry)
 enum LogType
 {
-    values
-    {
-        // Don't log
-        #0 none default;
+  values
+  {
+    // Don't log
+    #0 none default;
 
-        // Log during events only
-        #1 event;
+    // Log during events only
+    #1 event;
 
-        // Log in telemetry log (all the time) and also in events
-        #2 telemetry;
+    // Log telemetry non-redundanty (all the time) and also in events
+    #2 non_redundant_telemetry;
 
-        // Log telemetry redundantly (all the time) and also in events
-        #3 redundant_telemetry;
-    }
+    // Log telemetry redundantly (all the time) and also in events
+    #3 redundant_telemetry;
+  }
 }
 
 // Schema for ChannelLoggingPolicy
 schema ChannelPolicySchema
 {
-    fields
-    {
-        // The type of channel (regular vs persistent)
-        #0 channel_type: ChannelType = ChannelType::regular;
+  fields
+  {
+    // The type of channel (regular vs persistent)
+    #0 channel_type: ChannelType = ChannelType::regular;
 
-        // When to log
-        #1 log_type: LogType;
-    }
+    // When to log
+    #1 log_type: LogType;
+  }
 }
 
 // Policy for configuring logging per-channel
 def policy ChannelLoggingPolicy
 {
-    binds_to: Channel;
-    schema: ChannelPolicySchema;
+  binds_to: Channel;
+  schema: ChannelPolicySchema;
 }
 
 // Schema for LogReaderPolicy
 schema LogReaderPolicySchema
 {
-    fields
-    {
-        // The name of the channel in the source log
-        // If not specified, the channel name is used.
-        #0 source_name: Optional<String> = nullopt;
-    }
+  fields
+  {
+    // The name of the channel in the source log
+    // If not specified, the channel name is used.
+    #0 source_name: Optional<String> = nullopt;
+  }
 }
 
 // Policy for configuring log reader to feed messages into a running Clockwork system
 def policy LogReaderPolicy
 {
-    binds_to: Channel;
-    schema: LogReaderPolicySchema;
+  binds_to: Channel;
+  schema: LogReaderPolicySchema;
 }

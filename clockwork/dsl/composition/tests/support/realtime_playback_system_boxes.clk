@@ -1,0 +1,102 @@
+use clockwork::dsl::tests::support::clk_hellomsg;
+use clockwork::logging::realtime_playback::realtime_playback_policy::{RealtimePlaybackPolicy};
+use clockwork::logging::realtime_playback::realtime_playback_stream_kind::{RealtimePlaybackStreamKind};
+
+// Configuration initialized from a logged first message.
+cog PlaybackConfigCog
+{
+  configs
+  {
+    config: Tappy<clk_hellomsg::HelloMsg>;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// Regular playback destination with a remapped recorded source.
+channel RegularChannel
+{
+  name: "/regular";
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 10;
+}
+
+// Camera playback destination using the generic HelloMsg representation.
+channel CameraChannel
+{
+  name: "/camera";
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 2;
+}
+
+// Shared recorded source for configuration initialization in both domains.
+channel SharedInitChannel
+{
+  name: "/shared_init";
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 1;
+}
+
+policy RealtimePlaybackPolicy for RegularChannel
+{
+  source_name = "/recorded_regular";
+  playback_cpu_domain = DomainOne;
+}
+
+policy RealtimePlaybackPolicy for CameraChannel
+{
+  source_name = "/recorded_camera";
+  playback_cpu_domain = DomainTwo;
+  stream_kind = RealtimePlaybackStreamKind::camera;
+}
+
+cpu_domain DomainOne
+{
+  simplelaunch_node: "c1";
+}
+
+cpu_domain DomainTwo
+{
+  simplelaunch_node: "c2";
+}
+
+box DomainOneBox
+{
+  new init: FirstMessage(channel=SharedInitChannel, allow_default=true);
+  new cog: PlaybackConfigCog;
+  connect init to cog.config;
+}
+
+// The second domain exercises a serialized-data file fallback.
+box DomainTwoBox
+{
+  new init: FirstMessage(channel=SharedInitChannel);
+  new file_fallback: SerializedDataFile(
+    representation=Tachyon<clk_hellomsg::HelloMsg>,
+    path="fixture_init.tachyon",
+  );
+  new cog: PlaybackConfigCog;
+  connect file_fallback to init.fallback;
+  connect init to cog.config;
+}
+
+box PlaybackSystem
+{
+  new domain_one_box: DomainOneBox;
+  new domain_two_box: DomainTwoBox;
+  new process_one: Process(executable=realtime_playback_test_exe);
+  new process_two: Process(executable=realtime_playback_test_exe);
+  apply HostProcess(process=process_one) in domain_one_box;
+  apply HostProcess(process=process_two) in domain_two_box;
+  apply HostCpuDomain(cpu_domain=DomainOne) to process_one;
+  apply HostCpuDomain(cpu_domain=DomainTwo) to process_two;
+}
+
+// Process identity for the test-only SystemTarget; no executable is generated.
+cpp_executable realtime_playback_test_exe
+{
+  casing
+  {}
+}

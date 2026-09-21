@@ -161,13 +161,20 @@ Two IMU cogs are defined, ImuDeviceCog and ImuDriverCog.
 The ImuDeviceCog runs every 10 milliseconds and generates some simulated messages with contrived accelerations to get the vehicle position to change slightly over time without going anywhere.
 The ImuDriverCog republishes the raw IMU packets on a different channel.
 
+The channels and cogs used in the driver cog are parameterized as an example of how parameterized cogs and channels work in Clockwork.
+
 ```clk
 // Cog to simulate the IMU device sending raw IMU packets over UDP
 cog ImuDeviceCog
 {
+  parameters
+  {
+    msg_type: Type;
+  }
+
   outputs
   {
-    raw_imu: Tappy<imu_message::ImuMessage>;
+    raw_imu: Tappy<MsgType>;
   }
 
   execution
@@ -177,9 +184,16 @@ cog ImuDeviceCog
   }
 }
 
+instantiate ImuDeviceCog<msg_type=imu_message::ImuMessage>;
+
 // Cog to simulate a driver that converts raw IMU packets into IMU messages
 cog ImuDriverCog
 {
+  parameters
+  {
+    msg_type: Type;
+  }
+
   inputs
   {
     raw_imu: Tappy<imu_message::ImuMessage>;
@@ -196,6 +210,8 @@ cog ImuDriverCog
     execute when: new_raw_imu;
   }
 }
+
+instantiate ImuDriverCog<msg_type=imu_message::ImuMessage>;
 ```
 
 ## Localization

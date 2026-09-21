@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dsl/tests/support/tapmsg.hh"
 #include "clockwork/dsl/tests/support/taptag.hh"
 #include "clockwork/dsl/tests/support/taptags_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/container/at.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/optional.hh"
 #include "jewels/container/tap/var_array.hh"
@@ -16,9 +17,7 @@
 #include "jewels/utility/fix_clockwork_path.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <__stddef_offsetof.h>
 #include <catch2/catch_test_macros.hpp>
-#include <gsl/util>
 
 #include <algorithm>
 #include <array>
@@ -34,6 +33,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 // Manual import / aliases to avoid symbols being in the global namespace and not being caught in the test.
@@ -330,7 +330,7 @@ TEST_CASE("Methods")
       var_array.emplace_back(123);
       msg.get_underlying_array_of_primitives() = var_array;
       REQUIRE(msg.get_array_of_primitives().size() == 1UL);
-      REQUIRE(gsl::at(msg.get_array_of_primitives(), 0L) == 123);
+      REQUIRE(jewels::at(msg.get_array_of_primitives(), 0L) == 123);
     }
     SECTION("Modify using get_mutable")
     {
@@ -871,7 +871,7 @@ TEST_CASE("Comparsion operators")
     SECTION("FixedArray")
     {
       REQUIRE(::std::ranges::all_of(var_a.get_fixed_array(), [](auto value) { return value == 0; }));
-      ++::gsl::at(var_a.get_mutable_fixed_array(), 0);
+      ++::jewels::at(var_a.get_mutable_fixed_array(), 0);
       REQUIRE(var_a != var_b);
     }
   }

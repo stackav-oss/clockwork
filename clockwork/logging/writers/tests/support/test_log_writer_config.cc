@@ -1,27 +1,37 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/common/signal_metadata_config_clk_cc.hh"
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/log_uuid.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
+#include "clockwork/logging/writers/persistent_log_entry.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
 #include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/std/span.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <gsl/util>
 
+#include <algorithm>
+#include <memory_resource>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace clockwork_logging::tests
 {
@@ -39,7 +49,7 @@ constexpr auto num_slots = 10U;
   auto config_ptr = std::make_shared<clockwork::Tappy<LogWriterConfig<>>>();
   auto& config = *config_ptr;
 
-  using MessageType1 = clockwork::Tappy<clockwork::tests::SimpleSchemaV1>;
+  using MessageType1 = clockwork::Tappy<TestMessage1>;
   auto& channel1 = config.get_underlying_channels().emplace_back();
   channel1.set_uuid(LogUuid::random_uuid());
   channel1.set_num_slots(num_slots);
@@ -53,7 +63,7 @@ constexpr auto num_slots = 10U;
     channel1.get_underlying_schema_definition().begin(), schema_definition1.begin(), schema_definition1.end());
   channel1.set_channel_type(ChannelType::regular);
 
-  using MessageType2 = clockwork::Tappy<clockwork::tests::SimpleSchemaV2>;
+  using MessageType2 = clockwork::Tappy<TestMessage2>;
   auto& channel2 = config.get_underlying_channels().emplace_back();
   channel2.set_uuid(LogUuid::random_uuid());
   channel2.set_num_slots(num_slots);
@@ -164,7 +174,78 @@ get_test_metrics_channel_metadata_config()
   channel2.get_underlying_cog_path().set_truncate("channel2::cog::path");
   channel2.get_underlying_cog_instance_path().set_truncate("channel2::cog::instance::path");
 
+  config.get_underlying_metrics_metadata_report_schema_name().set_truncate(
+    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>::schema_name);
+  const auto metrics_metadata_report_schema_definition = std::as_bytes(
+    std::span{
+      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>::schema_definition});
+  config.get_underlying_metrics_metadata_report_schema_definition().resize(
+    metrics_metadata_report_schema_definition.size());
+  std::ranges::copy(
+    metrics_metadata_report_schema_definition, config.get_mutable_metrics_metadata_report_schema_definition().begin());
+
   return config_ptr;
+}
+
+[[nodiscard]] std::shared_ptr<const clockwork::Tappy<clockwork::common::SignalMetadataConfig<>>>
+get_test_signal_metadata_config()
+{
+  auto config_ptr = std::make_shared<clockwork::Tappy<clockwork::common::SignalMetadataConfig<>>>();
+  auto& config = *config_ptr;
+
+  auto& signal1 = config.get_underlying_signals().emplace_back();
+  signal1.get_underlying_name().set_truncate("test_signal_1");
+
+  auto& signal2 = config.get_underlying_signals().emplace_back();
+  signal2.get_underlying_name().set_truncate("test_signal_2");
+
+  return config_ptr;
+}
+
+[[nodiscard]] std::pmr::vector<PersistentLogEntry>
+get_test_persistent_entries(jewels::memory::MemoryResource memres, bool include_metrics, bool include_signal_metadata)
+{
+  std::pmr::vector<PersistentLogEntry> entries{memres};
+
+  if (include_metrics)
+  {
+    auto metrics_config = get_test_metrics_channel_metadata_config();
+    auto report =
+      jewels::memory::make_pmr_shared<clockwork::Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>(memres);
+    report->get_underlying_metrics_channels() = metrics_config->get_underlying_metrics_channels();
+
+    entries.push_back(
+      PersistentLogEntry{
+        .channel_name = std::string(metrics_channel_metadata_channel_name),
+        .schema_name = std::string(metrics_config->get_metrics_metadata_report_schema_name()),
+        .schema_encoding = SchemaEncoding::clockwork_tachyon,
+        .schema_definition = std::string(
+          clockwork_logging::nolint_helper::byte_span_to_string_view(
+            metrics_config->get_metrics_metadata_report_schema_definition())),
+        .data_owner = report,
+        .data = std::as_bytes(jewels::as_single_item_span(*report)),
+      });
+  }
+
+  if (include_signal_metadata)
+  {
+    auto signal_config = get_test_signal_metadata_config();
+    using SignalMetadataTappy = clockwork::Tappy<clockwork::common::SignalMetadataConfig<>>;
+    using Traits = clockwork::LoggingTraits<SignalMetadataTappy>;
+    auto schema_def_bytes = std::as_bytes(std::span{Traits::schema_definition});
+
+    entries.push_back(
+      PersistentLogEntry{
+        .channel_name = std::string(signal_metadata_channel_name),
+        .schema_name = std::string(Traits::schema_name),
+        .schema_encoding = static_cast<SchemaEncoding>(Traits::schema_encoding),
+        .schema_definition = std::string(clockwork_logging::nolint_helper::byte_span_to_string_view(schema_def_bytes)),
+        .data_owner = signal_config,
+        .data = std::as_bytes(jewels::as_single_item_span(*signal_config)),
+      });
+  }
+
+  return entries;
 }
 
 } // namespace clockwork_logging::tests

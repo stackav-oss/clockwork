@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -19,6 +19,9 @@ clk(
         "soa_test_schema_clk_cc.cc",
         "soa_test_schema_clk_cc.hh",
         "soa_test_schema_clk_cc.inl",
+        "soa_test_schema_clk_cc_types.cc",
+        "soa_test_schema_clk_cc_types.hh",
+        "soa_test_schema_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

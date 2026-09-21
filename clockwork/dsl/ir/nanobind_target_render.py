@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Render a nanobind target to C++ nanobind module definition."""
@@ -16,6 +16,7 @@ from clockwork.dsl.ir import (
     nanobinding_registry,
     primitive,
     schema,
+    statement,
     typesys,
 )
 from clockwork.dsl.ir.clkbuiltins import PrimitiveType
@@ -50,6 +51,10 @@ def _get_optional_element_type(type_val: TypeVal) -> TypeVal:
         msg = f"Expected a TypeVal. Received: {element_type}."
         raise TypeError(msg)
 
+    if isinstance(element_type, statement.InstantiateStmt):
+        assert isinstance(element_type.typespec, typesys.Instantiation)
+        element_type = schema.InstantiatedSchema.from_typespec(element_type.typespec)
+
     return element_type
 
 
@@ -64,6 +69,10 @@ def _get_fixed_array_element_type(type_val: TypeVal) -> TypeVal:
         msg = f"Expected a TypeVal. Received: {element_type}."
         raise TypeError(msg)
 
+    if isinstance(element_type, statement.InstantiateStmt):
+        assert isinstance(element_type.typespec, typesys.Instantiation)
+        element_type = schema.InstantiatedSchema.from_typespec(element_type.typespec)
+
     return element_type
 
 
@@ -77,6 +86,10 @@ def _get_var_array_element_type(type_val: TypeVal) -> TypeVal:
     if not isinstance(element_type, TypeVal):
         msg = f"Expected a TypeVal. Received: {element_type}."
         raise TypeError(msg)
+
+    if isinstance(element_type, statement.InstantiateStmt):
+        assert isinstance(element_type.typespec, typesys.Instantiation)
+        element_type = schema.InstantiatedSchema.from_typespec(element_type.typespec)
 
     return element_type
 
@@ -690,7 +703,7 @@ def _sanitized_element_type_name(type_val: TypeVal, compiler_context: CompilerCo
         assert type_val.inner_scope.uniq_path.endswith(type_val.name)
         return sanitize_uniqpath(type_val.inner_scope.uniq_path).replace("::", "_")
 
-    if isinstance(type_val, schema.InstantiateStmt):
+    if isinstance(type_val, statement.InstantiateStmt):
         # use the generic alias if there is one
         target_info = nanobinding_registry.lookup_binding(type_val, compiler_context)
         if target_info and target_info.maybe_generic_alias is not None:
@@ -967,11 +980,15 @@ def _render_decimal_literal_constant(
         # make sure 32 bit floats reach python with correct precision
         maybe_f = "f" if retain_float32 else ""
         return f"nb::float_({binding_value.value}{maybe_f})"
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     if type_val == clkbuiltins.FLOAT64 or (is_strong_type and type_val.typespec == clkbuiltins.FLOAT64):
         return f"nb::float_({binding_value.value})"
+    # fmt: off
     if isinstance(type_val, clkbuiltins.IntegerPrimitiveType) or (
+        # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         is_strong_type and isinstance(type_val.typespec, clkbuiltins.IntegerPrimitiveType)
     ):
+    # fmt: on
         return f"nb::int_({binding_value.value})"
     msg = f"Unsupported type for decimal literal: {type_val}"
     raise TypeError(msg)

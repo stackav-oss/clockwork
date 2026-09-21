@@ -1,18 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_statistics.hh"
-#include "clockwork/cog/input_view.hh"
+#include "clockwork/cog/include_common.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/cond_time_since_last_exec.hh"
 #include "clockwork/dsl/cog/common_cog_event_metrics_clk_cc.hh"
 #include "clockwork/dsl/cog/common_cog_telemetry_metrics_clk_cc.hh"
 #include "clockwork/dsl/cog/ten_nanosecond_type.hh"
 #include "clockwork/dsl/tests/support/hellocog.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 
@@ -26,6 +24,7 @@
 #include <memory_resource>
 #include <span>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace clockwork::testing::cogs
@@ -54,7 +53,8 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog get_conditions_mask", "[h
   // No conditions active
   {
     const TimersTuple timers{PeriodicCondition{false, std::chrono::nanoseconds{0}}};
-    const ConditionsTuple conditions{AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}, AnyMsgCondition{false, 0}, AnyMsgCondition{false, 0}};
     const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
     CHECK(trigger_mask == 0);
   }
@@ -62,7 +62,8 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog get_conditions_mask", "[h
   // Periodic timer active
   {
     const TimersTuple timers{PeriodicCondition{true, std::chrono::milliseconds{500}}};
-    const ConditionsTuple conditions{AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}, AnyMsgCondition{false, 0}, AnyMsgCondition{false, 0}};
     const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
     CHECK(trigger_mask == static_cast<uint8_t>(HelloCogConditionsMask::periodic));
   }
@@ -70,7 +71,8 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog get_conditions_mask", "[h
   // any_msg active
   {
     const TimersTuple timers{PeriodicCondition{false, std::chrono::nanoseconds{0}}};
-    const ConditionsTuple conditions{AnyMsgCondition{true, 1}, NewMsgCondition{false, 0}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{true, 1}, NewMsgCondition{false, 0}, AnyMsgCondition{false, 0}, AnyMsgCondition{false, 0}};
     const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
     CHECK(trigger_mask == static_cast<uint8_t>(HelloCogConditionsMask::any_msg));
   }
@@ -78,20 +80,42 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog get_conditions_mask", "[h
   // new_msg active
   {
     const TimersTuple timers{PeriodicCondition{false, std::chrono::nanoseconds{0}}};
-    const ConditionsTuple conditions{AnyMsgCondition{false, 0}, NewMsgCondition{true, 1}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{false, 0}, NewMsgCondition{true, 1}, AnyMsgCondition{false, 0}, AnyMsgCondition{false, 0}};
     const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
     CHECK(trigger_mask == static_cast<uint8_t>(HelloCogConditionsMask::new_msg));
+  }
+
+  // new_multi_connect_hello__0 active
+  {
+    const TimersTuple timers{PeriodicCondition{false, std::chrono::nanoseconds{0}}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}, AnyMsgCondition{true, 1}, AnyMsgCondition{false, 0}};
+    const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
+    CHECK(trigger_mask == static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__0));
+  }
+
+  // new_multi_connect_hello__1 active
+  {
+    const TimersTuple timers{PeriodicCondition{false, std::chrono::nanoseconds{0}}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{false, 0}, NewMsgCondition{false, 0}, AnyMsgCondition{false, 0}, AnyMsgCondition{true, 1}};
+    const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
+    CHECK(trigger_mask == static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__1));
   }
 
   // All active
   {
     const TimersTuple timers{PeriodicCondition{true, std::chrono::milliseconds{500}}};
-    const ConditionsTuple conditions{AnyMsgCondition{true, 1}, NewMsgCondition{true, 1}};
+    const ConditionsTuple conditions{
+      AnyMsgCondition{true, 1}, NewMsgCondition{true, 1}, AnyMsgCondition{true, 1}, AnyMsgCondition{true, 1}};
     const uint8_t trigger_mask = HelloCogPolicy::get_conditions_mask(timers, conditions);
     // NOLINTNEXTLINE(hicpp-signed-bitwise) false positive
     const uint8_t expected_mask = static_cast<uint8_t>(HelloCogConditionsMask::periodic) |
                                   static_cast<uint8_t>(HelloCogConditionsMask::any_msg) |
-                                  static_cast<uint8_t>(HelloCogConditionsMask::new_msg);
+                                  static_cast<uint8_t>(HelloCogConditionsMask::new_msg) |
+                                  static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__0) |
+                                  static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__1);
     CHECK(trigger_mask == expected_mask);
   }
 }
@@ -156,17 +180,15 @@ struct InputViewFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
 
   InputViewFixture()
     : resource(std::pmr::new_delete_resource()),
-      channel(resource),
-      publisher_handle(channel.make_publisher(1)),
-      subscriber_handle(channel.make_subscriber()),
-      subscriber(subscriber_handle, 10, resource, false)
+      channel(std::make_shared<InMemoryChannel<MsgType, 5, false>>(resource)),
+      publisher_handle(channel->make_publisher(1)),
+      subscriber(channel, 10, resource, false)
   {
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, 5, false> channel;
+  std::shared_ptr<InMemoryChannel<MsgType, 5, false>> channel;
   pinion::PublisherHandle publisher_handle;
-  pinion::SubscriberHandle subscriber_handle;
   InputView<Policy> subscriber;
 };
 
@@ -174,8 +196,8 @@ template <typename PolicyType>
 class MockInputView : public InputView<PolicyType>
 {
 public:
-  MockInputView(pinion::SubscriberHandle subscriber_handle, jewels::memory::MemoryResource& resource) noexcept
-    : InputView<PolicyType>(subscriber_handle, 10, resource, false)
+  MockInputView(std::shared_ptr<pinion::AbstractChannel> subscriber, jewels::memory::MemoryResource& resource) noexcept
+    : InputView<PolicyType>(std::move(subscriber), 10, resource, false)
   {
   }
 
@@ -201,13 +223,17 @@ public:
 TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_event_metrics", "[hellocog][metrics]")
 {
   const InputViewFixture<HelloCogPolicy::LatestHelloPolicy> fixture1;
-  const InputViewFixture<HelloCogPolicy::HistoryOfHellosPolicy> fixture2;
+  const InputViewFixture<HelloCogPolicy::MultiConnectHello_0Policy> fixture2;
+  const InputViewFixture<HelloCogPolicy::MultiConnectHello_1Policy> fixture3;
+  const InputViewFixture<HelloCogPolicy::HistoryOfHellosPolicy> fixture4;
 
   // Create mock input views with predefined metrics
-  auto mock_input1 =
-    std::make_shared<MockInputView<HelloCogPolicy::LatestHelloPolicy>>(fixture1.subscriber_handle, mem_res);
+  auto mock_input1 = std::make_shared<MockInputView<HelloCogPolicy::LatestHelloPolicy>>(fixture1.channel, mem_res);
   auto mock_input2 =
-    std::make_shared<MockInputView<HelloCogPolicy::HistoryOfHellosPolicy>>(fixture2.subscriber_handle, mem_res);
+    std::make_shared<MockInputView<HelloCogPolicy::MultiConnectHello_0Policy>>(fixture2.channel, mem_res);
+  auto mock_input3 =
+    std::make_shared<MockInputView<HelloCogPolicy::MultiConnectHello_1Policy>>(fixture3.channel, mem_res);
+  auto mock_input4 = std::make_shared<MockInputView<HelloCogPolicy::HistoryOfHellosPolicy>>(fixture4.channel, mem_res);
   // Set up input metrics for mock_input1
   AggregatedInputMetrics input1_metrics{};
   input1_metrics.event_metrics.emplace_back(
@@ -219,13 +245,29 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_event_metr
   // Set up input metrics for mock_input2
   AggregatedInputMetrics input2_metrics{};
   input2_metrics.event_metrics.emplace_back(
-    InputEventMetrics{.num_unseen_messages = 2, .message_staleness = TenNanoseconds{150}, .messages_dropped = 0});
+    InputEventMetrics{.num_unseen_messages = 6, .message_staleness = TenNanoseconds{101}, .messages_dropped = 3});
   input2_metrics.event_metrics.emplace_back(
-    InputEventMetrics{.num_unseen_messages = 4, .message_staleness = TenNanoseconds{75}, .messages_dropped = 3});
+    InputEventMetrics{.num_unseen_messages = 4, .message_staleness = TenNanoseconds{201}, .messages_dropped = 2});
   mock_input2->set_input_metrics(input2_metrics);
 
+  // Set up input metrics for mock_input3
+  AggregatedInputMetrics input3_metrics{};
+  input3_metrics.event_metrics.emplace_back(
+    InputEventMetrics{.num_unseen_messages = 7, .message_staleness = TenNanoseconds{102}, .messages_dropped = 4});
+  input3_metrics.event_metrics.emplace_back(
+    InputEventMetrics{.num_unseen_messages = 5, .message_staleness = TenNanoseconds{203}, .messages_dropped = 3});
+  mock_input3->set_input_metrics(input3_metrics);
+
+  // Set up input metrics for mock_input4
+  AggregatedInputMetrics input4_metrics{};
+  input4_metrics.event_metrics.emplace_back(
+    InputEventMetrics{.num_unseen_messages = 2, .message_staleness = TenNanoseconds{150}, .messages_dropped = 0});
+  input4_metrics.event_metrics.emplace_back(
+    InputEventMetrics{.num_unseen_messages = 4, .message_staleness = TenNanoseconds{75}, .messages_dropped = 3});
+  mock_input4->set_input_metrics(input4_metrics);
+
   // Create subscribers tuple
-  auto subscribers = std::make_tuple(mock_input1, mock_input2);
+  auto subscribers = std::make_tuple(mock_input1, mock_input2, mock_input3, mock_input4);
 
   HelloCogPolicy::populate_input_event_metrics(subscribers, event_metrics_tap);
 
@@ -236,6 +278,12 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_event_metr
   CHECK(tachyon_event_0.get_latest_hello().get_unseen_messages() == 5);
   CHECK(tachyon_event_0.get_latest_hello().get_staleness() == ten_nanoseconds_factory(100));
   CHECK(tachyon_event_0.get_latest_hello().get_dropped_messages() == 2);
+  CHECK(tachyon_event_0.get_multi_connect_hello__0().get_unseen_messages() == 6);
+  CHECK(tachyon_event_0.get_multi_connect_hello__0().get_staleness() == ten_nanoseconds_factory(101));
+  CHECK(tachyon_event_0.get_multi_connect_hello__0().get_dropped_messages() == 3);
+  CHECK(tachyon_event_0.get_multi_connect_hello__1().get_unseen_messages() == 7);
+  CHECK(tachyon_event_0.get_multi_connect_hello__1().get_staleness() == ten_nanoseconds_factory(102));
+  CHECK(tachyon_event_0.get_multi_connect_hello__1().get_dropped_messages() == 4);
   CHECK(tachyon_event_0.get_history_of_hellos().get_unseen_messages() == 2);
   CHECK(tachyon_event_0.get_history_of_hellos().get_staleness() == ten_nanoseconds_factory(150));
   CHECK(tachyon_event_0.get_history_of_hellos().get_dropped_messages() == 0);
@@ -244,6 +292,12 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_event_metr
   CHECK(tachyon_event_1.get_latest_hello().get_unseen_messages() == 3);
   CHECK(tachyon_event_1.get_latest_hello().get_staleness() == ten_nanoseconds_factory(200));
   CHECK(tachyon_event_1.get_latest_hello().get_dropped_messages() == 1);
+  CHECK(tachyon_event_1.get_multi_connect_hello__0().get_unseen_messages() == 4);
+  CHECK(tachyon_event_1.get_multi_connect_hello__0().get_staleness() == ten_nanoseconds_factory(201));
+  CHECK(tachyon_event_1.get_multi_connect_hello__0().get_dropped_messages() == 2);
+  CHECK(tachyon_event_1.get_multi_connect_hello__1().get_unseen_messages() == 5);
+  CHECK(tachyon_event_1.get_multi_connect_hello__1().get_staleness() == ten_nanoseconds_factory(203));
+  CHECK(tachyon_event_1.get_multi_connect_hello__1().get_dropped_messages() == 3);
   CHECK(tachyon_event_1.get_history_of_hellos().get_unseen_messages() == 4);
   CHECK(tachyon_event_1.get_history_of_hellos().get_staleness() == ten_nanoseconds_factory(75));
   CHECK(tachyon_event_1.get_history_of_hellos().get_dropped_messages() == 3);
@@ -275,7 +329,8 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_condition_trigge
 
 TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_telemetry_triggers", "[hellocog][metrics]")
 {
-  TelemetryMetrics telemetry_metrics{.output_metrics{mem_res}, .conditions_mask_vector{mem_res}};
+  TelemetryMetrics telemetry_metrics{
+    .output_metrics{mem_res}, .conditions_mask_vector{mem_res}, .publisher_throttle_counts{mem_res}};
 
   // Set up conditions mask vector with various trigger combinations to create different counts for each condition
   // periodic: appears in 5 masks
@@ -311,12 +366,16 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_telemetry_trigge
 TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_telemetry_metrics", "[hellocog][metrics]")
 {
   const InputViewFixture<HelloCogPolicy::LatestHelloPolicy> fixture1;
-  const InputViewFixture<HelloCogPolicy::HistoryOfHellosPolicy> fixture2;
+  const InputViewFixture<HelloCogPolicy::MultiConnectHello_0Policy> fixture2;
+  const InputViewFixture<HelloCogPolicy::MultiConnectHello_1Policy> fixture3;
+  const InputViewFixture<HelloCogPolicy::HistoryOfHellosPolicy> fixture4;
 
-  auto mock_input1 =
-    std::make_shared<MockInputView<HelloCogPolicy::LatestHelloPolicy>>(fixture1.subscriber_handle, mem_res);
+  auto mock_input1 = std::make_shared<MockInputView<HelloCogPolicy::LatestHelloPolicy>>(fixture1.channel, mem_res);
   auto mock_input2 =
-    std::make_shared<MockInputView<HelloCogPolicy::HistoryOfHellosPolicy>>(fixture2.subscriber_handle, mem_res);
+    std::make_shared<MockInputView<HelloCogPolicy::MultiConnectHello_0Policy>>(fixture2.channel, mem_res);
+  auto mock_input3 =
+    std::make_shared<MockInputView<HelloCogPolicy::MultiConnectHello_1Policy>>(fixture3.channel, mem_res);
+  auto mock_input4 = std::make_shared<MockInputView<HelloCogPolicy::HistoryOfHellosPolicy>>(fixture4.channel, mem_res);
 
   // Set up telemetry metrics for mock_input1
   AggregatedInputMetrics input1_metrics{};
@@ -332,16 +391,36 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_telemetry_
 
   // Set up telemetry metrics for mock_input2
   AggregatedInputMetrics input2_metrics{};
-  std::ignore = input2_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(80));
-  std::ignore = input2_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(120));
-  std::ignore = input2_metrics.telemetry_metrics.num_unseen_messages.update(4);
-  std::ignore = input2_metrics.telemetry_metrics.num_unseen_messages.update(6);
-  std::ignore = input2_metrics.telemetry_metrics.messages_dropped.update(0);
-  std::ignore = input2_metrics.telemetry_metrics.messages_dropped.update(3);
+  std::ignore = input2_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(81));
+  std::ignore = input2_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(121));
+  std::ignore = input2_metrics.telemetry_metrics.num_unseen_messages.update(5);
+  std::ignore = input2_metrics.telemetry_metrics.num_unseen_messages.update(7);
+  std::ignore = input2_metrics.telemetry_metrics.messages_dropped.update(1);
+  std::ignore = input2_metrics.telemetry_metrics.messages_dropped.update(4);
   mock_input2->set_input_metrics(input2_metrics);
 
+  // Set up telemetry metrics for mock_input3
+  AggregatedInputMetrics input3_metrics{};
+  std::ignore = input3_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(82));
+  std::ignore = input3_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(122));
+  std::ignore = input3_metrics.telemetry_metrics.num_unseen_messages.update(6);
+  std::ignore = input3_metrics.telemetry_metrics.num_unseen_messages.update(8);
+  std::ignore = input3_metrics.telemetry_metrics.messages_dropped.update(2);
+  std::ignore = input3_metrics.telemetry_metrics.messages_dropped.update(5);
+  mock_input3->set_input_metrics(input3_metrics);
+
+  // Set up telemetry metrics for mock_input4
+  AggregatedInputMetrics input4_metrics{};
+  std::ignore = input4_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(80));
+  std::ignore = input4_metrics.telemetry_metrics.message_staleness.update(ten_nanoseconds_factory(120));
+  std::ignore = input4_metrics.telemetry_metrics.num_unseen_messages.update(4);
+  std::ignore = input4_metrics.telemetry_metrics.num_unseen_messages.update(6);
+  std::ignore = input4_metrics.telemetry_metrics.messages_dropped.update(0);
+  std::ignore = input4_metrics.telemetry_metrics.messages_dropped.update(3);
+  mock_input4->set_input_metrics(input4_metrics);
+
   // Create subscribers tuple
-  auto subscribers = std::make_tuple(mock_input1, mock_input2);
+  auto subscribers = std::make_tuple(mock_input1, mock_input2, mock_input3, mock_input4);
 
   HelloCogPolicy::populate_input_telemetry_metrics(subscribers, telemetry_metrics_tap);
 
@@ -355,7 +434,23 @@ TEST_CASE_METHOD(HelloCogMetricsTestFixture, "HelloCog populate_input_telemetry_
   CHECK(telemetry_metrics_tap.get_latest_hello().get_dropped_messages().get_min() == 1);
   CHECK(telemetry_metrics_tap.get_latest_hello().get_dropped_messages().get_max() == 2);
 
-  // For history_of_hellos input (mock_input2)
+  // For multi_connect_hello__0 input (mock_input2)
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_staleness().get_min() == ten_nanoseconds_factory(81));
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_staleness().get_max() == ten_nanoseconds_factory(121));
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_unseen_messages().get_min() == 5);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_unseen_messages().get_max() == 7);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_dropped_messages().get_min() == 1);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__0().get_dropped_messages().get_max() == 4);
+
+  // For multi_connect_hello__1 input (mock_input3)
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_staleness().get_min() == ten_nanoseconds_factory(82));
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_staleness().get_max() == ten_nanoseconds_factory(122));
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_unseen_messages().get_min() == 6);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_unseen_messages().get_max() == 8);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_dropped_messages().get_min() == 2);
+  CHECK(telemetry_metrics_tap.get_multi_connect_hello__1().get_dropped_messages().get_max() == 5);
+
+  // For history_of_hellos input (mock_input4)
   CHECK(telemetry_metrics_tap.get_history_of_hellos().get_staleness().get_min() == ten_nanoseconds_factory(80));
   CHECK(telemetry_metrics_tap.get_history_of_hellos().get_staleness().get_max() == ten_nanoseconds_factory(120));
   CHECK(telemetry_metrics_tap.get_history_of_hellos().get_unseen_messages().get_min() == 4);

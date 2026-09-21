@@ -1,11 +1,11 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
 """Tests for report group schema generation."""
 
 import pytest
-from clockwork.dsl.ir import clkbuiltins, cog, compiler, schema, typesys
+from clockwork.dsl.ir import clkbuiltins, cog, compiler, primitive, schema, typesys
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
@@ -50,6 +50,15 @@ def get_inner_schema_from_var_soa_field(
     inner_schema = field.type_info.arguments["type"]
     assert isinstance(inner_schema, schema.InstantiatedSchema)
     return inner_schema.schema
+
+
+def get_bitset_size(field: schema.FieldDef | schema.ResolvedFieldDef) -> int:
+    """Return the static size of a generated Bitset field."""
+    assert isinstance(field.type_info, typesys.Instantiation)
+    assert field.type_info.instantiates == clkbuiltins.BITSET
+    size = field.type_info.arguments["size"]
+    assert isinstance(size, primitive.DecimalValue)
+    return int(size.value)
 
 
 def test_post_aggregated_comprehensive(fs_importer: FilesystemImporter) -> None:
@@ -124,7 +133,7 @@ cog ComprehensiveCog
 policy ReportGroupPolicy for ComprehensiveCog.test_group
 {
     reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     min_observations = 5;
     max_observations = 100;
 }
@@ -182,6 +191,56 @@ policy ReportGroupPolicy for ComprehensiveCog.test_group
     stripped_field = get_field_by_name(generated_schema.schema, "metadata_stripped_sum_sum")
     assert stripped_field.type_info == clkbuiltins.UINT32
     assert not field_exists(generated_schema.schema, "metadata_stripped_sum_sum_metadata")
+
+
+def test_report_group_entry_metadata_override(fs_importer: FilesystemImporter) -> None:
+    """Report group entries can override a signal's metadata type in generated schemas."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Doc.
+cog MetadataOverrideCog
+{
+    signals batch_group
+    {
+        overridden_metadata: signal UInt32
+        {
+            metadata: SyncTime;
+            pre_aggregation: ["min"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for MetadataOverrideCog.batch_group
+{
+    reporting_strategy = ReportingStrategy::batched;
+    log_type = ReportGroupLogType::event;
+    max_observations = 10;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "metadata_override_test"), importer=fs_importer)
+    test_cog = module.inner_scope.lookup("MetadataOverrideCog")
+    assert isinstance(test_cog, cog.Cog)
+
+    report_group = test_cog.report_groups["batch_group"]
+    report_group.entries["overridden_metadata"].metadata_override = clkbuiltins.UINT64
+    report_group.generated_outer_schema = None
+    report_group.generated_schemas.clear()
+    report_group.generated_representations.clear()
+    report_group.generated_interfaces.clear()
+    report_group.resolve(module.inner_scope, "MetadataOverrideCog")
+    generated_schema = report_group.generated_outer_schema
+    assert isinstance(generated_schema, schema.InstantiatedSchema)
+
+    inner_schema = get_inner_schema_from_var_soa_field(generated_schema.schema, "signals")
+    metadata_field = get_field_by_name(inner_schema, "overridden_metadata_min_metadata")
+    assert metadata_field.type_info == clkbuiltins.UINT64
 
 
 def test_batched_comprehensive(fs_importer: FilesystemImporter) -> None:
@@ -261,7 +320,7 @@ cog BatchedCog
 policy ReportGroupPolicy for BatchedCog.batch_group
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 """
@@ -334,3 +393,99 @@ policy ReportGroupPolicy for BatchedCog.batch_group
     assert field_exists(inner_schema, "stripped_metadata_count")
     stripped_metadata_fields = [f for f in inner_schema.fields.values() if f.cur_name.startswith("stripped_metadata_")]
     assert len(stripped_metadata_fields) == 2  # Only sum and count, no metadata fields
+
+    assert get_bitset_size(get_field_by_name(inner_schema, "signal_presence")) == 3
+    assert (
+        report_group.get_signal_validity("basic_signal").index,
+        report_group.get_signal_validity("multi_pre_agg").index,
+    ) == (0, 1)
+    assert report_group.get_signal_validity("mean_signal").index == mean_count_field.num
+    assert (
+        report_group.get_signal_validity("stripped_metadata").index
+        == get_field_by_name(inner_schema, "stripped_metadata_count").num
+    )
+
+
+def test_all_count_batched_group_omits_presence_bitset(fs_importer: FilesystemImporter) -> None:
+    """Count-derived validity does not require a presence bitset."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Doc.
+cog CountCog
+{
+    signals counts
+    {
+        count_signal: signal UInt32
+        {
+            pre_aggregation: ["count"];
+        }
+
+        mean_signal: signal UInt32
+        {
+            pre_aggregation: ["mean"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for CountCog.counts
+{
+    reporting_strategy = ReportingStrategy::batched;
+    log_type = ReportGroupLogType::event;
+    max_observations = 10;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "all_count_batched_test"), importer=fs_importer)
+    count_cog = module.inner_scope.lookup("CountCog")
+    assert isinstance(count_cog, cog.Cog)
+
+    report_group = count_cog.report_groups["counts"]
+    report_group.resolve(module.inner_scope, "CountCog")
+    outer_schema = report_group.get_generated_schema().schema
+    inner_schema = get_inner_schema_from_var_soa_field(outer_schema, "signals")
+    assert not field_exists(inner_schema, "signal_presence")
+    assert (
+        report_group.get_signal_validity("count_signal").index
+        == get_field_by_name(inner_schema, "count_signal_count").num
+    )
+    assert (
+        report_group.get_signal_validity("mean_signal").index
+        == get_field_by_name(inner_schema, "mean_signal_count").num
+    )
+
+
+def test_signal_presence_is_a_reserved_report_group_entry_name(fs_importer: FilesystemImporter) -> None:
+    """User report-group aliases cannot collide with generated presence data."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Doc.
+cog ReservedNameCog
+{
+    signals values
+    {
+        signal_presence: signal UInt32;
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for ReservedNameCog.values
+{
+    reporting_strategy = ReportingStrategy::batched;
+    log_type = ReportGroupLogType::event;
+    max_observations = 10;
+}
+"""
+    with pytest.raises(ValueError, match="reserved for generated report-group presence tracking"):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "reserved_presence_name_test"), importer=fs_importer)

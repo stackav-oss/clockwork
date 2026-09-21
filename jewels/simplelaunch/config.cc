@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/simplelaunch/config.hh"
@@ -14,6 +14,7 @@
 
 namespace jewels::simplelaunch
 {
+
 jewels::expected<Config, jewels::filesystem::ErrorCode>
 load_config(jewels::filesystem::Filesystem& filesystem, const std::string_view path)
 {
@@ -35,4 +36,5 @@ load_config(jewels::filesystem::Filesystem& filesystem, const std::string_view p
 
   return config;
 }
+
 } // namespace jewels::simplelaunch

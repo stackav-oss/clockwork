@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/detail/socket_common.hh"
@@ -8,6 +8,8 @@
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/error_code_stringmakers.hh" // IWYU pragma: keep
+#include "jewels/testing/expected_stringmakers.hh"   // IWYU pragma: keep
 #include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_template_test_macros.hpp>
@@ -16,10 +18,12 @@
 #include <array>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <system_error>
 #include <thread>
 #include <tuple>
@@ -53,10 +57,12 @@ template <>
 std::pair<jewels::expected<TcpSocket, std::errc>, jewels::expected<TcpSocket, std::errc>> make_socket_pair()
 {
   const auto host = std::string{"127.0.0.1"};
-  const auto listener_addr = jewels::networking::SocketAddress::create(host, 9999);
-  const auto client_addr = jewels::networking::SocketAddress::create(host, 9998);
-  auto listener = TcpSocket::create_listen(*listener_addr, 1);
-  auto client = TcpSocket::create_connect(*listener_addr, *client_addr);
+  auto addr = jewels::networking::SocketAddress::create(host, 0);
+  REQUIRE(addr);
+  auto listener = TcpSocket::create_listen(*addr, 1);
+  const auto listener_addr = listener->get_bound_address();
+  REQUIRE(listener_addr);
+  auto client = TcpSocket::create_connect(*listener_addr, *addr);
   return {std::move(listener), std::move(client)};
 }
 

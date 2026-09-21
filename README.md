@@ -184,7 +184,7 @@ To learn more, please visit [Stack AV's website](https://stackav.com).
 
 ## License
 
-Copyright 2025 Stack AV Co.
+Copyright 2025-2026 Stack AV Co.
 
 Licensed under the [Apache License, Version 2.0](LICENSE.txt).
 

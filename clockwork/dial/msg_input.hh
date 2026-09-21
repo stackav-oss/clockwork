@@ -1,71 +1,177 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "jewels/container/circular_buffer.hh"
+#include "clockwork/pinion/device_ptr.hh"
 
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
-#include <ranges>
 #include <span>
+#include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace clockwork
 {
 
-namespace detail
+/// Non-owning view over an array of const pointers that auto-dereferences on iteration.
+/// Semantically equivalent to std::span<const T> but backed by pointer indirection,
+/// avoiding copies while presenting value-like iteration (`const T&`).
+template <class T, bool expose_seqno_v, bool use_device_ptr_v>
+class MsgView
 {
+public:
+  static constexpr auto expose_seqno = expose_seqno_v;
+  static constexpr auto use_device_ptr = use_device_ptr_v;
 
-template <class T>
-struct MsgPolicy
-{
-  using storage_type = const T*;
-  using value_type = const T;
-  using reference = const T&;
-  using const_reference = const T&;
+  /// Storage for message data and metadata
+  struct Item
+  {
+    const T* message;
+    [[no_unique_address]] std::conditional_t<expose_seqno, uint64_t, std::monostate> seqno{};
+    [[no_unique_address]]
+    std::conditional_t<use_device_ptr, pinion::DevicePtr<const T>, std::monostate> device_ptr{};
+  };
 
-  /// Construct an object of type T* in the storage.
-  /// @param storage Where to construct the T*.
-  static void construct(storage_type& storage, const T* ptr);
+  using InnerSpan = std::span<Item>;
 
-  /// Destruct the T being held in the storage.
-  ///
-  /// Technically since this is just a pointer there's no destructor, but this
-  /// sets the T* to nullptr to rapidly surface bugs with accessing a removed
-  /// member.
-  ///
-  /// @param storage Where the T* is stored.
-  static void destruct(storage_type& storage);
+  /// Random-access iterator that auto-dereferences through the pointer layer.
+  class Iterator
+  {
+  public:
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type = const T;
+    using difference_type = ptrdiff_t;
+    using pointer = const T*;
+    using reference = const T&;
 
-  /// Marshall an aligned storage as a reference.
-  ///
-  /// In our case we just dereference the pointer.  This does not check for
-  /// nullptr.  Note that reference and const_reference are the same in our
-  /// case.
-  ///
-  /// @note This is UB if a T has not been constructed in the storage (because
-  /// it'll deref nullptr.)
-  /// @param storage A storage holding a valid T.
-  /// @return A reference to the underlying object.
-  [[nodiscard]] static reference get(storage_type& storage);
+    constexpr Iterator() = default;
+    constexpr explicit Iterator(typename InnerSpan::iterator iter)
+      : it_(iter)
+    {
+    }
 
-  /// Marshall an aligned storage as a const reference.
-  ///
-  /// In our case we just dereference the pointer.  This does not check for
-  /// nullptr.  Note that reference and const_reference are the same in our
-  /// case.
-  ///
-  /// @note This is UB if a T has not been constructed in the storage (because
-  /// it'll deref nullptr.)
-  /// @param storage A storage holding a valid T.
-  /// @return A reference to the underlying object.
-  [[nodiscard]] static const_reference get(const storage_type& storage);
+    constexpr const T& operator*() const
+    {
+      return *it_->message;
+    }
+    constexpr const T* operator->() const
+    {
+      return it_->message;
+    }
+    [[nodiscard]] constexpr uint64_t seqno() const
+      requires(expose_seqno)
+    {
+      return it_->seqno;
+    }
+    constexpr pinion::DevicePtr<const T> device_ptr() const
+      requires(use_device_ptr)
+    {
+      return std::move(it_->device_ptr);
+    }
 
-  static void get(storage_type&& storage) = delete;
+    constexpr Iterator& operator++()
+    {
+      ++it_;
+      return *this;
+    }
+    constexpr Iterator operator++(int)
+    {
+      auto tmp = *this;
+      ++it_;
+      return tmp;
+    }
+    constexpr Iterator& operator--()
+    {
+      --it_;
+      return *this;
+    }
+    constexpr Iterator operator--(int)
+    {
+      auto tmp = *this;
+      --it_;
+      return tmp;
+    }
 
-  static void get(const storage_type&& storage) = delete;
+    constexpr Iterator& operator+=(difference_type n)
+    {
+      it_ += n;
+      return *this;
+    }
+    constexpr Iterator& operator-=(difference_type n)
+    {
+      it_ -= n;
+      return *this;
+    }
+    constexpr Iterator operator+(difference_type n) const
+    {
+      return Iterator{it_ + n};
+    }
+    constexpr Iterator operator-(difference_type n) const
+    {
+      return Iterator{it_ - n};
+    }
+    constexpr difference_type operator-(const Iterator& other) const
+    {
+      return it_ - other.it_;
+    }
+    constexpr const T& operator[](difference_type n) const
+    {
+      return *it_[n].message;
+    }
+
+    constexpr auto operator<=>(const Iterator&) const = default;
+    constexpr bool operator==(const Iterator&) const = default;
+
+    friend constexpr Iterator operator+(difference_type n, const Iterator& rhs)
+    {
+      return Iterator{rhs.it_ + n};
+    }
+
+  private:
+    typename InnerSpan::iterator it_{};
+  };
+
+  constexpr MsgView() = default;
+  constexpr MsgView(Item* data, size_t count)
+    : inner_(data, count)
+  {
+  }
+
+  [[nodiscard]] constexpr Iterator begin() const
+  {
+    return Iterator{inner_.begin()};
+  }
+  [[nodiscard]] constexpr Iterator end() const
+  {
+    return Iterator{inner_.end()};
+  }
+  [[nodiscard]] constexpr size_t size() const
+  {
+    return inner_.size();
+  }
+  [[nodiscard]] constexpr bool empty() const
+  {
+    return inner_.empty();
+  }
+  [[nodiscard]] constexpr const T& back() const
+  {
+    return *inner_.back().message;
+  }
+  [[nodiscard]] constexpr const T& front() const
+  {
+    return *inner_.front().message;
+  }
+  [[nodiscard]] constexpr const T& operator[](size_t idx) const
+  {
+    return *inner_[idx].message;
+  }
+
+private:
+  InnerSpan inner_{};
 };
-} // namespace detail
 
 /// Dial structure providing an interface to a view of (views of) input
 /// messages.
@@ -81,24 +187,38 @@ struct MsgPolicy
 /// long as this view exists.
 ///
 /// @tparam MsgViewType The type of the message view.
-template <class MsgViewType, size_t max_size, size_t min_messages, size_t min_new_messages>
+/// @tparam max_size Maximum number of messages in the view.
+/// @tparam min_messages Minimum number of messages guaranteed in the view (from execution conditions).
+/// @tparam min_new_messages Minimum number of new messages guaranteed in the view.
+/// @tparam manual_cursor_v When true, exposes set_cursor() for manual cursor control.
+/// @tparam expose_seqno_v When true, exposes get_sequence_number() for reading message sequence numbers.
+template <
+  class MsgViewType,
+  size_t max_size,
+  size_t min_messages,
+  size_t min_new_messages,
+  bool manual_cursor_v = false,
+  bool expose_seqno_v = false,
+  bool use_device_ptr_v = false>
 class MessageInputDial
 {
-  using CircularBuffer =
-    jewels::container::CircularBuffer<detail::MsgPolicy<MsgViewType>, std::span<const MsgViewType*, max_size>>;
-
 public:
   using MsgType = MsgViewType;
+  using MsgDevicePtr = pinion::DevicePtr<const MsgType>;
   static constexpr auto max_msgs = max_size;
   static constexpr auto min_msgs = min_messages;
   static constexpr auto min_new_msgs = min_new_messages;
+  static constexpr auto manual_cursor = manual_cursor_v;
+  static constexpr auto expose_seqno = expose_seqno_v;
+  static constexpr auto use_device_ptr = use_device_ptr_v;
 
-  /// ViewType is the range view exposed to users.  It's guaranteed to provide
-  /// O(1) random access and a size() method.
-  using ViewType = std::ranges::ref_view<CircularBuffer>;
+  /// ViewType is an auto-dereferencing view over externally-owned message pointers.
+  /// Iteration yields `const MsgViewType&`, not pointers.
+  using ViewType = MsgView<MsgViewType, expose_seqno, use_device_ptr>;
+  using ViewItem = MsgView<MsgViewType, expose_seqno, use_device_ptr>::Item;
 
-  /// This is the iterator type used by ViewType.  They will be random access iterators.
-  using IteratorType = std::ranges::iterator_t<CircularBuffer>;
+  /// Random-access iterator that auto-dereferences through the pointer layer.
+  using IteratorType = typename ViewType::Iterator;
 
   MessageInputDial() = delete;
 
@@ -114,8 +234,7 @@ public:
   /// @param buffer_view A non-owning view onto the underlying container.
   /// @param cursor An iterator to the "cursor" element for this input.
   /// @param first_new An iterator to the first new/unseen message in the view.
-  /// @param skip_count How many messages were preemptively skipped this cycle.
-  /// @param connected Indicates if this input is connected to a channel.
+  /// @param parameters Additional construction parameters
   constexpr MessageInputDial(
     ViewType buffer_view,
     IteratorType cursor,
@@ -166,29 +285,28 @@ public:
   /// @return True if this input is connected to a channel.
   [[nodiscard]] constexpr bool connected() const noexcept;
 
-protected:
   /// Set the cursor iterator.
-  /// @note This is exposed only by the MessageInputDialWithCursorControl class (below).
-  constexpr void set_cursor(IteratorType cursor) noexcept;
+  /// @note Only available when manual cursor control is enabled.
+  constexpr void set_cursor(IteratorType cursor) noexcept
+    requires(manual_cursor);
+
+  /// Get the sequence number of the message at the given iterator position.
+  /// @note Only available when sequence number exposure is enabled.
+  /// @pre iter must be a valid dereferenceable iterator into get_view() (not end()).
+  /// @param iter An iterator into the message view.
+  /// @return The sequence number of the message at the given position.
+  [[nodiscard]] constexpr uint64_t get_sequence_number(IteratorType iter) const noexcept
+    requires(expose_seqno);
+
+  [[nodiscard]] MsgDevicePtr device_ptr(IteratorType iter) const noexcept
+    requires(use_device_ptr);
 
 private:
   ViewType buffer_view_;
   IteratorType cursor_;
   IteratorType first_new_;
-  size_t skip_count_;
-  bool connected_;
-};
-
-/// Version of a message input dial that allows the cursor to be set.
-///
-/// @note This is used only when the Cog has explicitly declared that it needs
-/// manual cursor control.  Otherwise cursor control is automated.
-template <class MsgType, size_t max_size, size_t min_messages, size_t min_new_messages>
-class MessageInputDialWithCursorControl : public MessageInputDial<MsgType, max_size, min_messages, min_new_messages>
-{
-public:
-  using MessageInputDial<MsgType, max_size, min_messages, min_new_messages>::MessageInputDial;
-  using MessageInputDial<MsgType, max_size, min_messages, min_new_messages>::set_cursor;
+  size_t skip_count_{0};
+  bool connected_{true};
 };
 
 } // namespace clockwork

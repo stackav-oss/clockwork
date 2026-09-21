@@ -3,114 +3,114 @@ use clockwork::pinion::tests::support::test_message::{TestMessage};
 // Channel 1
 channel Channel1
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 10;
 }
 
 // Channel 2
 channel Channel2
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 10;
 }
 
 // Channel 3
 channel Channel3
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 10;
 }
 
 // Channel 4
 channel Channel4
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 10;
 }
 
 // Cog with optional and required inputs and outputs
 cog OptionallyConnectedCog
 {
-    inputs
+  inputs
+  {
+    not_connected_input: Tappy<TestMessage>
     {
-        not_connected_input: Tappy<TestMessage>
-        {
-            connect_optional: true;
-        }
-        required_connected_input: Tappy<TestMessage>;
-        connected_optional_input: Tappy<TestMessage>
-        {
-            connect_optional: true;
-        }
+      connect_optional: true;
     }
+    required_connected_input: Tappy<TestMessage>;
+    connected_optional_input: Tappy<TestMessage>
+    {
+      connect_optional: true;
+    }
+  }
 
-    outputs
+  outputs
+  {
+    not_connected_output: Tappy<TestMessage>
     {
-        not_connected_output: Tappy<TestMessage>
-        {
-            connect_optional: true;
-        }
-        required_connected_output: Tappy<TestMessage>;
-        connected_optional_output: Tappy<TestMessage>
-        {
-            connect_optional: true;
-        }
+      connect_optional: true;
     }
+    required_connected_output: Tappy<TestMessage>;
+    connected_optional_output: Tappy<TestMessage>
+    {
+      connect_optional: true;
+    }
+  }
 
-    execution
-    {
-        condition periodic_10hz: time_since_last_exec(100ms);
-        execute when: periodic_10hz;
-    }
+  execution
+  {
+    condition periodic_10hz: time_since_last_exec(100ms);
+    execute when: periodic_10hz;
+  }
 }
 
 cpp_target optionally_connected_cog
 {
-    options
-    {
-        namespace clockwork::pinion::test;
-    }
-    cog OptionallyConnectedCog;
+  options
+  {
+    namespace clockwork::pinion::test;
+  }
+  cog OptionallyConnectedCog;
 }
 
 box OptionallyConnectedSystemBox
 {
-    new cog1: OptionallyConnectedCog;
-    new cog2: OptionallyConnectedCog;
+  new cog1: OptionallyConnectedCog;
+  new cog2: OptionallyConnectedCog;
 
-    connect cog1.required_connected_output to Channel1;
-    connect Channel1 to cog2.required_connected_input;
+  connect cog1.required_connected_output to Channel1;
+  connect Channel1 to cog2.required_connected_input;
 
-    connect cog2.required_connected_output to Channel2;
-    connect Channel2 to cog1.required_connected_input;
+  connect cog2.required_connected_output to Channel2;
+  connect Channel2 to cog1.required_connected_input;
 
-    connect cog1.connected_optional_output to Channel3;
-    connect Channel3 to cog2.connected_optional_input;
+  connect cog1.connected_optional_output to Channel3;
+  connect Channel3 to cog2.connected_optional_input;
 
-    connect cog2.connected_optional_output to Channel4;
-    connect Channel4 to cog1.connected_optional_input;
+  connect cog2.connected_optional_output to Channel4;
+  connect Channel4 to cog1.connected_optional_input;
 }
 
 cpu_domain SimCpu;
 
 box OptionallyConnectedSystem
 {
-    new box: OptionallyConnectedSystemBox;
-    new proc: Process(executable=optionally_connected_system_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=SimCpu) to proc;
+  new box: OptionallyConnectedSystemBox;
+  new proc: Process(executable=optionally_connected_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=SimCpu) to proc;
 }
 
 cpp_executable optionally_connected_system_exe
 {
-    casing
-    {
-        box OptionallyConnectedSystemBox;
-    }
-    offline: true;
+  casing
+  {
+    box OptionallyConnectedSystemBox;
+  }
+  offline: true;
 }
 
 system_target optionally_connected_system
 {
-    box: OptionallyConnectedSystem;
+  box: OptionallyConnectedSystem;
 }

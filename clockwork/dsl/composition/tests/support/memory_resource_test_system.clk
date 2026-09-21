@@ -1,0 +1,6 @@
+use clockwork::dsl::composition::tests::support::memory_resource_test_boxes;
+
+system_target MemoryResourceTestSystem
+{
+  box: memory_resource_test_boxes::SystemBox;
+}

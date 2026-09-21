@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """C++ backend for Clockwork schemas.
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.cpp import literal, typereg, types, values
 from clockwork.dsl.cpp.context import CppChunk, CppModuleChunks, Header, SystemHeader, comment_doc_string
-from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, strongtypes, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, statement, strongtypes, typesys
 from clockwork.dsl.ir.module_id import JEWELS_REPO
 from clockwork.dsl.ir.statement import ImmutableBinding
 from clockwork.dsl.ir.uuid_reg import lookup_uuid
@@ -194,7 +194,7 @@ def _to_tap_tachyon_helper(
     schema_transform: Callable[[schema.ResolvedSchema | typesys.Instantiation], typesys.TypeVal],
 ) -> typesys.TypeVal:
     """Recursively convert a type to a Tachyon or Tap-Tachyon type."""
-    if isinstance(type_info, schema.InstantiateStmt):
+    if isinstance(type_info, statement.InstantiateStmt):
         assert isinstance(type_info.typespec, typesys.Instantiation)
         type_info = schema.InstantiatedSchema.from_typespec(type_info.typespec)
     if isinstance(type_info, schema.InstantiatedSchema):
@@ -963,7 +963,7 @@ def _field_instantiation_to_cpp(
 
     """
     field_type = field.type_info
-    if not isinstance(field_type, typesys.Instantiation | schema.InstantiatedSchema | schema.InstantiateStmt):
+    if not isinstance(field_type, typesys.Instantiation | schema.InstantiatedSchema | statement.InstantiateStmt):
         msg = f"Unexpected field type.  Received: {type(field_type)}"
         raise TypeError(msg)
 
@@ -1008,7 +1008,7 @@ def _field_to_cpp(compiler_context: CompilerContext, field: schema.InstantiatedF
         return _field_var_string_to_cpp(compiler_context, field)
     if isinstance(field_type, typesys.Instantiation) and field_type.instantiates == clkbuiltins.OPTIONAL:
         return _field_optional_to_cpp(compiler_context, field)
-    if isinstance(field_type, typesys.Instantiation | schema.InstantiatedSchema | schema.InstantiateStmt):
+    if isinstance(field_type, typesys.Instantiation | schema.InstantiatedSchema | statement.InstantiateStmt):
         return _field_instantiation_to_cpp(compiler_context, field)
     msg = f"Unable to convert type {field_type.value_key()} to CppField."
     raise TypeError(msg)
@@ -1118,6 +1118,11 @@ def define_clear_method(fields: list[CppFieldDef], enclosing_namespace: str) -> 
             or (ftype.cpp_namespace == "clockwork" and ftype.template_name == "Tap")
         ):
             inline.append(f"{field.field_name}.clear();")
+        elif isinstance(ftype, types.CppTemplateType) and (
+            ftype.cpp_namespace == "jewels::tap" and ftype.template_name == "Tensor"
+        ):
+            # As an optimization, tensors don't get cleared, since they will be quite large in the common case.
+            continue
         else:
             value = field.field.member.value
             value_str = value.render(enclosing_namespace) if value else ""
@@ -1351,6 +1356,7 @@ def to_cpp_spec(compiler_context: CompilerContext, typespec: typesys.Instantiati
         assert parameters is not None
         class_local_defs = to_class_local_defs(compiler_context, parameters, schema_ir.arguments)
     else:
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         class_local_defs = []
 
     field_defs, field_gaps = to_cpp_fields(compiler_context, schema_ir, layout)

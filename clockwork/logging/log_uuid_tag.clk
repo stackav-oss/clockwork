@@ -1,4 +1,4 @@
-#![generate(cpp)]
+#![generate(cpp, py)]
 #![cpp(namespace=clockwork_logging::tags)]
 
 // Log UUID tag

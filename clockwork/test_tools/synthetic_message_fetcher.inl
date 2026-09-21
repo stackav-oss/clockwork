@@ -14,6 +14,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>

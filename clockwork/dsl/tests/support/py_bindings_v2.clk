@@ -3,40 +3,43 @@ use clockwork::dsl::tests::support::py_bindings_v2_ext;
 // Nested schema in the same module
 schema NestedSchema
 {
-    uuid: 95980a81-1e5b-44ba-abcf-8fc8ca5d5372;
+  uuid: 95980a81-1e5b-44ba-abcf-8fc8ca5d5372;
 
-    fields
-    {
-        // Some field.
-        #0 some_integer: UInt8;
-    }
+  fields
+  {
+    // Some field.
+    #0 some_integer: UInt8;
+  }
 }
 
 // Test schema
 schema MySchema
 {
-    uuid: b00b505f-12a2-486f-8340-e76325d11959;
+  uuid: b00b505f-12a2-486f-8340-e76325d11959;
 
-    fields
-    {
-        // An integral field.
-        #0 some_integer: UInt32;
+  fields
+  {
+    // An integral field.
+    #0 some_integer: UInt32;
 
-        // A bool field.
-        #1 some_bool: Bool;
+    // A bool field.
+    #1 some_bool: Bool;
 
-        // A nested schema.
-        #2 nested_schema: NestedSchema;
+    // A nested schema.
+    #2 nested_schema: NestedSchema;
 
-        // A nested schema from an external module.
-        #3 ext_nested_schema: py_bindings_v2_ext::NestedSchema;
+    // A nested schema from an external module.
+    #3 ext_nested_schema: py_bindings_v2_ext::NestedSchema;
 
-        // A VarArray of primitives.
-        #4 var_array_of_primitives: VarArray<UInt32, 3>;
+    // A VarArray of primitives.
+    #4 var_array_of_primitives: VarArray<UInt32, 3>;
 
-        // A nested VarArray of primitives.
-        #5 nested_var_array_of_primitives: VarArray<VarArray<UInt32, 2>, 3>;
-    }
+    // A nested VarArray of primitives.
+    #5 nested_var_array_of_primitives: VarArray<VarArray<UInt32, 2>, 3>;
+
+    // A compact sensor availability mask.
+    #6 sensor_present: Bitset<10>;
+  }
 }
 
 cpp_target py_bindings_v2_clk_cc

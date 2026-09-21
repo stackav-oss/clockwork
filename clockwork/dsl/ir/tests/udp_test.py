@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -450,7 +450,7 @@ def _test_invalid_udp_batch_size(socket_type: str, socket_address: str) -> None:
         """,
     )
 
-    with pytest.raises(TypeError, match=r"Type inference failed: ::String != ::UInt32"):
+    with pytest.raises(TypeError, match=r"Type inference failed: ::String and ::UInt32 are disjoint"):
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, f"invalid_batch_size_{socket_type}"), importer=fs_importer
         )
@@ -525,6 +525,7 @@ def _test_bind_to_interface(binding: str) -> primitive.IPv4Address | primitive.S
     assert udp.SocketBindToDevice in socket_ir.options.options
     bind = socket_ir.options.options[udp.SocketBindToDevice]
     assert isinstance(bind, udp.SocketBindToDevice)
+    # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     return bind.value
 
 

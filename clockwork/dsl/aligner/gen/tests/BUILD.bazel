@@ -1,0 +1,144 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:cc.bzl", "cc_test")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "aligner_cog_test",
+    srcs = [
+        "aligner_cog_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+        "//std/aligners:state.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_components",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:schema_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "aligner_csr_test",
+    srcs = ["aligner_csr_test.cc"],
+    data = [
+        "//clockwork/dsl/aligner/gen/tests/support:clockwork.clockwork.dsl.aligner.gen.tests.support.test_system.aligner_test_system.proc.tachyon",
+        "//clockwork/dsl/aligner/gen/tests/support:test_system.aligner_test_system.TestCpu_channel_publisher_config.tachyon",
+        "//clockwork/dsl/aligner/gen/tests/support:test_system.aligner_test_system.TestCpu_telemetry_logger_config.tachyon",
+    ],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/aligner/gen/tests/support:aligner_test_msgs_clk_cc",
+        "//clockwork/dsl/aligner/gen/tests/support:test_aligner_clk_cc",
+        "//clockwork/dsl/aligner/gen/tests/support:test_system_boxes_clk_exe_lib",  # keep
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "aligner_unit_test",
+    srcs = ["aligner_unit_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/aligner/gen/tests/support:exact_batch_aligner_clk_cc",
+        "//clockwork/dsl/aligner/gen/tests/support:exact_batch_aligner_clk_cc_test",
+        "//clockwork/dsl/aligner/gen/tests/support:optional_reference_nearest_aligner_clk_cc",
+        "//clockwork/dsl/aligner/gen/tests/support:optional_reference_nearest_aligner_clk_cc_test",
+        "//clockwork/dsl/aligner/gen/tests/support:test_aligner_clk_cc",
+        "//clockwork/dsl/aligner/gen/tests/support:test_aligner_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "codegen_plan_test",
+    srcs = [
+        "codegen_plan_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:pipeline",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/aligner/gen:codegen_plan",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "search_codegen_test",
+    srcs = [
+        "search_codegen_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/aligner/gen/tests/resources:expected_search_outputs",
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+        "//std/aligners:state.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:objective_analysis",
+        "//clockwork/dsl/aligner:partition_types",
+        "//clockwork/dsl/aligner:pipeline",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/aligner/gen:codegen_plan",
+        "//clockwork/dsl/aligner/gen:search_codegen",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)

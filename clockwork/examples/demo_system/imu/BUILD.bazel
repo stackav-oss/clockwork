@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -16,6 +16,7 @@ clk(
     visibility = ["//visibility:public"],
     deps = [
         ":imu_channels_clk",
+        ":imu_message_clk",
         "//clockwork/logging:channel_policy_clk",
         "//clockwork/logging:channel_type_clk",
     ],
@@ -36,9 +37,15 @@ clk(
         "imu_clk_cc.cc",
         "imu_clk_cc.hh",
         "imu_clk_cc.inl",
+        "imu_clk_cc_cog.cc",
+        "imu_clk_cc_cog.hh",
+        "imu_clk_cc_cog.inl",
         "imu_clk_cc_dial.cc",
         "imu_clk_cc_dial.hh",
         "imu_clk_cc_dial.inl",
+        "imu_clk_cc_types.cc",
+        "imu_clk_cc_types.hh",
+        "imu_clk_cc_types.inl",
         "imu_clk_exe.cc",
         "imu_clk_exe.hh",
         "imu_clk_exe.inl",
@@ -59,13 +66,9 @@ clk(
 
 cc_library(
     name = "imu_clk_cc_impl",
-    srcs = ["imu_clk_cc_impl.cc"],
-    deps = [
-        ":imu_clk_cc_dial",
-        ":imu_message_clk_cc",
-        "//clockwork/dial:msg_input",
-        "//clockwork/pinion:publishable",
-    ],
+    srcs = ["imu_clk_cc_impl.inl"],
+    hdrs = ["imu_clk_cc_impl.hh"],
+    deps = [":imu_clk_cc_dial"],
 )
 
 clk(
@@ -75,6 +78,9 @@ clk(
         "imu_message_clk_cc.cc",
         "imu_message_clk_cc.hh",
         "imu_message_clk_cc.inl",
+        "imu_message_clk_cc_types.cc",
+        "imu_message_clk_cc_types.hh",
+        "imu_message_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

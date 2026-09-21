@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -14,7 +14,8 @@ namespace clockwork::pinion
 WISE_ENUM_CLASS((InitError, uint8_t), invalid_size, invalid_alignment)
 
 /// Errors when writing to a buffer.
-WISE_ENUM_CLASS((WriteError, uint8_t), unexpected_reservation, unexpected_head, count_too_large, seqno_count_mismatch)
+WISE_ENUM_CLASS(
+  (WriteError, uint8_t), unexpected_reservation, unexpected_head, count_too_large, seqno_count_mismatch, non_contiguous)
 
 /// Errors when reserving write space.
 WISE_ENUM_CLASS((ReserveError, uint8_t), unexpected_tail, existing_reservation, count_too_large)

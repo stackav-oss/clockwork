@@ -7,7 +7,7 @@ index b1759b2..b731523 100644
      ],
      cgo = True,
 +    copts = ["-w"],
-     importpath = "github.com/dougthor42/go-tree-sitter",
+     importpath = "github.com/smacker/go-tree-sitter",
      visibility = ["//visibility:public"],
  )
 diff --git python/BUILD.bazel python/BUILD.bazel
@@ -20,6 +20,6 @@ index 1bb60e9..f46ba81 100644
      cgo = True,
 +    copts = ["-w"],
 +    cxxopts = ["-w"],
-     importpath = "github.com/dougthor42/go-tree-sitter/python",
+     importpath = "github.com/smacker/go-tree-sitter/python",
      visibility = ["//visibility:public"],
      deps = ["//:go-tree-sitter"],

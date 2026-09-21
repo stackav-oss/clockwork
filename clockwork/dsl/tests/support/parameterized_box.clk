@@ -1,0 +1,233 @@
+use clockwork::dsl::tests::support::parameterized_types::{TestSchema, TestSchemaUInt8, TestSchemaBool};
+use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+
+//
+extern_type CxxState;
+
+// Diagnostics
+channel DiagnosticsChannel
+{
+  name: "/diagnostics";
+  message_type: Tachyon<DiagnosticsReport>;
+  max_num_messages: 100;
+  publishers: diagnostics;
+}
+
+// Docs.
+channel TestChannel
+{
+  parameters
+  {
+    some_string: String;
+    some_type: Type;
+  }
+  name: fmt!("/{some_string}");
+  message_type: Tachyon<TestSchema<some_type>>;
+  max_num_messages: 10;
+}
+
+TestInputChannel = TestChannel<some_string="input", some_type=UInt8>;
+
+// Docs.
+udp_socket IncomingUdpSocket
+{
+  address: 127.0.0.1;
+  port: 12345;
+  direction: incoming;
+  message_type: Tachyon<TestSchema<UInt8>>;
+}
+
+// Docs.
+cog TestCog
+{
+  inputs
+  {
+    input: Tappy<TestSchema<UInt8>>;
+  }
+  outputs
+  {
+    output: Tappy<TestSchema<Bool>>;
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
+
+  diagnostics
+  {
+    group_id: "fault_injector_a";
+  }
+}
+
+// Docs.
+cog ParamTestCog
+{
+  parameters
+  {
+    group_id: String;
+    instance_id: String;
+    config_type: Type;
+    state_type: Type;
+    input_type: Type;
+    output_type: Type;
+  }
+  configs
+  {
+    config: Tappy<TestSchema<config_type>>;
+  }
+  states
+  {
+    state: state_type;
+  }
+  inputs
+  {
+    input: Tappy<input_type>;
+  }
+  outputs
+  {
+    output: Tap<Tachyon<output_type>>;
+  }
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    execute when: periodic;
+  }
+  diagnostics
+  {
+    group_id: group_id;
+    instance_id: instance_id;
+  }
+  metrics_options
+  {
+    enabled: true;
+  }
+}
+policy CogEventMetricsPolicy for TestCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for TestCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for ParamTestCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for ParamTestCog
+{
+  enabled = false;
+}
+box TestBoxImpl
+{
+  parameters
+  {
+    channel_prefix: String;
+    group_id: String;
+    state_type: Type;
+    input_type: Type;
+    output_type: Type;
+  }
+  new socket: IncomingUdpSocket;
+  new cog: TestCog;
+  connect socket to TestChannel<some_string=fmt!("{channel_prefix}_input"), some_type=UInt8>;
+  connect TestChannel<some_string=fmt!("{channel_prefix}_input"), some_type=UInt8> to cog.input;
+  connect cog.output to TestChannel<some_string=fmt!("{channel_prefix}_output"), some_type=Bool>;
+  connect cog.diagnostics to DiagnosticsChannel;
+  new param_cog1: ParamTestCog<
+    group_id=group_id,
+    instance_id="a",
+    config_type=Bool,
+    state_type=state_type,
+    input_type=TestSchema<input_type>,
+    output_type=TestSchema<output_type>,
+  >;
+  connect TestChannel<some_string=fmt!("{channel_prefix}_input"), some_type=input_type> to param_cog1.input;
+  connect param_cog1.output to TestChannel<some_string=fmt!("{channel_prefix}_output1"), some_type=output_type>;
+  connect param_cog1.diagnostics to DiagnosticsChannel;
+  new param_cog2: ParamTestCog<
+    group_id=group_id,
+    instance_id=fmt!("b"),
+    config_type=UInt8,
+    state_type=state_type,
+    input_type=TestSchema<input_type>,
+    output_type=TestSchema<output_type>,
+  >;
+  connect TestChannel<some_string=fmt!("{channel_prefix}_input"), some_type=input_type> to param_cog2.input;
+  connect param_cog2.output to TestChannel<some_string=fmt!("{channel_prefix}_output2"), some_type=output_type>;
+  connect param_cog2.diagnostics to DiagnosticsChannel;
+}
+cpp_target parameterized_box_clk_cc
+{
+  options
+  {
+    namespace clockwork::testing;
+  }
+  extern
+  {
+    header_file: "clockwork/dsl/tests/support/cxx_state.hh";
+    namespace: clockwork::testing;
+    type
+    {
+      name: CxxState;
+    }
+  }
+  udp_socket IncomingUdpSocket;
+  cog TestCog;
+  cog ParamTestCog;
+  instantiate ParamTestCog<
+    group_id="fault_injector_b",
+    instance_id="a",
+    config_type=Bool,
+    state_type=CxxState,
+    input_type=TestSchema<UInt8>,
+    output_type=TestSchema<UInt8>,
+  >;
+  instantiate ParamTestCog<
+    group_id="fault_injector_b",
+    instance_id="b",
+    config_type=UInt8,
+    state_type=CxxState,
+    input_type=TestSchema<UInt8>,
+    output_type=TestSchema<UInt8>,
+  >;
+  instantiate ParamTestCog<
+    group_id="fault_injector_b",
+    instance_id="a",
+    config_type=Bool,
+    state_type=Tappy<TestSchema<Bool>>,
+    input_type=TestSchema<UInt8>,
+    output_type=TestSchema<Bool>,
+  >;
+  instantiate ParamTestCog<
+    group_id="fault_injector_b",
+    instance_id="b",
+    config_type=UInt8,
+    state_type=Tappy<TestSchema<Bool>>,
+    input_type=TestSchema<UInt8>,
+    output_type=TestSchema<Bool>,
+  >;
+}
+cpp_executable parameterized_box_clk_exe
+{
+  casing
+  {
+    instantiate TestBoxImpl<
+      channel_prefix="box1",
+      group_id="fault_injector_b",
+      state_type=CxxState,
+      input_type=UInt8,
+      output_type=UInt8,
+    >;
+    instantiate TestBoxImpl<
+      channel_prefix="box2",
+      group_id="fault_injector_b",
+      state_type=Tappy<TestSchema<Bool>>,
+      input_type=UInt8,
+      output_type=Bool,
+    >;
+  }
+}

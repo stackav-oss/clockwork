@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate signal metadata configurations for a physical system.
@@ -12,13 +12,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from clockwork.dsl.composition import signal_metadata_config, signal_metadata_config_proto
-from clockwork.dsl.ir import cog, report_group, signal_registry
+from clockwork.dsl.ir import cog, report_group, signal_registry, units
 from clockwork.dsl.ir.signal import AggregationType
-from clockwork.dsl.ir.uuid_reg import lookup_uuid
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from clockwork.dsl.compiler_context import CompilerContext
     from clockwork.dsl.composition import system
 
@@ -125,16 +122,16 @@ def _generate_cog_report_groups(
 ) -> list[signal_metadata_config_proto.CogReportGroupsMetadata]:
     result = []
     compiler_context = sys.system.module.context
-    processed_cog_classes: set[UUID] = set()
+    processed_cog_classes: set[str] = set()
 
     for cog_instance in sys.system.cogs.values():
         cog_class = cog_instance.cog_class
-        cog_class_uuid = lookup_uuid(compiler_context, cog_class)
+        cog_path = cog_class.fqn
 
-        if cog_class_uuid in processed_cog_classes:
+        if cog_path in processed_cog_classes:
             continue
 
-        report_groups_defs = cog_class.report_groups
+        report_groups_defs = {**cog_class.report_groups, **cog_class.cog_metrics_report_groups}
         if not report_groups_defs:
             continue
 
@@ -144,11 +141,11 @@ def _generate_cog_report_groups(
         ]
 
         cog_report_groups = entities.cog_report_groups_metadata(
-            cog_class_id=cog_class_uuid,
+            cog_path=cog_path,
             report_groups=report_groups_metadata,
         )
         result.append(cog_report_groups)
-        processed_cog_classes.add(cog_class_uuid)
+        processed_cog_classes.add(cog_path)
 
     return result
 
@@ -173,8 +170,8 @@ def _generate_report_group_metadata(
 
     if config.log_type == report_group.ReportGroupLogType.EVENT:
         log_type = entities.log_type.event
-    elif config.log_type == report_group.ReportGroupLogType.TELEMETRY:
-        log_type = entities.log_type.telemetry
+    elif config.log_type == report_group.ReportGroupLogType.NON_REDUNDANT_TELEMETRY:
+        log_type = entities.log_type.non_redundant_telemetry
     else:
         log_type = entities.log_type.none
 
@@ -183,14 +180,15 @@ def _generate_report_group_metadata(
     aggregation_size = 0
 
     if config.min_duration:
-        min_duration = int(config.min_duration.value)
+        min_duration = int(config.min_duration.as_unit(units.NANOSECONDS).value)
     if config.max_duration:
-        max_duration = int(config.max_duration.value)
+        max_duration = int(config.max_duration.as_unit(units.NANOSECONDS).value)
     if config.max_observations is not None:
         aggregation_size = config.max_observations
 
     signals_metadata = [
-        _generate_report_group_signal_metadata(entry, compiler_context, entities) for entry in rg_def.entries.values()
+        _generate_report_group_signal_metadata(rg_def, entry, compiler_context, entities)
+        for entry in rg_def.entries.values()
     ]
 
     return entities.report_group_metadata(
@@ -205,6 +203,7 @@ def _generate_report_group_metadata(
 
 
 def _generate_report_group_signal_metadata(
+    rg_def: report_group.ReportGroupDef,
     entry: report_group.ReportGroupEntry,
     compiler_context: CompilerContext,
     entities: signal_metadata_config.Entities,
@@ -217,11 +216,14 @@ def _generate_report_group_signal_metadata(
     post_agg_types = [_aggregation_to_enum(agg_type, entities) for agg_type in post_agg] if post_agg else []
 
     alias = entry.name if entry.name != resolved_signal.signal_name else ""
+    validity = rg_def.get_signal_validity(entry.name)
 
     return entities.report_group_signal_metadata(
         signal_index=signal_index,
         post_aggregation_types=post_agg_types,
         alias=alias,
+        validity_source=_validity_source_to_enum(validity.source, entities),
+        validity_index=validity.index,
     )
 
 
@@ -232,8 +234,6 @@ def _generate_cog_instance_metadata(
     entities: signal_metadata_config.Entities,
 ) -> signal_metadata_config_proto.CogInstanceMetadata:
     cog_class = cog_instance.cog_class
-    cog_class_uuid = lookup_uuid(compiler_context, cog_class)
-    cog_instance_uuid = lookup_uuid(compiler_context, cog_instance)
 
     report_group_instances = [
         _generate_report_group_instance_metadata(
@@ -247,26 +247,26 @@ def _generate_cog_instance_metadata(
     ]
 
     return entities.cog_instance_metadata(
-        cog_class_id=cog_class_uuid,
-        cog_instance_id=cog_instance_uuid,
+        cog_path=cog_class.fqn,
+        cog_instance_path=cog_instance.fqn,
         report_group_instances=report_group_instances,
     )
 
 
 def _generate_report_group_instance_metadata(
     rg_instance: report_group.ReportGroupInstance,
-    cog_class: cog.Cog,
+    cog_class: cog.Cog | cog.InstantiatedCog,
     compiler_context: CompilerContext,
     instance_names: list[str],
     entities: signal_metadata_config.Entities,
 ) -> signal_metadata_config_proto.ReportGroupInstanceMetadata:
     report_group_index = _find_report_group_index(
-        list(cog_class.report_groups.values()),
+        list({**cog_class.report_groups, **cog_class.cog_metrics_report_groups}.values()),
         rg_instance.group_def.name,
         cog_class.name,
     )
 
-    channel_name_str = rg_instance.channel_name()
+    channel_name_str = rg_instance.channel_name(compiler_context)
 
     all_signals = signal_registry.get_all_signals(compiler_context)
     signal_instances_metadata = [
@@ -288,15 +288,19 @@ def _generate_report_group_channels(
     sys: system.PhysicalSystem,
     entities: signal_metadata_config.Entities,
 ) -> list[signal_metadata_config_proto.ReportGroupChannelMetadata]:
-    compiler_context = sys.system.module.context
-
     return [
         entities.report_group_channel_metadata(
-            channel_name=rg_instance.channel_name(),
-            cog_class_id=lookup_uuid(compiler_context, cog_instance.cog_class),
-            cog_instance_id=lookup_uuid(compiler_context, cog_instance),
+            channel_name=rg_instance.channel_name(sys.system.module.context),
+            cog_path=cog_instance.cog_class.fqn,
+            cog_instance_path=cog_instance.fqn,
+            is_cog_metrics_channel=rg_instance.group_def.name in cog_instance.cog_class.cog_metrics_report_groups,
             report_group_index=_find_report_group_index(
-                list(cog_instance.cog_class.report_groups.values()),
+                list(
+                    {
+                        **cog_instance.cog_class.report_groups,
+                        **cog_instance.cog_class.cog_metrics_report_groups,
+                    }.values()
+                ),
                 rg_instance.group_def.name,
                 cog_instance.cog_class.name,
             ),
@@ -322,3 +326,16 @@ def _aggregation_to_enum(
         AggregationType.FIRST_VALUE: entities.aggregation_type.FirstValue,
     }
     return mapping.get(agg_type, entities.aggregation_type.Value)
+
+
+def _validity_source_to_enum(
+    source: report_group.SignalValiditySource,
+    entities: signal_metadata_config.Entities,
+) -> signal_metadata_config_proto.SignalValiditySource:
+    """Convert a generated report-group validity source to metadata enum data."""
+    if source is report_group.SignalValiditySource.COUNT_FIELD:
+        return entities.signal_validity_source.count_field
+    if source is report_group.SignalValiditySource.PRESENCE_BIT:
+        return entities.signal_validity_source.presence_bit
+    msg = f"Unexpected signal validity source: {source}"
+    raise ValueError(msg)

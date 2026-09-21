@@ -6,14 +6,20 @@
 ---
 manifest:
   modules_mapping:
+    81d243bd2c585b0f4821__mypyc: charset_normalizer
+    955cd85d9c9a4f4b30d3__mypyc: tomli
     _hypothesis_ftz_detector: hypothesis
     _hypothesis_globals: hypothesis
     _hypothesis_pytestplugin: hypothesis
     _pytest: pytest
     annotated_types: annotated_types
+    attr: attrs
+    attrs: attrs
     certifi: certifi
     charset_normalizer: charset_normalizer
     click: click
+    cyclopts: cyclopts
+    docstring_parser: docstring_parser
     exceptiongroup: exceptiongroup
     google._upb._message: protobuf
     google.protobuf: protobuf
@@ -24,6 +30,7 @@ manifest:
     lz4: lz4
     markdown_it: markdown_it_py
     mdurl: mdurl
+    mypy_boto3_s3: mypy_boto3_s3
     nanobind: nanobind
     numpy: numpy
     packaging: packaging
@@ -35,6 +42,7 @@ manifest:
     pytest: pytest
     requests: requests
     rich: rich
+    rich_rst: rich_rst
     runfiles: bazel_runfiles
     sortedcontainers: sortedcontainers
     tomli: tomli

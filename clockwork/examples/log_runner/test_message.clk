@@ -4,10 +4,10 @@
 // Test message
 schema TestMessage
 {
-    uuid: 35e318cb-64a3-4624-9939-d10f43f81dd6;
-    fields
-    {
-        // A test string
-        #1 message_string: VarString<240>;
-    }
+  uuid: 35e318cb-64a3-4624-9939-d10f43f81dd6;
+  fields
+  {
+    // A test string
+    #1 message_string: VarString<240>;
+  }
 }

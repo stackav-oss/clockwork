@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 load("//tools/rules:cc.bzl", "cc_library")
 
@@ -14,9 +14,10 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork/common:process_description_clk_cc",
         "//clockwork/logging:channel_publisher_config_clk_cc",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/pinion:error",
-        "//clockwork/pinion:publisher_handle",
-        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
         "//jewels/callsig:outcome",
         "//jewels/container:compare",
         "//jewels/log_cerr",
@@ -40,10 +41,10 @@ cc_library(
         "//clockwork:repr_iface",
         "//clockwork/common:process_description_clk_cc",
         "//clockwork/logging:log_writer_config_clk_cc",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/pinion:channel_observer",
         "//clockwork/pinion:channel_observer_client",
         "//clockwork/pinion:observer",
-        "//clockwork/pinion:shm_publisher",
         "//clockwork/pinion:slot",
         "//clockwork/pinion:slot_ref",
         "//jewels/container:compare",
@@ -65,8 +66,11 @@ cc_library(
     deps = [
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:cog_envelope",
+        "//clockwork/common:forward",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
     ],
 )
 
@@ -83,8 +87,9 @@ cc_library(
         "//clockwork/common:abstract_timer",
         "//clockwork/common:cog_envelope",
         "//clockwork/common:process_description_clk_cc",
-        "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:abstract_channel",
         "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/cli:exit_condition",
         "//jewels/container:compare",
         "//jewels/log_cerr",
@@ -135,7 +140,9 @@ cc_library(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:cog_envelope",
-        "//clockwork/common:cog_execution_error_clk_cc",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",

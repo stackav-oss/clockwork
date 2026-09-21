@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -12,7 +12,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from clockwork.dsl.ir import box, clkbuiltins, cog, compiler, hardware, policy, pubsub, signal, signal_registry, udp
+from clockwork.dsl.ir import (
+    box,
+    clkbuiltins,
+    cog,
+    compiler,
+    hardware,
+    policy,
+    pubsub,
+    signal,
+    signal_registry,
+    system_target,
+    typesys,
+    udp,
+)
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
@@ -25,7 +38,7 @@ def fs_importer() -> FilesystemImporter:
     return FilesystemImporter(compile_fn=compiler.compile_source_file)
 
 
-def test_box(fs_importer: FilesystemImporter) -> None:
+def test_box(fs_importer: FilesystemImporter) -> None:  # noqa: PLR0915 (test code)
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellomod.clk")), fs_importer
     )
@@ -34,7 +47,7 @@ def test_box(fs_importer: FilesystemImporter) -> None:
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     assert box_ir.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box"
 
-    assert len(box_ir.instances) == 10
+    assert len(box_ir.instances) == 11
 
     (
         mem_box,
@@ -44,6 +57,7 @@ def test_box(fs_importer: FilesystemImporter) -> None:
         _ro_hello_init,
         ro_hello,
         _rw_hello,
+        _extern_hello_memory,
         _extern_hello,
         _in_udp,
         _out_udp,
@@ -73,7 +87,7 @@ def test_box(fs_importer: FilesystemImporter) -> None:
         == "::Tachyon<schema=@clockwork::clockwork::dsl::tests::support::hellomsg::HelloMsg>"
     )
 
-    assert len(box_ir.connections) == 18
+    assert len(box_ir.connections) == 19
     conn = box_ir.connections[6]
     chan = module.inner_scope.lookup("HelloChan")
     assert isinstance(chan, pubsub.Channel)
@@ -95,14 +109,22 @@ def test_box(fs_importer: FilesystemImporter) -> None:
         multi_in_conn.target.value_key()
         == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.hello_cog.multi_publisher_hello"
     )
-    multi_out_conn1 = box_ir.connections[11]
+    multi_connect_in_conn = box_ir.connections[9]
+    assert isinstance(multi_connect_in_conn.source, typesys.Values)
+    assert len(multi_connect_in_conn.source.elements) == 2
+    assert multi_connect_in_conn.target is hello_cog.attribute("multi_connect_hello")
+    assert (
+        multi_connect_in_conn.target.value_key()
+        == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.hello_cog.multi_connect_hello"
+    )
+    multi_out_conn1 = box_ir.connections[12]
     assert multi_out_conn1.source is hello_cog.attribute("out_multi1")
     assert (
         multi_out_conn1.source.value_key()
         == f"@{CLK_REPO}::clockwork::dsl::tests::support::hellomod.box.hello_cog.out_multi1"
     )
     assert multi_out_conn1.target is multi_chan
-    multi_out_conn2 = box_ir.connections[12]
+    multi_out_conn2 = box_ir.connections[13]
     assert multi_out_conn2.source is hello_cog.attribute("out_multi2")
     assert (
         multi_out_conn2.source.value_key()
@@ -120,7 +142,7 @@ def test_clk_box(fs_importer: FilesystemImporter) -> None:
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     assert box_ir.value_key() == f"@{CLK_REPO}::clockwork::dsl::tests::support::clk_hellomod.box"
 
-    assert len(box_ir.instances) == 10
+    assert len(box_ir.instances) == 11
 
     (
         mem_box,
@@ -130,6 +152,7 @@ def test_clk_box(fs_importer: FilesystemImporter) -> None:
         _ro_hello_init,
         ro_hello,
         _rw_hello,
+        _extern_hello_memory,
         _extern_hello,
         _in_udp,
         _out_udp,
@@ -301,7 +324,7 @@ def test_composition_policies(fs_importer: FilesystemImporter) -> None:
     process_policies = list(policy.lookup_all_policies(module, box.HOST_PROCESS_POLICY))
     # 10 in each HelloBox, two HelloBoxes per HelloProcs, two HelloProcs in
     # system, another HelloBox for hello_world system
-    assert len(process_policies) == 50
+    assert len(process_policies) == 55
     process_counts: dict[str, int] = defaultdict(int)
     for process_policy in process_policies:
         assert isinstance(
@@ -316,7 +339,7 @@ def test_composition_policies(fs_importer: FilesystemImporter) -> None:
         assert isinstance(process, box.ProcessInstance)
         process_counts[process.value_key()] += 1
     assert len(process_counts) == 5
-    assert all(x == 10 for x in process_counts.values())
+    assert all(x == 11 for x in process_counts.values())
     cpu_policies = list(policy.lookup_all_policies(module, box.HOST_CPU_DOMAIN_POLICY))
     assert len(cpu_policies) == 5
     cpu_counts: dict[str, int] = defaultdict(int)
@@ -659,14 +682,14 @@ cog InstanceCog
 policy ReportGroupPolicy for InstanceCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
 policy ReportGroupPolicy for InstanceCog.group_level
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
@@ -689,7 +712,7 @@ box CogBox
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     (instance_cog,) = box_ir.instances
     assert isinstance(instance_cog, cog.CogInstance)
-    assert {"default", "group_level"} == {
+    assert {"default", "group_level", "cog_event_metrics_group", "cog_telemetry_metrics_group"} == {
         report_group.group_def.name for report_group in instance_cog.report_group_instances
     }
     for report_group in instance_cog.report_group_instances:
@@ -778,7 +801,7 @@ cog InstanceCog
 policy ReportGroupPolicy for InstanceCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
@@ -830,7 +853,7 @@ cog NonMultiInstanceCog
 policy ReportGroupPolicy for NonMultiInstanceCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
@@ -983,3 +1006,691 @@ box TestBox
 """
     with pytest.raises(ValueError, match=re.escape("Missing use targets for CxxState, require [cpp], have []")):
         compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_extern_state_without_use_cpp"), fs_importer)
+
+
+def test_tachyon_state_with_memory_resource(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+#![generate(cpp_exe)]
+use[] clockwork::dsl::tests::support::clk_hellomsg;
+
+box TestBox
+{
+    new test_memory: HeapMemory(max_size=1024);
+    new test_state: State(representation=Tachyon<clk_hellomsg::HelloMsg>, memory_resource=test_memory);
+}
+"""
+    with pytest.raises(
+        ValueError, match=re.escape("States with Tachyon representations can not specify a memory_resource")
+    ):
+        compiler.compile_source_text(
+            source_text, ModuleID(CLK_REPO, "test_tachyon_state_with_memory_resource"), fs_importer
+        )
+
+
+def test_cpp_state_without_memory_resource(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+#![generate(cpp_exe)]
+use[] clockwork::dsl::tests::support::clk_hellocog;
+
+box TestBox
+{
+    new test_state: State(representation=clk_hellocog::CxxState);
+}
+"""
+    with pytest.raises(ValueError, match=re.escape("Extern type state must have a memory_resource parameter")):
+        compiler.compile_source_text(
+            source_text, ModuleID(CLK_REPO, "test_cpp_state_without_memory_resource"), fs_importer
+        )
+
+
+def test_state_without_representation(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+#![generate(cpp_exe)]
+
+box TestBox
+{
+    new test_memory: HeapMemory(max_size=1024);
+    new test_state: State(memory_resource=test_memory);
+}
+"""
+    with pytest.raises(ValueError, match=re.escape("Missing parameter 'representation'")):
+        compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_state_without_representation"), fs_importer)
+
+
+def test_state_with_unsupported_representation(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+
+#![generate(cpp_exe)]
+use[] clockwork::dsl::tests::support::clk_hellomsg;
+
+box TestBox
+{
+    new test_state: State(representation=Tappy<clk_hellomsg::HelloMsg>);
+}
+"""
+    with pytest.raises(
+        TypeError, match=re.escape("Representation must be a Tachyon instantiation or extern type, not")
+    ):
+        compiler.compile_source_text(
+            source_text, ModuleID(CLK_REPO, "test_state_with_unsupported_representation"), fs_importer
+        )
+
+
+def test_non_multi_instance_signal_in_nested_box(fs_importer: FilesystemImporter) -> None:
+    """Non-multi-instance signals should work in cogs within nested boxes.
+
+    When a box containing a cog with a non-multi-instance signal is nested inside another box,
+    compile_source_text with cpp_exe generation should not raise a duplicate signal instance error.
+    The cog is only instantiated once, so the signal should be registered exactly once.
+    """
+    source_text = """
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=test::nested_box_signals)]
+
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Cog with a non-multi-instance signal
+cog InnerCog
+{
+    signals perf_metrics
+    {
+        // Non-multi-instance signal
+        total_runtime: signal Float32
+        {
+            post_aggregation: ["min", "max", "mean"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for InnerCog.perf_metrics
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+    max_duration = 5s;
+}
+
+// Inner box containing the cog
+box InnerBox
+{
+    new inner_cog: InnerCog;
+}
+
+// Outer box nesting the inner box
+box OuterBox
+{
+    new inner_box: InnerBox;
+}
+"""
+    # This should compile successfully without raising a duplicate signal instance error
+    compiler.compile_source_text(
+        source_text, ModuleID(CLK_REPO, "test_non_multi_instance_signal_in_nested_box"), fs_importer
+    )
+
+
+def test_connecting_instantiated_channels(fs_importer: FilesystemImporter) -> None:
+    """Test that instantiated generic channels can be used in box connections."""
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// Cog with input and output endpoints
+cog SomeCog
+{
+    inputs
+    {
+        // Input endpoint
+        input: Tappy<hellomsg::HelloMsg>
+        {
+            max_msgs: 6;
+        }
+    }
+
+    outputs
+    {
+        // Output endpoint
+        output: Tappy<hellomsg::HelloMsg>;
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(10ms);
+        execute when: periodic;
+    }
+}
+
+// Generic channel with a string parameter
+channel Chan
+{
+    parameters
+    {
+        // Channel name suffix
+        some_string: String;
+    }
+    name: fmt!("/{some_string}");
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+box CogBox
+{
+    new cog: SomeCog;
+    connect Chan<"input"> to cog.input;
+    connect cog.output to Chan<"output">;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "connection_generic_channels"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("CogBox")
+    assert isinstance(box_template_ir, box.BoxTemplate)
+
+    # Instantiate the box to verify connections resolve properly
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    resolved = box_ir.get_resolved()
+
+    # Verify we have two connections
+    assert len(resolved.connections) == 2
+
+    # Verify the first connection: Chan<"input"> -> cog.input
+    input_conn = resolved.connections[0]
+    assert isinstance(input_conn.source, pubsub.InstantiatedChannel)
+    assert input_conn.source.channel_name.value == "/input"
+    assert isinstance(input_conn.target, cog.CogInstanceMember)
+    assert input_conn.target.member.name == "input"
+
+    # Verify the second connection: cog.output -> Chan<"output">
+    output_conn = resolved.connections[1]
+    assert isinstance(output_conn.source, cog.CogInstanceMember)
+    assert output_conn.source.member.name == "output"
+    assert isinstance(output_conn.target, pubsub.InstantiatedChannel)
+    assert output_conn.target.channel_name.value == "/output"
+
+
+def test_parameterized_boxes(fs_importer: FilesystemImporter) -> None:  # noqa: PLR0915 (test code)
+    source_text = """
+use clockwork::dsl::tests::support::clk_parameterized_box::{CxxState, TestBoxImpl, clk_parameterized_box_clk_exe};
+use clockwork::dsl::tests::support::parameterized_types::{TestSchema};
+
+cpu_domain Cpu1;
+cpu_domain Cpu2;
+
+box ParamTestBox
+{
+  parameters
+  {
+    cpu1: CpuDomain;
+    cpu2: CpuDomain;
+    proc: ProcessType;
+  }
+
+  new box_impl1 : TestBoxImpl<channel_prefix=fmt!("{snake_case_name(cpu1)}"), group_id="fault_injector_b", state_type=CxxState, input_type=UInt8, output_type=UInt8>;
+  new box_impl2 : TestBoxImpl<channel_prefix=fmt!("{snake_case_name(cpu2)}"), group_id="fault_injector_b", state_type=Tappy<TestSchema<Bool>>, input_type=UInt8, output_type=Bool>;
+
+  apply HostProcess(process=proc) in box_impl1;
+  apply HostProcess(process=proc) in box_impl2;
+
+  apply HostCpuDomain(cpu_domain=cpu1) in box_impl1;
+  apply HostCpuDomain(cpu_domain=cpu2) in box_impl2;
+}
+
+box TestSystemBox
+{
+  new proc : Process(executable=clk_parameterized_box_clk_exe);
+  new param_box: ParamTestBox<cpu1=Cpu1, cpu2=Cpu2, proc=proc>;
+}
+
+system_target target_sys
+{
+  box: TestSystemBox;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "parameterized_boxes"), fs_importer)
+
+    target = module.inner_scope.lookup("target_sys")
+    assert isinstance(target, system_target.UnresolvedSystemTarget)
+    assert isinstance(target.resolved, system_target.SystemTarget)
+
+    target_box = target.resolved.box_instance
+    assert isinstance(target_box, box.ResolvedBox)
+    assert target_box.name == "target_sys"
+    assert len(target_box.instances) == 2
+
+    param_box = target_box.instances[1]
+    assert isinstance(param_box, box.Box)
+    assert param_box.name == "param_box"
+    assert param_box.resolved
+    assert len(param_box.resolved.instances) == 2
+
+    box_impl1 = param_box.resolved.instances[0]
+    assert isinstance(box_impl1, box.Box)
+    assert box_impl1.name == "box_impl1"
+    assert box_impl1.resolved
+    assert len(box_impl1.instances) == 4
+
+    socket_1 = box_impl1.resolved.instances[0]
+    assert socket_1.name == "socket"
+    assert isinstance(socket_1, udp.UdpSocketInstance)
+
+    cog_1 = box_impl1.resolved.instances[1]
+    assert cog_1.name == "cog"
+    assert isinstance(cog_1, cog.CogInstance)
+
+    param_cog1_1 = box_impl1.resolved.instances[2]
+    assert param_cog1_1.name == "param_cog1"
+    assert isinstance(param_cog1_1, cog.CogInstance)
+    assert (
+        param_cog1_1.cog_class.name
+        == "ParamTestCog_config_type_::Bool_group_id_fault_injector_b_input_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_instance_id_a_output_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_state_type_@clockwork::clockwork::dsl::tests::support::clk_parameterized_box::CxxState"
+    )
+
+    param_cog2_1 = box_impl1.resolved.instances[3]
+    assert param_cog2_1.name == "param_cog2"
+    assert isinstance(param_cog2_1, cog.CogInstance)
+    assert (
+        param_cog2_1.cog_class.name
+        == "ParamTestCog_config_type_::UInt8_group_id_fault_injector_b_input_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_instance_id_b_output_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_state_type_@clockwork::clockwork::dsl::tests::support::clk_parameterized_box::CxxState"
+    )
+
+    box_impl2 = param_box.resolved.instances[1]
+    assert isinstance(box_impl2, box.Box)
+    assert box_impl2.name == "box_impl2"
+    assert box_impl2.resolved
+    assert len(box_impl2.instances) == 4
+
+    socket_2 = box_impl2.resolved.instances[0]
+    assert socket_2.name == "socket"
+    assert isinstance(socket_2, udp.UdpSocketInstance)
+
+    cog_2 = box_impl2.resolved.instances[1]
+    assert cog_2.name == "cog"
+    assert isinstance(cog_2, cog.CogInstance)
+
+    param_cog1_2 = box_impl2.resolved.instances[2]
+    assert param_cog1_2.name == "param_cog1"
+    assert isinstance(param_cog1_2, cog.CogInstance)
+    assert (
+        param_cog1_2.cog_class.name
+        == "ParamTestCog_config_type_::Bool_group_id_fault_injector_b_input_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_instance_id_a_output_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::Bool>_state_type_::Tappy<schema=@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::Bool>>"
+    )
+
+    param_cog2_2 = box_impl2.resolved.instances[3]
+    assert param_cog2_2.name == "param_cog2"
+    assert isinstance(param_cog2_2, cog.CogInstance)
+    assert (
+        param_cog2_2.cog_class.name
+        == "ParamTestCog_config_type_::UInt8_group_id_fault_injector_b_input_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::UInt8>_instance_id_b_output_type_@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::Bool>_state_type_::Tappy<schema=@clockwork::clockwork::dsl::tests::support::parameterized_types::TestSchema<param=::Bool>>"
+    )
+
+
+def test_parameterized_box_instantiations(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::clk_parameterized_box::{CxxState, TestBoxImpl, clk_parameterized_box_clk_exe};
+
+cpu_domain Cpu1;
+
+box TestBox
+{
+  new test_box : TestBoxImpl<channel_prefix="cpu22", group_id="fault_injector_b", state_type=CxxState, input_type=UInt8, output_type=UInt8>;
+  new proc : Process(executable=clk_parameterized_box_clk_exe);
+  apply HostProcess(process=proc) in test_box;
+  apply HostCpuDomain(cpu_domain=Cpu1) in test_box;
+}
+
+system_target TargetSys
+{
+  box: TestBox;
+}
+"""
+    with pytest.raises(ValueError, match="Box has not been instantiated"):
+        compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "parameterized_boxes"), fs_importer)
+
+
+def test_executable_type_in_builtins_scope() -> None:
+    """EXECUTABLE_TYPE is registered in the builtins scope and usable as a parameter type bound."""
+    executable = clkbuiltins.BUILTINS_SCOPE.lookup("Executable")
+    assert executable is clkbuiltins.EXECUTABLE_TYPE
+
+
+def test_state_instance_type_in_builtins_scope() -> None:
+    """STATE_INSTANCE_TYPE is registered in the builtins scope and usable as a parameter type bound."""
+    state_instance = clkbuiltins.BUILTINS_SCOPE.lookup("StateInstance")
+    assert state_instance is clkbuiltins.STATE_INSTANCE_TYPE
+
+
+def test_box_executable_type_parameter(fs_importer: FilesystemImporter) -> None:
+    """A box parameter typed as Executable accepts a CppExecutable value."""
+    source = """
+use clockwork::dsl::tests::support::clk_parameterized_box::{clk_parameterized_box_clk_exe};
+
+box ExeBox {
+    parameters {
+        exe: Executable;
+    }
+    new proc : Process(executable=exe);
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
+    exe_box = module.inner_scope.lookup("ExeBox")
+    assert isinstance(exe_box, box.BoxTemplate)
+    params = exe_box.generic_parameters()
+    assert params is not None
+    assert len(params) == 1
+    assert params[0].name == "exe"
+    assert params[0].type_bound is clkbuiltins.EXECUTABLE_TYPE
+
+
+def test_box_state_instance_type_parameter(fs_importer: FilesystemImporter) -> None:
+    """A box parameter typed as StateInstance accepts a StateInstance value."""
+    source = """
+use clockwork::dsl::tests::support::hellomsg;
+
+box StateBox {
+    parameters {
+        state: StateInstance;
+    }
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
+    state_box = module.inner_scope.lookup("StateBox")
+    assert isinstance(state_box, box.BoxTemplate)
+    params = state_box.generic_parameters()
+    assert params is not None
+    assert len(params) == 1
+    assert params[0].name == "state"
+    assert params[0].type_bound is clkbuiltins.STATE_INSTANCE_TYPE
+
+
+def test_apply_host_process_with_process_parameter(fs_importer: FilesystemImporter) -> None:
+    """Apply HostProcess(process=proc) works when proc is a ProcessInstance parameter."""
+    source = """
+use clockwork::dsl::tests::support::clk_parameterized_box::{TestBoxImpl, clk_parameterized_box_clk_exe, CxxState};
+
+cpu_domain Cpu1;
+
+box WrapperBox {
+    new proc : Process(executable=clk_parameterized_box_clk_exe);
+    new inner : TestBoxImpl<channel_prefix="cpu1", group_id="fault_injector_b", state_type=CxxState, input_type=UInt8, output_type=UInt8>;
+    apply HostProcess(process=proc) in inner;
+    apply HostCpuDomain(cpu_domain=Cpu1) in inner;
+}
+
+system_target TargetSys
+{
+    box: WrapperBox;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "test"), importer=fs_importer)
+    wrapper = module.inner_scope.lookup("WrapperBox")
+    assert isinstance(wrapper, box.BoxTemplate)
+    wrapper.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="wrapper", doc=None)
+    process_policies = list(policy.lookup_all_policies(module, box.HOST_PROCESS_POLICY))
+    assert len(process_policies) > 0
+    process = process_policies[0].data.data["process"]
+    assert isinstance(process, box.ProcessInstance)
+
+
+def test_match_statement(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+// Modes the box can be configured with.
+enum Mode
+{
+    values
+    {
+        // A
+        #0 mode_a default;
+        // B
+        #1 mode_b;
+        // C
+        #2 mode_c;
+    }
+}
+
+box NestedA
+{
+}
+
+box NestedB
+{
+}
+
+box ConditionalBox
+{
+  parameters
+  {
+    mode: Mode;
+  }
+
+  match mode {
+    Mode::mode_a => {
+      new box_a: NestedA;
+    },
+    Mode::mode_b => {
+      new box_b: NestedB;
+    },
+  }
+}
+
+box SystemBox
+{
+    new conditional_box_a: ConditionalBox<Mode::mode_a>;
+    new conditional_box_b: ConditionalBox<Mode::mode_b>;
+}
+
+system_target the_system
+{
+  box: SystemBox;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_match_box"), fs_importer)
+
+    system = module.inner_scope.lookup("the_system")
+    assert isinstance(system, system_target.UnresolvedSystemTarget)
+    assert isinstance(system.resolved, system_target.SystemTarget)
+
+    system_box = system.resolved.box_instance
+    assert isinstance(system_box, box.ResolvedBox)
+    assert len(system_box.instances) == 2
+
+    conditional_a = system_box.instances[0]
+    assert isinstance(conditional_a, box.Box)
+    assert conditional_a.name == "conditional_box_a"
+    assert len(conditional_a.instances) == 1
+    nested_a = conditional_a.instances[0]
+    assert isinstance(nested_a, box.Box)
+    assert nested_a.name == "box_a"
+    assert nested_a.template is not None
+    assert nested_a.template.name == "NestedA"
+
+    conditional_b = system_box.instances[1]
+    assert isinstance(conditional_b, box.Box)
+    assert conditional_b.name == "conditional_box_b"
+    assert len(conditional_b.instances) == 1
+    nested_b = conditional_b.instances[0]
+    assert isinstance(nested_b, box.Box)
+    assert nested_b.name == "box_b"
+    assert nested_b.template is not None
+    assert nested_b.template.name == "NestedB"
+
+
+def test_conditional_statement(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use std::traits;
+
+box NestedA
+{
+}
+
+box NestedB
+{
+}
+
+box ConditionalBox
+{
+  parameters
+  {
+    mode: String;
+  }
+
+  cond {
+    mode == "a" => {
+      new box_a: NestedA;
+    },
+    mode == "b" => {
+      new box_b: NestedB;
+    },
+    else => {}
+  }
+}
+
+box SystemBox
+{
+    new conditional_box_a: ConditionalBox<\"a\">;
+    new conditional_box_b: ConditionalBox<\"b\">;
+    new defaulted_box: ConditionalBox<\"c\">;
+}
+
+system_target the_system
+{
+  box: SystemBox;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_cond_box"), fs_importer)
+
+    system = module.inner_scope.lookup("the_system")
+    assert isinstance(system, system_target.UnresolvedSystemTarget)
+    assert isinstance(system.resolved, system_target.SystemTarget)
+
+    system_box = system.resolved.box_instance
+    assert isinstance(system_box, box.ResolvedBox)
+    assert len(system_box.instances) == 3
+
+    conditional_a = system_box.instances[0]
+    assert isinstance(conditional_a, box.Box)
+    assert conditional_a.name == "conditional_box_a"
+    assert len(conditional_a.instances) == 1
+    nested_a = conditional_a.instances[0]
+    assert isinstance(nested_a, box.Box)
+    assert nested_a.name == "box_a"
+    assert nested_a.template is not None
+    assert nested_a.template.name == "NestedA"
+
+    conditional_b = system_box.instances[1]
+    assert isinstance(conditional_b, box.Box)
+    assert conditional_b.name == "conditional_box_b"
+    assert len(conditional_b.instances) == 1
+    nested_b = conditional_b.instances[0]
+    assert isinstance(nested_b, box.Box)
+    assert nested_b.name == "box_b"
+    assert nested_b.template is not None
+    assert nested_b.template.name == "NestedB"
+
+    defaulted = system_box.instances[2]
+    assert isinstance(defaulted, box.Box)
+    assert defaulted.name == "defaulted_box"
+    assert len(defaulted.instances) == 0
+
+
+def test_if_statement(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+box NestedA
+{
+}
+
+box NestedB
+{
+}
+
+box ConditionalBox
+{
+  parameters
+  {
+    flag: Bool;
+  }
+
+  if flag then {
+      new box_a: NestedA;
+  } else {
+    new box_b: NestedB;
+  }
+}
+
+box SystemBox
+{
+    new conditional_box_a: ConditionalBox<true>;
+    new conditional_box_b: ConditionalBox<false>;
+}
+
+system_target the_system
+{
+  box: SystemBox;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_if_box"), fs_importer)
+
+    system = module.inner_scope.lookup("the_system")
+    assert isinstance(system, system_target.UnresolvedSystemTarget)
+    assert isinstance(system.resolved, system_target.SystemTarget)
+
+    system_box = system.resolved.box_instance
+    assert isinstance(system_box, box.ResolvedBox)
+    assert len(system_box.instances) == 2
+
+    conditional_a = system_box.instances[0]
+    assert isinstance(conditional_a, box.Box)
+    assert conditional_a.name == "conditional_box_a"
+    assert len(conditional_a.instances) == 1
+    nested_a = conditional_a.instances[0]
+    assert isinstance(nested_a, box.Box)
+    assert nested_a.name == "box_a"
+    assert nested_a.template is not None
+    assert nested_a.template.name == "NestedA"
+
+    conditional_b = system_box.instances[1]
+    assert isinstance(conditional_b, box.Box)
+    assert conditional_b.name == "conditional_box_b"
+    assert len(conditional_b.instances) == 1
+    nested_b = conditional_b.instances[0]
+    assert isinstance(nested_b, box.Box)
+    assert nested_b.name == "box_b"
+    assert nested_b.template is not None
+    assert nested_b.template.name == "NestedB"
+
+
+def test_invalid_conditional_statement(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+box NestedA
+{
+}
+
+box NestedB
+{
+}
+
+box ConditionalBox
+{
+  parameters
+  {
+    flag: Bool;
+  }
+
+  if flag then "foo" else "bar"
+}
+
+box SystemBox
+{
+    new conditional_box_a: ConditionalBox<true>;
+    new conditional_box_b: ConditionalBox<false>;
+}
+
+system_target the_system
+{
+  box: SystemBox;
+}
+"""
+    with pytest.raises(TypeError, match=r", but expected a Block"):
+        compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_invalid_conditional_box"), fs_importer)

@@ -22,5 +22,9 @@ enum CogExecutionError
     #6 make_publishables_failed;
     // Overrun
     #7 overrun;
+    // Alignment miss: all upstream data is stale (no longer in view)
+    #8 alignment_stale;
+    // Alignment miss: upstream data has not yet arrived
+    #9 alignment_pending;
   }
 }

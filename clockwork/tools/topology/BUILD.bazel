@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
@@ -8,6 +8,8 @@ package(
     default_visibility = [
         ":__subpackages__",
         "//clockwork:__pkg__",
+        "//clockwork/tools/journal_file_generator:__pkg__",
+        "//clockwork/tools/journal_file_generator/tests:__pkg__",
     ],
 )
 
@@ -15,6 +17,7 @@ py_library(
     name = "topology",
     srcs = ["topology.py"],
     imports = ["../../.."],
+    visibility = ["//visibility:public"],
 )
 
 py_binary(
@@ -22,6 +25,7 @@ py_binary(
     srcs = ["query.py"],
     deps = [
         ":topology",
+        ":topology_file",
         "@clockwork_pip//click",
     ],
 )
@@ -38,9 +42,23 @@ py_binary(
     deps = [
         ":topology",
         "//clockwork:logical_system_interface",
+        "//clockwork/dsl/composition:logger_config",
         "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:extern_type",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:uuid_reg",
         "@clockwork_pip//click",
         "@root_repo//:root_repo_py",
     ],
+)
+
+py_library(
+    name = "topology_file",
+    srcs = ["topology_file.py"],
+    imports = ["../../.."],
+    visibility = ["//visibility:public"],
+    deps = [":topology"],
 )

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -142,14 +142,14 @@ cog AnotherCog
 policy ReportGroupPolicy for InstanceCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
 policy ReportGroupPolicy for AnotherCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 

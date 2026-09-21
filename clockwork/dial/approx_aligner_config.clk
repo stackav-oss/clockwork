@@ -64,6 +64,16 @@ schema ApproxAlignerConfig
     // Maximum time wait time for inputs. If no valid (i.e. meets all requirements)
     // alignment then the current best alignment will be returned.
     #3 maximum_wait_time: Optional<Int64>;
+
+    // If maximum wait time is enabled and expired, this is the maximum number of
+    // empty inputs allowed in the alignment returned. Note that an alignment of
+    // all empty inputs is never returned.
+    #4 max_missing_inputs_on_timeout: Optional<UInt64>;
+  }
+
+  history
+  {
+    version: 4;
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/s3_chunk_reader.hh"
@@ -10,7 +10,6 @@
 #include "jewels/std/expected.hh"
 
 #include <cstddef>
-#include <deque>
 #include <memory>
 #include <memory_resource>
 #include <string_view>

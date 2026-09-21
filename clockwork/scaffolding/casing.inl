@@ -9,13 +9,13 @@
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/tags.hh"
 #include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -221,6 +221,42 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
+auto CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::
+  try_instantiate_state_from_snapshot(
+    jewels::Uuid<common::StateInstanceId> instance_id,
+    jewels::Uuid<RepresentationTag> repr_id,
+    jewels::Uuid<RepresentationTag> snapshot_repr_id,
+    jewels::memory::MemoryResource memres,
+    std::span<const std::byte> snapshot_data) -> Outcome
+{
+  const auto* factory = CogStateFactory::find(repr_id);
+  if (factory == nullptr)
+  {
+    return OutcomeEnum::invalid_class_uuid;
+  }
+
+  CogStateFactory::Ptr state;
+  const auto result = factory->make(jewels::Out{state}, memres_, std::move(memres), snapshot_repr_id, snapshot_data);
+  switch (result.get())
+  {
+  case CogStateFactory::StateRestoreResult::success:
+    if (!state)
+    {
+      return OutcomeEnum::init_failure;
+    }
+    states_[instance_id] = std::move(state);
+    return OutcomeEnum::success;
+  case CogStateFactory::StateRestoreResult::invalid_class_uuid:
+    return OutcomeEnum::invalid_class_uuid;
+  case CogStateFactory::StateRestoreResult::buffer_error:
+    return OutcomeEnum::buffer_error;
+  case CogStateFactory::StateRestoreResult::init_failure:
+    return OutcomeEnum::init_failure;
+  }
+  return OutcomeEnum::init_failure;
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
 jewels::expected<void, AbstractCasing::Error>
 CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_instantiate_config(
   jewels::Uuid<common::ConfigInstanceId> instance_id,
@@ -381,12 +417,12 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
 jewels::expected<std::shared_ptr<pinion::Observer>, AbstractCasing::Error>
 CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::try_connect_subscriber(
-  jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::SubscriberHandle handle)
+  jewels::Uuid<common::EndpointInstanceId> endpoint, std::shared_ptr<pinion::AbstractChannel> channel)
 {
   if (auto iter = io_connections_.find(endpoint); iter != std::end(io_connections_))
   {
     auto& [io_connection, endpoint_class_id] = iter->second;
-    auto result = io_connection->connect_subscriber(endpoint_class_id, std::move(handle));
+    auto result = io_connection->connect_subscriber(endpoint_class_id, std::move(channel));
     if (!result)
     {
       jewels::log_cerr_error(
@@ -395,7 +431,7 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
     }
     return {*std::move(result)};
   }
-  return set_handle<std::shared_ptr<pinion::Observer>>(endpoint, std::move(handle));
+  return set_handle<std::shared_ptr<pinion::Observer>>(endpoint, std::move(channel));
 }
 
 template <typename... Cogs, typename... Schemas, typename... IoConnections>
@@ -621,6 +657,51 @@ CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections
   jewels::Uuid<common::CogInstanceId> /*unused*/)
 {
   return jewels::unexpected(AbstractCasing::Error::invalid_instance_uuid);
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+bool CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::has_schema_representation(
+  const jewels::Uuid<RepresentationTag>& repr_id) const noexcept
+{
+  bool found = false;
+  // Each schema type in `Schemas...` exposes its UUID via either
+  // `detail::Config::Traits<T>::uuid` (Tap<Tachyon<...>> and ProtoSchema) or
+  // `detail::State::Traits<T>::uuid` (CxxSchema, plus Tap<Tachyon<...>>).
+  auto check = [&found, repr_id]<typename T>()
+  {
+    if constexpr (requires { detail::Config::template Traits<T>::uuid; })
+    {
+      if (detail::Config::template Traits<T>::uuid == repr_id)
+      {
+        found = true;
+      }
+    }
+    else if constexpr (requires { detail::State::template Traits<T>::uuid; })
+    {
+      if (detail::State::template Traits<T>::uuid == repr_id)
+      {
+        found = true;
+      }
+    }
+  };
+  (check.template operator()<Schemas>(), ...);
+  return found;
+}
+
+template <typename... Cogs, typename... Schemas, typename... IoConnections>
+bool CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConnections...>>::has_io_connection_class(
+  const jewels::Uuid<common::IoConnectionClassId>& io_id) const noexcept
+{
+  bool found = false;
+  auto check = [&found, io_id]<typename T>()
+  {
+    if (T::uuid == io_id)
+    {
+      found = true;
+    }
+  };
+  (check.template operator()<IoConnections>(), ...);
+  return found;
 }
 
 } // namespace clockwork::scaffolding

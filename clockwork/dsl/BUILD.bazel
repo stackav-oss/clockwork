@@ -1,7 +1,9 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@fltk//:rules.bzl", "generate_parser")
+load("@fltk//:rust.bzl", "generate_rust_parser")
 load("//tools/rules:package.bzl", "package")
 load("//tools/rules:python.bzl", "py_binary", "py_library")
 
@@ -9,14 +11,25 @@ package(
     default_visibility = ["//clockwork:__subpackages__"],
 )
 
+string_flag(
+    name = "clk_compile_benchmark_nonce",
+    build_setting_default = "",
+    visibility = ["//visibility:public"],
+)
+
 py_binary(
     name = "clkc",
     srcs = ["clkc.py"],
-    imports = ["../.."],
     visibility = ["//visibility:public"],
     deps = [
+        ":parser_backend",
+        "//clockwork/dsl/aligner:pipeline",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/aligner/gen:search_codegen",
         "//clockwork/dsl/bazel:extract_targets",
         "//clockwork/dsl/composition:systemgen",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/ir:aligner",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:cpp_executable",
         "//clockwork/dsl/ir:cpp_target",
@@ -34,17 +47,64 @@ py_binary(
 
 py_library(
     name = "clockwork_cst",
-    srcs = [":generate_parser"],
-    deps = ["@fltk"],
+    srcs = ["clockwork_cst.py"],
+    # keep: select() keys are unsupported (bazelbuild/bazel-gazelle#1051)
+    deps = [":parser_backend"] + select({
+        ":use_rust_parser_enabled": [":clockwork_native"],
+        "//conditions:default": [":clockwork_py_cst"],
+    }),
+)
+
+py_library(
+    name = "clockwork_cst_protocol",
+    srcs = ["clockwork_cst_protocol.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":clockwork_cst",
+        ":clockwork_py_cst",  # keep
+    ],
+)
+
+generate_rust_parser(
+    name = "clockwork_native",
+    src = "clockwork.fltkg",
+    protocol_module = "clockwork.dsl.clockwork_cst_protocol",
+    python_extension = True,
 )
 
 py_library(
     name = "clockwork_parser",
+    srcs = ["clockwork_parser.py"],
+    # keep: select() keys are unsupported (bazelbuild/bazel-gazelle#1051)
+    deps = [
+        ":parser_backend",
+        "@fltk",
+    ] + select({
+        ":use_rust_parser_enabled": [":clockwork_native"],
+        "//conditions:default": [":clockwork_py_parser"],
+    }),
+)
+
+py_library(
+    name = "clockwork_py_cst",
+    srcs = [":generate_parser"],
+    imports = ["../.."],
+    deps = ["@fltk"],
+)
+
+py_library(
+    name = "clockwork_py_parser",
     srcs = [":generate_parser"],
     deps = [
-        ":clockwork_cst",
+        ":clockwork_py_cst",
         "@fltk",
     ],
+)
+
+# gazelle:resolve py clockwork.dsl.clockwork_unparser :clockwork_unparser
+py_library(
+    name = "clockwork_unparser",
+    srcs = ["clockwork_unparser.py"],
 )
 
 py_library(
@@ -54,9 +114,90 @@ py_library(
     deps = ["@clockwork_pip//typing_extensions"],
 )
 
+py_binary(
+    name = "fmt",
+    srcs = ["fmt.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":clockwork_cst",
+        ":clockwork_cst_protocol",
+        ":clockwork_unparser",
+        "//clockwork/dsl/ir:parse",
+        "@clockwork_pip//cyclopts",
+        "@fltk",
+    ],
+)
+
+# gazelle:resolve py clockwork.dsl.fmt :fmt_lib
+py_library(
+    name = "fmt_lib",
+    srcs = [
+        "fmt.py",
+        ":generate_unparser",
+    ],
+    imports = ["../.."],
+    deps = [
+        ":clockwork_cst",
+        "//clockwork/dsl/ir:parse",
+        "@clockwork_pip//cyclopts",
+        "@fltk",
+    ],
+)
+
 generate_parser(
     name = "generate_parser",
     src = "clockwork.fltkg",
-    base_name = "clockwork",
-    cst_mod_path = "clockwork.dsl.clockwork_cst",
+    base_name = "clockwork_py",
+    cst_mod_path = "clockwork.dsl.clockwork_py_cst",
+    protocol = True,
+)
+
+genrule(
+    name = "generate_unparser",
+    srcs = [
+        "clockwork.fltkfmt",
+        "clockwork.fltkg",
+    ],
+    outs = ["clockwork_unparser.py"],
+    cmd = " ".join([
+        "$(location :generate_unparser_tool)",
+        "$(location :clockwork.fltkg)",
+        "$(location :clockwork.fltkfmt)",
+        "clockwork.dsl.clockwork_cst",
+        "$@",
+    ]),
+    tools = [":generate_unparser_tool"],
+)
+
+py_binary(
+    name = "generate_unparser_tool",
+    srcs = ["generate_unparser.py"],
+    main = "generate_unparser.py",
+    deps = [
+        "@clockwork_pip//cyclopts",
+        "@fltk",
+    ],
+)
+
+py_library(
+    name = "parser_backend",
+    srcs = ["parser_backend.py"],
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "profile_clk_compile_benchmark",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "use_rust_parser",
+    build_setting_default = True,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "use_rust_parser_enabled",
+    flag_values = {":use_rust_parser": "true"},
 )

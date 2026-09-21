@@ -8,7 +8,7 @@
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
@@ -33,11 +33,10 @@
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/scope_guard/scope_guard.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 #include "jewels/uuid/uuid_hasher.hh"
-
-#include <gsl/util>
 
 #include <cstdint>
 #include <cstdlib>
@@ -61,7 +60,7 @@ template <typename LogMessageFetcherType>
 int run_deterministic_impl(
   const Tappy<common::ProcessDescription<>>& desc,
   AbstractCasing& casing,
-  pinion::ShmChannelFactory& channel_factory,
+  pinion::AbstractChannelFactory& channel_factory,
   jewels::cli::ExitCondition& exit,
   const ExecutionParams& execution_params)
 {
@@ -71,7 +70,7 @@ int run_deterministic_impl(
   auto memres_scratch = jewels::memory::MemoryResource(std::pmr::get_default_resource());
   auto memres_runner = jewels::memory::MemoryResource(std::pmr::get_default_resource());
 
-  const pinion::ShmChannelFactoryContext channel_factory_context(channel_factory);
+  const pinion::ChannelFactoryContext channel_factory_context(channel_factory);
 
   auto time_range = calc_start_and_end_times(execution_params);
   if (!time_range)
@@ -79,8 +78,8 @@ int run_deterministic_impl(
     return EXIT_FAILURE;
   }
 
-  auto deterministic_logging_config = get_deterministic_logging_config(execution_params);
-  if (!deterministic_logging_config)
+  DeterministicLoggingConfig deterministic_logging_config;
+  if (jewels::fails(get_deterministic_logging_config(jewels::Out{deterministic_logging_config}, execution_params)))
   {
     return EXIT_FAILURE;
   }
@@ -92,8 +91,8 @@ int run_deterministic_impl(
   }
 
   auto logged_channels =
-    (deterministic_logging_config->channel_publisher_config
-       ? deterministic_logging_config->channel_publisher_config->get_channels()
+    (deterministic_logging_config.channel_publisher_config
+       ? deterministic_logging_config.channel_publisher_config->get_channels()
        : std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>>{});
   auto channels = setup_deterministic_channels(
     desc.get_pubsub_graph().get_publish_endpoints(), logged_channels, memres_scratch, channel_factory);
@@ -102,7 +101,7 @@ int run_deterministic_impl(
     return EXIT_FAILURE;
   }
   auto deterministic_log_writer = setup_deterministic_log_writer(
-    memres_scratch, execution_params, *deterministic_logging_config, *channels, time_range->start);
+    memres_scratch, execution_params, deterministic_logging_config, *channels, time_range->start);
   if (!deterministic_log_writer)
   {
     return EXIT_FAILURE;
@@ -117,7 +116,7 @@ int run_deterministic_impl(
   // Populate first message cache for data source restoration
   scaffolding::FirstMessageCache first_message_cache(memres);
 
-  if (deterministic_logging_config->channel_publisher_config)
+  if (deterministic_logging_config.channel_publisher_config)
   {
     std::shared_ptr<MessageFetcher> message_fetcher{nullptr};
     if (execution_params.message_injectors.message_fetcher_)
@@ -133,7 +132,7 @@ int run_deterministic_impl(
       }
       message_fetcher = std::make_shared<LogMessageFetcherType>(
         *execution_params.input_log_uri,
-        jewels::memory::make_non_null_from_ref(*deterministic_logging_config->channel_publisher_config),
+        jewels::memory::make_non_null_from_ref(*deterministic_logging_config.channel_publisher_config),
         clockwork_logging::LogInterval{
           clockwork_logging::LogTimestamp{time_range->start}, clockwork_logging::LogTimestamp{time_range->end}},
         memres_runner);
@@ -175,6 +174,13 @@ int run_deterministic_impl(
     return EXIT_FAILURE;
   }
 
+  // NOTE: this must be called after states is created but before anything else
+  // that can fail and cause an early return, since the CasingImpl destructor (called on early return)
+  // accesses the states vector to clear publishers.
+  // If we call the destructors on the state objects they will try to access the publishers which have already been
+  // freed, causing a use-after-free and crash.
+  const jewels::ScopeGuard shutdown_casing{[&casing] { casing.shutdown(); }};
+
   if (!setup_configs(
         desc.get_config_graph().get_config_instances(),
         desc.get_data_sources(),
@@ -197,9 +203,13 @@ int run_deterministic_impl(
 
   auto cog_queue = std::make_shared<DeterministicCogQueue>(memres_runner);
 
-  const gsl::final_action shutdown_casing{[&casing] { casing.shutdown(); }};
   auto cogs = setup_cogs(desc.get_cog_instances(), memres, memres_runner, cog_queue, casing);
   if (!cogs)
+  {
+    return EXIT_FAILURE;
+  }
+  auto publisher_throttle_timers = setup_deterministic_publisher_throttle_timers(*cogs, memres);
+  if (!publisher_throttle_timers)
   {
     return EXIT_FAILURE;
   }
@@ -309,9 +319,10 @@ int run_deterministic_impl(
     memres_runner,
     std::move(runner_cogs),
     *timers,
+    *publisher_throttle_timers,
     *channels,
     std::move(cog_queue),
-    *deterministic_logging_config,
+    deterministic_logging_config,
     *time_range,
     cog_ptr_to_gpu_ids);
 

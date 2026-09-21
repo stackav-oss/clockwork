@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/serialization/cpp/tachyon_model.hh"
@@ -7,10 +7,12 @@
 #include "clockwork/serialization/cpp/clk_enum_type.hh"
 #include "clockwork/serialization/cpp/clk_schema_type.hh"
 #include "clockwork/serialization/cpp/clk_type.hh"
+#include "clockwork/serialization/cpp/metadata_versions.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/hash/md5.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <fmt/format.h>
@@ -20,6 +22,7 @@
 #include <cstddef>
 #include <exception>
 #include <memory>
+#include <memory_resource>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -287,21 +290,23 @@ void md5_finalize(Out<jewels::hash::MD5HashValue> hash, jewels::hash::MD5HashCon
 
 } // namespace
 
-TachyonModel::TachyonModel(size_t outer_type_id, std::unique_ptr<ClkTypeFactory> factory)
+TachyonModel::TachyonModel(size_t outer_type_id, std::shared_ptr<ClkTypeFactory> factory)
   : outer_type_id_(outer_type_id), factory_(std::move(factory))
 {
 }
 
-[[nodiscard]] std::unique_ptr<TachyonModel>
-TachyonModel::from_proto(std::unique_ptr<metadata::TachyonMetadata> metadata_proto)
+[[nodiscard]] std::shared_ptr<TachyonModel> TachyonModel::from_proto(
+  const jewels::memory::MemoryResource& memory_resource,
+  const std::shared_ptr<metadata::TachyonMetadata>& metadata_proto)
 {
-  std::vector<std::unique_ptr<ClkTypeFactoryPlugin>> plugins;
-  plugins.emplace_back(std::make_unique<ClkBuiltInTypeFactoryPlugin>());
-  plugins.emplace_back(std::make_unique<ClkSchemaTypeFactoryPlugin>());
-  plugins.emplace_back(std::make_unique<ClkEnumTypeFactoryPlugin>());
-  auto factory = std::make_unique<ClkTypeFactory>(std::move(metadata_proto), std::move(plugins));
-  auto model = std::make_unique<TachyonModel>(
-    static_cast<size_t>(factory->get_metadata_proto().outer_type_id()), std::move(factory));
+  std::pmr::vector<std::shared_ptr<ClkTypeFactoryPlugin>> plugins{memory_resource};
+  plugins.emplace_back(jewels::memory::make_pmr_shared<ClkBuiltInTypeFactoryPlugin>(memory_resource));
+  plugins.emplace_back(jewels::memory::make_pmr_shared<ClkSchemaTypeFactoryPlugin>(memory_resource));
+  plugins.emplace_back(jewels::memory::make_pmr_shared<ClkEnumTypeFactoryPlugin>(memory_resource));
+  auto factory = jewels::memory::make_pmr_shared<ClkTypeFactory>(
+    memory_resource, memory_resource, metadata_proto, std::move(plugins));
+  auto model = jewels::memory::make_pmr_shared<TachyonModel>(
+    memory_resource, static_cast<size_t>(factory->get_metadata_proto().outer_type_id()), std::move(factory));
   for (size_t i = 0U; i < model->factory_->get_types().size(); ++i)
   {
     std::ignore = model->factory_->get_clk_type(i); // Ensure that the types are populated
@@ -309,9 +314,11 @@ TachyonModel::from_proto(std::unique_ptr<metadata::TachyonMetadata> metadata_pro
   return model;
 }
 
-[[nodiscard]] std::unique_ptr<TachyonModel> TachyonModel::from_proto(const metadata::TachyonMetadata& metadata_proto)
+[[nodiscard]] std::shared_ptr<TachyonModel> TachyonModel::from_proto(
+  const jewels::memory::MemoryResource& memory_resource, const metadata::TachyonMetadata& metadata_proto)
 {
-  return from_proto(std::make_unique<metadata::TachyonMetadata>(metadata_proto));
+  return from_proto(
+    memory_resource, jewels::memory::make_pmr_shared<metadata::TachyonMetadata>(memory_resource, metadata_proto));
 }
 
 [[nodiscard]] const ClkType& TachyonModel::get_outer_type() const
@@ -393,9 +400,15 @@ void TachyonModel::check_for_unexpected_schema_changes(TachyonModel& other)
   get_outer_type().check_for_unexpected_schema_changes(other.get_outer_type(), true, get_outer_type().get_fqn());
 }
 
+[[nodiscard]] jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> TachyonModel::make_lite_compressor()
+{
+  return get_outer_type().make_lite_compressor();
+}
+
 [[nodiscard]] bool validate_logged_channel_metadata(
   const metadata::LoggedChannelMetadata& prev_metadata, const metadata::LoggedChannelMetadata& curr_metadata)
 {
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   bool validate_result = true;
   for (const auto& [prev_name, prev_meta] : prev_metadata.channel_metadata())
   {
@@ -404,8 +417,8 @@ void TachyonModel::check_for_unexpected_schema_changes(TachyonModel& other)
       try
       {
         const auto& curr_meta = curr_metadata.channel_metadata().at(prev_name);
-        const auto prev_model = TachyonModel::from_proto(prev_meta);
-        const auto curr_model = TachyonModel::from_proto(curr_meta);
+        const auto prev_model = TachyonModel::from_proto(memory_resource, prev_meta);
+        const auto curr_model = TachyonModel::from_proto(memory_resource, curr_meta);
         // Ignoring make_upgrader_result, we are just interested in whether this throws an exception
         std::ignore = curr_model->make_upgrader(*prev_model);
       }

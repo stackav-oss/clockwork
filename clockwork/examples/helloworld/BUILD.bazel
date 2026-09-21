@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -17,9 +17,15 @@ clk(
         "cogs_clk_cc.cc",
         "cogs_clk_cc.hh",
         "cogs_clk_cc.inl",
+        "cogs_clk_cc_cog.cc",
+        "cogs_clk_cc_cog.hh",
+        "cogs_clk_cc_cog.inl",
         "cogs_clk_cc_dial.cc",
         "cogs_clk_cc_dial.hh",
         "cogs_clk_cc_dial.inl",
+        "cogs_clk_cc_types.cc",
+        "cogs_clk_cc_types.hh",
+        "cogs_clk_cc_types.inl",
         "cogs_clk_exe.cc",
         "cogs_clk_exe.hh",
         "cogs_clk_exe.inl",
@@ -48,9 +54,11 @@ cc_library(
         ":helloworld_state_clk_cc",
         ":schema_clk_cc",
         "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
         "//jewels/log_cerr",
+        "//jewels/uuid",
     ],
 )
 
@@ -66,8 +74,10 @@ merge_simplelaunch_config(
         "system.producer_consumer.DemoCpu_channel_allocations.csv",
         "system.producer_consumer.DemoCpu_channel_spy_config.tachyon",
         "system.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "system.producer_consumer.DemoCpu_journal_topology.tachyon",
         "system.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
         "system.producer_consumer.DemoCpu_signal_metadata_config.tachyon",
+        "system.producer_consumer.DemoCpu_system_metadata.tachyon",
         "system.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
         "system.producer_consumer.diagnostics_database_config.tachyon",
         ":cogs_clk_exe",
@@ -82,6 +92,9 @@ clk(
         "helloworld_state_clk_cc.cc",
         "helloworld_state_clk_cc.hh",
         "helloworld_state_clk_cc.inl",
+        "helloworld_state_clk_cc_types.cc",
+        "helloworld_state_clk_cc_types.hh",
+        "helloworld_state_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )
@@ -93,6 +106,9 @@ clk(
         "schema_clk_cc.cc",
         "schema_clk_cc.hh",
         "schema_clk_cc.inl",
+        "schema_clk_cc_types.cc",
+        "schema_clk_cc_types.hh",
+        "schema_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )
@@ -106,9 +122,11 @@ clk(
         "system.producer_consumer.DemoCpu_channel_allocations.csv",
         "system.producer_consumer.DemoCpu_channel_spy_config.tachyon",
         "system.producer_consumer.DemoCpu_event_logger_config.tachyon",
+        "system.producer_consumer.DemoCpu_journal_topology.tachyon",
         "system.producer_consumer.DemoCpu_metrics_channel_metadata_config.tachyon",
         "system.producer_consumer.DemoCpu_signal_metadata_config.tachyon",
         "system.producer_consumer.DemoCpu_simplelaunch_config.textproto",
+        "system.producer_consumer.DemoCpu_system_metadata.tachyon",
         "system.producer_consumer.DemoCpu_telemetry_logger_config.tachyon",
         "system.producer_consumer.diagnostics_database_config.tachyon",
         "system.producer_consumer.logged_channel_metadata.pbbin",

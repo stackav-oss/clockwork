@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """A cc_toolchain configuration rule for Clang."""
@@ -16,7 +16,7 @@ load(
     "variable_with_value",
     "with_feature_set",
 )
-load("@rules_cc//cc:defs.bzl", "CcToolchainConfigInfo")
+load("@rules_cc//cc:defs.bzl", "CcToolchainConfigInfo", "cc_common")
 load("//tools/cc:flags.bzl", "CLANG_CXX_WARNING_FLAGS", "CLANG_C_WARNING_FLAGS", "CLANG_MISC_FLAGS")
 
 all_c_compile_actions = [
@@ -170,6 +170,19 @@ def _cc_toolchain_config_impl(ctx):
                     flag_group(
                         flags = ["-I%{include_paths}"],
                         iterate_over = "include_paths",
+                    ),
+                    # Emit -isystem for external-repo cc_library.includes
+                    # BEFORE the toolchain's system_include_paths (sysroot /usr
+                    # /include etc). Bazel 9 routes these paths through the
+                    # `external_include_paths` variable
+                    # (https://github.com/bazelbuild/bazel/pull/25750); placing
+                    # them here preserves the pre-Bazel-9 ordering where
+                    # in-repo dependencies' headers shadow sysroot headers on
+                    # collision (e.g. nasm's `error.h` vs glibc's `error.h`).
+                    flag_group(
+                        flags = ["-isystem", "%{external_include_paths}"],
+                        iterate_over = "external_include_paths",
+                        expand_if_available = "external_include_paths",
                     ),
                     flag_group(flags = system_include_paths),
                     flag_group(
@@ -393,6 +406,7 @@ def _cc_toolchain_config_impl(ctx):
                     "-ggdb",
                     "-gdwarf-4",
                     "-gz",  # Compress debug information
+                    "-Wno-nullability-extension",
                 ])],
                 with_features = [with_feature_set(features = ["dbg"])],
             ),
@@ -804,6 +818,19 @@ def _cc_toolchain_config_impl(ctx):
         ],
     )
 
+    # Bazel 9 splits include-path generation for `cc_library.includes`
+    # (https://github.com/bazelbuild/bazel/pull/25750): paths from external
+    # repositories are expanded through the `external_include_paths` compile
+    # variable only when the `external_include_paths` feature is enabled. When
+    # disabled, Bazel emits plain `-I` for those paths, losing the implicit
+    # system-header treatment that pre-Bazel-9 `cc_library.includes` provided.
+    # The bazel9.bazelrc enables this feature globally; this empty feature
+    # declaration makes the toolchain advertise support for the feature. The
+    # actual flag expansion is emitted inline in `default_flags_feature` above,
+    # where it is placed before system_include_paths to preserve pre-Bazel-9
+    # ordering semantics.
+    external_include_paths_feature = feature(name = "external_include_paths")
+
     # Now that we have built up the constituent feature definitions, compose
     # them, including configuration based on the target platform. Currently,
     # the target platform is configured with the "cpu" attribute for legacy
@@ -828,6 +855,7 @@ def _cc_toolchain_config_impl(ctx):
     # Start off adding the baseline features.
     features += [
         default_flags_feature,
+        external_include_paths_feature,
         minimal_optimization_flags,
         default_optimization_flags,
         thinlto_feature,
@@ -869,11 +897,8 @@ def _cc_toolchain_config_impl(ctx):
         # target_cpu is used in the name of the `_solib_<TARGET_CPU>` directory that gets created for shared libaries.
         # Here we use `"local"` to be consistent with our previous naming behavior.
         target_cpu = "local",
-
-        # These attributes aren't meaningful at all so just use placeholder
-        # values.
         target_libc = "local",
-        compiler = "local",
+        compiler = "clang",
         abi_version = "local",
         abi_libc_version = "local",
 

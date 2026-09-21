@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/log_reader.hh"
@@ -17,12 +17,12 @@ namespace clockwork_logging
 
 LogReader::Iterator::Iterator() = default;
 
-LogReader::Iterator::Iterator(AbstractLogReader* reader)
+LogReader::Iterator::Iterator(LogReader* reader)
   : reader_(reader)
 {
 }
 
-LogReader::Iterator::Iterator(AbstractLogReader* reader, std::optional<LoggedMessage> msg)
+LogReader::Iterator::Iterator(LogReader* reader, std::optional<LoggedMessage> msg)
   : reader_(reader), msg_(msg)
 {
 }
@@ -165,8 +165,11 @@ LogExpected<LogTimestamp> LogReader::end_time()
   return end_time_result;
 }
 
-[[nodiscard]] LogExpected<void> LogReader::open(const std::function<bool(std::string_view)>& topic_filter)
+[[nodiscard]] LogExpected<void> LogReader::open(
+  const std::function<bool(std::string_view)>& topic_filter,
+  const std::function<bool(std::string_view, uint32_t)>& sequence_number_filter)
 {
+  reader_->set_sequence_number_filter(sequence_number_filter);
   if (const auto open_result = reader_->open(topic_filter); !open_result)
   {
     return jewels::unexpected(open_result.error());
@@ -182,14 +185,9 @@ auto LogReader::begin() -> iterator
     return end();
   }
 
-  if (auto msg = reader_->next_message())
+  if (auto msg = next_message())
   {
-    if (auto metadata = get_channel_metadata(msg->topic))
-    {
-      msg->message_encoding = metadata->message_encoding;
-    }
-
-    return Iterator{reader_.get(), msg};
+    return Iterator{this, msg};
   }
 
   return end();
@@ -197,7 +195,20 @@ auto LogReader::begin() -> iterator
 
 auto LogReader::end() -> iterator
 {
-  return Iterator(reader_.get());
+  return Iterator(this);
+}
+
+std::optional<LoggedMessage> LogReader::next_message()
+{
+  auto msg = reader_->next_message();
+  if (msg)
+  {
+    if (auto metadata = get_channel_metadata(msg->topic))
+    {
+      msg->message_encoding = metadata->message_encoding;
+    }
+  }
+  return msg;
 }
 
 } // namespace clockwork_logging

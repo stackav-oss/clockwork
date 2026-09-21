@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
@@ -13,6 +13,8 @@ message Config {
   // Note: Right now these are launched _before_ the HTTP status server comes up.
   // Make sure they do not block for a large amount of time.
   repeated AppConfig pre_launch = 2;
+  // Simplelaunch runner config file path for clockwork integration
+  string runner_config_path = 3;
 }
 
 // The configuration for an individual application.
@@ -28,5 +30,6 @@ message AppConfig {
   // Run the application as root.
   // Note: This can only be used for pre_launch apps.
   bool as_root = 5;
+  // CPUs to run the application (inherits CPUs from parent process if empty)
   repeated int32 cpus = 6;
 }

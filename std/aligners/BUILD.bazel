@@ -1,0 +1,35 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:package.bzl", "package")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "builtins.clk",
+    "state.clk",
+])
+
+clk(
+    name = "builtins_clk",
+    srcs = ["builtins.clk"],
+    generate = ["none"],
+    deps = ["//std:traits_clk"],
+)
+
+clk(
+    name = "state_clk",
+    srcs = ["state.clk"],
+    outs = [
+        "state_clk_cc.cc",
+        "state_clk_cc.hh",
+        "state_clk_cc.inl",
+        "state_clk_cc_types.cc",
+        "state_clk_cc_types.hh",
+        "state_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)

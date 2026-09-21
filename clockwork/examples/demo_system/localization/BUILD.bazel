@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -36,9 +36,15 @@ clk(
         "localization_clk_cc.cc",
         "localization_clk_cc.hh",
         "localization_clk_cc.inl",
+        "localization_clk_cc_cog.cc",
+        "localization_clk_cc_cog.hh",
+        "localization_clk_cc_cog.inl",
         "localization_clk_cc_dial.cc",
         "localization_clk_cc_dial.hh",
         "localization_clk_cc_dial.inl",
+        "localization_clk_cc_types.cc",
+        "localization_clk_cc_types.hh",
+        "localization_clk_cc_types.inl",
         "localization_clk_exe.cc",
         "localization_clk_exe.hh",
         "localization_clk_exe.inl",
@@ -77,8 +83,10 @@ cc_library(
         "//clockwork/dial:msg_input",
         "//clockwork/examples/demo_system/gps:gps_message_clk_cc",
         "//clockwork/examples/demo_system/imu:imu_message_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
     ],
 )
 
@@ -89,6 +97,9 @@ clk(
         "localization_state_clk_cc.cc",
         "localization_state_clk_cc.hh",
         "localization_state_clk_cc.inl",
+        "localization_state_clk_cc_types.cc",
+        "localization_state_clk_cc_types.hh",
+        "localization_state_clk_cc_types.inl",
     ],
     cpp_deps = [":pose_message_clk_cc"],
     generate = ["cpp"],
@@ -119,6 +130,9 @@ clk(
         "pose_message_clk_cc.cc",
         "pose_message_clk_cc.hh",
         "pose_message_clk_cc.inl",
+        "pose_message_clk_cc_types.cc",
+        "pose_message_clk_cc_types.hh",
+        "pose_message_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

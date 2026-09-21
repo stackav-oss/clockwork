@@ -1,0 +1,20 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork_logging::realtime_playback)]
+
+// Selects the node-local stream that receives real-time playback data.
+enum RealtimePlaybackStreamKind
+{
+  uuid: 41c71de8-ad8c-42f3-bc86-ba831772a55b;
+
+  values
+  {
+    // Write the channel to the regular node-local playback log.
+    #0 regular default;
+
+    // Write the channel to the camera node-local playback log.
+    #1 camera;
+  }
+}

@@ -1,11 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "clockwork/io/network_var_packet_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/io/var_packet_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/tests/support/udp_payloads.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"

@@ -5,7 +5,8 @@
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/io/var_packet_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/io_connection.hh"
@@ -29,13 +30,14 @@
 #include <fmt/format.h> // IWYU pragma: keep
 
 #include <cerrno>
+#include <cstddef>
 #include <iterator>
 #include <memory>
-#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <tuple>
 #include <utility>
 
@@ -102,9 +104,9 @@ void OutgoingUdp<Tachyon<Schema>>::write()
 template <class Schema>
 jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
 OutgoingUdp<Tachyon<Schema>>::connect_subscriber(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> subscriber)
 {
-  if (auto res = this->connect_subscriber_impl(endpoint_id, subscriber); !res)
+  if (auto res = this->connect_subscriber_impl(endpoint_id, std::move(subscriber)); !res)
   {
     return jewels::unexpected{res.error()};
   }
@@ -214,13 +216,13 @@ void OutgoingUdpImpl<Tachyon<Schema>>::write(std::ranges::subrange<SlotRef> avai
 
 template <class Schema>
 jewels::expected<void, IoConnection::Error> OutgoingUdpImpl<Tachyon<Schema>>::connect_subscriber_impl(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle& subscriber)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> subscriber)
 {
   if (subscriber_)
   {
     return jewels::unexpected{IoConnection::Error::already_connected};
   }
-  if (subscriber.layout().message_size != sizeof(Msg))
+  if (subscriber->layout().message_size != sizeof(Msg))
   {
     return jewels::unexpected{IoConnection::Error::invalid_buffer_layout};
   }
@@ -229,7 +231,7 @@ jewels::expected<void, IoConnection::Error> OutgoingUdpImpl<Tachyon<Schema>>::co
     return jewels::unexpected{IoConnection::Error::unexpected_endpoint_id};
   }
 
-  subscriber_.emplace(std::move(subscriber));
+  subscriber_ = std::move(subscriber);
   return {};
 }
 

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -6,10 +6,25 @@ load("//tools/rules:cc.bzl", "cc_test")
 package(default_testonly = True)
 
 cc_test(
+    name = "time_bucket_test",
+    srcs = ["time_bucket_test.cc"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/rate_limiter:time_bucket",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "token_bucket_test",
     srcs = ["token_bucket_test.cc"],
     deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/rate_limiter:token_bucket",
+        "//jewels/time:sync_time",
         "@catch2//:catch2_main",
     ],
 )

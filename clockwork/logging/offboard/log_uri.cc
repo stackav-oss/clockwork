@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/log_uri.hh"
@@ -32,6 +32,15 @@ LogUri::LogUri(
     scheme_prefix_(std::move(scheme_prefix)),
     host_(std::move(host)),
     path_(std::move(path)),
+    memory_resource_(std::move(memory_resource))
+{
+}
+
+LogUri::LogUri(jewels::memory::MemoryResource memory_resource)
+  : scheme_(LogUriScheme::file),
+    scheme_prefix_(memory_resource),
+    host_(memory_resource),
+    path_(memory_resource),
     memory_resource_(std::move(memory_resource))
 {
 }
@@ -253,6 +262,11 @@ LogUri& LogUri::operator+=(std::string_view path)
     result_uri.path_ = jewels::filesystem::Path{".", memory_resource_};
   }
   return result_uri;
+}
+
+[[nodiscard]] bool LogUri::is_absolute_path(std::string_view path_str)
+{
+  return path_str.starts_with('/') || path_str.starts_with(file_prefix) || path_str.starts_with(s3_prefix);
 }
 
 std::ostream& operator<<(std::ostream& ostream, LogUriScheme value)

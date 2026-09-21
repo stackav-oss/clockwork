@@ -81,23 +81,23 @@ TappyCallbackWrapperParams<CallbackT>::TappyCallbackWrapperParams(
 {
 }
 
-/// Log processor callback implementation for callback with message
+/// Deserialize a message for a tappy callback.
 /// @tparam T Message type
+/// @tparam CallbackT Callback type
 /// @param[in] params Tappy callback wrapper parameters
 /// @param[in] msg Log message
-template <typename T>
-void tappy_callback_wrapper(
-  const TappyCallbackWrapperParams<std::function<void(const T&)>>& params, const LoggedMessage& msg)
+/// @return Deserialized message, or nullptr when the topic previously failed or keep-going behavior handles a failure.
+template <typename T, typename CallbackT>
+std::unique_ptr<T> deserialize_tappy(const TappyCallbackWrapperParams<CallbackT>& params, const LoggedMessage& msg)
 {
   // If this topic has failed deserialization before do not try deserializing more messages from that topic
   if (params.failed_topics->contains(params.topic))
   {
-    return;
+    return {};
   }
-  std::unique_ptr<T> deserialized_msg;
   try
   {
-    deserialized_msg = std::make_unique<T>();
+    auto deserialized_msg = std::make_unique<T>();
     if (params.schema_upgrader && params.schema_upgrader->upgrade_required())
     {
       params.schema_upgrader->upgrade(msg.data, std::as_writable_bytes(jewels::as_single_item_span(*deserialized_msg)));
@@ -106,6 +106,7 @@ void tappy_callback_wrapper(
     {
       deserialize_tachyon<T>(*deserialized_msg, msg.data);
     }
+    return deserialized_msg;
   }
   catch (const std::exception& exc)
   {
@@ -113,11 +114,24 @@ void tappy_callback_wrapper(
     if (params.error_behavior == DeserializationErrorBehavior::keep_going)
     {
       params.failed_topics->emplace(params.topic);
-      return;
+      return {};
     }
     throw;
   }
-  params.callback(*deserialized_msg);
+}
+
+/// Log processor callback implementation for callback with message
+/// @tparam T Message type
+/// @param[in] params Tappy callback wrapper parameters
+/// @param[in] msg Log message
+template <typename T>
+void tappy_callback_wrapper(
+  const TappyCallbackWrapperParams<std::function<void(const T&)>>& params, const LoggedMessage& msg)
+{
+  if (auto deserialized_msg = deserialize_tappy<T>(params, msg))
+  {
+    params.callback(*deserialized_msg);
+  }
 }
 
 /// Log processor callback implementation for callback with message and timestamp
@@ -129,35 +143,25 @@ void tappy_callback_wrapper(
   const TappyCallbackWrapperParams<std::function<void(const LogTimestamp&, const T&)>>& params,
   const LoggedMessage& msg)
 {
-  // If this topic has failed deserialization before do not try deserializing more messages from that topic
-  if (params.failed_topics->contains(params.topic))
+  if (auto deserialized_msg = deserialize_tappy<T>(params, msg))
   {
-    return;
+    params.callback(msg.publish_time, *deserialized_msg);
   }
-  std::unique_ptr<T> deserialized_msg;
-  try
+}
+
+/// Log processor callback implementation for callback with raw message metadata and deserialized message
+/// @tparam T Message type
+/// @param[in] params Tappy callback wrapper parameters
+/// @param[in] msg Log message
+template <typename T>
+void tappy_callback_wrapper(
+  const TappyCallbackWrapperParams<std::function<void(const LoggedMessage&, const T&)>>& params,
+  const LoggedMessage& msg)
+{
+  if (auto deserialized_msg = deserialize_tappy<T>(params, msg))
   {
-    deserialized_msg = std::make_unique<T>();
-    if (params.schema_upgrader && params.schema_upgrader->upgrade_required())
-    {
-      params.schema_upgrader->upgrade(msg.data, std::as_writable_bytes(std::span{deserialized_msg.get(), 1U}));
-    }
-    else
-    {
-      deserialize_tachyon<T>(*deserialized_msg, msg.data);
-    }
+    params.callback(msg, *deserialized_msg);
   }
-  catch (const std::exception& exc)
-  {
-    jewels::log_cerr_error("{}: {}", params.topic, exc.what());
-    if (params.error_behavior == DeserializationErrorBehavior::keep_going)
-    {
-      params.failed_topics->emplace(params.topic);
-      return;
-    }
-    throw;
-  }
-  params.callback(msg.publish_time, *deserialized_msg);
 }
 
 } // namespace detail
@@ -189,6 +193,27 @@ LogProcessor& LogProcessor::add_tappy_callback(
 {
   auto callback_params =
     std::make_shared<detail::TappyCallbackWrapperParams<std::function<void(const LogTimestamp&, const T&)>>>(
+      std::move(callback),
+      std::string(topic),
+      error_behavior,
+      jewels::memory::make_non_null_from_ref(failed_topics_),
+      create_schema_upgrader<T>(topic, error_behavior));
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) There is no leak here
+  auto wrapped = [callback_params = std::move(callback_params)](const LoggedMessage& msg)
+  { detail::tappy_callback_wrapper(*callback_params, msg); };
+
+  return add_raw_msg_callback(topic, std::move(wrapped));
+}
+
+template <typename T>
+LogProcessor& LogProcessor::add_tappy_msg_callback(
+  std::string_view topic,
+  std::function<void(const LoggedMessage&, const T&)> callback,
+  DeserializationErrorBehavior error_behavior)
+  requires clockwork::TappyType<T>
+{
+  auto callback_params =
+    std::make_shared<detail::TappyCallbackWrapperParams<std::function<void(const LoggedMessage&, const T&)>>>(
       std::move(callback),
       std::string(topic),
       error_behavior,

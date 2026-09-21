@@ -1,11 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/include_common.hh"
-#include "clockwork/dsl/ir/tests/support/report_group_defs.hh"
-#include "clockwork/dsl/ir/tests/support/report_group_defs_dial.hh"
+#include "clockwork/dial/include_common.hh"
+#include "clockwork/dsl/ir/tests/support/report_group_defs_clk_cc.hh"
+#include "clockwork/dsl/ir/tests/support/report_group_defs_clk_cc_dial.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
+#include "jewels/container/tap/bitset.hh"
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_approx.hpp>
@@ -14,7 +16,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <type_traits>
+#include <utility>
 
 namespace clockwork::dsl::tests::support
 {
@@ -915,10 +919,14 @@ TEST_CASE("BatchedCog SignalApi populate_batched_group with missing signals", "[
 
   // First element should have basic_batched but not multi_pre_agg (optional fields are 0-initialized)
   REQUIRE(signals[0].get_basic_batched_value() == 100U);
+  REQUIRE(signals[0].get_signal_presence().test(0));
+  REQUIRE_FALSE(signals[0].get_signal_presence().test(1));
 
   // Second element should have multi_pre_agg but not basic_batched
   REQUIRE(signals[1].get_multi_pre_agg_min() == 50);
   REQUIRE(signals[1].get_multi_pre_agg_max() == 50);
+  REQUIRE_FALSE(signals[1].get_signal_presence().test(0));
+  REQUIRE(signals[1].get_signal_presence().test(1));
 }
 
 TEST_CASE("ComprehensiveCog SignalApi populate_test_group with empty data", "[populate][post-aggregated]")
@@ -934,6 +942,7 @@ TEST_CASE("ComprehensiveCog SignalApi populate_test_group with empty data", "[po
 
   // Should have execution_interval of 0 (no window started)
   REQUIRE(msg.get_execution_interval() == std::chrono::nanoseconds{0});
+  REQUIRE_FALSE(msg.get_signal_presence().test(0));
 }
 
 TEST_CASE("ComprehensiveCog SignalApi populate_test_group with single execution", "[populate][post-aggregated]")
@@ -968,6 +977,7 @@ TEST_CASE("ComprehensiveCog SignalApi populate_test_group with single execution"
   // Verify post-aggregated signal values
   // basic_signal uses default VALUE pre-agg and MIN post-agg
   REQUIRE(msg.get_basic_signal_value_min() == 100U);
+  REQUIRE(msg.get_signal_presence().test(0));
 
   // combined_signal uses MIN pre-agg with MIN and FINAL_VALUE post-agg
   REQUIRE(msg.get_combined_signal_min_min() == std::chrono::milliseconds{10});

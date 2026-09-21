@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to report group policy configurations."""
@@ -39,16 +39,19 @@ class ReportGroupLogTypeEnum(Protocol):
 
     none: ReportGroupLogType
     event: ReportGroupLogType
-    telemetry: ReportGroupLogType
+    non_redundant_telemetry: ReportGroupLogType
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ReportGroupPolicyConfig(Tachyon["ReportGroupPolicyConfig"]):
+# fmt: on
     """Schema for report group policy."""
 
     reporting_strategy: ReportingStrategy
     log_type: ReportGroupLogType
     min_observations: int | None
     max_observations: int | None
-    min_duration: int | None
-    max_duration: int | None
+    min_duration: int | None  # Duration in nanoseconds
+    max_duration: int | None  # Duration in nanoseconds

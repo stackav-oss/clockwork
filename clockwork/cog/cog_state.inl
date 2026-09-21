@@ -4,9 +4,10 @@
 #include "clockwork/cog/cog_state.hh"
 
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -26,7 +27,7 @@ namespace clockwork
 
 template <typename StateType>
 CogStateDataImpl<StateType>::CogStateDataImpl(jewels::memory::MemoryResource memres)
-  : state(memres)
+  : state(memres), memres(std::move(memres))
 {
 }
 

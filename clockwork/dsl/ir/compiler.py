@@ -1,26 +1,31 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Facilities for compiling Clockwork source to the IR."""
 
-import pickle
+import math
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
+from typing import final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
+from clockwork.dsl.aligner.gen.aligner_cog import make_aligner_cog
 from clockwork.dsl.bazel import clk_targets
 from clockwork.dsl.cog import clk_cog_metrics
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.cpp import context, types
 from clockwork.dsl.cpp import typereg as cpp_typereg
 from clockwork.dsl.ir import (
+    aligner,
     audio,
     box,
     clkbuiltins,
     clkenum,
     cog,
+    cog_components,
     converter,
     cpp_executable,
     cpp_target,
@@ -34,6 +39,7 @@ from clockwork.dsl.ir import (
     node,
     parse,
     policy,
+    primitive,
     proto_target,
     pubsub,
     py_target,
@@ -61,6 +67,23 @@ from clockwork.dsl.proto import proto_typereg
 from clockwork.dsl.python import typereg as py_typereg
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
 from fltk.fegen.pyrt import terminalsrc
+
+
+@final
+@dataclass(slots=True)
+class CompileTiming:
+    """Accumulates timing data for one Clockwork compile."""
+
+    parse_elapsed_ns: int = 0
+    """Nanoseconds spent parsing source."""
+
+    parsed_module_count: int = 0
+    """Number of modules parsed from source text."""
+
+    def record_parse(self, elapsed_ns: int) -> None:
+        """Record time spent parsing source text."""
+        self.parse_elapsed_ns += elapsed_ns
+        self.parsed_module_count += 1
 
 
 def create_filesystem_importer() -> node.Importer:
@@ -101,7 +124,7 @@ def compile_source_file(
     module_id: ModuleID,
     importer: node.Importer,
     path_resolver: PathResolver | None = None,
-    out_cache_file: Path | None = None,
+    timing: CompileTiming | None = None,
 ) -> node.Module:
     """Compiles a DSL source code into a fully-resolved Module IR.
 
@@ -109,7 +132,7 @@ def compile_source_file(
         module_id: Module ID to compile.
         importer: An Importer instance responsible for resolving imports.
         path_resolver: Used to convert a module ID to a file path.
-        out_cache_file: An optional file to use for caching the cst.
+        timing: An optional accumulator for parse timing.
 
     Returns:
         A fully resolved Module instance.
@@ -121,27 +144,8 @@ def compile_source_file(
     if module is not None:
         return module
 
-    in_cache_file = path_resolver.find_path(module_id.with_suffix(".clk_pkl"))
-    if in_cache_file and in_cache_file.exists():
-        with in_cache_file.open("rb") as f:
-            cst_node, terminals = pickle.load(f)  # noqa: S301 This artifact is written below and then controlled by bazel.
-
-        module = node.Module.from_cst(
-            module_id=module_id,
-            builtins=clkbuiltins.BUILTINS_SCOPE,
-            cst_node=cst_node,
-            terminals=terminals,
-        )
-
-        _store_importer_in_context(module.context, importer)
-        resolve_module(module, importer, terminals)
-
-    else:
-        source_text = get_resolved_source_text(module_id, path_resolver)
-        module = compile_source_text(source_text, module_id, importer)
-        if out_cache_file:
-            with out_cache_file.open("wb") as f:
-                pickle.dump((module.cst_node, module.terminals), f)
+    source_text = get_resolved_source_text(module_id, path_resolver)
+    module = compile_source_text(source_text, module_id, importer, timing=timing)
 
     importer.cache_module(module_id, module)
 
@@ -168,11 +172,34 @@ def resolve_module(
     _resolve_entities(module, entities)
     _generate_targets(module, entities, terminals)
 
+    # Aligners are resolved after target generation so that interfaces are
+    # registered (by _generate_targets / _resolve_entities) before
+    # resolve_schema_interface is called.
+    for aligner_ir in entities.aligners:
+        aligner_ir.resolve()
+    has_generate_cpp_aligner = module.generates is not None and node.GenerateTarget.cpp_aligner in module.generates
+    has_manual_cpp_targets = bool(entities.cpp_targets)
+
+    if has_generate_cpp_aligner:
+        if not entities.aligners:
+            msg = "Module has cpp_aligner generation target but no aligner defined"
+            raise ValueError(msg)
+        _generate_aligner_targets(module, entities, terminals)
+    if has_manual_cpp_targets and entities.aligners:
+        _populate_manual_aligner_cogs(module, entities)
+
+    for cog_ir in entities.cogs:
+        if cog_ir.aligned_inputs:
+            _expand_aligned_input_class_defs(cog_ir)
+            for input_def in cog_ir.expanded_aligned_input_defs.values():
+                uuid_reg.register_entity_with_stable_key(module.context, input_def)
+
 
 def compile_source_text(
     source_text: str,
     module_id: ModuleID,
     importer: node.Importer,
+    timing: CompileTiming | None = None,
 ) -> node.Module:
     """Compiles a string containing a module.
 
@@ -180,11 +207,15 @@ def compile_source_text(
         source_text: The module contents.
         module_id: The module ID
         importer: An Importer instance responsible for resolving imports.
+        timing: An optional accumulator for parse timing.
 
     Returns:
         A fully resolved Module instance.
     """
+    start_ns = time.perf_counter_ns()
     parse_result = parse.clk_string_to_cst(source_text, module_id.get_base_path())
+    if timing is not None:
+        timing.record_parse(time.perf_counter_ns() - start_ns)
 
     module = node.Module.from_cst(
         module_id=module_id,
@@ -208,12 +239,12 @@ def to_clk_target(module_id: ModuleID, search_paths: Iterable[Path] | None = Non
 
 
 def _handle_cog_metrics_imports(module: node.Module, cst_cog: cst.Cog | cst.PythonCog) -> bool:
-    metrics_enabled = True
-    if (metrics_options := cst_cog.child_cog_blocks().maybe_metrics_options_block()) and (
-        maybe_metrics_enabled := metrics_options.maybe_metrics_enabled_option()
-    ):
-        metrics_value = maybe_metrics_enabled.child_boolean()
-        metrics_enabled = metrics_value.maybe_true() is not None
+    metrics_enabled = False
+    if options_cst := cst_cog.child_cog_blocks().maybe_metrics_options_block():
+        options = cog.MetricsOptions.from_cst(options_cst, module)
+        # Presence of a metrics_options block implies legacy metrics opt-in.
+        # Default to enabled unless explicitly disabled.
+        metrics_enabled = options.metrics_enabled
     if metrics_enabled:
         module.unresolved_imports.extend(clk_cog_metrics.get_cog_metrics_imports(module))
         return True
@@ -297,6 +328,7 @@ class ExtractedEntities:
     py_targets: list[py_target.PyTarget] = field(default_factory=list)
     proto_targets: list[proto_target.ProtoTarget] = field(default_factory=list)
     boxes: list[box.BoxTemplate] = field(default_factory=list)
+    box_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
     strong_types: list[strongtypes.StrongType] = field(default_factory=list)
     policy_defs: list[policy.PolicyDef] = field(default_factory=list)
     policy_instances: list[policy.PolicyInstance] = field(default_factory=list)
@@ -308,10 +340,44 @@ class ExtractedEntities:
     pcie_links: list[hardware.PcieLink] = field(default_factory=list)
     ethernet_lans: list[hardware.EthernetLan] = field(default_factory=list)
     constants: list[statement.ImmutableBinding] = field(default_factory=list)
-    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
-    trait_defs: list[dfl_types.TraitDef] = field(default_factory=list)
-    trait_impls: list[dfl_types.TraitImpl] = field(default_factory=list)
-    fn_defs: list[dfl.FnDef] = field(default_factory=list)
+    instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
+    cog_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
+    schema_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
+    dfl_trait_defs: list[dfl_types.TraitDef] = field(default_factory=list)
+    dfl_trait_impls: list[dfl_types.TraitImpl] = field(default_factory=list)
+    dfl_fn_defs: list[dfl.FnDef] = field(default_factory=list)
+    aligners: list[aligner.Aligner] = field(default_factory=list)
+
+
+_UNDEFINED_ID_PREFIX = "Undefined identifier "
+
+
+def _maybe_raise_aligner_schema_hint(exc: ValueError, pending_names: set[str]) -> None:
+    """Re-raise with guidance if the undefined identifier is an aligner-generated schema.
+
+    When an aligner and a cog that references its generated alignment schema
+    live in the same ``.clk`` file, the schema name does not exist yet at name
+    resolution time (it is created later during aligner codegen).  Detect this
+    case and surface a clear message so the user knows to split the aligner
+    into a separate file.
+    """
+    text = str(exc)
+    if not text.startswith(_UNDEFINED_ID_PREFIX):
+        return
+    # The identifier sits between the prefix and the first newline (which
+    # begins the source-location annotation added by DeferredLookup.resolve).
+    identifier = text[len(_UNDEFINED_ID_PREFIX) :].split("\n", 1)[0]
+    if identifier not in pending_names:
+        return
+    aligner_name = identifier.removesuffix("AlignmentMsg")
+    msg = (
+        f"{text}\n\n"
+        + f"Hint: '{identifier}' is the alignment schema that will be generated for "
+        + f"aligner '{aligner_name}', but it is not available during name resolution "
+        + "because the schema is created after module evaluation.\n"
+        + "Move the aligner definition into a separate .clk file and import it."
+    )
+    raise ValueError(msg) from None
 
 
 # We must disable C901 and PLR0912 here (function complexity, branches) because
@@ -437,14 +503,18 @@ def _extract_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
         elif trait_def_cst := entity.maybe_dfl_trait_def():
             trait_def_ir = dfl_types.TraitDef.from_cst(trait_def_cst, module, module.inner_scope)
             module.inner_scope.define(trait_def_ir.name, trait_def_ir, terminals)
-            entities.trait_defs.append(trait_def_ir)
+            entities.dfl_trait_defs.append(trait_def_ir)
         elif trait_impl_cst := entity.maybe_dfl_impl_decl():
             trait_impl_ir = dfl_types.TraitImpl.from_cst(trait_impl_cst, module)
-            entities.trait_impls.append(trait_impl_ir)
+            entities.dfl_trait_impls.append(trait_impl_ir)
         elif fn_def_cst := entity.maybe_dfl_fn_def():
             fn_def_ir = dfl.FnDef.from_cst(fn_def_cst, module, module.inner_scope)
             module.inner_scope.define(fn_def_ir.name, fn_def_ir, terminals)
-            entities.fn_defs.append(fn_def_ir)
+            entities.dfl_fn_defs.append(fn_def_ir)
+        elif aligner_cst := entity.maybe_aligner():
+            aligner_ir = aligner.Aligner.from_cst(aligner_cst, module, module.inner_scope)
+            module.inner_scope.define(aligner_ir.name, aligner_ir, terminals)
+            entities.aligners.append(aligner_ir)
         else:
             msg = node.append_error_line(entity, module, "Unrecognized module-scope entity")
             raise NotImplementedError(msg)
@@ -483,8 +553,8 @@ def _extract_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
             extern_type_ir = extern_type.ExternType.from_cst(cst_node=extern_type_cst, module=module)
             module.inner_scope.define(extern_type_ir.name, extern_type_ir, terminals)
             entities.extern_types.append(extern_type_ir)
-        elif instantiation_cst := entity.maybe_instantiate_stmt():
-            instantiation_ir = schema.InstantiateStmt.from_cst(instantiation_cst, module)
+        elif instantiation_cst := entity.maybe_clk_instantiate_stmt():
+            instantiation_ir = statement.InstantiateStmt.from_cst(instantiation_cst, module)
             if instantiation_ir.name:
                 module.inner_scope.define(instantiation_ir.name, instantiation_ir, terminals)
             entities.instantiations.append(instantiation_ir)
@@ -531,26 +601,36 @@ def _extract_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
         elif trait_def_cst := entity.maybe_dfl_trait_def():
             trait_def_ir = dfl_types.TraitDef.from_cst(trait_def_cst, module, module.inner_scope)
             module.inner_scope.define(trait_def_ir.name, trait_def_ir, terminals)
-            entities.trait_defs.append(trait_def_ir)
+            entities.dfl_trait_defs.append(trait_def_ir)
         elif trait_impl_cst := entity.maybe_dfl_impl_decl():
             trait_impl_ir = dfl_types.TraitImpl.from_cst(trait_impl_cst, module)
-            entities.trait_impls.append(trait_impl_ir)
+            entities.dfl_trait_impls.append(trait_impl_ir)
         elif fn_def_cst := entity.maybe_dfl_fn_def():
             fn_def_ir = dfl.FnDef.from_cst(fn_def_cst, module, module.inner_scope)
             module.inner_scope.define(fn_def_ir.name, fn_def_ir, terminals)
-            entities.fn_defs.append(fn_def_ir)
+            entities.dfl_fn_defs.append(fn_def_ir)
+        elif aligner_cst := entity.maybe_aligner():
+            aligner_ir = aligner.Aligner.from_cst(aligner_cst, module, module.inner_scope)
+            module.inner_scope.define(aligner_ir.name, aligner_ir, terminals)
+            entities.aligners.append(aligner_ir)
         else:
             msg = node.append_error_line(entity, module, "Unrecognized module-scope entity")
             raise NotImplementedError(msg)
+
+    pending_aligner_schema_names = {f"{a.name}AlignmentMsg" for a in entities.aligners}
 
     for named_entity in chain(
         module.inner_scope.names.values(),
         (r for r in entities.representations if not r.name),
         (policy_instance for policy_instance in entities.policy_instances),
-        (trait_impl for trait_impl in entities.trait_impls),
+        (trait_impl for trait_impl in entities.dfl_trait_impls),
         (instantiate for instantiate in entities.instantiations),
     ):
-        resolved = node.resolve_names(named_entity, module.inner_scope)
+        try:
+            resolved = node.resolve_names(named_entity, module.inner_scope)
+        except ValueError as exc:
+            _maybe_raise_aligner_schema_hint(exc, pending_aligner_schema_names)
+            raise
         if resolved is not named_entity:
             msg = f"Internal error: Module entity identity changed by name resolution: {named_entity} is not {resolved}"
             raise RuntimeError(msg)
@@ -558,7 +638,10 @@ def _extract_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
     return entities
 
 
-def _register_entity_uuids(compiler_context: CompilerContext, entities: ExtractedEntities) -> None:
+# We must disable C901 here (function complexity) because
+# we inherently have many branches, one for each type of module-level entity.
+# However, they're handled in a uniform way that isn't difficult to understand
+def _register_entity_uuids(compiler_context: CompilerContext, entities: ExtractedEntities) -> None:  # noqa: C901 (See above)
     # Cogs
     for acog in entities.cogs:
         uuid_reg.register_entity(compiler_context, acog, acog.fqn)
@@ -567,20 +650,31 @@ def _register_entity_uuids(compiler_context: CompilerContext, entities: Extracte
             acog.configs.values(),
             acog.states.values(),
             acog.inputs.values(),
+            acog.aligned_inputs.values(),
             acog.outputs.values(),
             acog.metrics_outputs.values(),
             acog.report_groups.values(),
+            acog.cog_metrics_report_groups.values(),
             acog.conditions.values(),
             acog.diagnostics.values(),
         ):
+            if isinstance(entity, cog.InputDef) and entity.elements:
+                for element in entity.elements:
+                    uuid_reg.register_entity_with_stable_key(compiler_context, element)
             uuid_reg.register_entity_with_stable_key(compiler_context, entity)
+
+    # InstantiatedCogs
+    for inst in entities.cog_instantiations:
+        assert isinstance(inst.instantiated, typesys.Value)
+        uuid_reg.register_entity(compiler_context, inst.instantiated, inst.instantiated.fqn)
 
     # Channels
     for channel in entities.channels:
         if not isinstance(channel, typesys.Value) or not isinstance(channel, node.NamedEntity):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
             msg = f"Channel {channel} {type(channel)} is not of the correct type for UUID registration."
             raise TypeError(msg)
-        uuid_reg.register_entity(compiler_context, channel, channel.fqn)
+        if not channel.generic_parameters():
+            uuid_reg.register_entity(compiler_context, channel, channel.fqn)
 
     for extern_ir in entities.extern_types:
         uuid_reg.register_entity_with_stable_key(compiler_context, extern_ir)
@@ -589,13 +683,19 @@ def _register_entity_uuids(compiler_context: CompilerContext, entities: Extracte
         uuid_reg.register_entity(compiler_context, cpu_domain, cpu_domain.fqn)
 
 
-def _register_box_instance_uuids(compiler_context: CompilerContext, box_ir: box.Box) -> None:
+# We must disable C901 here (function complexity) because
+# we inherently have many branches, one for each type of module-level entity.
+# However, they're handled in a uniform way that isn't difficult to understand
+def _register_box_instance_uuids(compiler_context: CompilerContext, box_ir: box.Box) -> None:  # noqa: C901 (see above)
     uuid_reg.register_entity_with_stable_key(compiler_context, box_ir)
     for instance in box_ir.instances:
         if isinstance(instance, cog.CogInstance):
             uuid_reg.register_entity_with_stable_key(compiler_context, instance)
             for member in instance.members:
                 uuid_reg.register_entity_with_stable_key(compiler_context, member)
+                if isinstance(member.member, cog.InputDef) and member.elements is not None:
+                    for element in member.elements:
+                        uuid_reg.register_entity_with_stable_key(compiler_context, element)
         elif isinstance(
             instance,
             box.FirstMessageInstance
@@ -658,11 +758,29 @@ def _register_cpp_target_schema_tags(
                     ),
                 )
             else:
+                # Programmatically-generated schemas (e.g. aligner alignment
+                # output schemas) may be defined in the same CppTarget as the
+                # cog that publishes them. The cog's dial header references the
+                # schema type but is #included before the struct definition in
+                # the main .hh. Using a forward declaration instead of the full
+                # Header avoids a circular include (dial → main → dial) while
+                # still making the type visible when the dial header is expanded.
+                # External consumers get the full definition from the target's
+                # main .hh which they include transitively.
+                if schema_tag.schema_ir.programmatically_generated:
+                    schema_includes: list[context.Include] = [
+                        context.FwdDecl(
+                            cpp_target_ir.options.namespace,
+                            f"struct {schema_tag.schema_ir.name}",
+                        )
+                    ]
+                else:
+                    schema_includes = [module_header]
                 cpp_typereg.register_cpp_type(
                     module.context,
                     schema_tag.schema_ir,
                     types.CppType(
-                        includes=[module_header],
+                        includes=schema_includes,
                         cpp_namespace=cpp_target_ir.options.namespace,
                         type_name=schema_tag.schema_ir.name,
                     ),
@@ -766,7 +884,7 @@ def _register_representation(representation_ir: ResolvedReprInstantiation) -> No
 # We could in principle make a data-driven table of handlers instead of explicit
 # branches, but it would be awkward and would not decouple the code in a
 # meaningful way.
-def _register_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module) -> None:
+def _register_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Module) -> None:  # noqa: C901, PLR0912 (See above).
     """Register the entities within a CppTarget.
 
     This is not meant to be used on its own, but as a helper function for
@@ -816,21 +934,47 @@ def _register_cpp_target(cpp_target_ir: cpp_target.CppTarget, module: node.Modul
             schema_reg.InterfaceInfo.make(interface_ir=interface),
         )
 
+    for instantiate_stmt in cpp_target_ir.instantiations:
+        assert isinstance(instantiate_stmt.instantiated, cog.InstantiatedCog)
+        cog.register_instantiated_cog(module.context, instantiate_stmt.instantiated)
+
     for cpp_cog in cpp_target_ir.cogs:
         assert isinstance(cpp_cog.cog_ir, cog.Cog)
-        cpp_typereg.register_cpp_type(
-            module.context,
-            cpp_cog.cog_ir,
-            types.CppType(
-                includes=[cpp_target_header],
-                cpp_namespace=cpp_target_ir.options.namespace,
-                type_name=cpp_cog.cog_ir.name + "Factory",
-            ),
-        )
+        if cpp_cog.cog_ir.is_generic():
+            cpp_typereg.register_cpp_template(
+                module.context,
+                cpp_cog.cog_ir,
+                types.CppTemplate(
+                    includes=[cpp_target_header],
+                    cpp_namespace=cpp_target_ir.options.namespace,
+                    template_name=cpp_cog.cog_ir.name + "Factory",
+                ),
+            )
+        else:
+            cpp_typereg.register_cpp_type(
+                module.context,
+                cpp_cog.cog_ir,
+                types.CppType(
+                    includes=[cpp_target_header],
+                    cpp_namespace=cpp_target_ir.options.namespace,
+                    type_name=cpp_cog.cog_ir.name + "Factory",
+                ),
+            )
         cpp_cog.dial_header = context.Header(
             cpp_target_header.repo, cpp_target_header.path.parent / (cpp_target_header.path.stem + "_dial.hh")
         )
         cpp_cog.cog_header = cpp_target_header
+
+    for inst in cpp_target_ir.instantiations:
+        assert isinstance(inst.instantiated, typesys.Value)
+        uuid_reg.register_entity(module.context, inst.instantiated, inst.instantiated.fqn)
+
+    for cpp_instantiated_cog in cpp_target_ir.instantiated_cogs:
+        assert isinstance(cpp_instantiated_cog.instantiation, cog.InstantiatedCog)
+        cpp_instantiated_cog.dial_header = context.Header(
+            cpp_target_header.repo, cpp_target_header.path.parent / (cpp_target_header.path.stem + "_dial.hh")
+        )
+        cpp_instantiated_cog.cog_header = cpp_target_header
 
     _register_cpp_target_dials(cpp_target_ir, module)
 
@@ -930,8 +1074,9 @@ def _register_cpp_target_representations_and_interfaces(
                 schema_arg = resolved_repr.typespec.arguments["schema"]
                 assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
                 schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
-                layout = tachyon_layout.layout_schema(module.context, schema_ir)
-                tachyon_layout_reg.register_structured_type(module.context, schema_ir, layout)
+                if tachyon_reg.constraint_for_type(module.context, schema_ir) is None:
+                    layout = tachyon_layout.layout_schema(module.context, schema_ir)
+                    tachyon_layout_reg.register_structured_type(module.context, schema_ir, layout)
             except RuntimeError:
                 if not retry_errors:
                     raise
@@ -1005,8 +1150,9 @@ def _register_cpp_dial_representations(dial: cpp_target.CppDial, module: node.Mo
             schema_arg = resolved_repr.typespec.arguments["schema"]
             assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
             schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
-            layout = tachyon_layout.layout_schema(module.context, schema_ir)
-            tachyon_layout_reg.register_structured_type(module.context, schema_ir, layout)
+            if tachyon_reg.constraint_for_type(module.context, schema_ir) is None:
+                layout = tachyon_layout.layout_schema(module.context, schema_ir)
+                tachyon_layout_reg.register_structured_type(module.context, schema_ir, layout)
 
 
 def _register_cpp_dial_interfaces(dial: cpp_target.CppDial, module: node.Module) -> None:
@@ -1083,9 +1229,29 @@ def _register_py_target(py_target_ir: py_target.PyTarget, module: node.Module) -
         )
 
 
+def _register_cog_report_group_tachyon_layouts(module: node.Module, cog_ir: cog.Cog) -> None:
+    """Register tachyon layouts for cog metrics report group schemas.
+
+    This ensures that schemas dynamically generated by cog metrics report groups
+    have tachyon constraint/layout entries even when no ``generate(cpp)`` target
+    is present in the module.  User-defined report group schemas are handled by
+    the normal cpp_target / dial registration path.
+    """
+    for report_group in cog_ir.cog_metrics_report_groups.values():
+        for repr_inst in report_group.generated_representations:
+            resolved_repr = repr_inst.get_resolved()
+            if resolved_repr.typespec.instantiates is clkbuiltins.TACHYON:
+                schema_arg = resolved_repr.typespec.arguments["schema"]
+                assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
+                schema_ir = schema.InstantiatedSchema.from_typespec(schema_arg)
+                if tachyon_reg.constraint_for_type(module.context, schema_ir) is None:
+                    layout = tachyon_layout.layout_schema(module.context, schema_ir)
+                    tachyon_layout_reg.register_structured_type(module.context, schema_ir, layout)
+
+
 def _register_cog_private_signals(compiler_context: CompilerContext, cog_ir: cog.Cog) -> None:
     """Register cog-private signals (those defined within report groups) in the global signal registry."""
-    for report_group in cog_ir.report_groups.values():
+    for report_group in (*cog_ir.report_groups.values(), *cog_ir.cog_metrics_report_groups.values()):
         for entry in report_group.entries.values():
             if entry.cog_private and isinstance(entry.signal, signal.Signal):
                 resolved_signal = entry.signal.get_resolved()
@@ -1098,7 +1264,7 @@ def _register_cog_private_signals(compiler_context: CompilerContext, cog_ir: cog
 # We could in principle make a data-driven table of handlers instead of explicit
 # branches, but it would be awkward and would not decouple the code in a
 # meaningful way.
-def _resolve_entities(  # noqa: C901, PLR0912 (see above)
+def _resolve_entities(  # noqa: C901, PLR0912, PLR0915 (see above)
     module: node.Module, entities: ExtractedEntities
 ) -> None:
     for constant_ir in entities.constants:
@@ -1114,8 +1280,8 @@ def _resolve_entities(  # noqa: C901, PLR0912 (see above)
     for schema_ir in entities.schemas:
         schema_ir.resolve()
 
-    for instantiation_ir in entities.instantiations:
-        instantiation_ir.resolve()
+    for extern_type_ir in entities.extern_types:
+        extern_type_ir.resolve()
 
     for enum_ir in entities.enums:
         enum_ir.resolve()
@@ -1130,17 +1296,30 @@ def _resolve_entities(  # noqa: C901, PLR0912 (see above)
         policy_instance.resolve()
         policy.register_policy(module, policy_instance)
 
-    for trait_def in entities.trait_defs:
+    for trait_def in entities.dfl_trait_defs:
         trait_def.resolve()
         dfl_types.register_trait(module, trait_def)
 
-    for trait_impl in entities.trait_impls:
+    for trait_impl in entities.dfl_trait_impls:
         trait_impl.resolve()
         dfl_types.register_trait_impl(module, trait_impl)
 
     for cog_ir in entities.cogs:
+        _prepare_aligned_input_names(cog_ir)
         cog_ir.resolve()
         _register_cog_private_signals(module.context, cog_ir)
+        _validate_cog_aligned_inputs(cog_ir)
+        _register_cog_report_group_tachyon_layouts(module, cog_ir)
+
+    for instantiation_ir in entities.instantiations:
+        instantiation_ir.resolve()
+        if isinstance(instantiation_ir.instantiated, cog.InstantiatedCog):
+            entities.cog_instantiations.append(instantiation_ir)
+            cog.register_instantiated_cog(module.context, instantiation_ir.instantiated)
+        elif isinstance(instantiation_ir.instantiated, box.InstantiatedBox):
+            entities.box_instantiations.append(instantiation_ir)
+        else:
+            entities.schema_instantiations.append(instantiation_ir)
 
     for ethernet_lan_ir in entities.ethernet_lans:
         ethernet_lan_ir.resolve()
@@ -1169,12 +1348,12 @@ def _resolve_entities(  # noqa: C901, PLR0912 (see above)
         proto_target_ir.resolve()
         _register_proto_target(proto_target_ir, module)
 
-    for cpp_exe_ir in entities.cpp_executables:
-        cpp_exe_ir.resolve()
-
     for cpp_target_ir in entities.cpp_targets:
         cpp_target_ir.resolve()
         _register_cpp_target(cpp_target_ir, module)
+
+    for cpp_exe_ir in entities.cpp_executables:
+        cpp_exe_ir.resolve()
 
     for nanobind_target_ir in entities.nanobind_targets:
         nanobind_target_ir.resolve()
@@ -1192,15 +1371,192 @@ def _resolve_entities(  # noqa: C901, PLR0912 (see above)
     _register_entity_uuids(module.context, entities)
 
 
+def _prepare_aligned_input_names(cog_ir: cog.Cog) -> None:
+    """Resolve aligned inputs early and populate extra input names for metrics and infra diagnostics.
+
+    This runs in the compiler because cog.py cannot import aligner.py (circular dep).
+    Must run before Cog.resolve() so the names are available when metrics schemas
+    and infra diagnostic signals are generated.
+    """
+    for aligned_def in cog_ir.aligned_inputs.values():
+        aligned_def.resolve()
+        if not isinstance(aligned_def.aligned_type, aligner.Aligner):
+            continue
+        cog_ir.extra_metrics_input_names.append(aligned_def.name)
+        cog_ir.extra_diagnostics_input_names.append(aligned_def.name)
+        if isinstance(aligned_def.view_params.max_msgs, int):
+            cog_ir.extra_metrics_input_view_sizes[aligned_def.name] = aligned_def.view_params.max_msgs
+        for inp in aligned_def.aligned_type.inputs.values():
+            cog_ir.extra_metrics_input_names.append(inp.name)
+            cog_ir.extra_diagnostics_input_names.append(inp.name)
+            if (view_size := _aligned_consumer_max_msgs(aligned_def, inp)) is not None:
+                cog_ir.extra_metrics_input_view_sizes[inp.name] = view_size
+
+
+def _aligned_consumer_max_msgs(
+    aligned_def: cog_components.CogAlignedInputDef,
+    aligner_input: aligner.AlignerInputDef,
+) -> int | None:
+    aligner_max = aligner_input.view_params.max_msgs
+    if not isinstance(aligner_max, int):
+        return None
+    override = aligned_def.upstream_view_overrides.get(aligner_input.name)
+    if override is not None and override.is_user_set("max_msgs"):
+        return override.max_msgs if isinstance(override.max_msgs, int) else None
+    return _auto_size_aligned_consumer_max_msgs(aligner_max)
+
+
+def _auto_size_aligned_consumer_max_msgs(aligner_max: int) -> int:
+    """Compute the default consumer view size for an upstream aligned input."""
+    # Auto-size consumer ``max_msgs`` to give headroom over the aligner:
+    # at least one more slot, plus a 20% margin on top of the aligner value.
+    return max(aligner_max + 1, math.ceil(aligner_max * 1.2))
+
+
+def _validate_cog_aligned_inputs(cog_ir: cog.Cog) -> None:
+    """Validate that all aligned_inputs on a cog reference actual aligner types.
+
+    This validation runs in the compiler because cog.py cannot import aligner.py
+    (circular dep). The compiler already imports both.
+    """
+    for aligned_input in cog_ir.aligned_inputs.values():
+        if not isinstance(aligned_input.aligned_type, aligner.Aligner):
+            msg = node.append_error_line(
+                aligned_input.cst_node,
+                aligned_input.module,
+                f"aligned_inputs type must be an aligner, got {type(aligned_input.aligned_type).__name__}",
+            )
+            raise TypeError(msg)
+
+
+def _expand_aligned_input_class_defs(cog_ir: cog.Cog) -> None:
+    """Create class-level InputDefs for each upstream input of each aligned input group."""
+    for aligned_def in cog_ir.aligned_inputs.values():
+        aligner_type = aligned_def.aligned_type
+        assert isinstance(aligner_type, aligner.Aligner), f"Expected Aligner, got {type(aligner_type).__name__}"
+
+        assert aligner_type.resolved is not None, (
+            f"Aligner '{aligner_type.name}' referenced by cog '{cog_ir.name}' is not resolved"
+        )
+        aligner_input_names = {inp.name for inp in aligner_type.inputs.values()}
+        for override_name, override_params in aligned_def.upstream_view_overrides.items():
+            if override_name not in aligner_input_names:
+                msg = (
+                    f"Aligned input '{aligned_def.name}' on cog '{cog_ir.name}' has an "
+                    f"override for unknown upstream '{override_name}'. Known upstreams: "
+                    f"{sorted(aligner_input_names)}."
+                )
+                if aligned_def.module.terminals is not None and override_params.cst_node is not None:
+                    msg += node.append_error_line(
+                        override_params.cst_node,
+                        aligned_def.module,
+                        "",
+                    )
+                raise ValueError(msg)
+        for aligner_input in aligner_type.inputs.values():
+            input_name = f"{aligned_def.name}.{aligner_input.name}"
+            consumer_params = _synthesize_consumer_view_params(
+                cog_ir=cog_ir,
+                aligned_def=aligned_def,
+                aligner_input=aligner_input,
+            )
+            # fmt: off
+            input_def = cog.InputDef(
+                # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+                name=input_name,
+                # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+                scope=cog_ir.inner_scope,
+                type_info=clkbuiltins.COG_INPUT_TYPE,
+                doc=aligner_input.doc,
+                module=cog_ir.module,
+                cst_node=None,
+                message_type=aligner_input.get_interface_info(),
+                view_params=consumer_params,
+                is_generic=False,
+                elements=None,
+            )
+            # fmt: on
+            cog_ir.expanded_aligned_input_defs[input_name] = input_def
+
+
+def _synthesize_consumer_view_params(  # noqa: C901  # Inherent complexity: one branch per overrideable view param.
+    *,
+    cog_ir: cog.Cog,
+    aligned_def: cog_components.CogAlignedInputDef,
+    aligner_input: aligner.AlignerInputDef,
+) -> cog_components.ViewParams:
+    """Compute the consumer's per-upstream view by overlaying the override on the aligner's view.
+
+    Start from a copy of the aligner-side view so the consumer inherits
+    ``safety_margin``, ``manual_cursor``, etc. Then overlay any user-set
+    fields from the corresponding ``upstream_view_overrides`` entry. If
+    ``max_msgs`` was not overridden, auto-size it from the aligner's
+    ``max_msgs`` so the consumer has headroom over the aligner.
+
+    Also validates that the final ``max_msgs`` is at least the aligner's.
+    """
+    aligner_params = aligner_input.view_params
+    # Defensive: aligners require ``max_msgs`` to be explicit, so by the time we
+    # reach this expansion the aligner-side ``max_msgs`` must already be resolved
+    # to an int. Consumer views of aligner inputs are never ``manual_cursor`` and
+    # never expose seqno.
+    assert isinstance(aligner_params.max_msgs, int)
+    consumer = cog_components.ViewParams(
+        module=aligned_def.module,
+        cst_node=None,
+        max_msgs=aligner_params.max_msgs,
+        manual_cursor=aligner_params.manual_cursor,
+        no_dial=aligner_params.no_dial,
+        skip_threshold=aligner_params.skip_threshold,
+        safety_margin=aligner_params.safety_margin,
+        copy_inputs=aligner_params.copy_inputs,
+        is_optional=aligner_params.is_optional,
+        expose_seqno=aligner_params.expose_seqno,
+        use_device_ptr=aligner_params.use_device_ptr,
+    )
+    override = aligned_def.upstream_view_overrides.get(aligner_input.name)
+    if override is not None:
+        if override.is_user_set("max_msgs"):
+            assert isinstance(override.max_msgs, int)
+            consumer.max_msgs = override.max_msgs
+        if override.is_user_set("manual_cursor"):
+            consumer.manual_cursor = override.manual_cursor
+        if override.is_user_set("no_dial"):
+            consumer.no_dial = override.no_dial
+        if override.is_user_set("skip_threshold"):
+            consumer.skip_threshold = override.skip_threshold
+        if override.is_user_set("safety_margin"):
+            consumer.safety_margin = override.safety_margin
+        if override.is_user_set("copy_inputs"):
+            consumer.copy_inputs = override.copy_inputs
+        if override.is_user_set("connect_optional"):
+            consumer.is_optional = override.is_optional
+    if override is None or not override.is_user_set("max_msgs"):
+        aligner_max = aligner_params.max_msgs
+        consumer.max_msgs = _auto_size_aligned_consumer_max_msgs(aligner_max)
+    assert isinstance(consumer.max_msgs, int)
+    if consumer.max_msgs < aligner_params.max_msgs:
+        msg = (
+            f"Aligned input '{aligned_def.name}.{aligner_input.name}' on cog "
+            f"'{cog_ir.name}' has consumer max_msgs={consumer.max_msgs} which is "
+            f"less than the aligner's max_msgs={aligner_params.max_msgs}. The "
+            "consumer view is auto-sized by default; only set it explicitly when "
+            "you need unusual headroom."
+        )
+        raise ValueError(msg)
+    return consumer
+
+
 def _generate_cpp_target(
     module: node.Module, entities: ExtractedEntities, terminals: terminalsrc.TerminalSource
 ) -> None:
     cpp_target_entities = cpp_target.CppGeneratedEntities(
         cogs=entities.cogs,
+        cog_instantiations=entities.cog_instantiations,
         schemas=entities.schemas,
         enums=entities.enums,
-        constants=entities.constants,
-        instantiations=entities.instantiations,
+        constants=[constant for constant in entities.constants if primitive.is_renderable_value(constant.value)],
+        schema_instantiations=entities.schema_instantiations,
         tags=entities.tags,
         extern_types=entities.extern_types,
         strong_types=entities.strong_types,
@@ -1219,8 +1575,8 @@ def _generate_py_target(
     py_target_entities = py_target.PyGeneratedEntities(
         schemas=entities.schemas,
         enums=entities.enums,
-        constants=entities.constants,
-        instantiations=entities.instantiations,
+        constants=[constant for constant in entities.constants if primitive.is_renderable_value(constant.value)],
+        schema_instantiations=entities.schema_instantiations,
     )
     py_target_ir = py_target.PyTarget.from_generate_py(module, py_target_entities)
     _register_py_target(py_target_ir, module)
@@ -1243,8 +1599,8 @@ def _generate_nanobind_target(
     nanobind_target_entities = nanobind_target.NanobindGeneratedEntities(
         schemas=entities.schemas,
         enums=entities.enums,
-        constants=entities.constants,
-        instantiations=entities.instantiations,
+        constants=[constant for constant in entities.constants if primitive.is_renderable_value(constant.value)],
+        schema_instantiations=entities.schema_instantiations,
     )
     nanobind_target_ir = nanobind_target.NanobindTarget.from_generate_nanobind(module, nanobind_target_entities)
     module.inner_scope.define(nanobind_target_ir.name, nanobind_target_ir, terminals)
@@ -1257,7 +1613,7 @@ def _generate_proto_target(
     proto_target_entities = proto_target.ProtoGeneratedEntities(
         schemas=entities.schemas,
         enums=entities.enums,
-        instantiations=entities.instantiations,
+        schema_instantiations=entities.schema_instantiations,
     )
     proto_target_ir = proto_target.ProtoTarget.from_generate_proto(module, proto_target_entities)
     _register_proto_target(proto_target_ir, module)
@@ -1270,7 +1626,7 @@ def _generate_proto_conv_target(
 ) -> None:
     proto_conv_target_entities = cpp_target.ProtoConvGeneratedEntities(
         schemas=entities.schemas,
-        instantiations=entities.instantiations,
+        schema_instantiations=entities.schema_instantiations,
     )
     proto_conv_target_ir = cpp_target.CppTarget.from_generate_proto_conv(module, proto_conv_target_entities)
     _register_cpp_target(proto_conv_target_ir, module)
@@ -1283,8 +1639,12 @@ def _generate_cpp_exe_target(
 ) -> None:
     boxes: list[cpp_executable.CasingEntitySource] = []
     for bx in entities.boxes:
-        assert isinstance(bx, cpp_executable.CasingEntitySource)
-        boxes.append(bx)
+        if not bx.is_generic():
+            assert isinstance(bx, cpp_executable.CasingEntitySource)
+            boxes.append(bx)
+    for inst in entities.box_instantiations:
+        assert isinstance(inst.instantiated, cpp_executable.CasingEntitySource)
+        boxes.append(inst.instantiated)
     cpp_exe_target_entities = cpp_executable.CppExecutableCasingEntities(
         boxes=boxes,
     )
@@ -1300,8 +1660,12 @@ def _generate_py_exe_target(
     """Generate a CPP exectable to run under a cc_binary_with_embedded_py bazel rule."""
     boxes: list[cpp_executable.CasingEntitySource] = []
     for bx in entities.boxes:
-        assert isinstance(bx, cpp_executable.CasingEntitySource)
-        boxes.append(bx)
+        if not bx.is_generic():
+            assert isinstance(bx, cpp_executable.CasingEntitySource)
+            boxes.append(bx)
+    for inst in entities.box_instantiations:
+        assert isinstance(inst.instantiated, cpp_executable.CasingEntitySource)
+        boxes.append(inst.instantiated)
     py_exe_target_entities = cpp_executable.CppExecutableCasingEntities(
         boxes=boxes,
     )
@@ -1311,12 +1675,268 @@ def _generate_py_exe_target(
     py_exe_target_ir.resolve()
 
 
+@dataclass
+class _AlignerInjectionContext:
+    """Bundle of state shared across aligner-injection helpers."""
+
+    main_target: cpp_target.CppTarget
+    main_target_header: context.Header
+    main_target_dial_header: context.Header
+    generate_test_cogs: bool
+    generate_combo: bool
+
+
+def _resolve_aligner_main_target(module: node.Module, entities: ExtractedEntities) -> _AlignerInjectionContext:
+    """Validate and locate the main ``_cc`` ``CppTarget`` for aligner injection."""
+    assert module.generates is not None
+    if node.GenerateTarget.cpp not in module.generates:
+        msg = node.append_error_line(
+            module.cst_node,
+            module,
+            "Modules with #![generate(cpp_aligner)] must also #![generate(cpp)] "
+            + "so the alignment output schema can be placed in the _cc target.",
+        )
+        raise ValueError(msg)
+
+    main_target_name = f"{module.module_id.name.split('::')[-1]}_clk_cc"
+    main_target = next(
+        (t for t in entities.cpp_targets if t.name == main_target_name),
+        None,
+    )
+    assert main_target is not None, (
+        f"Expected main CppTarget '{main_target_name}' in entities.cpp_targets "
+        f"(found: {[t.name for t in entities.cpp_targets]})"
+    )
+    assert main_target.options is not None
+
+    main_target_header = context.Header(
+        module.module_id.repo, (module.module_id.get_base_path().parent / main_target.name).with_suffix(".hh")
+    )
+    main_target_dial_header = context.Header(
+        main_target_header.repo, main_target_header.path.parent / (main_target_header.path.stem + "_dial.hh")
+    )
+    return _AlignerInjectionContext(
+        main_target=main_target,
+        main_target_header=main_target_header,
+        main_target_dial_header=main_target_dial_header,
+        generate_test_cogs=node.GenerateTarget.cpp_test_cog in module.generates,
+        generate_combo=node.GenerateTarget.cpp_combo_test in module.generates,
+    )
+
+
+def _inject_aligner_cog_into_target(
+    aligner_ir: aligner.Aligner,
+    module: node.Module,
+    ctx: _AlignerInjectionContext,
+) -> None:
+    """Create + register the synthetic cog for an aligner and attach it to the main target.
+
+    Mirrors what ``_register_cpp_target`` /
+    ``_handle_generated_cog_metrics`` /
+    ``_register_report_group_outputs_on_dial`` do for cogs that were present
+    during initial target registration, but only for this single
+    aligner-derived synthetic cog.
+    """
+    assert aligner_ir.resolved is not None
+    main_target = ctx.main_target
+    assert main_target.options is not None
+    synthetic_cog = make_aligner_cog(aligner_ir.resolved, module)
+    uuid_reg.register_entity(module.context, synthetic_cog, synthetic_cog.fqn)
+    for entity in chain(
+        synthetic_cog.states.values(),
+        synthetic_cog.inputs.values(),
+        synthetic_cog.outputs.values(),
+        synthetic_cog.conditions.values(),
+        synthetic_cog.cog_metrics_report_groups.values(),
+    ):
+        uuid_reg.register_entity_with_stable_key(module.context, entity)
+    aligner_ir.synthetic_cog = synthetic_cog
+
+    cpp_typereg.register_cpp_type(
+        module.context,
+        synthetic_cog,
+        types.CppType(
+            includes=[ctx.main_target_header],
+            cpp_namespace=main_target.options.namespace,
+            type_name=synthetic_cog.name + "Factory",
+        ),
+    )
+
+    cpp_cog = cpp_executable.CppCog(
+        cog_ir=synthetic_cog,
+        dial_header=ctx.main_target_dial_header,
+        cog_header=ctx.main_target_header,
+    )
+    main_target.cogs.append(cpp_cog)
+    new_dial = cpp_target.CppDial(cpp_cog=cpp_cog)
+    main_target.dials.append(new_dial)
+    main_target.aligner_cogs.append(synthetic_cog)
+    main_target.aligner_sources.append(aligner_ir)
+
+    main_target.representations.extend(synthetic_cog.generated_repr())
+    main_target.interfaces.extend(synthetic_cog.generated_interfaces())
+    main_target.schema_tags.extend(cpp_target.SchemaTag(schema_ir=s) for s in synthetic_cog.generated_schemas())
+    main_target.enums.extend(cpp_target.EnumTarget(enum_ir=e) for e in synthetic_cog.generated_enums())
+    new_dial.representations.extend(synthetic_cog.generated_report_group_repr())
+    new_dial.interfaces.extend(synthetic_cog.generated_report_group_interfaces())
+    new_dial.schema_tags.extend(
+        cpp_target.SchemaTag(schema_ir=s) for s in synthetic_cog.generated_report_group_schemas()
+    )
+
+    _register_cpp_dial_schema_tags(new_dial, module, ctx.main_target_dial_header, main_target.options.namespace)
+    _register_cpp_dial_representations(new_dial, module)
+    _register_cpp_dial_interfaces(new_dial, module)
+
+    if ctx.generate_test_cogs:
+        main_target.cpp_test_cogs.append(cpp_target.CppTestCog(cpp_cog=cpp_cog, generate_combo_test=ctx.generate_combo))
+
+
+def _inject_aligner_alignment_artifacts(
+    aligner_ir: aligner.Aligner,
+    module: node.Module,
+    ctx: _AlignerInjectionContext,
+    terminals: terminalsrc.TerminalSource,
+) -> None:
+    """Inject one aligner's alignment schema/repr/interface into the main ``_cc`` target.
+
+    The C++ types for each injected artifact are registered immediately,
+    since ``_register_cpp_target()`` already ran for ``main_target``.
+    """
+    main_target = ctx.main_target
+    assert main_target.options is not None
+    if aligner_ir.alignment_schema is not None:
+        schema_source = aligner_ir.alignment_schema.schema.source
+        assert schema_source is not None
+        main_target.schema_tags.append(cpp_target.SchemaTag(schema_ir=schema_source))
+        module.inner_scope.define(schema_source.name, schema_source, terminals)
+        # Auto-generated <AlignerName>AlignmentMsg lives physically in
+        # _cc_types.hh, but its public-facing include is the umbrella
+        # _cc.hh (re-exported via IWYU pragma).  Same-module sub-files
+        # that reference the schema have the umbrella stripped and
+        # _cc_types.hh substituted in by ``_strip_umbrella_self_include``,
+        # so registering against the umbrella is the right canonical
+        # choice for both internal and external consumers.
+        cpp_typereg.register_cpp_type(
+            module.context,
+            schema_source,
+            types.CppType(
+                includes=[ctx.main_target_header],
+                cpp_namespace=main_target.options.namespace,
+                type_name=schema_source.name,
+            ),
+        )
+    if aligner_ir.alignment_repr is not None:
+        main_target.representations.append(aligner_ir.alignment_repr)
+        resolved_repr = aligner_ir.alignment_repr.get_resolved()
+        _register_representation(resolved_repr)
+        if resolved_repr.typespec.instantiates is clkbuiltins.TACHYON:
+            schema_arg = resolved_repr.typespec.arguments["schema"]
+            assert isinstance(schema_arg, schema.Schema | typesys.Instantiation)
+            schema_ir_inst = schema.InstantiatedSchema.from_typespec(schema_arg)
+            layout = tachyon_layout.layout_schema(module.context, schema_ir_inst)
+            tachyon_layout_reg.register_structured_type(module.context, schema_ir_inst, layout)
+    if aligner_ir.alignment_iface is not None:
+        main_target.interfaces.append(aligner_ir.alignment_iface)
+        schema_reg.register_interface(
+            main_target.module.context,
+            schema_reg.InterfaceInfo.make(interface_ir=aligner_ir.alignment_iface),
+        )
+
+
+def _generate_aligner_targets(
+    module: node.Module, entities: ExtractedEntities, terminals: terminalsrc.TerminalSource
+) -> None:
+    """Fold aligner-derived cogs into the main ``_cc`` ``CppTarget``.
+
+    Each aligner produces a synthetic ``cog.Cog`` IR node that is appended
+    to the main target's ``cogs``/``dials`` (and tracked in
+    ``aligner_cogs``/``aligner_sources`` for impl generation).  The
+    auto-generated alignment schema/repr/interface for each aligner is
+    likewise injected into the main target so that ``<AlignerName>AlignmentMsg``
+    lands in the same ``_cc_types.hh`` as user-declared schemas, keeping
+    the umbrella ``_cc.hh`` as the single public include for consumers.
+    """
+    ctx = _resolve_aligner_main_target(module, entities)
+
+    for aligner_ir in entities.aligners:
+        _inject_aligner_cog_into_target(aligner_ir, module, ctx)
+
+    for aligner_ir in entities.aligners:
+        _inject_aligner_alignment_artifacts(aligner_ir, module, ctx, terminals)
+
+
+def _populate_manual_aligner_cogs(module: node.Module, entities: ExtractedEntities) -> None:
+    """For manual ``cpp_target`` blocks with aligner refs, create synthetic cogs.
+
+    After ``CppTarget.resolve()`` the ``CppAlignerRef`` objects have resolved
+    their name expressions to ``aligner.Aligner`` IR nodes.  After
+    ``Aligner.resolve()`` each aligner has a ``resolved`` attribute.  This
+    function creates synthetic ``cog.Cog`` nodes and adds them to the owning
+    ``CppTarget``'s ``cogs``, ``dials``, and ``aligner_cogs`` lists — the same
+    as if the user had declared ``cog Foo;`` in the target, except the
+    ``_impl`` is auto-generated.
+    """
+    for cpp_target_ir in entities.cpp_targets:
+        if not cpp_target_ir.aligner_refs:
+            continue
+
+        cpp_target_header = context.Header(
+            cpp_target_ir.module.module_id.repo,
+            BazelPathResolver().to_buildtime_path(cpp_target_ir.module.module_id).parent / (cpp_target_ir.name + ".hh"),
+        )
+
+        for ref in cpp_target_ir.aligner_refs:
+            assert isinstance(ref.aligner_ir, aligner.Aligner)
+            assert ref.aligner_ir.resolved is not None
+            synthetic_cog = make_aligner_cog(ref.aligner_ir.resolved, module)
+            uuid_reg.register_entity(module.context, synthetic_cog, synthetic_cog.fqn)
+            for entity in chain(
+                synthetic_cog.states.values(),
+                synthetic_cog.inputs.values(),
+                synthetic_cog.outputs.values(),
+                synthetic_cog.conditions.values(),
+                synthetic_cog.cog_metrics_report_groups.values(),
+            ):
+                uuid_reg.register_entity_with_stable_key(module.context, entity)
+            ref.aligner_ir.synthetic_cog = synthetic_cog
+
+            cpp_cog = cpp_executable.CppCog(cog_ir=synthetic_cog, dial_header=None, cog_header=cpp_target_header)
+            # Register the cog C++ type (same as _register_cpp_target does
+            # for cogs that were present during initial target registration).
+            cpp_typereg.register_cpp_type(
+                module.context,
+                synthetic_cog,
+                types.CppType(
+                    includes=[cpp_target_header],
+                    cpp_namespace=cpp_target_ir.options.namespace,
+                    type_name=synthetic_cog.name + "Factory",
+                ),
+            )
+            cpp_cog.dial_header = context.Header(
+                cpp_target_header.repo,
+                cpp_target_header.path.parent / (cpp_target_header.path.stem + "_dial.hh"),
+            )
+            cpp_target_ir.cogs.append(cpp_cog)
+            cpp_target_ir.dials.append(cpp_target.CppDial(cpp_cog=cpp_cog))
+            cpp_target_ir.aligner_cogs.append(synthetic_cog)
+            cpp_target_ir.aligner_sources.append(ref.aligner_ir)
+
+            if ref.aligner_ir.alignment_schema is not None:
+                schema_source = ref.aligner_ir.alignment_schema.schema.source
+                assert schema_source is not None
+                cpp_target_ir.schema_tags.append(cpp_target.SchemaTag(schema_ir=schema_source))
+            if ref.aligner_ir.alignment_repr is not None:
+                cpp_target_ir.representations.append(ref.aligner_ir.alignment_repr)
+            if ref.aligner_ir.alignment_iface is not None:
+                cpp_target_ir.interfaces.append(ref.aligner_ir.alignment_iface)
+
+
 def _generate_targets(module: node.Module, entities: ExtractedEntities, terminals: terminalsrc.TerminalSource) -> None:  # noqa: C901, PLR0912 (One condition/branch per target generated)
     if module.generates is None:
         return
 
     instantiation_aliases = set()
-    for instantiation in entities.instantiations:
+    for instantiation in entities.schema_instantiations:
         assert isinstance(instantiation.typespec, typesys.Instantiation)
         assert isinstance(instantiation.typespec.instantiates, schema.Schema)
         instantiation_alias = instantiation.name or instantiation.typespec.instantiates.name

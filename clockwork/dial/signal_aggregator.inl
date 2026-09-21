@@ -1,6 +1,6 @@
-// IWYU pragma: private, include "clockwork/dial/signal_aggregator.hh"
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
+// IWYU pragma: private, include "clockwork/dial/signal_aggregator.hh"
 
 #pragma once
 
@@ -223,7 +223,15 @@ constexpr double MeanAggregator<T>::get_mean() const noexcept
   {
     return 0.0;
   }
-  return static_cast<double>(sum_) / static_cast<double>(count_);
+  // Use .count() for chrono duration types to extract the underlying numeric representation.
+  if constexpr (requires { sum_.count(); })
+  {
+    return static_cast<double>(sum_.count()) / static_cast<double>(count_);
+  }
+  else
+  {
+    return static_cast<double>(sum_) / static_cast<double>(count_);
+  }
 }
 
 template <typename T>

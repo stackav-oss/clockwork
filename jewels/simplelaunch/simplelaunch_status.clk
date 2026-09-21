@@ -1,0 +1,79 @@
+#![generate(cpp)]
+#![cpp(namespace=jewels::simplelaunch)]
+
+// The state of a process
+enum ProcessState
+{
+  uuid: 1bd0c60b-863a-48b3-9635-70b7a64c56aa;
+  values
+  {
+    // Invalid default value
+    #0 unspecified default { underlying_value: 0; }
+
+    // The process is not running yet
+    #1 not_running { underlying_value: 1; }
+
+    // The process is running
+    #2 running { underlying_value: 2; }
+
+    // The process has exited
+    #3 exited { underlying_value: 3; }
+
+    // The process has crashed
+    #4 crashed { underlying_value: 4; }
+  }
+}
+
+// Information about a particular process
+schema ProcessInfo
+{
+  uuid: 9c03d9ca-b8bb-49d3-a0a6-4e0477a32393;
+
+  fields
+  {
+    // Process name
+    #1 name: VarString<max_size=64>;
+
+    // Process ID
+    #2 pid: Int32;
+
+    // Whether the process has generated a core dump
+    #3 core_dumped: Bool;
+
+    // Process state
+    #4 state: ProcessState;
+  }
+}
+
+// Information about a pre-launch task
+schema PreLaunchInfo
+{
+  uuid: 222541e0-26c4-490c-92d9-55811d65d753;
+
+  fields
+  {
+    // Task name
+    #1 name: VarString<max_size=64>;
+
+    // Whether the task succeeded
+    #2 succeeded: Bool;
+  }
+}
+
+// Simplelaunch runner status message
+schema SimplelaunchRunnerStatus
+{
+  uuid: a4482d01-cd56-4e84-a0b3-da38162f3d2a;
+
+  fields
+  {
+    // Host name
+    #1 host_name: VarString<max_size=32>;
+
+    //  Process information
+    #2 process_info: VarArray<ProcessInfo, max_size=64>;
+
+    // Pre-launch task information
+    #3 pre_launch_info: VarArray<PreLaunchInfo, max_size=8>;
+  }
+}

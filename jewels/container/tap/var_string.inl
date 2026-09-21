@@ -3,6 +3,8 @@
 
 #include "jewels/container/tap/var_string.hh"
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/tap/var_array.hh"
 
 #include <algorithm>
@@ -37,12 +39,13 @@ VarString<fixed_capacity>::VarString(
   // std::end(...) would include the null terminator as part of the
   // string.  Need std::prev(std::end(...)) to trim the extra
   // terminator.
-  Base::insert_impl(Base::end(), std::begin(in_str), std::prev(std::end(in_str)));
+  typename Base::iterator inserted{};
+  std::ignore = Base::try_insert(jewels::Out{inserted}, Base::end(), std::begin(in_str), std::prev(std::end(in_str)));
   Base::wipe(fixed_capacity - (in_size - 1UL));
 }
 
 template <size_t fixed_capacity>
-const char* VarString<fixed_capacity>::c_str() const noexcept
+constexpr const char* VarString<fixed_capacity>::c_str() const noexcept
 {
   return this->data();
 }
@@ -60,26 +63,32 @@ constexpr VarString<fixed_capacity>::operator std::string_view() const noexcept
 }
 
 template <size_t fixed_capacity>
+constexpr jewels::BinaryOutcome VarString<fixed_capacity>::try_set(std::string_view other, CallsigTag /*tag*/) noexcept
+{
+  return Base::try_set(other, callsig);
+}
+
+template <size_t fixed_capacity>
 constexpr bool VarString<fixed_capacity>::try_set(std::string_view other) noexcept
 {
-  return Base::try_set(other);
+  return jewels::ok(try_set(other, callsig));
 }
 
 template <size_t fixed_capacity>
 constexpr void VarString<fixed_capacity>::set_truncate(std::string_view str) noexcept
 {
   // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage) `.size()` is used to prevent overruns
-  std::ignore = Base::try_set(std::span{str.data(), std::min(str.size(), fixed_capacity - 1U)});
+  std::ignore = Base::try_set(std::span{str.data(), std::min(str.size(), fixed_capacity - 1U)}, callsig);
 }
 
 template <size_t fixed_capacity>
-bool operator==(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs)
+constexpr bool operator==(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs) noexcept
 {
   return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 
 template <size_t fixed_capacity>
-bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs)
+constexpr bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs) noexcept
 {
   return !(lhs == rhs);
 }
@@ -88,7 +97,7 @@ bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capa
 /// NOTE: `fmt/format.h` needs to be included for this trait to be discoverable rather than just `fmt/core.h`.
 /// Neither are included here to avoid adding a spurious dependency
 template <size_t fixed_capacity>
-auto format_as(const VarString<fixed_capacity>& string)
+constexpr auto format_as(const VarString<fixed_capacity>& string) noexcept
 {
   return std::string_view{string};
 }

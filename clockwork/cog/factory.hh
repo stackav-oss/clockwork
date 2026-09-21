@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,13 +6,20 @@
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/forward.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/uuid/uuid.hh"
 
+#include <wise_enum.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <span>
 
 namespace clockwork
 {
@@ -81,12 +88,30 @@ struct CogStateFactory : detail::ClassFactoryRegistry<CogStateFactory, jewels::U
   using Type = CogStateData;
   using Ptr = std::shared_ptr<Type>;
 
+  WISE_ENUM_CLASS_MEMBER(
+    (StateRestoreResult, uint8_t), (success, 0), (invalid_class_uuid, 1), (buffer_error, 3), (init_failure, 4))
+  using StateRestoreOutcome = jewels::Outcome<StateRestoreResult, StateRestoreResult::success>;
+
   CogStateFactory();
 
   [[nodiscard]] virtual Ptr make(jewels::memory::MemoryResource memres_sys, pinion::PublisherHandle publisher) const;
 
   [[nodiscard]] virtual Ptr
   make(jewels::memory::MemoryResource memres_sys, jewels::memory::MemoryResource memres_state) const;
+
+  /// Restores an external state from its serialized snapshot.
+  /// @param state_out The restored state object.
+  /// @param memres_sys The system memory resource used for the state record.
+  /// @param memres_state The memory resource used by the external state.
+  /// @param snapshot_representation_id The representation of snapshot_data.
+  /// @param snapshot_data The serialized state snapshot.
+  /// @return The restoration result.
+  [[nodiscard]] virtual StateRestoreOutcome make(
+    jewels::Out<Ptr> state_out,
+    jewels::memory::MemoryResource memres_sys,
+    jewels::memory::MemoryResource memres_state,
+    jewels::Uuid<RepresentationTag> snapshot_representation_id,
+    std::span<const std::byte> snapshot_data) const;
 };
 
 /// Explicit instantiation in order to ensure unique location of static class variables

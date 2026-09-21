@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -7,6 +7,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/offboard/types.hh"
@@ -32,6 +33,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ratio>
@@ -127,7 +129,8 @@ TEST_CASE("Reader")
       REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{
+      memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -215,7 +218,8 @@ TEST_CASE("Reader")
       REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{
+      memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -404,7 +408,8 @@ TEST_CASE("Reader")
   {
     SECTION("No log directory")
     {
-      Reader reader{memory_resource, test_log_path.string()};
+      Reader reader{
+        memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
       REQUIRE_FALSE(reader);
       REQUIRE(reader.get_metadata() == jewels::unexpected(LogError::no_such_file_or_directory));
       REQUIRE(reader.get_channel_metadata("not_a_channel") == jewels::unexpected(LogError::no_such_file_or_directory));
@@ -417,10 +422,11 @@ TEST_CASE("Reader")
     SECTION("No log file")
     {
       REQUIRE(vfs.create_directories(test_log_path).has_value());
-      Reader reader{memory_resource, test_log_path.string()};
+      Reader reader{
+        memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
       REQUIRE_FALSE(reader);
       REQUIRE(reader.get_metadata() == jewels::unexpected(LogError::not_a_log));
-      REQUIRE(reader.get_channel_metadata("not_a_channel") == jewels::unexpected(LogError::not_a_log));
+      REQUIRE(reader.get_channel_metadata("channel1") == jewels::unexpected(LogError::not_a_log));
       REQUIRE(reader.get_channels() == jewels::unexpected(LogError::not_a_log));
       REQUIRE(reader.get_metrics() == jewels::unexpected(LogError::not_a_log));
       REQUIRE(reader.open() == jewels::unexpected(LogError::not_a_log));
@@ -590,7 +596,7 @@ TEST_CASE("Reader is deterministic")
     REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
   }
 
-  Reader reader{memory_resource, test_log_path.string()};
+  Reader reader{memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
   REQUIRE(reader.open());
 
   auto expected_time = end_time;
@@ -789,7 +795,7 @@ TEST_CASE("Duplicate messages are filtered")
     REQUIRE(vfs.remove(test_log_path / "stack_log_metadata.pbtxt").has_value());
   }
 
-  Reader reader{memory_resource, test_log_path.string()};
+  Reader reader{memory_resource, test_log_path.string(), std::make_shared<ChunkReaderWriterFactory<>>(memory_resource)};
 
   REQUIRE(reader.open());
   REQUIRE(reader);

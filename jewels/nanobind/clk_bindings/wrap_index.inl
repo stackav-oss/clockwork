@@ -1,7 +1,6 @@
 // IWYU pragma: private, include "jewels/nanobind/clk_bindings/wrap_index.hh"
 #pragma once
 
-#include <Python.h>
 #include <nanobind/nanobind.h>
 
 #include <cstddef>

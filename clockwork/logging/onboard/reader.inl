@@ -18,11 +18,9 @@
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "clockwork/logging/zstd_helper.hh"
 #include "jewels/container/at.hh"
-#include "jewels/filesystem/error_code.hh"
-#include "jewels/filesystem/filesystem.hh"
-#include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 #include "jewels/uuid/uuid.hh"
@@ -35,10 +33,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <dirent.h>
 #include <functional>
 #include <iterator>
 #include <list>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ranges>
@@ -54,12 +52,15 @@ namespace clockwork_logging::onboard
 
 template <typename BufferedReaderType>
 Reader<BufferedReaderType>::Reader(
-  jewels::memory::MemoryResource memory_resource, std::string_view log_path, MetadataMapOption metadata_map_option)
+  jewels::memory::MemoryResource memory_resource,
+  std::string_view log_path,
+  std::shared_ptr<BufferedReaderType> buffered_reader,
+  MetadataMapOption metadata_map_option)
   requires DiskBufferedReaderType<BufferedReaderType>
   : memory_resource_(std::move(memory_resource)),
     all_log_files_(memory_resource_),
     metadata_map_option_(metadata_map_option),
-    buffered_reader_(memory_resource_),
+    buffered_reader_(std::move(buffered_reader)),
     header_buffer_(memory_resource_),
     data_buffer_(memory_resource_),
     log_files_(memory_resource_),
@@ -77,13 +78,14 @@ Reader<BufferedReaderType>::Reader(
 template <typename BufferedReaderType>
 Reader<BufferedReaderType>::Reader(
   jewels::memory::MemoryResource memory_resource,
-  const std::pmr::list<jewels::filesystem::Path>& log_files,
+  const std::pmr::list<std::pmr::string>& log_files,
+  std::shared_ptr<BufferedReaderType> buffered_reader,
   MetadataMapOption metadata_map_option)
   requires DiskBufferedReaderType<BufferedReaderType>
   : memory_resource_(std::move(memory_resource)),
     all_log_files_(memory_resource_),
     metadata_map_option_(metadata_map_option),
-    buffered_reader_(memory_resource_),
+    buffered_reader_(std::move(buffered_reader)),
     header_buffer_(memory_resource_),
     data_buffer_(memory_resource_),
     log_files_(memory_resource_),
@@ -96,8 +98,7 @@ Reader<BufferedReaderType>::Reader(
     all_log_file_list_initialized_(true),
     decompressor_{memory_resource_}
 {
-  std::ranges::for_each(
-    log_files, [this](const auto& log_file) { all_log_files_.emplace_back(log_file.string_view(), memory_resource_); });
+  std::ranges::for_each(log_files, [this](const auto& log_file) { all_log_files_.emplace_back(log_file); });
 }
 
 template <typename BufferedReaderType>
@@ -106,7 +107,7 @@ Reader<BufferedReaderType>::Reader(
   requires MemoryBufferedReaderType<BufferedReaderType>
   : memory_resource_(std::move(memory_resource)),
     all_log_files_(memory_resource_),
-    buffered_reader_(memory_resource_),
+    buffered_reader_(jewels::memory::make_pmr_shared<BufferedReaderType>(memory_resource_, memory_resource_)),
     header_buffer_(memory_resource_),
     data_buffer_(memory_resource_),
     log_files_(memory_resource_),
@@ -123,44 +124,12 @@ Reader<BufferedReaderType>::Reader(
 }
 
 template <typename BufferedReaderType>
-[[nodiscard]] LogExpected<std::pmr::list<jewels::filesystem::Path>>
-Reader<BufferedReaderType>::list_log_files(jewels::memory::MemoryResource memory_resource, std::string_view log_path)
-  requires DiskBufferedReaderType<BufferedReaderType>
-{
-  typename BufferedReaderType::FilesystemType filesys{memory_resource};
-  auto readdir_result = filesys.read_directory(
-    log_path,
-    [&filesys, log_path](const auto& dent)
-    {
-      const std::string_view name{&dent.d_name[0U]};
-      bool is_reg = dent.d_type == DT_REG;
-      if (dent.d_type == DT_UNKNOWN || dent.d_type == DT_LNK)
-      {
-        const auto is_reg_result = filesys.is_regular_file(std::string(log_path).append("/").append(name));
-        is_reg = is_reg_result && is_reg_result.value();
-      }
-      return is_reg && name.ends_with(log_file_suffix);
-    });
-  if (!readdir_result)
-  {
-    return jewels::unexpected(LogError::failed);
-  }
-  std::pmr::list<jewels::filesystem::Path> log_files{memory_resource};
-  for (auto& path : readdir_result.value())
-  {
-    jewels::filesystem::Path file_path{log_path, memory_resource};
-    file_path /= path;
-    log_files.push_back(std::move(file_path));
-  }
-  return {std::move(log_files)};
-}
-
-template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<size_t> Reader<BufferedReaderType>::locate_first_log_file_for_interval(
   jewels::memory::MemoryResource memory_resource,
   LogInterval log_interval,
-  const std::pmr::vector<jewels::filesystem::Path>& log_files,
-  std::pmr::vector<LogExpected<LogInterval>>& interval_results)
+  const std::pmr::vector<std::pmr::string>& log_files,
+  std::pmr::vector<LogExpected<LogInterval>>& interval_results,
+  const std::shared_ptr<BufferedReaderType>& buffered_reader)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
   size_t left_index = 0U;
@@ -176,13 +145,11 @@ template <typename BufferedReaderType>
     if (!interval_results.at(next_index))
     {
       interval_results.at(next_index) =
-        get_file_log_interval(memory_resource, log_files.at(next_index), TimeFilterOption::log_time);
+        get_file_log_interval(memory_resource, log_files.at(next_index), TimeFilterOption::log_time, buffered_reader);
       if (!interval_results.at(next_index))
       {
         jewels::log_cerr_warn(
-          "Failed to get interval for {}: {}",
-          log_files.at(next_index).string_view(),
-          interval_results.at(next_index).error());
+          "Failed to get interval for {}: {}", log_files.at(next_index), interval_results.at(next_index).error());
         return jewels::unexpected(interval_results.at(next_index).error());
       }
     }
@@ -199,20 +166,22 @@ template <typename BufferedReaderType>
 }
 
 template <typename BufferedReaderType>
-[[nodiscard]] std::pmr::list<jewels::filesystem::Path> Reader<BufferedReaderType>::list_log_files_for_interval_no_fail(
+[[nodiscard]] std::pmr::list<std::pmr::string> Reader<BufferedReaderType>::list_log_files_for_interval_no_fail(
   jewels::memory::MemoryResource memory_resource,
   LogInterval log_interval,
   size_t first_index,
-  const std::pmr::vector<jewels::filesystem::Path>& log_files,
-  std::pmr::vector<LogExpected<LogInterval>>& interval_results)
+  const std::pmr::vector<std::pmr::string>& log_files,
+  std::pmr::vector<LogExpected<LogInterval>>& interval_results,
+  const std::shared_ptr<BufferedReaderType>& buffered_reader)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
-  std::pmr::list<jewels::filesystem::Path> interval_files(memory_resource);
+  std::pmr::list<std::pmr::string> interval_files(memory_resource);
   for (size_t i = first_index; i < log_files.size(); ++i)
   {
     if (interval_results.at(i) == jewels::unexpected(LogError::not_initialized))
     {
-      interval_results.at(i) = get_file_log_interval(memory_resource, log_files.at(i), TimeFilterOption::log_time);
+      interval_results.at(i) =
+        get_file_log_interval(memory_resource, log_files.at(i), TimeFilterOption::log_time, buffered_reader);
     }
     if (interval_results.at(i))
     {
@@ -230,17 +199,19 @@ template <typename BufferedReaderType>
 }
 
 template <typename BufferedReaderType>
-[[nodiscard]] LogExpected<std::pmr::list<jewels::filesystem::Path>>
-Reader<BufferedReaderType>::list_log_files_for_interval(
-  jewels::memory::MemoryResource memory_resource, std::string_view log_path, LogInterval log_interval)
+[[nodiscard]] LogExpected<std::pmr::list<std::pmr::string>> Reader<BufferedReaderType>::list_log_files_for_interval(
+  jewels::memory::MemoryResource memory_resource,
+  std::string_view log_path,
+  LogInterval log_interval,
+  const std::shared_ptr<BufferedReaderType>& buffered_reader)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
-  auto list_result = list_log_files(memory_resource, log_path);
+  auto list_result = buffered_reader->list_log_files(log_path);
   if (!list_result || list_result->empty())
   {
     return list_result;
   }
-  std::pmr::vector<jewels::filesystem::Path> log_files(memory_resource);
+  std::pmr::vector<std::pmr::string> log_files(memory_resource);
   log_files.reserve(list_result->size());
   for (auto& log_file : list_result.value())
   {
@@ -250,18 +221,20 @@ Reader<BufferedReaderType>::list_log_files_for_interval(
     log_files.size(), jewels::unexpected(LogError::not_initialized), memory_resource);
   if (log_files.size() == 1U)
   {
-    return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+    return list_log_files_for_interval_no_fail(
+      memory_resource, log_interval, 0U, log_files, interval_results, buffered_reader);
   }
   // Reading the last log file is expensive if the log is being written, check the second to last file first
-  interval_results.at(log_files.size() - 2U) =
-    get_file_log_interval(memory_resource, log_files.at(log_files.size() - 2U), TimeFilterOption::log_time);
+  interval_results.at(log_files.size() - 2U) = get_file_log_interval(
+    memory_resource, log_files.at(log_files.size() - 2U), TimeFilterOption::log_time, buffered_reader);
   if (!interval_results.at(log_files.size() - 2U))
   {
     jewels::log_cerr_warn(
       "Failed to get interval for {}: {}",
-      log_files.at(log_files.size() - 2U).string_view(),
+      log_files.at(log_files.size() - 2U),
       interval_results.at(log_files.size() - 2U).error());
-    return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+    return list_log_files_for_interval_no_fail(
+      memory_resource, log_interval, 0U, log_files, interval_results, buffered_reader);
   }
   if (interval_results.at(log_files.size() - 2U)->get_end_timestamp() >= log_interval.get_end_timestamp())
   {
@@ -270,7 +243,8 @@ Reader<BufferedReaderType>::list_log_files_for_interval(
   }
   else
   {
-    interval_results.back() = get_file_log_interval(memory_resource, log_files.back(), TimeFilterOption::log_time);
+    interval_results.back() =
+      get_file_log_interval(memory_resource, log_files.back(), TimeFilterOption::log_time, buffered_reader);
     if (!interval_results.back())
     {
       // The last log file may be empty
@@ -281,41 +255,43 @@ Reader<BufferedReaderType>::list_log_files_for_interval(
       }
       else
       {
-        jewels::log_cerr_warn(
-          "Failed to get interval for {}: {}", log_files.back().string_view(), interval_results.back().error());
-        return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+        jewels::log_cerr_warn("Failed to get interval for {}: {}", log_files.back(), interval_results.back().error());
+        return list_log_files_for_interval_no_fail(
+          memory_resource, log_interval, 0U, log_files, interval_results, buffered_reader);
       }
     }
   }
   if (!interval_results.front())
   {
-    interval_results.front() = get_file_log_interval(memory_resource, log_files.front(), TimeFilterOption::log_time);
+    interval_results.front() =
+      get_file_log_interval(memory_resource, log_files.front(), TimeFilterOption::log_time, buffered_reader);
     if (!interval_results.front())
     {
-      jewels::log_cerr_warn(
-        "Failed to get interval for {}: {}", log_files.front().string_view(), interval_results.front().error());
-      return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+      jewels::log_cerr_warn("Failed to get interval for {}: {}", log_files.front(), interval_results.front().error());
+      return list_log_files_for_interval_no_fail(
+        memory_resource, log_interval, 0U, log_files, interval_results, buffered_reader);
     }
   }
   if (!LogInterval{interval_results.front()->get_start_timestamp(), interval_results.back()->get_end_timestamp()}
          .overlaps(log_interval))
   {
-    return std::pmr::list<jewels::filesystem::Path>(memory_resource);
+    return std::pmr::list<std::pmr::string>(memory_resource);
   }
   if (log_files.size() <= 1U)
   {
-    std::pmr::list<jewels::filesystem::Path> interval_files(memory_resource);
+    std::pmr::list<std::pmr::string> interval_files(memory_resource);
     interval_files.emplace_back(std::move(log_files.front()));
     return interval_files;
   }
   const auto first_index_result =
-    locate_first_log_file_for_interval(memory_resource, log_interval, log_files, interval_results);
+    locate_first_log_file_for_interval(memory_resource, log_interval, log_files, interval_results, buffered_reader);
   if (!first_index_result)
   {
-    return list_log_files_for_interval_no_fail(memory_resource, log_interval, 0U, log_files, interval_results);
+    return list_log_files_for_interval_no_fail(
+      memory_resource, log_interval, 0U, log_files, interval_results, buffered_reader);
   }
   return list_log_files_for_interval_no_fail(
-    memory_resource, log_interval, first_index_result.value(), log_files, interval_results);
+    memory_resource, log_interval, first_index_result.value(), log_files, interval_results, buffered_reader);
 }
 
 template <typename BufferedReaderType>
@@ -356,17 +332,17 @@ template <typename BufferedReaderType>
     return jewels::unexpected(LogError::already_open);
   }
   close();
-  if (const auto open_result = buffered_reader_.open(log_data_buffer_); !open_result)
+  if (const auto open_result = buffered_reader_->open(log_data_buffer_); !open_result)
   {
     return jewels::unexpected(open_result.error());
   }
   LogHeader log_header{};
   const auto copy_result =
-    buffered_reader_.copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(log_header)));
+    buffered_reader_->copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(log_header)));
   if (!copy_result)
   {
     ++error_counters_.invalid_log_headers;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return jewels::unexpected(copy_result.error());
   }
   if (log_header.magic_number != log_magic_number)
@@ -376,11 +352,11 @@ template <typename BufferedReaderType>
   }
   else
   {
-    const auto advance_result = buffered_reader_.advance(log_header_size);
+    const auto advance_result = buffered_reader_->advance(log_header_size);
     if (!advance_result)
     {
       ++error_counters_.advance_errors;
-      buffered_reader_.close();
+      buffered_reader_->close();
       return jewels::unexpected(advance_result.error());
     }
   }
@@ -393,7 +369,7 @@ template <typename BufferedReaderType>
 template <typename BufferedReaderType>
 void Reader<BufferedReaderType>::close()
 {
-  buffered_reader_.close();
+  buffered_reader_->close();
   maybe_current_message_record_size_ = std::nullopt;
   error_counters_ = {};
   maybe_current_message_record_size_ = std::nullopt;
@@ -412,7 +388,7 @@ void Reader<BufferedReaderType>::close()
 template <typename BufferedReaderType>
 [[nodiscard]] Reader<BufferedReaderType>::operator bool() const noexcept
 {
-  return !log_files_.empty() || buffered_reader_;
+  return !log_files_.empty() || *buffered_reader_;
 }
 
 template <typename BufferedReaderType>
@@ -484,11 +460,11 @@ template <typename BufferedReaderType>
 template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<ZeroCopyLoggedMessage> Reader<BufferedReaderType>::scan_for_next_log_message()
 {
-  while (buffered_reader_ || !log_files_.empty())
+  while (*buffered_reader_ || !log_files_.empty())
   {
     if constexpr (IsDiskBufferedReader<BufferedReaderType>::value)
     {
-      if (!buffered_reader_)
+      if (!*buffered_reader_)
       {
         const auto file_name = std::move(log_files_.front());
         log_files_.pop_front();
@@ -496,7 +472,7 @@ template <typename BufferedReaderType>
         {
           return jewels::unexpected(open_result.error());
         }
-        if (!buffered_reader_)
+        if (!*buffered_reader_)
         {
           continue;
         }
@@ -572,7 +548,7 @@ Reader<BufferedReaderType>::get_channel_metadata(std::string_view channel_name)
     const auto schema_metadata_map_iter = schema_metadata_map_.find(metadata.schema_name);
     if (schema_metadata_map_iter == schema_metadata_map_.end())
     {
-      return jewels::unexpected(LogError::failed);
+      return jewels::unexpected(LogError::missing_schema_metadata);
     }
     const auto& schema_metadata = schema_metadata_map_iter->second;
     metadata.schema_encoding = schema_metadata.schema_encoding;
@@ -616,77 +592,66 @@ template <typename BufferedReaderType>
 template <typename BufferedReaderType>
 [[nodiscard]] BufferedReaderType& Reader<BufferedReaderType>::buffered_reader()
 {
-  return buffered_reader_;
+  return *buffered_reader_;
 }
 
 template <typename BufferedReaderType>
 [[nodiscard]] const BufferedReaderType& Reader<BufferedReaderType>::buffered_reader() const
 {
-  return buffered_reader_;
+  return *buffered_reader_;
 }
 
 template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<LogInterval> Reader<BufferedReaderType>::get_file_log_interval(
-  jewels::memory::MemoryResource memory_resource, std::string_view file_name, TimeFilterOption time_filter_option)
+  jewels::memory::MemoryResource memory_resource,
+  std::string_view file_name,
+  TimeFilterOption time_filter_option,
+  const std::shared_ptr<BufferedReaderType>& buffered_reader)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
-  const jewels::filesystem::Path file_path{file_name, memory_resource};
-  jewels::filesystem::Filesystem kits_fs{memory_resource};
-  kits_fs.set_verbosity(jewels::filesystem::Filesystem::ErrorVerbosity::verbose);
-  const auto open_result = kits_fs.open(file_name);
-  if (!open_result)
-  {
-    return jewels::unexpected(to_log_error(open_result.error()));
-  }
-  const auto& file_desc = open_result.value();
-  const auto size_result = kits_fs.get_size(file_desc);
-  if (!size_result)
-  {
-    return jewels::unexpected(to_log_error(size_result.error()));
-  }
   std::array<std::byte, end_log_file_record_header_size + record_trailer_size> data_buffer{};
-  if (size_result.value() >= data_buffer.size())
+  const auto read_result = buffered_reader->read_log_file_trailer(file_name, data_buffer);
+  if (!read_result)
   {
-    if (const auto read_result = kits_fs.read(file_desc, size_result.value() - data_buffer.size(), data_buffer);
-        !read_result)
+    return jewels::unexpected(read_result.error());
+  }
+  EndLogFileRecordHeader header{};
+  std::memcpy(&header, data_buffer.data(), end_log_file_record_header_size);
+  RecordTrailer trailer{};
+  std::memcpy(&trailer, &data_buffer.at(end_log_file_record_header_size), record_trailer_size);
+  if (try_validate_end_log_record(header, trailer))
+  {
+    if (!header.has_messages)
     {
-      return jewels::unexpected(to_log_error(read_result.error()));
+      return jewels::unexpected(LogError::empty_log_file);
     }
-    EndLogFileRecordHeader header{};
-    std::memcpy(&header, data_buffer.data(), end_log_file_record_header_size);
-    RecordTrailer trailer{};
-    std::memcpy(&trailer, &data_buffer.at(end_log_file_record_header_size), record_trailer_size);
-    if (try_validate_end_log_record(header, trailer))
+    switch (time_filter_option)
     {
-      if (!header.has_messages)
-      {
-        return jewels::unexpected(LogError::empty_log_file);
-      }
-      switch (time_filter_option)
-      {
-      case TimeFilterOption::log_time:
-        return LogInterval{LogTimestamp{header.min_log_time_ns}, LogTimestamp{header.max_log_time_ns}};
-      case TimeFilterOption::message_time:
-        return LogInterval{LogTimestamp{header.min_message_time_ns}, LogTimestamp{header.max_message_time_ns}};
-      }
+    case TimeFilterOption::log_time:
+      return LogInterval{LogTimestamp{header.min_log_time_ns}, LogTimestamp{header.max_log_time_ns}};
+    case TimeFilterOption::message_time:
+      return LogInterval{LogTimestamp{header.min_message_time_ns}, LogTimestamp{header.max_message_time_ns}};
     }
   }
   jewels::log_cerr_warn("Failed to find an end log record, reading {}", file_name);
-  return get_file_log_interval_from_log(memory_resource, file_name, time_filter_option);
+  return get_file_log_interval_from_log(memory_resource, file_name, time_filter_option, buffered_reader);
 }
 
 template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<LogInterval> Reader<BufferedReaderType>::get_file_log_interval_from_log(
-  jewels::memory::MemoryResource memory_resource, std::string_view file_name, TimeFilterOption time_filter_option)
+  jewels::memory::MemoryResource memory_resource,
+  std::string_view file_name,
+  TimeFilterOption time_filter_option,
+  const std::shared_ptr<BufferedReaderType>& buffered_reader)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
-  Reader reader{memory_resource, file_name, MetadataMapOption::disable};
+  Reader reader{memory_resource, file_name, buffered_reader, MetadataMapOption::disable};
   if (const auto open_result = reader.open_log_file(file_name); !open_result)
   {
     return jewels::unexpected(open_result.error());
   }
   std::optional<LogInterval> maybe_log_interval;
-  while (reader.buffered_reader_)
+  while (*reader.buffered_reader_)
   {
     const auto read_header_result = reader.read_next_record_header();
     if (!read_header_result)
@@ -741,7 +706,7 @@ template <typename BufferedReaderType>
       reader.maybe_current_message_record_size_ = std::nullopt;
     }
   }
-  reader.buffered_reader_.close();
+  reader.buffered_reader_->close();
   if (!maybe_log_interval)
   {
     jewels::log_cerr_warn("Failed to get log interval from empty log file '{}'", file_name);
@@ -798,7 +763,7 @@ template <typename BufferedReaderType>
   {
     return jewels::unexpected(LogError::invalid_log_uri);
   }
-  auto list_result = list_log_files(memory_resource_, *maybe_log_path_);
+  auto list_result = buffered_reader_->list_log_files(*maybe_log_path_);
   if (!list_result)
   {
     return jewels::unexpected(list_result.error());
@@ -820,9 +785,7 @@ template <typename BufferedReaderType>
   {
     return jewels::unexpected(init_result.error());
   }
-  std::ranges::for_each(
-    all_log_files_,
-    [this](const auto& log_file) { log_files_.emplace_back(log_file.string_view(), memory_resource_); });
+  std::ranges::for_each(all_log_files_, [this](const auto& log_file) { log_files_.emplace_back(log_file); });
   log_file_list_initialized_ = true;
   return {};
 }
@@ -851,8 +814,8 @@ template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<void> Reader<BufferedReaderType>::open_log_file(std::string_view file_name)
   requires DiskBufferedReaderType<BufferedReaderType>
 {
-  buffered_reader_.close();
-  const auto open_result = buffered_reader_.open(file_name);
+  buffered_reader_->close();
+  const auto open_result = buffered_reader_->open(file_name);
   if (!open_result)
   {
     ++error_counters_.open_failures;
@@ -860,11 +823,11 @@ template <typename BufferedReaderType>
   }
   LogHeader log_header{};
   const auto copy_result =
-    buffered_reader_.copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(log_header)));
+    buffered_reader_->copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(log_header)));
   if (!copy_result)
   {
     ++error_counters_.invalid_log_headers;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return {};
   }
   if (log_header.magic_number != log_magic_number)
@@ -874,11 +837,11 @@ template <typename BufferedReaderType>
   }
   else
   {
-    const auto advance_result = buffered_reader_.advance(log_header_size);
+    const auto advance_result = buffered_reader_->advance(log_header_size);
     if (!advance_result)
     {
       ++error_counters_.advance_errors;
-      buffered_reader_.close();
+      buffered_reader_->close();
     }
   }
   return {};
@@ -887,29 +850,29 @@ template <typename BufferedReaderType>
 template <typename BufferedReaderType>
 void Reader<BufferedReaderType>::scan_for_next_record()
 {
-  auto advance_result = buffered_reader_.advance(1U);
+  auto advance_result = buffered_reader_->advance(1U);
   if (!advance_result)
   {
     ++error_counters_.advance_errors;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
-  advance_result = buffered_reader_.advance(std::as_bytes(std::span{record_magic_number}));
+  advance_result = buffered_reader_->advance(std::as_bytes(std::span{record_magic_number}));
   if (!advance_result)
   {
     ++error_counters_.advance_errors;
-    buffered_reader_.close();
+    buffered_reader_->close();
   }
 }
 
 template <typename BufferedReaderType>
 void Reader<BufferedReaderType>::advance_past_current_record(size_t record_size)
 {
-  auto advance_result = buffered_reader_.advance(record_size);
+  auto advance_result = buffered_reader_->advance(record_size);
   if (!advance_result)
   {
     ++error_counters_.advance_errors;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
 }
@@ -917,28 +880,28 @@ void Reader<BufferedReaderType>::advance_past_current_record(size_t record_size)
 template <typename BufferedReaderType>
 [[nodiscard]] LogExpected<RecordHeader> Reader<BufferedReaderType>::read_next_record_header()
 {
-  while (buffered_reader_)
+  while (*buffered_reader_)
   {
-    const auto skip_result = buffered_reader_.skip_pad_bytes();
+    const auto skip_result = buffered_reader_->skip_pad_bytes();
     if (!skip_result)
     {
       ++error_counters_.advance_errors;
-      buffered_reader_.close();
+      buffered_reader_->close();
       return jewels::unexpected(LogError::end_of_log);
     }
-    if (!buffered_reader_)
+    if (!*buffered_reader_)
     {
       // We advanced to end of file
-      buffered_reader_.close();
+      buffered_reader_->close();
       return jewels::unexpected(LogError::end_of_log);
     }
     RecordHeader record_header{};
     const auto copy_result =
-      buffered_reader_.copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(record_header)));
+      buffered_reader_->copy_out(0U, std::as_writable_bytes(jewels::as_single_item_span(record_header)));
     if (!copy_result)
     {
       ++error_counters_.invalid_records;
-      buffered_reader_.close();
+      buffered_reader_->close();
       return jewels::unexpected(LogError::end_of_log);
     }
     if (record_header.magic_number != record_magic_number || record_header.record_size > max_log_record_size)
@@ -957,13 +920,13 @@ void Reader<BufferedReaderType>::process_schema_record(const RecordHeader& recor
 {
   SchemaRecordHeader header{};
   header.header = record_header;
-  const auto copy_result = buffered_reader_.copy_out(
+  const auto copy_result = buffered_reader_->copy_out(
     record_header_size,
     std::as_writable_bytes(jewels::as_single_item_span(header)).last(schema_record_header_size - record_header_size));
   if (!copy_result)
   {
     ++error_counters_.invalid_records;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
   if (schema_record_header_size + header.schema_name_length + record_trailer_size > header.header.record_size)
@@ -974,7 +937,7 @@ void Reader<BufferedReaderType>::process_schema_record(const RecordHeader& recor
   }
   const auto schema_definition_size =
     header.header.record_size - schema_record_header_size - header.schema_name_length - record_trailer_size;
-  const auto zero_copy_result = buffered_reader_.zero_copy_out(
+  const auto zero_copy_result = buffered_reader_->zero_copy_out(
     schema_record_header_size, header.schema_name_length, schema_definition_size, record_trailer_size);
   if (!zero_copy_result)
   {
@@ -1037,13 +1000,13 @@ void Reader<BufferedReaderType>::process_channel_record(const RecordHeader& reco
 {
   ChannelRecordHeader header{};
   header.header = record_header;
-  const auto copy_result = buffered_reader_.copy_out(
+  const auto copy_result = buffered_reader_->copy_out(
     record_header_size,
     std::as_writable_bytes(jewels::as_single_item_span(header)).last(channel_record_header_size - record_header_size));
   if (!copy_result)
   {
     ++error_counters_.invalid_records;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
   if (channel_record_header_size + record_trailer_size > header.header.record_size)
@@ -1054,7 +1017,7 @@ void Reader<BufferedReaderType>::process_channel_record(const RecordHeader& reco
   }
   const auto channel_name_length = header.header.record_size - channel_record_header_size - record_trailer_size;
   const auto zero_copy_result =
-    buffered_reader_.zero_copy_out(channel_record_header_size, channel_name_length, record_trailer_size, 0U);
+    buffered_reader_->zero_copy_out(channel_record_header_size, channel_name_length, record_trailer_size, 0U);
   if (!zero_copy_result)
   {
     ++error_counters_.invalid_records;
@@ -1192,13 +1155,13 @@ Reader<BufferedReaderType>::try_process_message_record(const RecordHeader& recor
 {
   MessageRecordHeader header{};
   header.header = record_header;
-  const auto copy_result = buffered_reader_.copy_out(
+  const auto copy_result = buffered_reader_->copy_out(
     record_header_size,
     std::as_writable_bytes(jewels::as_single_item_span(header)).last(message_record_header_size - record_header_size));
   if (!copy_result)
   {
     ++error_counters_.invalid_records;
-    buffered_reader_.close();
+    buffered_reader_->close();
     jewels::log_cerr_error("copy_result: {}", copy_result.error());
     return jewels::unexpected(jewels::MonoError{});
   }
@@ -1212,7 +1175,7 @@ Reader<BufferedReaderType>::try_process_message_record(const RecordHeader& recor
   const auto data_size =
     header.header.record_size - message_record_header_size - header.header_length - record_trailer_size;
   const auto zero_copy_result =
-    buffered_reader_.zero_copy_out(message_record_header_size, header.header_length, data_size, record_trailer_size);
+    buffered_reader_->zero_copy_out(message_record_header_size, header.header_length, data_size, record_trailer_size);
   if (!zero_copy_result)
   {
     ++error_counters_.invalid_records;
@@ -1303,23 +1266,23 @@ void Reader<BufferedReaderType>::process_end_log_file_record(const RecordHeader&
 {
   EndLogFileRecordHeader header{};
   header.header = record_header;
-  if (const auto copy_result = buffered_reader_.copy_out(
+  if (const auto copy_result = buffered_reader_->copy_out(
         record_header_size,
         std::as_writable_bytes(jewels::as_single_item_span(header))
           .last(end_log_file_record_header_size - record_header_size));
       !copy_result)
   {
     ++error_counters_.invalid_records;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
   RecordTrailer trailer{};
-  if (const auto copy_result = buffered_reader_.copy_out(
+  if (const auto copy_result = buffered_reader_->copy_out(
         end_log_file_record_header_size, std::as_writable_bytes(jewels::as_single_item_span(trailer)));
       !copy_result)
   {
     ++error_counters_.invalid_records;
-    buffered_reader_.close();
+    buffered_reader_->close();
     return;
   }
   if (const auto process_result = try_validate_end_log_record(header, trailer); !process_result)
@@ -1355,7 +1318,7 @@ template <typename BufferedReaderType>
     }
     const bool is_last_file = std::next(log_file_iter) == all_log_files_.end();
     bool reached_messages = false;
-    while (buffered_reader_ &&
+    while (*buffered_reader_ &&
            (!reached_messages || (metadata_map_option_ == MetadataMapOption::enable && is_last_file)))
     {
       const auto read_header_result = read_next_record_header();
@@ -1388,7 +1351,7 @@ template <typename BufferedReaderType>
         break;
       }
     }
-    buffered_reader_.close();
+    buffered_reader_->close();
   }
   return {};
 }

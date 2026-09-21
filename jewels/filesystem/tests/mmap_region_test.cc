@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/file_descriptor.hh"
@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <span>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <utility>
 

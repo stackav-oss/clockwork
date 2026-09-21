@@ -1,22 +1,31 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/buffer.hh"
 
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/device_ptr.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
 #include "jewels/compiler/intrinsics.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iterator>
+#include <ranges>
 #include <span>
 
 namespace clockwork::pinion
 {
+
+__attribute__((weak)) DevicePtrFactory* get_buffer_dev_ptr_factory_impl()
+{
+  return nullptr;
+}
 
 namespace
 {
@@ -62,7 +71,8 @@ Slot BufferIterator::dereference() const noexcept
 {
   return Slot{
     buffer_ + static_cast<std::ptrdiff_t>(detail::to_position(index_, layout_) * slot_stride(layout_)),
-    layout_.message_size};
+    layout_.message_size,
+    get_buffer_dev_ptr_factory_impl()};
 }
 
 bool BufferIterator::equal(const BufferIterator& other) const noexcept
@@ -221,6 +231,81 @@ size_t Buffer::get_publish_count() const noexcept
     return false;
   }
   return std::begin(*this) <= iterator && std::end(*this) > iterator;
+}
+
+jewels::expected<BufferIndex, ReserveError> Buffer::reserve(size_t count) noexcept
+{
+  if (reserved_ > 0U)
+  {
+    return jewels::unexpected{ReserveError::existing_reservation};
+  }
+  if (count > layout().num_slots)
+  {
+    return jewels::unexpected{ReserveError::count_too_large};
+  }
+  const auto current_tail = tail();
+  const auto current_head = head();
+  const auto slots_in_use = current_head - current_tail;
+  const auto slots_available = layout().num_slots - slots_in_use;
+  const auto slots_to_hide = count > slots_available ? count - slots_available : 0UL;
+
+  // Increment the tail to hide enough elements to satisfy the reservation.
+  const auto maybe_new_tail = increment_tail(current_tail, slots_to_hide);
+  if (!maybe_new_tail)
+  {
+    return jewels::unexpected{ReserveError::unexpected_tail};
+  }
+
+  // The control block has been updated already so subscribers can't
+  // see these slots anymore.  Safe to zero out headers and footers of
+  // hidden slots.
+  for (auto hidden_slot : std::ranges::subrange<BufferIterator>{
+         BufferIterator{get(), layout(), current_tail}, BufferIterator{get(), layout(), *maybe_new_tail}})
+  {
+    for (auto bytes : hidden_slot.headers_footers())
+    {
+      if (!bytes.empty())
+      {
+        std::memset(bytes.data(), 0, bytes.size_bytes());
+      }
+    }
+  }
+
+  reserved_ = count;
+  return current_head;
+}
+
+jewels::expected<void, WriteError> Buffer::commit(BufferIndex reserved_slot) noexcept
+{
+  return commit(reserved_slot, reserved_);
+}
+
+jewels::expected<void, WriteError> Buffer::commit(BufferIndex reserved_slot, size_t actual_count) noexcept
+{
+  const auto current_head = head();
+  if (reserved_ == 0UL || current_head != reserved_slot || actual_count > reserved_)
+  {
+    return jewels::unexpected{WriteError::unexpected_reservation};
+  }
+
+  // Incrementing the head by actual_count exposes only that many slots.
+  const auto maybe_new_head = increment_head(current_head, actual_count);
+  if (!maybe_new_head)
+  {
+    return jewels::unexpected{WriteError::unexpected_head};
+  }
+  reserved_ = 0UL;
+  return {};
+}
+
+jewels::expected<void, WriteError> Buffer::discard(BufferIndex reserved_slot) noexcept
+{
+  if (reserved_ == 0UL || head() != reserved_slot)
+  {
+    return jewels::unexpected{WriteError::unexpected_reservation};
+  }
+  reserved_ = 0UL;
+  return {};
 }
 
 } // namespace clockwork::pinion

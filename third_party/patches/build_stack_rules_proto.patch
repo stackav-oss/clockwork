@@ -681,3 +681,175 @@ index f2b49604..49bfa5dd 100644
                  "declaration": declaration,
                  "esModuleInterop": True,
              },
+diff --git pkg/language/protobuf/generate_test.go pkg/language/protobuf/generate_test.go
+index 2fd5b23a..1587eb0e 100644
+--- pkg/language/protobuf/generate_test.go
++++ pkg/language/protobuf/generate_test.go
+@@ -191,3 +191,30 @@ func (m *mockImportResolver) Provide(lang string, impLang, val string, location
+ 
+ func (m *mockImportResolver) Imports(lang, impLang string, visitor func(imp string, location []label.Label) bool) {
+ }
++
++func TestImportsIndexesExistingRulesNotRegenerated(t *testing.T) {
++	file := rule.EmptyFile("", "test/file/path")
++
++	protoLibrary := rule.NewRule("proto_library", "test_filename_proto")
++	protoLibrary.SetAttr("srcs", []string{"test_filename.proto"})
++	protoLibrary.Insert(file)
++
++	compile := rule.NewRule("proto_compile", "test_filename_cpp_compile")
++	compile.SetAttr("outputs", []string{"test_filename.pb.cc", "test_filename.pb.h"})
++	compile.SetAttr("proto", "test_filename_proto")
++	compile.Insert(file)
++
++	generated := rule.NewRule("proto_cc_library", "test_filename_cc_library")
++	generated.SetAttr("srcs", []string{"test_filename.pb.cc"})
++	generated.SetAttr("hdrs", []string{"test_filename.pb.h"})
++	generated.Insert(file)
++
++	got := NewProtobufLang("test").Imports(config.New(), generated, file)
++	want := []resolve.ImportSpec{{
++		Lang: "proto_cc_library",
++		Imp:  "test/file/path/test_filename.proto",
++	}}
++	if diff := cmp.Diff(want, got); diff != "" {
++		t.Errorf("Imports() mismatch (-want +got):\n%s", diff)
++	}
++}
+diff --git pkg/language/protobuf/resolve.go pkg/language/protobuf/resolve.go
+index 00ed0d41..0b0b588d 100644
+--- pkg/language/protobuf/resolve.go
++++ pkg/language/protobuf/resolve.go
+@@ -2,6 +2,9 @@ package protobuf
+ 
+ import (
+ 	"log"
++	"path"
++	"sort"
++	"strings"
+ 
+ 	"github.com/bazelbuild/bazel-gazelle/config"
+ 	"github.com/bazelbuild/bazel-gazelle/label"
+@@ -18,20 +20,114 @@ import (
+ // If nil is returned, the rule will not be indexed. If any non-nil slice is
+ // returned, including an empty slice, the rule will be indexed.
+ func (pl *protobufLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
+-	from := label.New("", f.Pkg, r.Name())
+-	pkg, ok := pl.packages[from.Pkg]
+-	if !ok {
+-		// log.Println("protobuf.Imports(): Unknown package", from)
++	if f != nil {
++		outputs := make(map[string]bool)
++		for _, attr := range []string{"srcs", "hdrs", "data"} {
++			for _, value := range r.AttrStrings(attr) {
++				outputs[value] = true
++			}
++		}
++		sharedGeneratedRules := 0
++		for _, candidate := range f.Rules {
++			if candidate == r {
++				continue
++			}
++			for _, attr := range []string{"srcs", "hdrs", "data"} {
++				if sharesOutput(candidate.AttrStrings(attr), outputs) {
++					sharedGeneratedRules++
++					break
++				}
++			}
++		}
++		if sharedGeneratedRules > 0 {
++			return []resolve.ImportSpec{}
++		}
++	}
++
++	if pkg, ok := pl.packages[f.Pkg]; ok {
++		if provider := pkg.RuleProvider(r); provider != nil {
++			return provider.Imports(c, r, f)
++		}
++	}
++
++	// When Gazelle updates only part of a repository, unchanged packages are
++	// indexed without being generated. Derive import specs for their existing
++	// rules so dependents can resolve cross-package proto imports.
++	return importsForExistingRule(r, f)
++}
++
++func importsForExistingRule(r *rule.Rule, f *rule.File) []resolve.ImportSpec {
++	if f == nil {
+ 		return nil
+ 	}
+ 
+-	provider := pkg.RuleProvider(r)
+-	if provider == nil {
+-		// log.Printf("Unknown rule provider for %v (rule=%p)", from, r)
++	outputs := make(map[string]bool)
++	for _, attr := range []string{"srcs", "hdrs", "data"} {
++		for _, value := range r.AttrStrings(attr) {
++			outputs[value] = true
++		}
++	}
++	if len(outputs) == 0 {
+ 		return nil
+ 	}
+ 
+-	return provider.Imports(c, r, f)
++	hasUniqueGeneratedOutput := func(candidateOutputs []string) bool {
++		matchingRules := 0
++		for _, generated := range f.Rules {
++			generatedOutputs := make(map[string]bool)
++			for _, attr := range []string{"srcs", "hdrs", "data"} {
++				for _, value := range generated.AttrStrings(attr) {
++					generatedOutputs[value] = true
++				}
++			}
++			if sharesOutput(candidateOutputs, generatedOutputs) {
++				matchingRules++
++			}
++		}
++		return matchingRules == 1
++	}
++
++	protoNames := make(map[string]bool)
++	for _, candidate := range f.Rules {
++		if candidate.Kind() != "proto_compile" || !strings.HasPrefix(r.Name(), strings.TrimSuffix(candidate.AttrString("proto"), "_proto")+"_") || !hasUniqueGeneratedOutput(candidate.AttrStrings("outputs")) {
++			continue
++		}
++		if protoName := candidate.AttrString("proto"); protoName != "" {
++			protoNames[protoName] = true
++		}
++	}
++
++	imports := make([]resolve.ImportSpec, 0)
++	for _, candidate := range f.Rules {
++		if candidate.Kind() != "proto_library" || !protoNames[candidate.Name()] {
++			continue
++		}
++		for _, src := range candidate.AttrStrings("srcs") {
++			srcLabel, err := label.Parse(src)
++			if err != nil {
++				log.Printf("%s %q: unparseable source label %q: %v", candidate.Kind(), candidate.Name(), src, err)
++				continue
++			}
++			imports = append(imports, resolve.ImportSpec{
++				Lang: r.Kind(),
++				Imp:  path.Join(f.Pkg, srcLabel.Name),
++			})
++		}
++	}
++
++	sort.Slice(imports, func(i, j int) bool {
++		return imports[i].Imp < imports[j].Imp
++	})
++	return imports
++}
++
++func sharesOutput(outputs []string, generated map[string]bool) bool {
++	for _, output := range outputs {
++		if generated[output] {
++			return true
++		}
++	}
++	return false
+ }
+ 
+ // Embeds returns a list of labels of rules that the given rule embeds. If a

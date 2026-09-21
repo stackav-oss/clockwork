@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -7,6 +7,20 @@ load("//tools/rules:cc.bzl", "cc_library")
 package(
     default_testonly = True,
     default_visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "compression_test_schema_clk",
+    srcs = ["compression_test_schema.clk"],
+    outs = [
+        "compression_test_schema_clk_cc.cc",
+        "compression_test_schema_clk_cc.hh",
+        "compression_test_schema_clk_cc.inl",
+        "compression_test_schema_clk_cc_types.cc",
+        "compression_test_schema_clk_cc_types.hh",
+        "compression_test_schema_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
 )
 
 cc_library(
@@ -22,6 +36,9 @@ clk(
         "test_schema_v1_clk_cc.cc",
         "test_schema_v1_clk_cc.hh",
         "test_schema_v1_clk_cc.inl",
+        "test_schema_v1_clk_cc_types.cc",
+        "test_schema_v1_clk_cc_types.hh",
+        "test_schema_v1_clk_cc_types.inl",
         "test_schema_v1_clk_py.py",
     ],
     cpp_deps = [":strong_type_factory"],
@@ -38,6 +55,9 @@ clk(
         "test_schema_v2_clk_cc.cc",
         "test_schema_v2_clk_cc.hh",
         "test_schema_v2_clk_cc.inl",
+        "test_schema_v2_clk_cc_types.cc",
+        "test_schema_v2_clk_cc_types.hh",
+        "test_schema_v2_clk_cc_types.inl",
         "test_schema_v2_clk_py.py",
     ],
     cpp_deps = [":strong_type_factory"],

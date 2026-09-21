@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_state.hh"
@@ -7,6 +7,7 @@
 #include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
 #include "clockwork/runners/thread_pool.hh"

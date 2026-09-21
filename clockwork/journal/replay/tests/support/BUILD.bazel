@@ -1,0 +1,23 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/journal/replay/tests:__pkg__"],
+)
+
+clk(
+    name = "execution_queue_test_messages_clk",
+    srcs = ["execution_queue_test_messages.clk"],
+    outs = [
+        "execution_queue_test_messages_clk_cc.cc",
+        "execution_queue_test_messages_clk_cc.hh",
+        "execution_queue_test_messages_clk_cc.inl",
+        "execution_queue_test_messages_clk_cc_types.cc",
+        "execution_queue_test_messages_clk_cc_types.hh",
+        "execution_queue_test_messages_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)

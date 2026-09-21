@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -55,7 +55,7 @@ public:
   [[nodiscard]] LogExpected<TopicMetadata> get_channel_metadata(std::string_view channel_name) override;
   [[nodiscard]] LogExpected<LogTimestamp> start_time() override;
   [[nodiscard]] LogExpected<LogTimestamp> end_time() override;
-  [[nodiscard]] std::optional<LoggedMessage> next_message() override;
+  [[nodiscard]] std::optional<LoggedMessage> next_message_impl() override;
 
 private:
   bool opened_ = false;

@@ -1,16 +1,20 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
 
-#include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/meta_channel_factory.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 
 #include <array>
 #include <chrono>
+#include <functional>
+#include <memory_resource>
 #include <string>
 #include <utility>
 
@@ -18,12 +22,12 @@ namespace clockwork
 {
 namespace
 {
-constexpr pinion::ShmChannel::ResumeBehavior resume_default = pinion::ShmChannel::ResumeBehavior::no_resume;
+constexpr pinion::AbstractChannel::ResumeBehavior resume_default = pinion::AbstractChannel::ResumeBehavior::no_resume;
 
 std::vector<std::string> get_resume_strings_vector()
 {
   std::vector<std::string> names;
-  for (auto enum_item : wise_enum::range<pinion::ShmChannel::ResumeBehavior>)
+  for (auto enum_item : wise_enum::range<pinion::AbstractChannel::ResumeBehavior>)
   {
     names.emplace_back(enum_item.name);
   }
@@ -48,9 +52,9 @@ PinionArgs::PinionArgs(jewels::memory::MemoryResource memres, TCLAP::ArgContaine
 {
 }
 
-jewels::expected<pinion::ShmChannelFactory, jewels::MonoError> PinionArgs::make_factory() const
+pinion::AbstractChannel::ResumeBehavior PinionArgs::resume() const
 {
-  auto requested_resume_maybe = wise_enum::from_string<pinion::ShmChannel::ResumeBehavior>(arg_resume_.getValue());
+  auto requested_resume_maybe = wise_enum::from_string<pinion::AbstractChannel::ResumeBehavior>(arg_resume_.getValue());
   auto resume = requested_resume_maybe.value_or(resume_default);
   // We know the second condition must be true if the first is, but clang-tidy can't see that so check it explicitly.
   if (resume != resume_default && requested_resume_maybe.has_value())
@@ -58,7 +62,33 @@ jewels::expected<pinion::ShmChannelFactory, jewels::MonoError> PinionArgs::make_
     jewels::log_cerr_warn(
       "{} flag set to nondefault: \"{}\".", arg_resume_.longID(), wise_enum::to_string(requested_resume_maybe.value()));
   }
-  return pinion::ShmChannelFactory::make(memres_, arg_pinion_ns_.getValue(), arg_pinion_dir_.getValue(), resume);
+  return resume;
+}
+
+jewels::expected<std::shared_ptr<pinion::AbstractChannelFactory>, jewels::MonoError>
+PinionArgs::make_factory(const Tappy<common::ProcessDescription<>>& config) const
+{
+  return pinion::MetaChannelFactory::make(
+           memres_, config, arg_pinion_ns_.getValue(), arg_pinion_dir_.getValue(), resume())
+    .transform([this](pinion::MetaChannelFactory&& factory)
+               { return jewels::memory::make_pmr_shared<pinion::MetaChannelFactory>(memres_, std::move(factory)); });
+}
+
+jewels::expected<std::shared_ptr<pinion::AbstractChannelFactory>, jewels::MonoError> PinionArgs::make_factory(
+  std::pmr::unordered_map<std::pmr::string, pinion::ChannelType> channel_types,
+  std::pmr::unordered_map<std::pmr::string, std::pmr::vector<std::pmr::string>> publisher_keys,
+  std::pmr::unordered_map<std::pmr::string, std::pmr::string> subscriber_keys) const
+{
+  return pinion::MetaChannelFactory::make(
+           memres_,
+           std::move(channel_types),
+           std::move(publisher_keys),
+           std::move(subscriber_keys),
+           arg_pinion_ns_.getValue(),
+           arg_pinion_dir_.getValue(),
+           resume())
+    .transform([this](pinion::MetaChannelFactory&& factory)
+               { return jewels::memory::make_pmr_shared<pinion::MetaChannelFactory>(memres_, std::move(factory)); });
 }
 
 ExecutionArgs::ExecutionArgs(TCLAP::ArgContainer& parser)
@@ -88,6 +118,8 @@ ExecutionArgs::ExecutionArgs(TCLAP::ArgContainer& parser)
       "",
       "string",
       parser),
+    signal_metadata_config_path_(
+      "", "signal-metadata-config", "Path to the signal metadata config file", false, "", "string", parser),
     suppress_schema_mismatch_errors_(
       "", "suppress-schema-mismatch-errors", "Suppress errors for schema mismatch", parser, false)
 {
@@ -131,7 +163,7 @@ jewels::expected<ExecutionParams, jewels::MonoError> ExecutionArgs::make_executi
   }
   else if (output_log_uri_.isSet() || log_writer_config_path_.isSet())
   {
-    jewels::log_cerr_error("If an outup log uri is set a log writer config path must also be.");
+    jewels::log_cerr_error("If an output log uri is set a log writer config path must also be.");
     return jewels::unexpected(jewels::MonoError{});
   }
 
@@ -142,6 +174,10 @@ jewels::expected<ExecutionParams, jewels::MonoError> ExecutionArgs::make_executi
   if (metrics_channel_metadata_config_path_.isSet())
   {
     execution_params.metrics_channel_metadata_config_path.emplace(metrics_channel_metadata_config_path_.getValue());
+  }
+  if (signal_metadata_config_path_.isSet())
+  {
+    execution_params.signal_metadata_config_path.emplace(signal_metadata_config_path_.getValue());
   }
 
   execution_params.suppress_schema_mismatch_errors.emplace(suppress_schema_mismatch_errors_.getValue());

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/hash/sha1.hh"
@@ -67,7 +67,7 @@ Sha1::Digest Sha1::get() const
   Digest digest = digest_;
   std::array<uint32_t, vog_sha1::BLOCK_INTS> block32{};
   uint64_t blocks = blocks_;
-  const uint64_t size = 8 * (block_bytes * blocks + pending_);
+  const uint64_t size = 8 * ((block_bytes * blocks) + pending_);
   if (pending_ > 0)
   {
     std::memset(std::next(buffer_.data(), static_cast<ssize_t>(pending_)), 0, block_bytes - pending_);

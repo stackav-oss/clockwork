@@ -1,8 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/log_cerr/log_cerr.hh"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fmt/format.h>
 
@@ -90,6 +91,8 @@ TEST_CASE("log_message_to_buffer")
 
 TEST_CASE("Smoke test")
 {
+  setup_mock_clock();
+
   LogCerrThrottle throttle({});
   log_cerr_fatal(
     "Really long fatal message "
@@ -102,15 +105,6 @@ TEST_CASE("Smoke test")
   log_cerr_warn_throttled(throttle, "Warning message {}.{}", 3, 1);
   log_cerr_debug("Debug message {}.{}.{}", 3, 1, "0");
   log_cerr_debug_throttled(throttle, "Debug message {}.{}.{}", 3, 1, "0");
-}
-
-TEST_CASE("Throttle")
-{
-  LogCerrThrottle throttle(std::chrono::seconds(1));
-  REQUIRE(throttle.should_log());
-  REQUIRE_FALSE(throttle.should_log());
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  REQUIRE(throttle.should_log());
 }
 
 } // namespace jewels

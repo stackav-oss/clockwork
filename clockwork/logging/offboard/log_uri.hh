@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -56,6 +56,10 @@ class LogUri
     jewels::memory::MemoryResource memory_resource);
 
 public:
+  /// Construct an empty URI
+  /// @param[in] memory_resource Memory resource
+  explicit LogUri(jewels::memory::MemoryResource memory_resource);
+
   ~LogUri() noexcept = default;
 
   /// Copy constructor
@@ -258,6 +262,14 @@ public:
   {
     return !(lhs < rhs);
   }
+
+  /// Test whether a path is an absolute path
+  ///
+  /// Absolute paths start with '/', 'file:', or 's3:'.
+  ///
+  /// @param[in] path_str Path string
+  /// @return True if the path is absolute, otherwise false
+  [[nodiscard]] static bool is_absolute_path(std::string_view path_str);
 
 private:
   /// URI scheme

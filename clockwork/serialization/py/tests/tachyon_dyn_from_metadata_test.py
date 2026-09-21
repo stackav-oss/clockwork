@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import struct
 import uuid
 from dataclasses import fields
 from decimal import Decimal
@@ -14,16 +15,36 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema
+from clockwork.dsl.compiler_context import CompilerContext
+from clockwork.dsl.ir import clkbuiltins, compiler, primitive, schema, tensor_builtins
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
+from clockwork.serialization.metadata import tachyon_model
 from clockwork.serialization.py import tachyon_dyn, tachyon_dyn_from_metadata
 
 
 @pytest.fixture()
 def fs_importer() -> FilesystemImporter:
     return FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+
+def test_bitset_from_metadata() -> None:
+    bitset_type = tachyon_model.BuiltInType(
+        fqn=clkbuiltins.BITSET.fqn,
+        uuid=clkbuiltins.BITSET.uuid,
+        size=2,
+        alignment=1,
+        arguments=["10"],
+    )
+    serdes = tachyon_dyn_from_metadata._bitset_factory(CompilerContext(), 0, [bitset_type], {})
+    assert serdes is not None
+    buffer = bytearray(2)
+    serdes.serializer(0x281, memoryview(buffer))
+    assert buffer == b"\x81\x02"
+    assert serdes.deserializer(memoryview(b"\x81\xfe")) == 0x281
+    with pytest.raises(ValueError, match="Bitset<10> value"):
+        serdes.serializer(1 << 10, memoryview(buffer))
 
 
 def test_tapmsg(fs_importer: FilesystemImporter) -> None:
@@ -52,30 +73,54 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     SubMsgDyn, _ = tachyon_dyn.get_schema_dataclass(module.context, module, "SubMsg")  # noqa: N806 Represents a type and should be camel case
     uuid1 = uuid.uuid4()
     uuid2 = uuid.uuid4()
+    # fmt: off
     msg_meta = TapMsgMeta(
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         integer=1,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         floating_point=2.0,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         boolean=True,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         array_of_primitives=list(range(9)),
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         array_of_array=["one", "two"],
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         uuid=uuid1,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         uuid_different_namespace=uuid2,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         default_enum=SomeEnumMeta.second_value,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         enum_with_init=SomeEnumMeta.first_value,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         default_flags=SomeFlagsMeta.flag12,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         flags_with_init=SomeFlagsMeta.flag3 | SomeFlagsMeta.flag12,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         nested_schema=SubMsgMeta(field=42),
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         array_of_schema=[SubMsgMeta(field=11)],
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         duration=1234,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         sync_time=4567,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         optional=None,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         bool_with_init=False,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         strong_type=3,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         external_strong_type=4,
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         fixed_array=list(range(2)),
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         var_string="a",
+        # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         integer_with_init=456,
     )
+    # fmt: on
     msg_dyn = TapMsgDyn(
         integer=1,
         floating_point=2.0,
@@ -109,13 +154,17 @@ def test_tapmsg(fs_importer: FilesystemImporter) -> None:
     assert msg_meta2 == msg_meta
     msg_dyn2 = TapMsgDyn.deserialize_tachyon(memoryview(bytes(buffer)))
     assert msg_dyn2 == msg_dyn
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     msg_meta.optional = 13
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     msg_meta.array_of_array = []
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     msg_meta.array_of_schema.append(SubMsgMeta(field=3))
     msg_meta2.serialize_tachyon(memoryview(buffer))
     msg_meta3 = TapMsgMeta.deserialize_tachyon(memoryview(bytes(buffer)))
     assert msg_meta3 == msg_meta2
 
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     msg_meta.array_of_schema.append(SubMsgDyn(field=3))
     with pytest.raises(ValueError, match=re.escape("Attempt to serialize array of length 3, max 2")):
         msg_meta.serialize_tachyon(memoryview(buffer))
@@ -179,7 +228,7 @@ cpp_target test_cpp
 
     # Create a container with FixedSoa
     points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             x=[1.0, 2.0, 3.0, 4.0, 5.0],
             y=[10.0, 20.0, 30.0, 40.0, 50.0],
@@ -258,7 +307,7 @@ cpp_target test_cpp
 
     # Create a container with VarSoa
     points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             x=[1.0, 2.0, 3.0],
             y=[10.0, 20.0, 30.0],
@@ -408,7 +457,7 @@ cpp_target test_cpp
 
     # Create container with SoA
     messages_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "messages")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         messages=messages_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             large=[100, 200, 300],
             small=[True, False, True],
@@ -485,7 +534,7 @@ cpp_target test_cpp
 
     # Try to create with too many elements
     points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             x=[1.0, 2.0, 3.0, 4.0],  # More than max_size=3
             y=[1.0, 2.0, 3.0, 4.0],
@@ -557,7 +606,7 @@ cpp_target test_cpp
 
     # Create with mismatched sizes
     points_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "points")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         points=points_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             x=[1.0, 2.0, 3.0],
             y=[1.0, 2.0],  # Different size!
@@ -648,7 +697,7 @@ cpp_target test_cpp
 
     # Create container
     data_type = next(f.type for f in fields(cast("Any", container_class)) if f.name == "data")
-    container = container_class(  # type: ignore[call-arg]
+    container = container_class(
         data=data_type(  # type: ignore[misc] # pyright: ignore[reportCallIssue]
             int_field=[10, 20],
             float_field=[1.5, 2.5],
@@ -730,3 +779,61 @@ cpp_target test_cpp
     # The FQN is "@test::soa_naming::Point3f" and we extract "Point3f"
     assert type(container_instance.fixed_points).__name__ == "FixedSoa_Point3f_10"
     assert type(container_instance.var_points).__name__ == "VarSoa_Point3f_5"
+
+
+def test_tensor(fs_importer: FilesystemImporter) -> None:
+    """Test basic Tensor serialization and deserialization."""
+    source = """
+// A message
+schema TensorMessage
+{
+  uuid: 11111111-1111-1111-1111-111111111111;
+  fields
+  {
+    // A tensor
+    #0 tensor: Tensor<Float32, [2, 3, 4], TensorLayout::column_major>;
+  }
+}
+
+cpp_target test_cpp
+{
+  options
+  {
+    namespace test;
+  }
+
+  representation Tachyon<TensorMessage>;
+}
+"""
+    module = compiler.compile_source_text(source, ModuleID("test", "tensor_dyn_metadata"), importer=fs_importer)
+
+    tensor_msg_schema = module.inner_scope.lookup("TensorMessage")
+    assert isinstance(tensor_msg_schema, schema.Schema)
+    tensor_msg_ir = schema.InstantiatedSchema.from_typespec(tensor_msg_schema)
+
+    tensor_msg_class: Any
+    tensor_msg_class, _ = tachyon_dyn_from_metadata.py_type_from_metadata(
+        module.context,
+        tensor_msg_ir.value_key(),
+        tachyon_metadata.get_metadata(module.context, tensor_msg_ir),
+    )
+
+    # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    msg = tensor_msg_class(tensor=tensor_builtins.TensorData(data=list(range(24)), shape=[2, 3, 4], strides=[1, 2, 6]))
+    buffer = bytearray(tensor_msg_class.get_tachyon_constraint().size)
+    msg.serialize_tachyon(memoryview(buffer))
+    msg2 = tensor_msg_class.deserialize_tachyon(memoryview(bytes(buffer)))
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    assert msg2.tensor == msg.tensor
+
+    # Seriealization should fail if the size doesn't match
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    msg.tensor.data = [1, 2, 3]
+    with pytest.raises(ValueError, match=r"Attempt to serialize tensor of length 3, expected 24"):
+        msg.serialize_tachyon(memoryview(buffer))
+
+    # Seriealization should fail if the buffer elements are the wrong type
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    msg.tensor.data = ["wrong"] * 24
+    with pytest.raises(struct.error):
+        msg.serialize_tachyon(memoryview(buffer))

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Representation-related IR nodes."""
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, schema, typesys, units
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
 
@@ -244,6 +244,7 @@ class RepresentationReference:
         This prevents us from recursively resolving into the referenced representation,
         which will already be resolved.
         """
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return []
 
     @classmethod

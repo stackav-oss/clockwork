@@ -15,7 +15,6 @@
 
 #include <cstddef>
 #include <memory_resource>
-#include <set>
 #include <string_view>
 #include <utility>
 #include <vector>

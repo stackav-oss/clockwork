@@ -1,7 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_memory_resources.hh"
+#include "clockwork/cog/detail.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"

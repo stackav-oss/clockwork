@@ -12,8 +12,7 @@ channel DummyChannel
 }
 
 policy LogReaderPolicy for DummyChannel
-{
-}
+{}
 
 // Channel for state snapshots (output)
 channel StateSnapshotChannel
@@ -32,25 +31,29 @@ channel ConfigSnapshotChannel
 // We listen to state snapshots
 policy ChannelLoggingPolicy for StateSnapshotChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
   channel_type = ChannelType::persistent;
 }
 
 // We listen to config snapshots
 policy ChannelLoggingPolicy for ConfigSnapshotChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
   channel_type = ChannelType::persistent;
 }
 
 // Box for Protobuf file-based state restoration
 box RestoreProtobufStateBox
 {
-  new memory: HeapMemory(max_size=10'000'000);
-  new state: State(representation=Tachyon<ExecState>, memory_resource=memory);
-  new config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/snapshot_test_config.textproto");
-
-  new saved_state: SerializedDataFile(representation=Protobuf<ExecState>, path="clockwork/tests/resources/restore_test_state.textproto");
+  new state: State(representation=Tachyon<ExecState>);
+  new config: SerializedDataFile(
+    representation=Protobuf<SnapshotTestConfig>,
+    path="clockwork/tests/resources/snapshot_test_config.textproto",
+  );
+  new saved_state: SerializedDataFile(
+    representation=Protobuf<ExecState>,
+    path="clockwork/tests/resources/restore_test_state.textproto",
+  );
 
   new cog: RestoreTestCog;
 

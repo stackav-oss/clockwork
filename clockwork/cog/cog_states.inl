@@ -8,9 +8,10 @@
 #include "clockwork/cog/detail.hh"
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serializable.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
@@ -29,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace clockwork
@@ -186,7 +188,7 @@ bool should_take_snapshot(SnapshotInfo* snapshot_info, jewels::time::SyncTime cu
 /// @param state The state to snapshot
 /// @param current_time The current time for publishing
 /// @return True if successful, false otherwise
-template <typename StateType, typename SnapshotInfo>
+template <typename StateType, typename SerializedType, typename SnapshotInfo>
 bool publish_single_snapshot(SnapshotInfo* snapshot_info, const StateType* state, jewels::time::SyncTime current_time)
 {
   auto slot = snapshot_info->snapshot_publisher.reserve();
@@ -196,20 +198,37 @@ bool publish_single_snapshot(SnapshotInfo* snapshot_info, const StateType* state
     return false;
   }
 
-  auto publishable = pinion::Publishable<StateType>::try_make(jewels::memory::make_non_null_from_ref(*slot));
+  auto discard_slot = [&slot]()
+  {
+    if (const auto result = slot->discard(); !result)
+    {
+      jewels::log_cerr_error("Failed to discard state snapshot slot: {}", result.error());
+    }
+    return false;
+  };
+
+  auto publishable = pinion::Publishable<SerializedType>::try_make(jewels::memory::make_non_null_from_ref(*slot));
   if (!publishable)
   {
     jewels::log_cerr_error("Failed to create publishable for state snapshot");
-    return false;
+    return discard_slot();
   }
 
-  publishable->message() = *state;
+  if constexpr (std::is_same_v<StateType, SerializedType>)
+  {
+    publishable->message() = *state;
+  }
+  else if (jewels::fails(Serializable<StateType>::serialize(jewels::Out{publishable->message()}, *state)))
+  {
+    jewels::log_cerr_error("Failed to serialize state snapshot");
+    return discard_slot();
+  }
   publishable->mark_for_publish();
   auto result = slot->process(current_time);
   if (!result)
   {
     jewels::log_cerr_error("Failed to publish state snapshot: {}", result.error());
-    return false;
+    return discard_slot();
   }
 
   return true;
@@ -241,10 +260,23 @@ jewels::BinaryOutcome CogStates<Policies...>::publish_snapshots(jewels::time::Sy
     }
 
     using StateType = typename Policy::StateType;
-    if constexpr (requires { typename CogStateDataImpl<StateType>::StateType; })
+    if constexpr (requires { typename Policy::SerializedType; })
+    {
+      using SerializedType = typename Policy::SerializedType;
+      const bool result =
+        detail::publish_single_snapshot<StateType, SerializedType>(snapshot_info, cog_state->get_state(), current_time);
+      if (!result)
+      {
+        all_success = false;
+      }
+
+      snapshot_info->execution_count = 0;
+      snapshot_info->last_snapshot_time = current_time;
+    }
+    else if constexpr (requires { typename CogStateDataImpl<StateType>::StateType; })
     {
       const bool result =
-        detail::publish_single_snapshot<StateType>(snapshot_info, cog_state->get_state(), current_time);
+        detail::publish_single_snapshot<StateType, StateType>(snapshot_info, cog_state->get_state(), current_time);
       if (!result)
       {
         all_success = false;

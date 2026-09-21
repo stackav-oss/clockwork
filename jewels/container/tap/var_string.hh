@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -62,7 +62,7 @@ public:
 
   /// Access a c-style string.
   /// @return the c-style string.
-  [[nodiscard]] const char* c_str() const noexcept;
+  [[nodiscard]] constexpr const char* c_str() const noexcept;
 
   /// Creates a string_view of this string.
   [[nodiscard]] constexpr std::string_view string_view() const noexcept;
@@ -76,6 +76,9 @@ public:
   /// terminator which means VarString<4>::try_set("abc") would fail.  Taking a string_view allows more 'normal'
   /// string-like behaviors.
   /// @return true if successful, false if the string_view is too large
+  constexpr jewels::BinaryOutcome try_set(std::string_view other, CallsigTag /*tag*/) noexcept;
+
+  /// Legacy boolean form retained for migration. Prefer try_set(value, callsig).
   [[nodiscard]] constexpr bool try_set(std::string_view other) noexcept;
 
   /// Sets the string to the the provided string, truncating if the length exceeds the fixed capacity.
@@ -95,14 +98,14 @@ private:
 /// @param[in] rhs The right hand side string.
 /// @return true if the strings are equal
 template <size_t fixed_capacity>
-bool operator==(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs);
+constexpr bool operator==(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs) noexcept;
 
 /// Compare two VarString for inequlity
 /// @param[in] lhs The left hand side string.
 /// @param[in] rhs The right hand side string.
 /// @return true if the strings are not equal
 template <size_t fixed_capacity>
-bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs);
+constexpr bool operator!=(const VarString<fixed_capacity>& lhs, const VarString<fixed_capacity>& rhs) noexcept;
 
 } // namespace jewels::tap
 

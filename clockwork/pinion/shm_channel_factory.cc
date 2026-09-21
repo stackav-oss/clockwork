@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/shm_channel_factory.hh"
@@ -21,6 +21,8 @@
 
 namespace clockwork::pinion
 {
+
+ShmChannelFactory::~ShmChannelFactory() = default;
 
 jewels::expected<ShmChannelFactory, jewels::MonoError> ShmChannelFactory::make(
   jewels::memory::MemoryResource memres,
@@ -64,39 +66,32 @@ ShmChannelFactory::ShmChannelFactory(
 {
 }
 
-jewels::expected<std::shared_ptr<ShmChannel>, ShmChannel::Error> ShmChannelFactory::open(
-  ShmChannel::Role role,
-  std::string_view uuid_str,
-  std::string_view channel_name,
-  const BufferLayout& layout,
-  size_t max_subscribers)
-{
-  switch (role)
-  {
-  case ShmChannel::Role::publisher:
-    return open_publisher(uuid_str, channel_name, layout, max_subscribers);
-  case ShmChannel::Role::subscriber:
-    return open_subscriber(uuid_str, channel_name, layout, max_subscribers);
-  }
-}
-
-jewels::expected<std::shared_ptr<ShmPublisher>, ShmChannel::Error> ShmChannelFactory::open_publisher(
+jewels::expected<std::shared_ptr<AbstractPublisher>, ShmChannel::Error> ShmChannelFactory::open_publisher(
   std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
-  return to_shared(
-    ShmPublisher::open(
-      memres_,
-      shm_dir_,
-      socket_ns_,
-      uuid_str,
-      channel_name,
-      layout,
-      max_subscribers,
-      max_subscribers,
-      resume_behavior_));
+  return open_shm_publisher(uuid_str, channel_name, layout, max_subscribers);
 }
 
-jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_subscriber(
+jewels::expected<std::shared_ptr<AbstractSubscriber>, ShmChannel::Error> ShmChannelFactory::open_subscriber(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
+{
+  return open_shm_subscriber(uuid_str, channel_name, layout, max_subscribers);
+}
+
+jewels::expected<std::shared_ptr<AbstractSubscriber>, ShmChannel::Error> ShmChannelFactory::open_spy(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
+{
+  return open_shm_spy(uuid_str, channel_name, layout, max_subscribers);
+}
+
+jewels::expected<std::shared_ptr<ShmPublisher>, ShmChannel::Error> ShmChannelFactory::open_shm_publisher(
+  std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
+{
+  return ShmPublisher::open(
+    memres_, shm_dir_, socket_ns_, uuid_str, channel_name, layout, max_subscribers, max_subscribers, resume_behavior_);
+}
+
+jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_shm_subscriber(
   std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
   return to_shared(
@@ -112,7 +107,7 @@ jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFa
       resume_behavior_));
 }
 
-jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_spy(
+jewels::expected<std::shared_ptr<ShmSubscriber>, ShmChannel::Error> ShmChannelFactory::open_shm_spy(
   std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
 {
   return to_shared(
@@ -150,29 +145,6 @@ ShmChannelFactory::to_shared(jewels::expected<T, pinion::ShmChannel::Error>&& ob
   auto make_shared = [this](T&& value)
   { return jewels::memory::make_pmr_shared<std::decay_t<T>>(memres_, std::move(value)); };
   return std::move(obj).transform(make_shared);
-}
-
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): RAII managed trivial type
-ShmChannelFactoryContext* ShmChannelFactoryContext::current_ = nullptr;
-
-ShmChannelFactoryContext::ShmChannelFactoryContext(ShmChannelFactory& factory)
-  : factory_(factory), previous_(current_)
-{
-  current_ = this;
-}
-
-ShmChannelFactoryContext::~ShmChannelFactoryContext()
-{
-  current_ = previous_;
-}
-
-ShmChannelFactory* ShmChannelFactoryContext::get()
-{
-  if (current_ != nullptr)
-  {
-    return &(current_->factory_);
-  }
-  return nullptr;
 }
 
 } // namespace clockwork::pinion

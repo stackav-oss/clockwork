@@ -3,36 +3,57 @@ use clockwork::dsl::tests::support::hellomsg;
 // Schema for TestPolicy
 schema TestPolicySchema
 {
-    fields
-    {
-        // Do a thing?
-        #0 do_thing: Bool = true;
+  fields
+  {
+    // Do a thing?
+    #0 do_thing: Bool = true;
 
-        // Do stuff?
-        #1 do_stuff: Bool;
+    // Do stuff?
+    #1 do_stuff: Bool;
 
-        // Kind of stuff
-        #2 stuff_type: Type;
-    }
+    // Kind of stuff
+    #2 stuff_type: Type;
+  }
 }
 
 // A test policy
 def policy TestPolicy
 {
-    binds_to: Channel;
-    schema: TestPolicySchema;
+  binds_to: Channel;
+  schema: TestPolicySchema;
+}
+
+// A test policy
+def policy UnionPolicy
+{
+  binds_to: Channel | CpuDomain;
+  schema: TestPolicySchema;
 }
 
 // Test channel
 channel TestChan
 {
-    name: "policy_test";
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 1;
+  name: "policy_test";
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 1;
 }
 
 policy TestPolicy for TestChan
 {
-    do_stuff = false;
-    stuff_type = Bool;
+  do_stuff = false;
+  stuff_type = Bool;
+}
+
+cpu_domain TestDomain;
+
+policy UnionPolicy for TestChan
+{
+  do_stuff = true;
+  stuff_type = Int32;
+}
+
+policy UnionPolicy for TestDomain
+{
+  do_stuff = true;
+  stuff_type = Float32;
 }

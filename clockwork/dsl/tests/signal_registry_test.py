@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -285,7 +285,7 @@ def test_get_signal_instances_from_spec(test_signals_module: node.Module) -> Non
     assert get_signal_instances_from_spec(context, nonexistent_spec) == []
 
 
-def test_signal_instances_with_cogs(fs_importer: FilesystemImporter) -> None:
+def test_signal_instances_with_cogs(fs_importer: FilesystemImporter) -> None:  # noqa: PLR0915 Test code.
     """Test SignalInstanceInfo cog tracking, filtering by CogInstance/Cog class, and query methods."""
     source = """
 use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
@@ -309,14 +309,14 @@ cog CogB
 policy ReportGroupPolicy for CogA.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
 policy ReportGroupPolicy for CogB.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
@@ -373,9 +373,14 @@ box TestBox
     assert cog_a1 in cog_a_instances
     assert cog_a2 in cog_a_instances
 
-    # Test get_signals_by_cog_class helper function
+    # Test get_signals_by_cog_class helper function (includes cog metrics signal instances)
     instances_a_direct = get_signals_by_cog_class(module.context, cog_a_class)
-    assert len(instances_a_direct) == 2
+    # 2 cog_a instances * 22 signal instances each:
+    #   1 user RG (sig_a) + 10 event metrics group + 10 telemetry metrics group
+    #   Each metrics group: 8 global + 1 group-specific + 1 per-condition (periodic)
+    assert len(instances_a_direct) == 44
+    multi_signal_a_instances = [inst for inst in instances_a_direct if inst.signal_ir is resolved_signal]
+    assert len(multi_signal_a_instances) == 2
     for inst in instances_a_direct:
         assert inst.cog_class is cog_a_class
 
@@ -387,15 +392,23 @@ box TestBox
     assert instances_b[0].cog_instance is cog_b1
 
     instances_b_direct = get_signals_by_cog_class(module.context, cog_b_class)
-    assert len(instances_b_direct) == 1
-    assert instances_b_direct[0].cog_class is cog_b_class
+    # 1 cog_b instance * 21 signal instances (same breakdown as CogA above)
+    assert len(instances_b_direct) == 22
+    multi_signal_b_instances = [inst for inst in instances_b_direct if inst.signal_ir is resolved_signal]
+    assert len(multi_signal_b_instances) == 1
+    for inst in instances_b_direct:
+        assert inst.cog_class is cog_b_class
 
     # Verify manual instance excluded from cog-filtered queries
     assert all(inst.instance_name != "manual_inst" for inst in instances_a + instances_b)
 
-    # Test get_unique_signal_instance_names includes cog-private instances
+    # Test get_unique_signal_instance_names includes cog-private and cog metrics instances
     unique_names = get_unique_signal_instance_names(module.context)
-    assert len(unique_names) == 4  # 3 cog instances + 1 manual
+    # 3 user RG instance names (one FQN per cog instance)
+    # + 12 cog metrics instance names (2 per group * 2 groups * 3 cog instances:
+    #     base name and per-condition/periodic name, for both event and telemetry groups)
+    # + 1 manual_inst
+    assert len(unique_names) == 16
     assert "manual_inst" in unique_names
 
 
@@ -407,7 +420,10 @@ def test_get_all_signals(test_signals_module: node.Module) -> None:
     all_signals = get_all_signals(context)
 
     # Verify all signals are returned and sorted by signal name
-    assert len(all_signals) >= 3  # At least simple_signal, multi_signal, complex_signal
+    # 6 signals defined in test_signals.clk:
+    #   simple_signal, named_signal (custom_signal_name), multi_signal,  # noqa: ERA001 false positive
+    #   metadata_signal, aggregated_signal, complex_signal (complex_name)  # noqa: ERA001 false positive
+    assert len(all_signals) == 6
     signal_names = [sig.signal_name for sig in all_signals]
 
     # Check that some expected signals are present

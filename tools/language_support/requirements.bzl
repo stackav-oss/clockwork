@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Macros to support writing Python requirements files."""
@@ -76,6 +76,11 @@ def write_python_requirements_source_file(
         # Only use a diff_test if the current repo is the root. Diff tests cannot work cross-repository.
         # repo_name() is the empty string if this is the root repository. It is non-empty if it is non-root.
         diff_test = not native.repo_name(),
+        diff_args = [
+            # ignore changes where all lines match a regex capturing that only hashes were modified which shouldn't
+            # fail the build because hashes can change upstream independent of source code changes in this repo
+            "--ignore-matching-lines=\\s*--hash=.*",
+        ],
     )
 
     # We still need to make a target with the same name as the diff test, though.

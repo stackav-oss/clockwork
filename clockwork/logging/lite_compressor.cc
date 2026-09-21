@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/lite_compressor.hh"
@@ -6,8 +6,9 @@
 #include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "jewels/aligner/aligner.hh"
-#include "jewels/math/constants.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 
 #include <algorithm>
@@ -15,9 +16,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <numeric>
 #include <span>
-#include <thread>
 #include <utility>
 
 namespace clockwork_logging
@@ -28,12 +29,6 @@ namespace
 
 /// Minimum size of a chunk of zero uint64s
 constexpr size_t min_zero_chunk_size = 3U;
-
-/// Number of bytes to checksum between yields in yield_processor mode
-constexpr size_t checksum_bytes_between_yields = jewels::math::constants::bytes_per_mib<size_t>;
-
-/// Number of chunks to compress between yields in yield_processor mode
-constexpr size_t compression_chunks_between_yields = 10U;
 
 /// Find the first zero in a span of uint64_t
 /// @param[in] data Span of uint64_t
@@ -55,13 +50,9 @@ constexpr size_t compression_chunks_between_yields = 10U;
 /// @param[in,out] data_checksum_state Data checksum state
 /// @param[in] data Span of uint64_t
 /// @param[in] start_index Search start index
-/// @param[in] mode Compression mode (minimum latency or yield processor)
 /// @return Index of the first non-zero or the size of the span if no zero is found
-[[nodiscard]] size_t find_first_zero(
-  XXH3_state_t& data_checksum_state,
-  std::span<const uint64_t> data,
-  size_t start_index,
-  LiteCompressor::CompressionMode mode)
+[[nodiscard]] size_t
+find_first_zero(XXH3_state_t& data_checksum_state, std::span<const uint64_t> data, size_t start_index)
 {
   size_t first_zero_index = start_index;
   while (first_zero_index < data.size() && data[first_zero_index] != 0U)
@@ -70,8 +61,7 @@ constexpr size_t compression_chunks_between_yields = 10U;
   }
   if (first_zero_index != start_index)
   {
-    LiteCompressor::update_checksum(
-      data_checksum_state, std::as_bytes(data.subspan(start_index, first_zero_index - start_index)), mode);
+    update_xxh3_checksum(data_checksum_state, std::as_bytes(data.subspan(start_index, first_zero_index - start_index)));
   }
   return first_zero_index;
 }
@@ -195,7 +185,7 @@ LiteCompressor::LiteCompressor(jewels::memory::MemoryResource memory_resource)
     const auto aligned_data = nolint_helper::byte_span_to_value_span<uint64_t>(
       data.subspan(start_offset, (data.size() - start_offset) / sizeof(uint64_t) * sizeof(uint64_t)));
     std::optional<XXH3_state_t> unused_checksum_state = std::nullopt;
-    compress_aligned_data(unused_checksum_state, aligned_data, CompressionMode::minimum_latency);
+    compress_aligned_data(unused_checksum_state, aligned_data);
 
     // Any data after the aligned region isn't compressed.
     if (const auto end_remainder = data.size() - start_offset - (aligned_data.size() * sizeof(uint64_t));
@@ -214,8 +204,7 @@ void LiteCompressor::compress(
   jewels::Out<std::span<const std::span<const std::byte>>> compressed_data,
   jewels::Out<uint64_t> counts_checksum,
   jewels::Out<uint64_t> data_checksum,
-  std::span<const std::byte> data,
-  CompressionMode mode)
+  std::span<const std::byte> data)
 {
   byte_counts_.resize(2U);
   byte_counts_.at(1U) = static_cast<int32_t>(data.size());
@@ -238,7 +227,7 @@ void LiteCompressor::compress(
   {
     byte_counts_.emplace_back(static_cast<int32_t>(start_offset));
     data_spans_.emplace_back(data.data(), start_offset);
-    update_checksum(data_checksum_state.value(), data_spans_.back(), mode);
+    update_xxh3_checksum(data_checksum_state.value(), data_spans_.back());
   }
 
   if (start_offset < data.size())
@@ -246,7 +235,7 @@ void LiteCompressor::compress(
     // Compress the data that is aligned to 64 bits.
     const auto aligned_data = nolint_helper::byte_span_to_value_span<uint64_t>(
       data.subspan(start_offset, (data.size() - start_offset) / sizeof(uint64_t) * sizeof(uint64_t)));
-    compress_aligned_data(data_checksum_state, aligned_data, mode);
+    compress_aligned_data(data_checksum_state, aligned_data);
 
     // Any data after the aligned region isn't compressed.
     if (const auto end_remainder = data.size() - start_offset - (aligned_data.size() * sizeof(uint64_t));
@@ -254,7 +243,7 @@ void LiteCompressor::compress(
     {
       byte_counts_.emplace_back(static_cast<int32_t>(end_remainder));
       data_spans_.emplace_back(data.subspan(start_offset + (aligned_data.size() * sizeof(uint64_t)), end_remainder));
-      update_checksum(data_checksum_state.value(), data_spans_.back(), mode);
+      update_xxh3_checksum(data_checksum_state.value(), data_spans_.back());
     }
   }
   byte_counts_.at(0U) = static_cast<int32_t>(byte_counts_.size() * sizeof(int32_t));
@@ -264,22 +253,18 @@ void LiteCompressor::compress(
   *data_checksum = digest_xxh3_checksum(data_checksum_state.value());
 }
 
+[[nodiscard]] std::shared_ptr<LiteCompressorInterface> LiteCompressor::clone() const
+{
+  return jewels::memory::make_pmr_shared<LiteCompressor>(memory_resource_, memory_resource_);
+}
+
 void LiteCompressor::compress_aligned_data(
-  std::optional<XXH3_state_t>& maybe_data_checksum_state, std::span<const uint64_t> aligned_data, CompressionMode mode)
+  std::optional<XXH3_state_t>& maybe_data_checksum_state, std::span<const uint64_t> aligned_data)
 {
   size_t offset = 0U;
   size_t non_zero_count = 0U;
-  auto byte_counts_at_last_yield = byte_counts_.size();
   while (offset < aligned_data.size())
   {
-    if (
-      mode == CompressionMode::yield_processor &&
-      byte_counts_.size() - byte_counts_at_last_yield >= compression_chunks_between_yields)
-    {
-      // Yield to give minimum_latency compressors a chance to run
-      std::this_thread::yield();
-      byte_counts_at_last_yield = byte_counts_.size();
-    }
     const auto prev_offset = offset;
     if (aligned_data[offset] == 0U)
     {
@@ -288,10 +273,8 @@ void LiteCompressor::compress_aligned_data(
       {
         if (maybe_data_checksum_state)
         {
-          update_checksum(
-            maybe_data_checksum_state.value(),
-            std::as_bytes(aligned_data.subspan(prev_offset, offset - prev_offset)),
-            mode);
+          update_xxh3_checksum(
+            maybe_data_checksum_state.value(), std::as_bytes(aligned_data.subspan(prev_offset, offset - prev_offset)));
         }
         non_zero_count += offset - prev_offset;
       }
@@ -308,9 +291,8 @@ void LiteCompressor::compress_aligned_data(
     }
     else
     {
-      offset = maybe_data_checksum_state
-                 ? find_first_zero(maybe_data_checksum_state.value(), aligned_data, offset, mode)
-                 : find_first_zero(aligned_data, offset + 1);
+      offset = maybe_data_checksum_state ? find_first_zero(maybe_data_checksum_state.value(), aligned_data, offset)
+                                         : find_first_zero(aligned_data, offset + 1);
       non_zero_count += offset - prev_offset;
     }
   }
@@ -343,8 +325,7 @@ LiteCompressor::decompress(std::span<const std::span<const std::byte>> data_span
   }
   buffer_.resize(static_cast<size_t>(byte_counts_.at(0U)));
   std::optional<XXH3_state_t> unused_checksum_state = std::nullopt;
-  if (const auto decompress_outcome =
-        decompress_common(unused_checksum_state, cursor, byte_counts_, buffer_, CompressionMode::minimum_latency);
+  if (const auto decompress_outcome = decompress_common(unused_checksum_state, cursor, byte_counts_, buffer_);
       !decompress_outcome.ok())
   {
     return jewels::unexpected(decompress_outcome.get());
@@ -420,11 +401,7 @@ LiteCompressor::zero_copy_decompress(std::span<const std::span<const std::byte>>
 }
 
 LogOutcome LiteCompressor::decompress(
-  uint64_t counts_checksum,
-  uint64_t data_checksum,
-  std::span<const std::byte> data,
-  std::span<std::byte> dest_span,
-  CompressionMode mode)
+  uint64_t counts_checksum, uint64_t data_checksum, std::span<const std::byte> data, std::span<std::byte> dest_span)
 {
   SpanCursor cursor{{&data, 1U}};
   int32_t counts_size{};
@@ -453,7 +430,7 @@ LogOutcome LiteCompressor::decompress(
   }
   std::optional data_checksum_state = init_xxh3_checksum();
   if (const auto decompress_outcome =
-        decompress_common(data_checksum_state, cursor, std::span{byte_counts_}, dest_span, mode);
+        decompress_common(data_checksum_state, cursor, std::span{byte_counts_}, dest_span);
       !decompress_outcome.ok())
   {
     return decompress_outcome;
@@ -480,17 +457,11 @@ LogOutcome LiteCompressor::decompress_common(
   std::optional<XXH3_state_t>& maybe_data_checksum_state,
   SpanCursor cursor,
   std::span<const int32_t> byte_counts,
-  std::span<std::byte> dest_span,
-  CompressionMode mode)
+  std::span<std::byte> dest_span)
 {
   size_t dest_offset = 0U;
   for (size_t i = 1U; i < byte_counts.size(); ++i)
   {
-    if (mode == CompressionMode::yield_processor && (i % compression_chunks_between_yields) == 0U)
-    {
-      // Yield to give minimum_latency compressors a chance to run
-      std::this_thread::yield();
-    }
     const auto byte_count = byte_counts[i];
 
     if (byte_count < 0)
@@ -517,7 +488,7 @@ LogOutcome LiteCompressor::decompress_common(
       }
       if (maybe_data_checksum_state)
       {
-        update_checksum(maybe_data_checksum_state.value(), subspan, mode);
+        update_xxh3_checksum(maybe_data_checksum_state.value(), subspan);
       }
       dest_offset += bytes_to_copy;
     }
@@ -527,25 +498,6 @@ LogOutcome LiteCompressor::decompress_common(
     return LogError::decompression_failure;
   }
   return LogError::success;
-}
-
-void LiteCompressor::update_checksum(XXH3_state_t& state, std::span<const std::byte> data, CompressionMode mode)
-{
-  if (mode == CompressionMode::minimum_latency)
-  {
-    update_xxh3_checksum(state, data);
-  }
-  else
-  {
-    auto remainder = data;
-    while (remainder.size() > checksum_bytes_between_yields)
-    {
-      update_xxh3_checksum(state, remainder.first(checksum_bytes_between_yields));
-      remainder = remainder.subspan(checksum_bytes_between_yields);
-      std::this_thread::yield();
-    }
-    update_xxh3_checksum(state, remainder);
-  }
 }
 
 [[nodiscard]] LogExpected<size_t> LiteCompressor::get_decompressed_size(std::span<const std::byte> data)

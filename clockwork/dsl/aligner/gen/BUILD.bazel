@@ -1,0 +1,75 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "aligner_cog",
+    srcs = ["aligner_cog.py"],
+    deps = [
+        ":alignment_schema",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:aligner_metrics_report_groups",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:cog_components",
+        "//clockwork/dsl/ir:diagnostics",
+        "//clockwork/dsl/ir:interface",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:representation",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:schema_reg",
+    ],
+)
+
+py_library(
+    name = "alignment_schema",
+    srcs = ["alignment_schema.py"],
+    deps = [
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:schema",
+    ],
+)
+
+py_library(
+    name = "codegen_plan",
+    srcs = ["codegen_plan.py"],
+    deps = [
+        "//clockwork/dsl/aligner:direction_analysis",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:join_plan",
+        "//clockwork/dsl/aligner:partition_types",
+    ],
+)
+
+py_library(
+    name = "search_codegen",
+    srcs = ["search_codegen.py"],
+    deps = [
+        ":codegen_plan",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/aligner:direction_analysis",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:join_plan",
+        "//clockwork/dsl/aligner:objective_analysis",
+        "//clockwork/dsl/aligner:partition_types",
+        "//clockwork/dsl/aligner:stn",
+        "//clockwork/dsl/cpp:context",
+        "//clockwork/dsl/cpp:literal",
+        "//clockwork/dsl/cpp:typereg",
+        "//clockwork/dsl/cpp:types",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:cpp_executable",
+        "//clockwork/dsl/ir:cpp_target",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:units",
+    ],
+)

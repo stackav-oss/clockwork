@@ -1,22 +1,35 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Tachyon Python Serializer Registry."""
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import enum
 import math
+import operator
 import struct
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeAlias, TypeVar, cast
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import clkbuiltins, clkenum, node, primitive, schema, statement, strongtypes, typesys
+from clockwork.dsl.ir import (
+    clkbuiltins,
+    clkenum,
+    node,
+    primitive,
+    schema,
+    statement,
+    strongtypes,
+    tensor_builtins,
+    typesys,
+)
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 from clockwork.serialization.metadata import tachyon_model
@@ -55,7 +68,7 @@ class SerDes(Generic[T]):  # noqa: PLW1641 __hash__ function not needed.
         """Equality comparison."""
         return (
             isinstance(other, SerDes)
-            and self.type_ is other.type_
+            and self.type_ == other.type_
             and self.constraint == other.constraint
             and self.clk_type == other.clk_type
         )
@@ -251,7 +264,9 @@ class TachyonDynRegistryKey(ContextKey[TachyonDynRegistry]):
 
         # Register generic types with their factories
         registry.generic_type_registry[clkbuiltins.UUID.value_key()] = _uuid_factory
+        registry.generic_type_registry[clkbuiltins.BITSET.value_key()] = _bitset_factory
         registry.generic_type_registry[clkbuiltins.FIXED_ARRAY.value_key()] = _fixed_array_factory
+        registry.generic_type_registry[tensor_builtins.TENSOR.value_key()] = _tensor_factory
         registry.generic_type_registry[clkbuiltins.OPTIONAL.value_key()] = _optional_factory
         registry.generic_type_registry[clkbuiltins.VAR_ARRAY.value_key()] = _var_array_factory
         registry.generic_type_registry[clkbuiltins.VAR_STRING.value_key()] = _var_string_factory
@@ -324,6 +339,47 @@ def _uuid_factory(compiler_context: CompilerContext, typ: typesys.Instantiation)
     return UUID_SERDES
 
 
+def _bitset_factory(compiler_context: CompilerContext, typ: typesys.Instantiation) -> SerDes[int] | None:
+    """Create a serializer for Bitset."""
+    if typ.instantiates is not clkbuiltins.BITSET:
+        msg = f"Expected Bitset but got {typ.instantiates}"
+        raise RuntimeError(msg)
+    size_arg = typ.arguments["size"]
+    if not isinstance(size_arg, primitive.DecimalValue):
+        msg = f"Bad value type for Bitset size parameter: {size_arg}"
+        raise TypeError(msg)
+    bit_size = primitive.unsigned_decimal_to_int(size_arg)
+    if bit_size <= 0:
+        msg = "Bitset size must be greater than zero"
+        raise ValueError(msg)
+    constraint = _get_constraint(compiler_context, typ)
+    maximum_value = (1 << bit_size) - 1
+
+    def _serialize(obj: int, buffer: memoryview) -> None:
+        if obj < 0 or obj > maximum_value:
+            msg = f"Bitset<{bit_size}> value must be in [0, {maximum_value}]"
+            raise ValueError(msg)
+        buffer[:] = obj.to_bytes(constraint.size, byteorder="little", signed=False)
+
+    def _deserialize(buffer: memoryview) -> int:
+        return int.from_bytes(buffer, byteorder="little", signed=False) & maximum_value
+
+    return SerDes(type_=int, constraint=constraint, serializer=_serialize, deserializer=_deserialize, clk_type=typ)
+
+
+def _make_type(mcls: type, name: str, bases: tuple[type, ...], members: dict[str, Any], **kwds: dict[str, Any]) -> type:
+    """This replicates class creation with metaclass support.
+
+    class name(*bases, **kwds, metaclass=mcls):
+        **members
+
+    """
+    clsdict = mcls.__prepare__(name, bases, **kwds)
+    clsdict.update(members)
+    # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    return mcls(name, bases, clsdict, **kwds)
+
+
 class EnumSerDes:  # noqa: PLW1641 Intentionally leaving out __hash__ because this is a mutable type.
     """SerDes for an enum type."""
 
@@ -333,7 +389,35 @@ class EnumSerDes:  # noqa: PLW1641 Intentionally leaving out __hash__ because th
         self.clk_type = clk_type
         self.underlying_type = clk_type.underlying_type
         values = [(value_def.name, value_def.integer_value) for _, value_def in sorted(self.clk_type.values.items())]
-        impl: type = enum.Flag if clk_type.bit_flags else enum.Enum
+        if self.clk_type.uuid is not None:
+
+            class UuidEnumCmp:
+                uuid_ = self.clk_type.uuid
+
+                @override
+                def __eq__(self: UuidEnumCmp, other: object) -> bool:
+                    assert isinstance(self, enum.Enum)
+                    if isinstance(other, type(self)):
+                        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+                        return self is other
+                    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+                    if isinstance(other, enum.Enum) and getattr(type(other), "uuid_", object()) == type(self).uuid_:
+                        return self.value == other.value
+                    return NotImplemented
+
+                @override
+                def __hash__(self: UuidEnumCmp) -> int:
+                    assert isinstance(self, enum.Enum)
+                    return hash(self.value)
+
+            impl = _make_type(
+                enum.EnumMeta,
+                self.clk_type.name + "Type",
+                (UuidEnumCmp, enum.Flag if clk_type.bit_flags else enum.Enum),
+                {},
+            )
+        else:
+            impl: type = enum.Flag if clk_type.bit_flags else enum.Enum
         self.py_type: Any = impl(self.clk_type.name, values)
         underlying_serdes = serdes_for_type(compiler_context, self.underlying_type)
         self.underlying_serializer = underlying_serdes.serializer
@@ -433,6 +517,62 @@ class FixedArraySerDes(Generic[T]):
         )
 
 
+class TensorSerDes(Generic[T]):
+    """SerDes for a tensor of T type."""
+
+    def __init__(
+        self,
+        compiler_context: CompilerContext,
+        shape: list[int],
+        strides: list[int],
+        element_type: typesys.TypeVal,
+        constraint: tachyon_reg.FieldConstraint,
+    ) -> None:
+        """Create a SerDes for array types."""
+        self.constraint = constraint
+        self.shape = shape
+        self.strides = strides
+        self.num_elements = reduce(operator.mul, self.shape)
+        element_serdes = serdes_for_type(compiler_context, element_type)
+        self.element_serializer = element_serdes.serializer
+        self.element_deserializer = element_serdes.deserializer
+        element_constraint = _get_constraint(compiler_context, element_type)
+        self.element_stride = element_constraint.array_stride()
+
+    def serialize(self, obj: tensor_builtins.TensorData[T], buffer: memoryview) -> None:
+        """Serializer for Tensors of T."""
+        if len(obj.data) != self.num_elements:
+            msg = f"Attempt to serialize tensor of length {len(obj.data)}, expected {self.num_elements}"
+            raise ValueError(msg)
+
+        offset = 0
+        for elem in obj.data:
+            next_offset = offset + self.element_stride
+            self.element_serializer(elem, buffer[offset:next_offset])
+            offset = next_offset
+
+    def deserialize(self, buffer: memoryview) -> tensor_builtins.TensorData[T]:
+        """Deserializer for type Tensors of T."""
+        offset = 0
+        data = [cast("T", None)] * self.num_elements
+        for i in range(self.num_elements):
+            next_offset = offset + self.element_stride
+            data[i] = self.element_deserializer(buffer[offset:next_offset])
+            offset = next_offset
+
+        return tensor_builtins.TensorData(data=data, shape=self.shape, strides=self.strides)
+
+    def make_serdes(self) -> SerDes[tensor_builtins.TensorData[T]]:
+        """Construct a SerDes for the registry."""
+        return SerDes(
+            type_=tensor_builtins.TensorData,
+            constraint=self.constraint,
+            serializer=self.serialize,
+            deserializer=self.deserialize,
+            clk_type=tensor_builtins.TENSOR,
+        )
+
+
 class VarArraySerDes(Generic[T]):
     """SerDes for a variable array of T type."""
 
@@ -509,6 +649,15 @@ def _array_type_checker(
     element_serdes = serdes_for_type(compiler_context, element_type)
     constraint = _get_constraint(compiler_context, clk_type)
     return element_type, int(size.value), element_serdes, constraint
+
+
+def _tensor_factory(compiler_context: CompilerContext, typ: typesys.Instantiation) -> SerDes[Any] | None:
+    """SerDes factory for FixedArray."""
+    element_type = tensor_builtins.get_tensor_element_type(typ)
+    shape = tensor_builtins.get_tensor_shape(typ)
+    strides = tensor_builtins.get_tensor_strides(typ)
+    constraint = _get_constraint(compiler_context, typ)
+    return TensorSerDes(compiler_context, shape, strides, element_type, constraint).make_serdes()
 
 
 def _fixed_array_factory(compiler_context: CompilerContext, typ: typesys.Instantiation) -> SerDes[Any] | None:
@@ -737,10 +886,12 @@ class SoaSerDes(Generic[T]):
                 field_array[i] = element_serdes.deserializer(buffer[element_offset : element_offset + element_size])
             field_values[field_name] = field_array
 
+        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return self.py_class(**field_values)
 
     def make_serdes(self) -> SerDes[T]:
         """Create a SerDes for the registry."""
+        # pyrefly: ignore[bad-return] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return SerDes(
             type_=self.py_class,
             constraint=self.constraint,
@@ -912,6 +1063,14 @@ class SchemaSerDes(Generic[T]):
                             field(default_factory=_default_factory),
                         )
                     )
+                elif type(default_value).__hash__ is None:
+                    # Python 3.12+ rejects mutable defaults (e.g., dataclass instances
+                    # without frozen=True) in dataclass fields. Use default_factory to
+                    # construct a fresh copy for each parent.
+                    _default = default_value
+                    dataclass_fields.append(
+                        (fld_def.cur_name, serdes.type_, field(default_factory=lambda _d=_default: copy.deepcopy(_d)))
+                    )
                 else:
                     dataclass_fields.append((fld_def.cur_name, serdes.type_, field(default=default_value)))
             else:
@@ -932,10 +1091,12 @@ class SchemaSerDes(Generic[T]):
         def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
             schema_serdes.serialize(self, buffer)
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
             return schema_serdes.deserialize(buffer)
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_constraint(_: type) -> tachyon_reg.FieldConstraint:
             return constraint
@@ -945,30 +1106,37 @@ class SchemaSerDes(Generic[T]):
         except ValueError:
             py_class_metadata = None
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_metadata_name(_: type) -> str | None:
             return schema_ir.value_key()
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_metadata(_: type) -> tachyon_model.TachyonMetadata | None:
             return py_class_metadata
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_module_name(_: type) -> str:
             return schema_ir.schema.module.module_id.repo
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_source_file_name(_: type) -> str:
             return str(schema_ir.schema.module.module_id.get_base_path())
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_class_name(_: type) -> str:
             return schema_ir.schema_name
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_schema_ir(_: type) -> schema.InstantiatedSchema:
             return schema_ir
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_compiler_context(_: type) -> CompilerContext:
             return schema_serdes.compiler_context
@@ -1049,6 +1217,7 @@ def _convert_init_value_to_python(  # noqa: PLR0911, C901
         # Create a default registry for initialization
         enum_serdes = serdes_for_type(compiler_context, init_value.value_def.enum.get_resolved())
         assert isinstance(enum_serdes.type_, type(enum.Enum))
+        # pyrefly: ignore[no-matching-overload] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return enum_serdes.type_(init_value.value_def.integer_value)
 
     if isinstance(init_value, primitive.StringValue) and py_type is str:
@@ -1091,7 +1260,7 @@ def _get_default_for_field(
 
 def _get_default_for_primitive_type(type_info: clkbuiltins.PrimitiveType) -> bool | float | None:
     """Get the default value for a primitive type."""
-    if type_info in (clkbuiltins.BOOL,):
+    if type_info == clkbuiltins.BOOL:
         return False
     if type_info in (
         clkbuiltins.BYTE,
@@ -1121,9 +1290,11 @@ def _get_default_for_enum(compiler_context: CompilerContext, type_info: clkenum.
     return result
 
 
-def _get_default_for_container(
+# We suppress PLR0911 here because there are simply a lot of cases that need to
+# be handled.
+def _get_default_for_container(  # noqa: PLR0911 (see above)
     compiler_context: CompilerContext, type_info: typesys.Instantiation
-) -> tuple[bool, float | list[Any] | str | None]:
+) -> tuple[bool, float | list[Any] | tensor_builtins.TensorData[Any] | str | None]:
     """Get the default value for a container type.
 
     Returns:
@@ -1137,6 +1308,17 @@ def _get_default_for_container(
         size = int(size_arg.value)
         _has_default, element_default = _get_default_for_type(compiler_context, element_type)
         return (True, [element_default] * size)
+
+    if type_info.instantiates is clkbuiltins.BITSET:
+        return (True, 0)
+
+    if type_info.instantiates is tensor_builtins.TENSOR:
+        element_type = tensor_builtins.get_tensor_element_type(type_info)
+        shape = tensor_builtins.get_tensor_shape(type_info)
+        strides = tensor_builtins.get_tensor_strides(type_info)
+        size = reduce(operator.mul, shape)
+        _, element_default = _get_default_for_type(compiler_context, element_type)
+        return (True, tensor_builtins.TensorData(data=[element_default] * size, shape=shape, strides=strides))
 
     if type_info.instantiates is clkbuiltins.VAR_ARRAY:
         return (True, [])
@@ -1539,6 +1721,7 @@ def _create_type_converter(  # noqa: PLR0913 (too many params mitigated by kwonl
         _handle_array_to_string_conversion,
         _handle_string_to_array_conversion,
         _handle_uuid_to_uuid_conversion,
+        _handle_uuid_to_varstring_conversion,
     ]
 
     if isinstance(new_type_info, strongtypes.StrongType):
@@ -1585,6 +1768,47 @@ def _handle_uuid_to_uuid_conversion(  # noqa: PLR0913 (too many params mitigated
         return True, None
 
     return False, None
+
+
+_UUID_STRING_LENGTH: Final = 36
+
+
+def _handle_uuid_to_varstring_conversion(  # noqa: PLR0913 (too many params mitigated by kwonly args)
+    *,
+    compiler_context: CompilerContext,  # noqa: ARG001 (need to match handler signature)
+    old_type_id: int,
+    old_types: Sequence[tachyon_model.ClkType],
+    new_type_info: typesys.TypeVal,
+    upgraders: dict[str, SchemaUpgrader | None],  # noqa: ARG001 (need to match handler signature)
+    error_node: node.CstNode[Any],
+) -> tuple[bool, Callable[[Any], Any] | None]:
+    """Handle conversion from UUID to VarString.
+
+    A UUID is formatted as a 36-character dash-separated hex string
+    (e.g. "550e8400-e29b-41d4-a716-446655440000"), so the destination
+    VarString must have max_size > 36 because VarString reserves one
+    byte for the null terminator.
+    """
+    old_type = old_types[old_type_id]
+    if not (
+        isinstance(old_type, tachyon_model.BuiltInType)
+        and old_type.fqn == ".Uuid"
+        and isinstance(new_type_info, typesys.Instantiation)
+        and new_type_info.instantiates is clkbuiltins.VAR_STRING
+    ):
+        return False, None
+
+    max_size = new_type_info.arguments["max_size"]
+    if not isinstance(max_size, primitive.DecimalLiteral) or int(max_size.value) <= _UUID_STRING_LENGTH:
+        msg = error_node.append_error_line(
+            f"VarString max_size must be greater than {_UUID_STRING_LENGTH} to hold a UUID string"
+        )
+        raise ValueError(msg)
+
+    def uuid_to_string(val: uuid.UUID) -> str:
+        return str(val)
+
+    return True, uuid_to_string
 
 
 def _create_int_to_float_converter() -> Callable[[int], float]:
@@ -1978,6 +2202,7 @@ def _handle_array_to_array_conversion(  # noqa: PLR0913 (too many params mitigat
         msg = error_node.append_error_line(f"Invalid array type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     old_element_type_id = int(old_type.arguments[0])
 
     new_element_type = new_type_info.arguments["type"]
@@ -2040,6 +2265,7 @@ def _handle_optional_to_array_conversion(  # noqa: PLR0913 (too many params miti
         msg = error_node.append_error_line(f"Invalid Optional type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     inner_old_type_id = int(old_type.arguments[0])
 
     new_element_type = new_type_info.arguments["type"]
@@ -2092,6 +2318,7 @@ def _handle_optional_to_varstring_conversion(  # noqa: PLR0913 (too many params 
         msg = error_node.append_error_line(f"Invalid optional type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     old_element_type_id = int(old_type.arguments[0])
     old_element_type = old_types[old_element_type_id]
     if not isinstance(old_element_type, tachyon_model.BuiltInType):
@@ -2131,6 +2358,7 @@ def _handle_array_to_optional_conversion(  # noqa: PLR0913 (too many params miti
         msg = error_node.append_error_line(f"Invalid array type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     old_element_type_id = int(old_type.arguments[0])
 
     new_inner_type = new_type_info.arguments["type"]
@@ -2187,6 +2415,7 @@ def _handle_array_to_string_conversion(  # noqa: PLR0913 (too many params mitiga
         msg = error_node.append_error_line(f"Invalid array type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     element_type_id = int(old_type.arguments[0])
     element_type = old_types[element_type_id]
 
@@ -2375,6 +2604,7 @@ def _create_soa_to_soa_converter(  # noqa: PLR0913 (too many params mitigated by
         for new_field_name, default_val in new_field_defaults.items():
             new_field_arrays[new_field_name] = [default_val] * array_length
 
+        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return new_soa_class(**new_field_arrays)
 
     return soa_to_soa_converter
@@ -2429,6 +2659,7 @@ def _create_aos_to_soa_converter(  # noqa: PLR0913 (too many params mitigated by
             for field_name, field_array in field_arrays.items():
                 field_array.append(getattr(new_instance, field_name))
 
+        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return new_soa_class(**field_arrays)
 
     return aos_to_soa_converter
@@ -2611,6 +2842,7 @@ def _handle_array_to_soa_conversion(  # noqa: PLR0913 (too many params mitigated
         msg = error_node.append_error_line(f"Invalid array type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     old_element_type_id = int(old_type.arguments[0])
     old_element_type = old_types[old_element_type_id]
 
@@ -2721,6 +2953,7 @@ def _handle_optional_to_soa_conversion(  # noqa: PLR0913 (too many params mitiga
         msg = error_node.append_error_line(f"Invalid Optional type arguments: {old_type}")
         raise ValueError(msg)
 
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     inner_old_type_id = int(old_type.arguments[0])
     inner_old_type = old_types[inner_old_type_id]
 
@@ -2802,6 +3035,7 @@ def _handle_soa_to_optional_conversion(  # noqa: PLR0913 (too many params mitiga
             msg = f"Cannot convert multi-element SoA to Optional: SoA has {len(aos_list)} elements"
             raise ValueError(msg)
 
+        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return aos_list[0]  # Single element → value
 
     return True, soa_to_optional
@@ -2889,6 +3123,7 @@ def _handle_optional_to_optional_conversion(  # noqa: PLR0913 (too many params m
     if len(old_type.arguments) != 1 or not isinstance(old_type.arguments[0], int):
         msg = error_node.append_error_line(f"Invalid Optional type arguments: {old_type}")
         raise ValueError(msg)
+    # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     old_inner_type_id = int(old_type.arguments[0])
 
     # Extract inner type from new optional

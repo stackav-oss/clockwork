@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/s3_utils.hh"
@@ -376,6 +376,18 @@ S3Utils::put_object(const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<std:
 [[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
 S3Utils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
 {
+  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource_);
+  const auto get_result = get_object(s3_uri, offset, buffer);
+  if (!get_result)
+  {
+    return jewels::unexpected(get_result.error());
+  }
+  return {std::move(buffer)};
+}
+
+[[nodiscard]] LogExpected<std::span<std::byte>>
+S3Utils::get_object(const LogUri& s3_uri, size_t offset, std::span<std::byte> buffer_span) const
+{
   const auto start_time = jewels::time::SteadyClock::now();
   if (s3_logging_is_enabled())
   {
@@ -388,10 +400,9 @@ S3Utils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
-  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource_);
-  S3ReadStreambuf sbuf(buffer);
+  S3ReadStreambuf sbuf(buffer_span);
 
-  const auto range_str = fmt::format("bytes={}-{}", offset, offset + length - 1U);
+  const auto range_str = fmt::format("bytes={}-{}", offset, offset + buffer_span.size() - 1U);
 
   Aws::S3::Model::GetObjectRequest request;
   request.SetBucket(std::string{s3_uri.host()});
@@ -409,7 +420,11 @@ S3Utils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_info(
-      "Failed to read ({}:{}) from {}: {}", offset, length, s3_uri.string(), outcome.GetError().GetMessage());
+      "Failed to read ({}:{}) from {}: {}",
+      offset,
+      buffer_span.size(),
+      s3_uri.string(),
+      outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
 
@@ -418,7 +433,7 @@ S3Utils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
     jewels::log_cerr_info("EXIT get_object({}): {:.3f} ms", s3_uri.string(), elapsed_ms(start_time));
   }
 
-  return {std::move(buffer)};
+  return {buffer_span};
 }
 
 void S3Utils::retry_callback(

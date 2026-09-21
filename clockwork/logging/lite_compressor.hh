@@ -1,13 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/logging/lite_compressor_interface.hh"
 #include "clockwork/logging/log_error.hh"
-#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 
-#include <wise_enum.h>
 #include <xxh3.h>
 
 #include <cstddef>
@@ -21,16 +20,12 @@ namespace clockwork_logging
 {
 
 /// Class to do lite compression/decompression on messages.
-/// Blocks of consecutive zeros are replaced with a count on compression and expanded
-/// on decompression.
 ///
-/// Compressed message format:
-///   counts_size: Size of the area that stores the compression bytes counts in bytes (32 bits)
-///   message_size: Size of the message in bytes (32 bits)
-///   counts: Array of 32 bit counts, positive counts indicate non-zero bytes, negative counts
-///           indicate zero bytes.
-///   data: Data for the non-zero message bytes
-class LiteCompressor
+/// Implements lite_compression by scanning the message and replacing consecutive chunks
+/// of zeros with a counts.
+///
+/// @see LiteCompressorInterface
+class LiteCompressor : public LiteCompressorInterface
 {
   /// Helper class for copying data out of a span of spans
   class SpanCursor
@@ -78,14 +73,6 @@ class LiteCompressor
   };
 
 public:
-  /// Compression mode
-  WISE_ENUM_CLASS_MEMBER(
-    (CompressionMode, uint8_t),
-    // Minimum latency
-    minimum_latency,
-    // Yield periodically to give other threads a chance to run
-    yield_processor)
-
   /// Maximum increase in message size after lite compression (message size, chunk count, three chunks = 20 bytes)
   static constexpr size_t max_compression_overhead_bytes = 20U;
 
@@ -93,38 +80,25 @@ public:
   /// @param[in] memory_resource Memory resource
   explicit LiteCompressor(jewels::memory::MemoryResource memory_resource);
 
-  ~LiteCompressor() noexcept = default;
+  ~LiteCompressor() noexcept override = default;
 
   LiteCompressor(const LiteCompressor&) = delete;
   LiteCompressor& operator=(const LiteCompressor&) = delete;
   LiteCompressor(LiteCompressor&&) = default;
   LiteCompressor& operator=(LiteCompressor&&) = default;
 
-  /// Compress a buffer by removing blocks of zeros
-  ///
-  /// The data in the result is backed by the input buffer.
-  /// The resulting span remains valid until the next call to compress or decompress.
-  ///
-  /// @param[in] data Data to be compressed
-  /// @return Span of spans containing the compressed data
-  [[nodiscard]] std::span<const std::span<const std::byte>> compress(std::span<const std::byte> data);
+  /// @see LiteCompressorInterface::compress
+  [[nodiscard]] std::span<const std::span<const std::byte>> compress(std::span<const std::byte> data) override;
 
-  /// Compress a buffer by removing blocks of zeros and generate checksums for the byte counts and compressed data
-  ///
-  /// The data in the result is backed by the input buffer.
-  /// The resulting span remains valid until the next call to compress or decompress.
-  ///
-  /// @param[out] compressed_data Span of spans containing the compressed data
-  /// @param[out] counts_checksum Compressed counts checksum
-  /// @param[out] data_checksum Compressed data checksum
-  /// @param[in] data Data to be compressed
-  /// @param[in] mode Compression mode (minimum latency or yield processor)
+  /// @see LiteCompressorInterface::compress
   void compress(
     jewels::Out<std::span<const std::span<const std::byte>>> compressed_data,
     jewels::Out<uint64_t> counts_checksum,
     jewels::Out<uint64_t> data_checksum,
-    std::span<const std::byte> data,
-    CompressionMode mode = CompressionMode::minimum_latency);
+    std::span<const std::byte> data) override;
+
+  /// @see LiteCompressorInterface::clone
+  [[nodiscard]] std::shared_ptr<LiteCompressorInterface> clone() const override;
 
   /// Decompress a buffer.
   ///
@@ -152,14 +126,9 @@ public:
   /// @param[in] data_checksum Compressed data checksum
   /// @param[in] data_span Data to be decompressed
   /// @param[in] dest_span Decompressed data span
-  /// @param[in] mode Compression mode (minimum latency or yield processor)
   /// @return Decompressed data or MonoError on failure
   LogOutcome decompress(
-    uint64_t counts_checksum,
-    uint64_t data_checksum,
-    std::span<const std::byte> data,
-    std::span<std::byte> dest_span,
-    CompressionMode mode = CompressionMode::minimum_latency);
+    uint64_t counts_checksum, uint64_t data_checksum, std::span<const std::byte> data, std::span<std::byte> dest_span);
 
   /// Decompress a buffer.
   ///
@@ -189,34 +158,24 @@ public:
   [[nodiscard]] static LogExpected<size_t>
   get_decompressed_size(std::span<const std::span<const std::byte>> data_spans);
 
-  /// Update the XXH3 checksum respecting the compression mode
-  /// @param[in] data Data
-  /// @param[in] mode Compression mode (minimum latency or yield processor)
-  static void update_checksum(XXH3_state_t& state, std::span<const std::byte> data, CompressionMode mode);
-
 private:
   /// Compress a buffer of uint64_t by removing blocks of zeros and updating the data checksum
   /// @param[in,out] maybe_data_checksum_state Data checksum state
   /// @param[in] aligned_data Aligned data to be compressed
-  /// @param[in] mode Compression mode (minimum latency or yield processor)
-  void compress_aligned_data(
-    std::optional<XXH3_state_t>& maybe_data_checksum_state,
-    std::span<const uint64_t> aligned_data,
-    CompressionMode mode);
+  void
+  compress_aligned_data(std::optional<XXH3_state_t>& maybe_data_checksum_state, std::span<const uint64_t> aligned_data);
 
   /// Common decompression implementation
   /// @param[in,out] maybe_data_checksum_state Optional data checksum state
   /// @param[in] cursor Source span cursor
   /// @param[in] byte_counts Message byte counts
   /// @param[in] dest_span Destination data span
-  /// @param[in] mode Compression mode (minimum latency or yield processor)
   /// @return Decompression outcome
   static LogOutcome decompress_common(
     std::optional<XXH3_state_t>& maybe_data_checksum_state,
     SpanCursor cursor,
     std::span<const int32_t> byte_counts,
-    std::span<std::byte> dest_span,
-    CompressionMode mode);
+    std::span<std::byte> dest_span);
 
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;

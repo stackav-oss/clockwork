@@ -5,7 +5,7 @@
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/report_clk_cc.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
@@ -69,6 +69,12 @@ template <typename Policy>
 }
 
 template <typename Policy>
+void CogDiagnosticsImpl<Policy>::set_health(ReporterType& report, diagnostics::ReportHealth health)
+{
+  report.set_health(health);
+}
+
+template <typename Policy>
 void CogDiagnosticsImpl<Policy>::set_unit_test_diagnostics_impl(pinion::PublisherHandle&& handle)
 {
   manager_.publisher().set_handle(std::move(handle));
@@ -106,6 +112,19 @@ template <typename... Policies>
   else
   {
     return ReporterType(std::move(std::get<CogDiagnosticsImpl<Policies>>(impls_).make_report(now))...);
+  }
+}
+
+template <typename... Policies>
+void CogDiagnostics<Policies...>::set_health(ReporterType& reports, diagnostics::ReportHealth health)
+{
+  if constexpr (sizeof...(Policies) == 1)
+  {
+    reports.set_health(health);
+  }
+  else
+  {
+    std::apply([health](auto&... report) { (report.set_health(health), ...); }, reports);
   }
 }
 

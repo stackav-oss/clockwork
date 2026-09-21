@@ -8,13 +8,14 @@
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/xxh3_checksum.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
+#include "clockwork/pinion/tests/support/bridge_test_message_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/span.hh"
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -38,7 +39,8 @@ decompress_message(uint64_t counts_checksum, uint64_t data_checksum, std::span<c
 {
   clockwork_logging::LiteCompressor compressor{jewels::memory::MemoryResource{std::pmr::new_delete_resource()}};
   auto message = std::make_unique<Msg>();
-  const auto decompress_outcome = compressor.decompress(counts_checksum, data_checksum, compressed_data, *message);
+  const auto decompress_outcome = compressor.decompress(
+    counts_checksum, data_checksum, compressed_data, std::as_writable_bytes(jewels::as_single_item_span(*message)));
   if (!decompress_outcome.ok())
   {
     return nullptr;
@@ -48,7 +50,8 @@ decompress_message(uint64_t counts_checksum, uint64_t data_checksum, std::span<c
 
 template <typename Msg>
 [[nodiscard]] std::optional<std::tuple<TcpMessageHeader, std::unique_ptr<Msg>, TcpMessageTail>>
-recv_and_unpack(int sock, const Msg& expected_message, std::chrono::nanoseconds recv_timeout)
+// NOLINTNEXTLINE(readability-function-size) This is test-only code
+recv_and_unpack(int sock, const Msg& expected_message, AckOption ack_option, std::chrono::nanoseconds recv_timeout)
 {
   const auto recv_deadline = jewels::time::SyncClock::now() + recv_timeout;
   std::optional<TcpMessageHeader> maybe_header;
@@ -72,6 +75,10 @@ recv_and_unpack(int sock, const Msg& expected_message, std::chrono::nanoseconds 
       CHECK(false);
       return std::nullopt;
     }
+    if (ack_option == AckOption::send_ack)
+    {
+      CHECK(send_acknowledgement(sock, maybe_header->body.sequence_number));
+    }
   }
   REQUIRE(maybe_header->body.message_length != 0U);
   REQUIRE(
@@ -93,6 +100,10 @@ recv_and_unpack(int sock, const Msg& expected_message, std::chrono::nanoseconds 
     CHECK(decompress_result);
     return std::nullopt;
   }
+  if (ack_option == AckOption::send_ack)
+  {
+    CHECK(send_acknowledgement(sock, maybe_header->body.sequence_number));
+  }
 
   return std::tuple<TcpMessageHeader, std::unique_ptr<Msg>, TcpMessageTail>{
     maybe_header.value(), std::move(decompress_result), tail};
@@ -105,9 +116,10 @@ template <typename Msg>
   const Msg& expected_message,
   int64_t expected_publish_time,
   int64_t expected_commit_time,
+  AckOption ack_option,
   std::chrono::nanoseconds recv_timeout)
 {
-  auto payload = recv_and_unpack(sock, expected_message, recv_timeout);
+  auto payload = recv_and_unpack(sock, expected_message, ack_option, recv_timeout);
   if (!payload)
   {
     CHECK(payload);
@@ -124,9 +136,13 @@ template <typename Msg>
 
 template <typename Msg>
 [[nodiscard]] bool check_next_payload(
-  int sock, uint64_t expected_seqno, const Msg& expected_message, std::chrono::nanoseconds recv_timeout)
+  int sock,
+  uint64_t expected_seqno,
+  const Msg& expected_message,
+  AckOption ack_option,
+  std::chrono::nanoseconds recv_timeout)
 {
-  auto payload = recv_and_unpack<Msg>(sock, expected_message, recv_timeout);
+  auto payload = recv_and_unpack<Msg>(sock, expected_message, ack_option, recv_timeout);
   if (!payload)
   {
     CHECK(payload);
@@ -139,10 +155,10 @@ template <typename Msg>
 }
 
 template <size_t message_size>
-[[nodiscard]] std::unique_ptr<std::array<std::byte, message_size>> make_random_message()
+[[nodiscard]] std::unique_ptr<Tappy<BridgeTestMessage<message_size>>> make_random_message()
 {
-  auto msg = std::make_unique<std::array<std::byte, message_size>>();
-  clockwork_logging::onboard::tests::fill_with_random_bytes(*msg);
+  auto msg = std::make_unique<Tappy<BridgeTestMessage<message_size>>>();
+  clockwork_logging::onboard::tests::fill_with_random_bytes(msg->get_mutable_data());
   return msg;
 }
 

@@ -1,13 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/exec_tools.hh"
+#include "clockwork/common/signal_metadata_config_clk_cc.hh"
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -23,6 +26,7 @@ struct DeterministicLoggingConfig
   std::shared_ptr<const Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config;
   std::shared_ptr<const Tappy<clockwork_logging::ChannelPublisherConfig<>>> channel_publisher_config;
   std::shared_ptr<const Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>> metrics_channel_metadata_config;
+  std::shared_ptr<const Tappy<clockwork::common::SignalMetadataConfig<>>> signal_metadata_config;
   bool suppress_schema_mismatch_errors = false;
 };
 
@@ -35,9 +39,9 @@ struct DeterministicRunnerTimeRange
 
 // Attempt to use the paths specified in execution params to retrieve the deterministic logging configurations.
 // If the paths are not specified this will return a DeterministicLoggingConfig that contains nullptrs. If it is
-// specified, it will populate the pointers for the config paths specifed. Will return an error on failure.
-jewels::expected<DeterministicLoggingConfig, jewels::MonoError>
-get_deterministic_logging_config(const ExecutionParams& execution_params);
+// specified, it will populate the pointers for the config paths specifed. Will return failure on error.
+jewels::BinaryOutcome get_deterministic_logging_config(
+  jewels::Out<DeterministicLoggingConfig> logging_config_out, const ExecutionParams& execution_params);
 
 // Uses the log to ensure that the start and end times are populated and in bounds
 [[nodiscard]] jewels::expected<DeterministicRunnerTimeRange, jewels::MonoError>

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/test_tools/clockwork_system_runner.hh"
@@ -7,6 +7,7 @@
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
@@ -71,8 +72,15 @@ ClockworkSystemRunner::create(const ClockworkSystemRunnerConfig& runner_config)
   system_runner.process_description_ = std::move(*maybe_process_description);
   if (runner_config.input_log_config)
   {
+    const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+    const auto chunk_reader_factory =
+      std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
     auto log_reader = clockwork_logging::OffboardLogReader(
-      runner_config.input_log_config->log_uri, {}, {}, clockwork_logging::DecompressOption::decompress);
+      runner_config.input_log_config->log_uri,
+      {},
+      {},
+      clockwork_logging::DecompressOption::decompress,
+      chunk_reader_factory);
     if (!log_reader.open({}))
     {
       return jewels::unexpected(ClockworkSystemRunnerError::error_opening_log_reader);

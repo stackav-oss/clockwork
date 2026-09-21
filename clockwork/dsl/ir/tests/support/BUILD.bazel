@@ -1,79 +1,83 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
 
-package(default_testonly = True)
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "clk_parametrized_box.clk",
+])
+
+clk(
+    name = "clk_parametrized_box_clk",
+    srcs = ["clk_parametrized_box.clk"],
+    outs = [
+        "clk_parametrized_box_clk_cc.cc",
+        "clk_parametrized_box_clk_cc.hh",
+        "clk_parametrized_box_clk_cc.inl",
+        "clk_parametrized_box_clk_cc_cog.cc",
+        "clk_parametrized_box_clk_cc_cog.hh",
+        "clk_parametrized_box_clk_cc_cog.inl",
+        "clk_parametrized_box_clk_cc_dial.cc",
+        "clk_parametrized_box_clk_cc_dial.hh",
+        "clk_parametrized_box_clk_cc_dial.inl",
+        "clk_parametrized_box_clk_cc_types.cc",
+        "clk_parametrized_box_clk_cc_types.hh",
+        "clk_parametrized_box_clk_cc_types.inl",
+        "clk_parametrized_box_clk_exe.cc",
+        "clk_parametrized_box_clk_exe.hh",
+        "clk_parametrized_box_clk_exe.inl",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 cc_library(
-    name = "report_group_defs",
-    srcs = [
-        "report_group_defs.cc",
-        "report_group_defs.inl",
-    ],
-    hdrs = ["report_group_defs.hh"],
-    data = [":report_group_defs_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":report_group_defs_dial",
-        ":report_group_defs_impl",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
-    ],
-    alwayslink = True,
+    name = "clk_parametrized_box_clk_cc_impl",
+    srcs = ["clk_parametrized_box_clk_cc_impl.inl"],
+    hdrs = ["clk_parametrized_box_clk_cc_impl.hh"],
+    deps = [":clk_parametrized_box_clk_cc_dial"],
 )
 
 clk(
     name = "report_group_defs_clk",
     srcs = ["report_group_defs.clk"],
     outs = [
-        "report_group_defs.cc",
-        "report_group_defs.hh",
-        "report_group_defs.inl",
-        "report_group_defs_dial.cc",
-        "report_group_defs_dial.hh",
-        "report_group_defs_dial.inl",
+        "report_group_defs_clk_cc.cc",
+        "report_group_defs_clk_cc.hh",
+        "report_group_defs_clk_cc.inl",
+        "report_group_defs_clk_cc_cog.cc",
+        "report_group_defs_clk_cc_cog.hh",
+        "report_group_defs_clk_cc_cog.inl",
+        "report_group_defs_clk_cc_dial.cc",
+        "report_group_defs_clk_cc_dial.hh",
+        "report_group_defs_clk_cc_dial.inl",
+        "report_group_defs_clk_cc_types.cc",
+        "report_group_defs_clk_cc_types.hh",
+        "report_group_defs_clk_cc_types.inl",
     ],
-    deps = [
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
-        "//std:signals_clk",
+    cpp_deps = ["//std:signals_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
     ],
-)
-
-cc_library(
-    name = "report_group_defs_dial",
-    srcs = [
-        "report_group_defs_dial.cc",
-        "report_group_defs_dial.inl",
-    ],
-    hdrs = ["report_group_defs_dial.hh"],
-    data = [":report_group_defs_clk"],
     visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:tags",
-        "//clockwork/dial:include_common",
-        "//jewels/callsig:outcome",
-        "//jewels/callsig:outparam",
-        "//jewels/container/tap:soa",
-        "//jewels/memory:aligned_storage",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/uuid",
-    ],
+    deps = ["//std:signals_clk"],
 )
 
 cc_library(
-    name = "report_group_defs_impl",
-    srcs = ["report_group_defs_impl.cc"],
-    deps = [":report_group_defs_dial"],
+    name = "report_group_defs_clk_cc_impl",
+    srcs = ["report_group_defs_clk_cc_impl.cc"],
+    deps = [":report_group_defs_clk_cc_dial"],
 )
 
 clk(

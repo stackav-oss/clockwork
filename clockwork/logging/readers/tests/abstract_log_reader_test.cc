@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
@@ -65,7 +65,7 @@ TEST_CASE("Abstract log reader")
     {
       return {LogTimestamp{}};
     }
-    [[nodiscard]] std::optional<LoggedMessage> next_message() override
+    [[nodiscard]] std::optional<LoggedMessage> next_message_impl() override
     {
       return {};
     }

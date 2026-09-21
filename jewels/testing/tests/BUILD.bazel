@@ -1,9 +1,28 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
 
 package(default_testonly = True)
+
+cc_test(
+    name = "error_code_stringmakers_test",
+    srcs = ["error_code_stringmakers_test.cc"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "//jewels/testing:error_code_stringmakers",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "expected_stringmakers_test",
+    srcs = ["expected_stringmakers_test.cc"],
+    deps = [
+        "//jewels/testing:expected_stringmakers",
+        "@catch2//:catch2_main",
+    ],
+)
 
 cc_test(
     name = "filesystem_wrapper_test",
@@ -12,6 +31,18 @@ cc_test(
     deps = [
         "//jewels/testing:filesystem_wrapper",
         "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "path_stringmakers_test",
+    srcs = ["path_stringmakers_test.cc"],
+    deps = [
+        "//jewels/filesystem:path",
+        "//jewels/memory:default_memory_resource",
+        "//jewels/memory:memory_resource",
+        "//jewels/testing:path_stringmakers",
         "@catch2//:catch2_main",
     ],
 )
@@ -27,5 +58,15 @@ cc_test(
         "//jewels/std:expected",
         "//jewels/testing:tmp_directory_guard",
         "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "wise_enum_stringmakers_test",
+    srcs = ["wise_enum_stringmakers_test.cc"],
+    deps = [
+        "//jewels/testing:wise_enum_stringmakers",
+        "@catch2//:catch2_main",
+        "@wise_enum",
     ],
 )

@@ -1,27 +1,36 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/deterministic_runner_setup.hh"
 
 #include "clockwork/common/cog_gpu_assignment_config_clk_cc.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/writers/deterministic_log_writer.hh"
+#include "clockwork/logging/writers/persistent_log_entry.hh"
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
+#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
+#include "jewels/container/tap/var_array.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/std/span.hh"
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <xxh3.h>
 
+#include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <memory_resource>
 #include <optional>
-#include <regex>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace clockwork
 {
@@ -45,6 +54,51 @@ jewels::expected<clockwork_logging::ChannelMap, jewels::MonoError> convert_chann
 
   return publisher_channel_map;
 }
+
+namespace
+{
+
+template <typename T>
+clockwork_logging::PersistentLogEntry
+make_tachyon_persistent_entry(std::string_view channel_name, std::shared_ptr<const T> data)
+{
+  using Traits = clockwork::LoggingTraits<T>;
+  const auto data_bytes = std::as_bytes(jewels::as_single_item_span(*data));
+  return clockwork_logging::PersistentLogEntry{
+    .channel_name = std::string(channel_name),
+    .schema_name = std::string(Traits::schema_name),
+    .schema_encoding = static_cast<clockwork_logging::SchemaEncoding>(Traits::schema_encoding),
+    .schema_definition = std::string(std::begin(Traits::schema_definition), std::end(Traits::schema_definition)),
+    .data_owner = std::move(data),
+    .data = data_bytes,
+  };
+}
+
+std::pmr::vector<clockwork_logging::PersistentLogEntry>
+build_persistent_entries(jewels::memory::MemoryResource memres, const DeterministicLoggingConfig& logging_config)
+{
+  std::pmr::vector<clockwork_logging::PersistentLogEntry> entries{memres};
+
+  if (logging_config.metrics_channel_metadata_config)
+  {
+    const auto& config = *logging_config.metrics_channel_metadata_config;
+    auto report = jewels::memory::make_pmr_shared<Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>(memres);
+    report->get_underlying_metrics_channels() = config.get_underlying_metrics_channels();
+    entries.push_back(make_tachyon_persistent_entry(
+      clockwork_logging::metrics_channel_metadata_channel_name,
+      std::shared_ptr<const Tappy<clockwork::tools::MetricsChannelMetadataReport<>>>(std::move(report))));
+  }
+
+  if (logging_config.signal_metadata_config)
+  {
+    entries.push_back(make_tachyon_persistent_entry(
+      clockwork_logging::signal_metadata_channel_name, logging_config.signal_metadata_config));
+  }
+
+  return entries;
+}
+
+} // namespace
 
 jewels::expected<std::shared_ptr<DeterministicChannelHandler>, jewels::MonoError> setup_deterministic_log_writer(
   jewels::memory::MemoryResource memres,
@@ -78,7 +132,7 @@ jewels::expected<std::shared_ptr<DeterministicChannelHandler>, jewels::MonoError
       memres,
       memres,
       jewels::memory::make_non_null_from_ref(*logging_config.log_writer_config),
-      logging_config.metrics_channel_metadata_config,
+      build_persistent_entries(memres, logging_config),
       *channel_map,
       *execution_params.output_log_uri,
       init_time);

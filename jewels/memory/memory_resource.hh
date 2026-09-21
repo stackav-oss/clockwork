@@ -1,10 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/memory/instrumented_pmr_resource.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <memory_resource>
+#include <unordered_map>
 
 namespace jewels::memory
 {
@@ -49,6 +53,14 @@ public:
   template <typename T>
   // NOLINTNEXTLINE(google-explicit-constructor) - See docblock for why this is implicit.
   constexpr operator std::pmr::polymorphic_allocator<T>() const noexcept;
+
+  /// Get metrics if the underlying memory_resource supports them.
+  /// @param metrics Metrics object to fill.
+  /// @return success if metrics were retrieved, failure otherwise.
+  inline jewels::BinaryOutcome get_memory_resource_metrics(jewels::Out<MemoryResourceMetrics> metrics) const noexcept;
+
+  /// Reset incremental metrics if the underlying memory_resource support metrics.
+  inline void reset_incremental_metrics() noexcept;
 
 private:
   // The underlying memory_resource pointer.

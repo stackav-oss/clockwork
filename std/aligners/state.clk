@@ -1,0 +1,19 @@
+// Copyright 2025-2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp)]
+#![cpp(namespace=clockwork::aligner)]
+
+// Persistent state for aligner cogs with optional input timeouts.
+schema AlignerState
+{
+  uuid: 3d1a8188-502f-403f-8761-d3044e275338;
+
+  fields
+  {
+    // The time at which a partial alignment was first found.
+    // Set when arming the timer. Only read when the timer is armed;
+    // stale values are harmless since timer disarm gates all reads.
+    #0 partial_start_time: SyncTime;
+  }
+}

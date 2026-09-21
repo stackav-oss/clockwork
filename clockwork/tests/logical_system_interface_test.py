@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -60,6 +60,7 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     """
     # load a system with some cogs
     # input_log -> Chan1 -> subscriber_cog -> Chan2 -> publisher_cog -> Chan3 -> output_log
+    # input_log -> InputChan1 -> subscriber_cog -> InBetweenChan2 -> publisher_cog -> OutputChan3 -> output_log
     logical_system = LogicalSystemInterface(
         ModuleID.from_path(
             CLK_REPO,
@@ -80,7 +81,7 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     logical_system_2.import_context_from(logical_system)
 
     # test getters
-    assert len(logical_system.get_channels()) == 10
+    assert len(logical_system.get_channels()) == 8
     channel_1 = logical_system.get_channel("Chan1")
     assert channel_1 is not None
     assert channel_1.get_name() == "Chan1"
@@ -104,10 +105,35 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     channel_1_producer = channel_1_producers[0]
     assert channel_1_producer.is_udp_socket() is False
     assert channel_1_producer.is_log_producer() is True
+
+    param_channel_1 = logical_system.get_channel("InputChan1")
+    assert param_channel_1 is not None
+    assert param_channel_1.get_name() == "InputChan1"
+    param_channel_1_producers = param_channel_1.get_producers()
+    assert len(param_channel_1_producers) == 1
+    param_channel_1_observers = param_channel_1.get_observers()
+    assert len(param_channel_1_observers) == 1
+    param_channel_3 = logical_system.get_channel("OutputChan3")
+    assert param_channel_3 is not None
+    assert param_channel_3.has_log_writer_policy() is True
+    assert param_channel_3.is_persistent() is False
+    param_channel_4 = logical_system.get_channel("PersistentOutputChan4")
+    assert param_channel_4 is not None
+    assert param_channel_4.has_log_writer_policy() is True
+    assert param_channel_4.is_persistent() is True
+    assert param_channel_1.get_message_size_bytes() > 0
+    assert param_channel_1.get_message_size_bytes() == param_channel_3.get_message_size_bytes()
+    assert param_channel_1.get_queue_size() == 12
+    param_channel_1.set_queue_size(2)
+    assert param_channel_1.get_queue_size() == 2
+    param_channel_1_producer = param_channel_1_producers[0]
+    assert param_channel_1_producer.is_udp_socket() is False
+    assert param_channel_1_producer.is_log_producer() is True
+
     processes = logical_system.get_processes()
     assert len(processes) == 1
     system_cogs = logical_system.get_cogs()
-    assert len(system_cogs) == 3
+    assert len(system_cogs) == 6
     cog_names = {cog.get_name() for cog in system_cogs}
     publisher_cog_fqn = (
         f"@{CLK_REPO}::clockwork::tests::support::test_system_description.test_system.test_cogs_box.publisher_cog"
@@ -131,7 +157,7 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     new_output_channel_name = "some_new_output_channel"
     new_input_channel_name = "some_new_input_channel"
     channel_1.add_log_producer(alternative_output_channel_name=new_output_channel_name)
-    assert len(logical_system.get_channels()) == 11
+    assert len(logical_system.get_channels()) == 9
     new_channel = logical_system.get_channel(new_output_channel_name)
     assert new_channel is not None
     new_channel_producers = new_channel.get_producers()
@@ -148,6 +174,27 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     assert channel_1.has_log_writer_policy() is False
     logical_system.add_telemetry_log_observers([channel_1])
     assert channel_1.has_log_writer_policy() is True
+
+    new_param_output_channel_name = "some_new_param_output_channel"
+    new_param_input_channel_name = "some_new_param_input_channel"
+    param_channel_1.add_log_producer(alternative_output_channel_name=new_param_output_channel_name)
+    assert len(logical_system.get_channels()) == 10
+    new_param_channel = logical_system.get_channel(new_param_output_channel_name)
+    assert new_param_channel is not None
+    new_param_channel_producers = new_param_channel.get_producers()
+    assert len(new_param_channel_producers) == 1
+    assert new_param_channel_producers[0].is_log_producer() is True
+
+    param_channel_1_producers = param_channel_1.get_producers()
+    assert len(param_channel_1_producers) == 1
+    logical_system.add_log_producer(param_channel_1, alternative_input_channel_name=new_param_input_channel_name)
+    param_channel_1_producers = param_channel_1.get_producers()
+    # we don't allow two log producers for the same channel
+    assert len(param_channel_1_producers) == 1
+
+    assert param_channel_1.has_log_writer_policy() is False
+    logical_system.add_telemetry_log_observers([param_channel_1])
+    assert param_channel_1.has_log_writer_policy() is True
 
     # test adding entities to a different system
     logical_system_2.clear_policies()
@@ -173,10 +220,10 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
                     assert new_channel is not None
                     logical_system_2.connect_channel_producer(new_channel, producer)
     assert (  # `some_new_channel` wasn't connected to a cog so didn't get brought over
-        len(logical_system_2.get_channels()) == 10
+        len(logical_system_2.get_channels()) == 8
     )
     assert len(logical_system_2.get_processes()) == 1
-    assert len(logical_system_2.get_cogs()) == 3
+    assert len(logical_system_2.get_cogs()) == 6
     assert len(logical_system_2.get_cpu_domains()) == 1
 
     renamed_channel_1_name = "renamed_channel_1"
@@ -190,11 +237,17 @@ def test_logical_system_interface(fs_importer: FilesystemImporter) -> None:  # n
     # test removals
     channel_2 = logical_system.get_channel("Chan2")
     assert channel_2 is not None
+    param_channel_2 = logical_system.get_channel("InBetweenChan2")
+    assert param_channel_2 is not None
     logical_system.remove_channel(channel_2)
+    logical_system.remove_channel(param_channel_2)
     assert logical_system.get_channel("Chan2") is None
-    assert len(logical_system.get_channels()) == 10
+    assert logical_system.get_channel("InBetweenChan2") is None
+    assert len(logical_system.get_channels()) == 8
     logical_system.remove_cog(system_cogs[0])
-    assert len(logical_system.get_cogs()) == 2
+    assert len(logical_system.get_cogs()) == 5
+    logical_system.remove_cogs(system_cogs[1:3])
+    assert len(logical_system.get_cogs()) == 3
     logical_system.remove_process(processes[0])
     assert len(logical_system.get_processes()) == 0
     assert channel_1.has_log_writer_policy() is True
@@ -472,3 +525,152 @@ def test_connect_state_type_validation(fs_importer: FilesystemImporter) -> None:
     assert input_endpoint is not None
     with pytest.raises(TypeError, match="Can only connect cog StateDef endpoints to state"):
         logical_system.connect_state(state, input_endpoint)
+
+
+def test_get_optimal_queue_size_with_aligned_inputs() -> None:
+    """Verify LSI methods work with aligned inputs."""
+    lsi = LogicalSystemInterface(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/composition/tests/support/aligned_consumer_system.clk"))
+    )
+    for channel in lsi.get_channels():
+        queue_size = channel.get_optimal_queue_size()
+        assert queue_size >= 1
+
+    cogs = lsi.get_cogs()
+    consumer_cog = next(c for c in cogs if c.get_name().endswith(".consumer"))
+    input_names = consumer_cog.get_input_channel_names()
+    assert "AlignmentChannel" in input_names
+    assert "RawDataChannel" in input_names
+    assert consumer_cog.get_endpoint_by_input_name("aligned") is not None
+
+
+def test_get_optimal_queue_size_accounts_for_producer_bursts() -> None:
+    """Verify queue sizing includes multi-message producer bursts."""
+    lsi = LogicalSystemInterface(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/tests/support/queue_size_multi_output_system.clk"))
+    )
+
+    burst_channel = lsi.get_channel("BurstChannel")
+    assert burst_channel is not None
+    assert burst_channel.get_optimal_queue_size() == 7
+
+
+def test_endpoint_is_state(fs_importer: FilesystemImporter) -> None:
+    """Test EndpointInterface.is_state() for state and non-state endpoints."""
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/logical_system_interface_test_system.clk"),
+        ),
+        fs_importer,
+    )
+
+    cogs = logical_system.get_cogs()
+    assert len(cogs) == 1
+    test_cog = cogs[0]
+
+    # State endpoints should return True
+    connected_states = test_cog.get_connected_states()
+    assert len(connected_states) > 0
+    for state_endpoint in connected_states:
+        assert state_endpoint.is_state() is True
+
+    # Input endpoints should return False
+    input_endpoint = test_cog.get_endpoint_by_input_name("dummy")
+    assert input_endpoint is not None
+    assert input_endpoint.is_state() is False
+
+    # Output endpoints should return False
+    output_endpoint = test_cog.get_endpoint_by_output_name("pub_state")
+    assert output_endpoint is not None
+    assert output_endpoint.is_state() is False
+
+    # Config endpoints should return False
+    config_endpoint = test_cog.get_config_endpoint_by_name("config")
+    assert config_endpoint is not None
+    assert config_endpoint.is_state() is False
+
+
+def test_cog_get_class_name(fs_importer: FilesystemImporter) -> None:
+    """Test CogInterface.get_class_name() returns the cog class FQN."""
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description.clk"),
+        ),
+        fs_importer,
+    )
+
+    cogs = logical_system.get_cogs()
+    assert len(cogs) > 0
+
+    # All cogs in test_system_description are TestSystemCog instances
+    expected_class_fqn = f"@{CLK_REPO}::clockwork::tests::support::test_system_description.TestSystemCog"
+    for cog in cogs:
+        assert cog.get_class_name() == expected_class_fqn
+
+    # Also verify with a different cog class
+    logical_system_2 = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/logical_system_interface_test_system.clk"),
+        ),
+        fs_importer,
+    )
+    cogs_2 = logical_system_2.get_cogs()
+    assert len(cogs_2) == 1
+    expected_restore_class_fqn = f"@{CLK_REPO}::clockwork::tests::support::restore_test_cog.RestoreTestCog"
+    assert cogs_2[0].get_class_name() == expected_restore_class_fqn
+
+
+def test_cog_get_connected_states(fs_importer: FilesystemImporter) -> None:
+    """Test get_connected_states() with a cog connected to a shared state."""
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description.clk"),
+        ),
+        fs_importer,
+    )
+
+    # In test_system_description, three cogs share one state
+    publisher_cog_fqn = (
+        f"@{CLK_REPO}::clockwork::tests::support::test_system_description.test_system.test_cogs_box.publisher_cog"
+    )
+    cogs = logical_system.get_cogs()
+    publisher_cog = next(cog for cog in cogs if cog.get_name() == publisher_cog_fqn)
+
+    connected_states = publisher_cog.get_connected_states()
+    # The publisher_cog has one state endpoint connected
+    assert len(connected_states) == 1
+    for endpoint in connected_states:
+        assert endpoint.is_state() is True
+
+
+def test_logical_system_interface_shared_states_have_same_uuid(fs_importer: FilesystemImporter) -> None:
+    """Test the LogicalSystemInterface."""
+    logical_system = LogicalSystemInterface(
+        ModuleID.from_path(
+            CLK_REPO,
+            Path("clockwork/tests/support/test_system_description.clk"),
+        ),
+        fs_importer,
+    )
+    subscriber_cog = None
+    publisher_cog = None
+    for cog in logical_system.get_cogs():
+        if cog.get_name().endswith(".test_cogs_box.subscriber_cog"):
+            assert subscriber_cog is None, "Found multiple subscriber cogs"
+            subscriber_cog = cog
+        elif cog.get_name().endswith(".test_cogs_box.publisher_cog"):
+            assert publisher_cog is None, "Found multiple publisher cogs"
+            publisher_cog = cog
+    assert subscriber_cog is not None
+    assert publisher_cog is not None
+    subscriber_cog_states = subscriber_cog.get_connected_states()
+    publisher_cog_states = publisher_cog.get_connected_states()
+    assert len(subscriber_cog_states) == 1
+    assert len(publisher_cog_states) == 1
+    subscriber_cog_state = subscriber_cog_states[0]
+    publisher_cog_state = publisher_cog_states[0]
+    assert subscriber_cog_state.get_uuid() == publisher_cog_state.get_uuid()

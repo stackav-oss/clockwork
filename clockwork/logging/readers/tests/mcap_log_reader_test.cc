@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -105,6 +105,7 @@ TEST_CASE("Mcap Log Reader")
            std::string{
              clockwork::LoggingTraits<MsgType>::schema_definition.data(),
              clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+         .is_amended = false,
        },
        {
          .name = "channel2",
@@ -116,6 +117,7 @@ TEST_CASE("Mcap Log Reader")
            std::string{
              clockwork::LoggingTraits<MsgType>::schema_definition.data(),
              clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+         .is_amended = false,
        }});
 
     const auto actual = reader.get_metadata();

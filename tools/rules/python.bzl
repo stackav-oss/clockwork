@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Wrapper macros for Python.
@@ -18,7 +18,7 @@ _DISABLED_TYPE_STUB_ALLOW_LIST = [
 
 # TODO(OI-3125): De-duplicate rule definitions.
 
-def py_cc_binding(name, srcs, deps, data = [], dynamic_deps = [], py_deps = None, pyi_file = None, use_type_stubs = None, visibility = None, testonly = None, exec_properties = None, imports = [], disabled_stubs = _DISABLED_TYPE_STUB_ALLOW_LIST):
+def py_cc_binding(name, srcs, deps, data = [], dynamic_deps = [], py_deps = None, pyi_file = None, use_type_stubs = None, visibility = None, testonly = None, exec_properties = None, imports = [], copts = [], disabled_stubs = _DISABLED_TYPE_STUB_ALLOW_LIST):
     """Create a solib and a Python library wrapping it.
 
     Args:
@@ -39,6 +39,7 @@ def py_cc_binding(name, srcs, deps, data = [], dynamic_deps = [], py_deps = None
             exec_properties of a platform selected for this
             target. See exec_properties of the platform rule.
         imports: Import paths
+        copts: C++ compiler options for the generated shared library.
         disabled_stubs: List of targets that are allowed to have type stubs disabled.
     """
     if name.endswith(".so"):
@@ -92,6 +93,8 @@ def py_cc_binding(name, srcs, deps, data = [], dynamic_deps = [], py_deps = None
         ],
         dynamic_deps = dynamic_deps,
         linkshared = True,
+        # Forward extension-only compile options from generated nanobind bindings.
+        copts = copts,
         visibility = ["//visibility:private"],
         deps = deps,
     )
@@ -138,8 +141,8 @@ def run_python_action(ctx, script, arguments = [], **kwargs):
     runtime_info = script[PyRuntimeInfo]
 
     ctx.actions.run(
-        executable = runtime_info.interpreter,
-        arguments = [default_info.files_to_run.executable.path] + arguments,
+        executable = default_info.files_to_run.executable,
+        arguments = arguments,
         tools = [
             default_info.files_to_run,
             depset([default_info.files_to_run.executable], transitive = [runtime_info.files, default_info.default_runfiles.files]),
@@ -325,7 +328,7 @@ def nanobind_stubgen(
         tags = [
             # Each of these binaries uses the same `src` file, so don't bother running the type-checker for each one.
             # Instead, we have a dedicated target for the `src` file that we type-check.
-            "pyright-skip",
+            "pyrefly-skip",
         ],
     )
 

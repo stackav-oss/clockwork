@@ -1,10 +1,11 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//tools/rules:python.bzl", "py_binary")
 
 exports_files([
+    "resources/bazel_binary_wrapper.sh.j2",
     "cc.bzl",
     "package.bzl",
     "python.bzl",
@@ -68,5 +69,14 @@ py_binary(
         "@clockwork_pip//nanobind",
         # TODO(DX-29): stubgen.py requires the 'typing_extensions' package on Python <3.11
         "@clockwork_pip//typing_extensions",  # keep
+    ],
+)
+
+bzl_library(
+    name = "write_binary_wrapper_source_file_bzl",
+    srcs = ["write_binary_wrapper_source_file.bzl"],
+    deps = [
+        "@bazel_lib//lib:write_source_files",
+        "@rules_appimage//appimage",
     ],
 )

@@ -4,5 +4,5 @@ use[] clockwork::dsl::tests::support::clk_hellomod;
 
 box HelloBox
 {
-    new hello_box: clk_hellomod::HelloProcs;
+  new hello_box: clk_hellomod::HelloProcs;
 }

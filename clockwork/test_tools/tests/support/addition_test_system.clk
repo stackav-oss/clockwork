@@ -5,48 +5,48 @@ use clockwork::test_tools::tests::support::messages::{AdditionMessage, SumMessag
 // Channel for publishing the addition message
 channel AdditionChannel
 {
-    message_type: Tachyon<AdditionMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<AdditionMessage>;
+  max_num_messages: 10;
 }
 
 // Channel for the sum messages
 channel SumChannel
 {
-    message_type: Tachyon<SumMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<SumMessage>;
+  max_num_messages: 10;
 }
 
 box AdditionSystemBox
 {
-    new addition_cog: AdditionCog;
-    new addition_tester_cog: AdditionTesterCog;
+  new addition_cog: AdditionCog;
+  new addition_tester_cog: AdditionTesterCog;
 
-    connect addition_tester_cog.addition_message to AdditionChannel;
-    connect AdditionChannel to addition_cog.addition_message;
+  connect addition_tester_cog.addition_message to AdditionChannel;
+  connect AdditionChannel to addition_cog.addition_message;
 
-    connect addition_cog.sum_message to SumChannel;
-    connect SumChannel to addition_tester_cog.sum_message;
+  connect addition_cog.sum_message to SumChannel;
+  connect SumChannel to addition_tester_cog.sum_message;
 }
 
 cpu_domain SimCpu;
 
 box AdditionSystem
 {
-    new box: AdditionSystemBox;
-    new proc: Process(executable=addition_system_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=SimCpu) to proc;
+  new box: AdditionSystemBox;
+  new proc: Process(executable=addition_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=SimCpu) to proc;
 }
 
 cpp_executable addition_system_exe
 {
-    casing
-    {
-        box AdditionSystemBox;
-    }
+  casing
+  {
+    box AdditionSystemBox;
+  }
 }
 
 system_target addition_system
 {
-    box: AdditionSystem;
+  box: AdditionSystem;
 }

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -50,7 +50,7 @@ def test_gen_configs(tmp_path: Path, fs_importer: FilesystemImporter) -> None:
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     compiler._register_box_instance_uuids(module.context, box_ir)
-    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False, False)
     physical_system = system.make_physical_system(logical_system)
     configs = gen_logger_configs.gen_logger_configs(physical_system)
 
@@ -104,7 +104,7 @@ def test_gen_logged_channel_metadata(fs_importer: FilesystemImporter) -> None:
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     compiler._register_box_instance_uuids(module.context, box_ir)
-    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False, False)
     physical_system = system.make_physical_system(logical_system)
     metadata = gen_logger_configs.gen_logged_channel_metadata(physical_system)
 

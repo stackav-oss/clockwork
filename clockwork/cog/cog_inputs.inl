@@ -6,9 +6,11 @@
 #include "clockwork/cog/cog_passthrough_observer.hh"
 #include "clockwork/cog/input_view.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -59,18 +61,18 @@ template <typename... Policies>
 template <typename CogType>
 jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError> CogInputs<Policies...>::set_handle(
   jewels::Uuid<common::EndpointClassId> endpoint_id,
-  pinion::SubscriberHandle handle,
+  std::shared_ptr<pinion::AbstractChannel> channel,
   jewels::memory::ObjectPtr<CogType> cog)
 {
   const std::scoped_lock lock{subscribers_mutex_};
   std::shared_ptr<pinion::Observer> observer = {};
-  auto try_set = [this, &observer, &endpoint_id, &handle, &cog](auto& subscriber) -> bool
+  auto try_set = [this, &observer, &endpoint_id, &channel, &cog](auto& subscriber) -> bool
   {
     using SubscriberType = typename std::decay_t<decltype(subscriber)>::element_type;
     if (endpoint_id == SubscriberType::endpoint_id)
     {
       subscriber = jewels::memory::make_pmr_shared<SubscriberType>(
-        resource_, std::move(handle), CogType::event_metrics_batch_size, resource_, running_offline_);
+        resource_, std::move(channel), CogType::event_metrics_batch_size, resource_, running_offline_);
       observer = jewels::memory::make_pmr_shared<CogPassthroughObserver<CogType>>(resource_, cog);
       return true;
     }
@@ -194,11 +196,81 @@ void CogInputs<Policies...>::set_infra_diagnostics(
 }
 
 template <typename... Policies>
+template <size_t index>
+auto CogInputs<Policies...>::prepare_aligned_input(
+  jewels::Out<typename std::tuple_element_t<index, typename CogInputs<Policies...>::SubscribersTuple>::element_type::
+                InputDialType> dial_out,
+  uint64_t target_seqno)
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::get<index>(subscribers_)->prepare_aligned_view(jewels::Out{*dial_out}, target_seqno);
+}
+
+template <typename... Policies>
+template <size_t index>
+auto CogInputs<Policies...>::prepare_aligned_input_range(
+  jewels::Out<typename std::tuple_element_t<index, typename CogInputs<Policies...>::SubscribersTuple>::element_type::
+                InputDialType> dial_out,
+  uint64_t begin_seq,
+  uint64_t end_seq)
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::get<index>(subscribers_)->prepare_aligned_range(jewels::Out{*dial_out}, begin_seq, end_seq);
+}
+
+template <typename... Policies>
+template <size_t index>
+auto CogInputs<Policies...>::prepare_empty_aligned_input()
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::get<index>(subscribers_)->prepare_empty_aligned_view();
+}
+
+template <typename... Policies>
+template <size_t index>
+auto CogInputs<Policies...>::commit_single(const InputDialTuple& inputs)
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  return std::get<index>(subscribers_)->commit(std::get<index>(inputs));
+}
+
+template <typename... Policies>
+jewels::BinaryOutcome CogInputs<Policies...>::commit_single(
+  jewels::Out<LastViewedTuple> commit_result_out, const InputDialTuple& inputs, size_t index)
+{
+  if (index >= policy_count)
+  {
+    return jewels::failure;
+  }
+
+  [&]<size_t... indices>(std::index_sequence<indices...>)
+  {
+    ((index == indices ? (*commit_result_out = this->template commit_single<indices>(inputs), void()) : void()), ...);
+  }(std::index_sequence_for<Policies...>{});
+  return jewels::success;
+}
+
+template <typename... Policies>
+void CogInputs<Policies...>::reset_saved_state()
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  std::apply([](auto&... subs) { (subs->reset_saved_state(), ...); }, subscribers_);
+}
+
+template <typename... Policies>
+template <size_t index>
+void CogInputs<Policies...>::advance_aligned_cursor(uint64_t seqno)
+{
+  const std::scoped_lock lock{subscribers_mutex_};
+  std::get<index>(subscribers_)->advance_aligned_cursor(seqno);
+}
+
+template <typename... Policies>
 template <size_t index, typename CogType>
-void CogInputs<Policies...>::set_unit_test_input(pinion::SubscriberHandle handle)
+void CogInputs<Policies...>::set_unit_test_input(std::shared_ptr<pinion::AbstractChannel> channel)
 {
   std::get<index>(subscribers_) = std::make_shared<InputView<PolicyType<index>>>(
-    std::move(handle), CogType::event_metrics_batch_size, resource_, running_offline_);
+    std::move(channel), CogType::event_metrics_batch_size, resource_, running_offline_);
 }
 
 template <typename... Policies>

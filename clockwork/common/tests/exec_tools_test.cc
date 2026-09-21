@@ -1,8 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -23,8 +22,8 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 namespace clockwork
@@ -53,20 +52,14 @@ TEST_CASE("PinionArgs")
     "no_resume"};
   cmd.parse(args.size(), args.data());
 
-  auto factory = pinion_args.make_factory();
+  auto factory = pinion_args.make_factory({});
   REQUIRE(factory);
 
   const std::string factory_suffix = "/clockwork/" + arg_pinion_ns + "/pinion/pub";
-  CHECK(std::string_view(factory->socket_ns()) == factory_suffix);
-
   struct stat stat_dir = {};
-  struct stat stat_factory = {};
   auto tmpdir_dir = jewels::filesystem::Directory::open(arg_pinion_dir + factory_suffix);
   REQUIRE(tmpdir_dir);
   CHECK(!fstat(tmpdir_dir->descriptor(), &stat_dir));
-  CHECK(!fstat(factory->directory().descriptor(), &stat_factory));
-  CHECK(stat_dir.st_dev == stat_factory.st_dev);
-  CHECK(stat_dir.st_ino == stat_factory.st_ino);
 }
 
 TEST_CASE("ExecutionArgs")

@@ -2,9 +2,9 @@
 #![cpp(namespace=clockwork_logging)]
 
 // Logger configuration
-schema LoggerConfig {
+schema LoggerConfig
+{
   uuid: c6456c0b-cb9e-450b-9a74-e70bc01177d5;
-
   fields
   {
 

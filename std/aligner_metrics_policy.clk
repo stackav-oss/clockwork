@@ -1,0 +1,20 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp)]
+#![cpp(namespace=clockwork::aligner_metrics)]
+use std::cog_metrics_policy::{CogEventMetricsPolicyConfig, CogTelemetryMetricsPolicyConfig};
+
+// Policy for controlling aligner event metrics report group generation
+def policy AlignerEventMetricsPolicy
+{
+  binds_to: Aligner;
+  schema: CogEventMetricsPolicyConfig;
+}
+
+// Policy for controlling aligner telemetry metrics report group generation
+def policy AlignerTelemetryMetricsPolicy
+{
+  binds_to: Aligner;
+  schema: CogTelemetryMetricsPolicyConfig;
+}

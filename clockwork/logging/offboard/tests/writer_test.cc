@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -8,6 +8,7 @@
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
@@ -44,6 +45,7 @@
 #include <functional>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <ratio>
 #include <span>
@@ -64,6 +66,8 @@ TEST_CASE("Writer, offload interface")
 
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
+  const auto is_amended = GENERATE(false, true);
+  CAPTURE(is_amended);
 
   const auto memory_resource = jewels::memory::get_default_memory_resource();
   const jewels::filesystem::Filesystem vfs{memory_resource};
@@ -78,13 +82,14 @@ TEST_CASE("Writer, offload interface")
   constexpr LogTimestamp time4{std::chrono::seconds(4)};
 
   constexpr auto channel_name1 = "channel1";
-  constexpr auto metadata1 = LoggedChannelMetadata{
+  const auto metadata1 = LoggedChannelMetadata{
     .channel_name = channel_name1,
     .message_encoding = MessageEncoding::unspecified,
     .channel_type = ChannelType::regular,
     .schema_name = "schema1",
     .schema_encoding = SchemaEncoding::undefined,
     .schema_definition = "Schema definition 1",
+    .is_amended = is_amended,
   };
   constexpr auto header1_size = 123U;
   std::vector<std::byte> header1(header1_size);
@@ -94,13 +99,14 @@ TEST_CASE("Writer, offload interface")
   onboard::tests::fill_with_random_bytes(data1);
 
   constexpr auto channel_name2 = "channel2";
-  constexpr auto metadata2 = LoggedChannelMetadata{
+  const auto metadata2 = LoggedChannelMetadata{
     .channel_name = channel_name2,
     .message_encoding = MessageEncoding::unspecified,
     .channel_type = ChannelType::persistent,
     .schema_name = "schema2",
     .schema_encoding = SchemaEncoding::unspecified,
     .schema_definition = "Schema definition 1",
+    .is_amended = is_amended,
   };
   constexpr auto header2_size = 234U;
   std::vector<std::byte> header2(header2_size);
@@ -146,7 +152,9 @@ TEST_CASE("Writer, offload interface")
     const auto multi_file_flag = GENERATE(false, true);
 
     const auto start_time = jewels::time::SteadyClock::now();
+    REQUIRE_FALSE(writer.is_open());
     REQUIRE(writer.open(test_log_path.string(), multi_file_flag ? multi_file_config : single_file_config));
+    REQUIRE(writer.is_open());
     REQUIRE(writer.create_channel(metadata1));
     REQUIRE(writer.create_channel(metadata2));
 
@@ -176,6 +184,7 @@ TEST_CASE("Writer, offload interface")
       }));
 
     const auto close_result = writer.close();
+    REQUIRE_FALSE(writer.is_open());
     const auto end_time = jewels::time::SteadyClock::now();
     REQUIRE(close_result);
     const auto& write_metrics = close_result.value();
@@ -183,8 +192,8 @@ TEST_CASE("Writer, offload interface")
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
     REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
-    ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
-    const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
+    const auto chunk_rw_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    const auto log_metadata_result = chunk_rw_factory->read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
       (test_log_path / log_metadata_filename).string());
     REQUIRE(log_metadata_result);
     const auto& log_metadata_proto = log_metadata_result.value();
@@ -246,7 +255,7 @@ TEST_CASE("Writer, offload interface")
       REQUIRE(file_metadata.max_transmit_time_ns() == time2.get_nanoseconds());
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{memory_resource, test_log_path.string(), chunk_rw_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -383,8 +392,8 @@ TEST_CASE("Writer, offload interface")
       *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel1_1.slog") +
         *vfs.get_size(test_log_path / "channel2_0.slog") + *vfs.get_size(test_log_path / "channel2_1.slog"));
 
-    ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
-    const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
+    const auto chunk_rw_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    const auto log_metadata_result = chunk_rw_factory->read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
       (test_log_path / log_metadata_filename).string());
     REQUIRE(log_metadata_result);
     const auto& log_metadata_proto = log_metadata_result.value();
@@ -423,7 +432,7 @@ TEST_CASE("Writer, offload interface")
       }
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{memory_resource, test_log_path.string(), chunk_rw_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -561,6 +570,8 @@ TEST_CASE("Writer, tachyon interface")
 
   const auto message_chunk_index_format = GENERATE(MessageChunkIndexFormat::v1, MessageChunkIndexFormat::v2);
   CAPTURE(message_chunk_index_format);
+  const auto is_amended = GENERATE(false, true);
+  CAPTURE(is_amended);
 
   const auto memory_resource = jewels::memory::get_default_memory_resource();
   const jewels::filesystem::Filesystem vfs{memory_resource};
@@ -624,9 +635,10 @@ TEST_CASE("Writer, tachyon interface")
 
     const auto start_time = jewels::time::SteadyClock::now();
     REQUIRE(writer.open(test_log_path.string(), multi_file_flag ? multi_file_config : single_file_config));
-    REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(channel_name1));
     REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(
-      channel_name2, ChannelType::persistent));
+      channel_name1, ChannelType::regular, is_amended));
+    REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(
+      channel_name2, ChannelType::persistent, is_amended));
 
     REQUIRE(writer.write(channel_name1, 1U, time1, time1, message1, true));
 
@@ -640,8 +652,8 @@ TEST_CASE("Writer, tachyon interface")
     REQUIRE(write_metrics.write_latency > std::chrono::nanoseconds(0));
     REQUIRE(write_metrics.write_latency < (end_time - start_time) * write_metrics.write_count);
 
-    ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
-    const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
+    const auto chunk_rw_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    const auto log_metadata_result = chunk_rw_factory->read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
       (test_log_path / log_metadata_filename).string());
     REQUIRE(log_metadata_result);
     const auto& log_metadata_proto = log_metadata_result.value();
@@ -703,7 +715,7 @@ TEST_CASE("Writer, tachyon interface")
       REQUIRE(file_metadata.max_transmit_time_ns() == time2.get_nanoseconds());
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{memory_resource, test_log_path.string(), chunk_rw_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -720,6 +732,7 @@ TEST_CASE("Writer, tachyon interface")
       std::string_view{
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.data(),
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.size()});
+    REQUIRE(metadata1.is_amended == is_amended);
     const auto& metadata2 = (*metadata_result)->at(channel_name2);
     REQUIRE(metadata2.channel_name == channel_name2);
     REQUIRE(metadata2.message_encoding == MessageEncoding::tachyon);
@@ -732,6 +745,7 @@ TEST_CASE("Writer, tachyon interface")
       std::string_view{
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.data(),
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.size()});
+    REQUIRE(metadata2.is_amended == is_amended);
 
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
@@ -788,9 +802,10 @@ TEST_CASE("Writer, tachyon interface")
 
     const auto start_time = jewels::time::SteadyClock::now();
     REQUIRE(writer.open(test_log_path.string(), multi_file_config));
-    REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(channel_name1));
     REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(
-      channel_name2, ChannelType::persistent));
+      channel_name1, ChannelType::regular, is_amended));
+    REQUIRE(writer.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage>>(
+      channel_name2, ChannelType::persistent, is_amended));
 
     REQUIRE(writer.write(channel_name1, 1U, time1, time1, message1, true));
 
@@ -819,8 +834,8 @@ TEST_CASE("Writer, tachyon interface")
       *vfs.get_size(test_log_path / "channel1_0.slog") + *vfs.get_size(test_log_path / "channel1_1.slog") +
         *vfs.get_size(test_log_path / "channel2_0.slog") + *vfs.get_size(test_log_path / "channel2_1.slog"));
 
-    ChunkReaderWriterFactory chunk_rw_factory{memory_resource};
-    const auto log_metadata_result = chunk_rw_factory.read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
+    const auto chunk_rw_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    const auto log_metadata_result = chunk_rw_factory->read_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
       (test_log_path / log_metadata_filename).string());
     REQUIRE(log_metadata_result);
     const auto& log_metadata_proto = log_metadata_result.value();
@@ -859,7 +874,7 @@ TEST_CASE("Writer, tachyon interface")
       }
     }
 
-    Reader reader{memory_resource, test_log_path.string()};
+    Reader reader{memory_resource, test_log_path.string(), chunk_rw_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -876,6 +891,7 @@ TEST_CASE("Writer, tachyon interface")
       std::string_view{
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.data(),
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.size()});
+    REQUIRE(metadata1.is_amended == is_amended);
     const auto& metadata2 = (*metadata_result)->at(channel_name2);
     REQUIRE(metadata2.channel_name == channel_name2);
     REQUIRE(metadata2.message_encoding == MessageEncoding::tachyon);
@@ -888,6 +904,7 @@ TEST_CASE("Writer, tachyon interface")
       std::string_view{
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.data(),
         clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage>>::schema_definition.size()});
+    REQUIRE(metadata2.is_amended == is_amended);
 
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);

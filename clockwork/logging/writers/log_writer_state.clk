@@ -8,39 +8,21 @@ enum LogWriterState
   values
   {
     // Unspecified, value not set
-    #0 unspecified default
-    {
-      underlying_value: 0;
-    }
+    #0 unspecified default { underlying_value: 0; }
 
     // Stopped, the log writer is not logging
-    #1 stopped
-    {
-      underlying_value: 1;
-    }
+    #1 stopped { underlying_value: 1; }
 
     // Logging, the log writer is logging
-    #2 logging
-    {
-      underlying_value: 2;
-    }
+    #2 logging { underlying_value: 2; }
 
     // Degraded, the log writer is logging but is degraded
-    #3 degraded
-    {
-      underlying_value: 3;
-    }
+    #3 degraded { underlying_value: 3; }
 
     // Failed, the log writer is unable to access the log device
-    #4 failed
-    {
-      underlying_value: 4;
-    }
+    #4 failed { underlying_value: 4; }
 
     // Paused, the log writer is paused
-    #5 paused
-    {
-      underlying_value: 5;
-    }
+    #5 paused { underlying_value: 5; }
   }
 }

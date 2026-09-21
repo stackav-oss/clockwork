@@ -1,7 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/logging/log_writer_config_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/data_source_loader.hh"
 #include "clockwork/scaffolding/first_message_cache.hh"
@@ -9,6 +10,7 @@
 #include "clockwork/test_tools/synthetic_message_fetcher.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
+#include "jewels/container/circular_buffer_state_clk_cc.hh" // IWYU pragma: keep
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"

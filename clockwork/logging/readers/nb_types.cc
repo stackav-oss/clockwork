@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -9,7 +9,6 @@
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
 
-#include <Python.h>
 #include <fmt/format.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h> // IWYU pragma: keep
@@ -225,7 +224,8 @@ void add_topic_metadata_bindings(auto& mod)
         const std::string& message_encoding,
         const std::string& channel_type,
         const std::string& schema_encoding,
-        const nanobind::bytes& schema_definition)
+        const nanobind::bytes& schema_definition,
+        bool is_amended = false)
       {
         const auto maybe_message_encoding =
           wise_enum::from_string<clockwork_logging::MessageEncoding>(message_encoding);
@@ -241,6 +241,7 @@ void add_topic_metadata_bindings(auto& mod)
             maybe_schema_encoding ? *maybe_schema_encoding : clockwork_logging::SchemaEncoding::undefined,
           .schema_definition =
             std::string(static_cast<const char*>(schema_definition.data()), schema_definition.size()),
+          .is_amended = is_amended,
         };
       },
       nanobind::arg("name"),
@@ -249,6 +250,7 @@ void add_topic_metadata_bindings(auto& mod)
       nanobind::arg("channel_type"),
       nanobind::arg("schema_encoding"),
       nanobind::arg("schema_definition"),
+      nanobind::arg("is_amended") = false,
       "Constructor.")
     .def_ro("name", &clockwork_logging::TopicMetadata::name, "Topic name.")
     .def_ro("type", &clockwork_logging::TopicMetadata::type, "Schema name.")
@@ -269,6 +271,7 @@ void add_topic_metadata_bindings(auto& mod)
       [](clockwork_logging::TopicMetadata& obj)
       { return nanobind::bytes(obj.schema_definition.data(), obj.schema_definition.size()); },
       "Schema definition.")
+    .def_ro("is_amended", &clockwork_logging::TopicMetadata::is_amended, "Channel is amended.")
     .def(nanobind::self == nanobind::self); // NOLINT(misc-redundant-expression) Shorthand nanobind operator
 }
 

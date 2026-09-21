@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/tcp_bridge_common.hh"
@@ -47,6 +47,8 @@ void combine_client_server_counters(const TcpBridgeClientServerCounters& source,
   dest.max_compression_time = std::max(dest.max_compression_time, source.max_compression_time);
   dest.total_bridge_latency += source.total_bridge_latency;
   dest.max_bridge_latency = std::max(dest.max_bridge_latency, source.max_bridge_latency);
+  dest.null_header_count += source.null_header_count;
+  dest.keep_alive_count += source.keep_alive_count;
 }
 
 void store_client_server_counters(
@@ -60,6 +62,8 @@ void store_client_server_counters(
   dest.set_message_rate_hz(static_cast<float>(source.message_count) / real_time.count());
   dest.set_data_rate_bps(static_cast<float>(source.message_bytes) / real_time.count());
   dest.set_compressed_data_rate_bps(static_cast<float>(source.compressed_message_bytes) / real_time.count());
+  dest.set_null_header_rate_hz(static_cast<float>(source.null_header_count) / real_time.count());
+  dest.set_keep_alive_rate_hz(static_cast<float>(source.keep_alive_count) / real_time.count());
   if (source.message_count != 0U)
   {
     dest.set_compression_ratio(
@@ -84,6 +88,32 @@ void store_client_server_counters(
     dest.set_max_compression_time(std::chrono::nanoseconds(0));
     dest.set_average_bridge_latency(std::chrono::nanoseconds(0));
     dest.set_max_bridge_latency(std::chrono::nanoseconds(0));
+  }
+}
+
+void combine_diagnostics_counters(const TcpBridgeDiagnosticsCounters& source, TcpBridgeDiagnosticsCounters& dest)
+{
+  dest.drop_count += source.drop_count;
+  dest.failed_sends += source.failed_sends;
+  dest.closed_socket_count += source.closed_socket_count;
+  dest.failed_recvs += source.failed_recvs;
+  dest.failed_reservations += source.failed_reservations;
+  dest.malformed_messages += source.malformed_messages;
+  dest.failed_commits += source.failed_commits;
+  dest.failed_discards += source.failed_discards;
+  dest.client_socket_errors += source.client_socket_errors;
+  dest.progress_errors += source.progress_errors;
+  dest.epoll_errors += source.epoll_errors;
+  dest.status_errors += source.status_errors;
+  if (source.max_bridge_latency > dest.max_bridge_latency)
+  {
+    dest.max_bridge_latency = source.max_bridge_latency;
+    dest.max_latency_channel_name = source.max_latency_channel_name;
+  }
+  if (source.max_bridge_bulk_data_latency > dest.max_bridge_bulk_data_latency)
+  {
+    dest.max_bridge_bulk_data_latency = source.max_bridge_bulk_data_latency;
+    dest.max_bulk_data_latency_channel_name = source.max_bulk_data_latency_channel_name;
   }
 }
 

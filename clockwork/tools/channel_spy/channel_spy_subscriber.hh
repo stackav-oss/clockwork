@@ -1,11 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/pinion/shm_subscriber.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/slot_ref.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/tools/channel_spy/types.hh"
 
@@ -112,18 +111,11 @@ private:
 
   /// Private constructor, use make_subscription to create an instance
   /// @param[in] subscriber Pinion shared memory channel subscriber
-  /// @param[in] subscriber_handle Pinion subscriber handle
   /// @param[in] callback_fn Message callback function
-  ChannelSpySubscriber(
-    std::shared_ptr<pinion::ShmSubscriber> subscriber,
-    pinion::SubscriberHandle subscriber_handle,
-    GenericCallbackFunction callback_fn);
+  ChannelSpySubscriber(std::shared_ptr<pinion::AbstractSubscriber> subscriber, GenericCallbackFunction callback_fn);
 
   /// Pinion shared memory channel subscriber
-  std::shared_ptr<pinion::ShmSubscriber> subscriber_;
-
-  /// Pinion subscriber handle
-  pinion::SubscriberHandle subscriber_handle_;
+  std::shared_ptr<pinion::AbstractSubscriber> subscriber_;
 
   /// Last message iterator
   pinion::SlotRef last_iter_;

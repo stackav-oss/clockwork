@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/shm_subscriber.hh"
@@ -15,6 +15,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/timerfd.h>
+#include <sys/types.h>
 #include <tuple>
 #include <unistd.h>
 #include <utility>
@@ -109,8 +110,7 @@ bool ShmSubscriber::on_readable(AbstractEPollManager& epoll)
     {
       for (auto& observer : observers_)
       {
-        observer->notify(
-          Observer::Event{.tail = msg.tail, .head = msg.head, .current_time = jewels::time::SyncClock::now()});
+        observer->notify(Observer::Event{.current_time = jewels::time::SyncClock::now()});
       }
       continue;
     }
@@ -218,6 +218,11 @@ bool ShmSubscriber::is_connected() const noexcept
   return this->socket() != -1;
 }
 
+void ShmSubscriber::disable_notifications()
+{
+  close_socket();
+}
+
 bool ShmSubscriber::reconnect()
 {
   if (is_connected())
@@ -239,7 +244,7 @@ bool ShmSubscriber::reconnect()
   this->set_socket(*std::move(socket));
   for (auto& observer : observers_)
   {
-    observer->notify(Observer::Event{.tail = 0, .head = 0, .current_time = jewels::time::SyncClock::now()});
+    observer->notify(Observer::Event{.current_time = jewels::time::SyncClock::now()});
   }
   return true;
 }

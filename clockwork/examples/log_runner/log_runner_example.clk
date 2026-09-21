@@ -10,75 +10,75 @@ use[] clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogRea
 // A channel
 channel Chan1
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 11;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 11;
 }
 
 // Another channel
 channel Chan2
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 11;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 11;
 }
 
 // Our log reader policy
 policy LogReaderPolicy for Chan1
 {
-    source_name = 'test_channel';
+  source_name = 'test_channel';
 }
 
 // Our log writer policy
 policy ChannelLoggingPolicy for Chan2
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 // Another channel
 channel Chan3
 {
-    message_type: Tachyon<TestMessage>;
-    max_num_messages: 11;
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 11;
 }
 
 // Our log reader policy
 policy LogReaderPolicy for Chan3
 {
-    source_name = 'test_channel2';
+  source_name = 'test_channel2';
 }
 
 // Our log writer policy
 policy ChannelLoggingPolicy for Chan3
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 // Our log reader policy
 policy LogReaderPolicy for EndOfLogChannel
 {
-    source_name = "/clockwork_logging/end_of_log";
+  source_name = "/clockwork_logging/end_of_log";
 }
 
 // Record the end of log channel so we can verify it was published.
 policy ChannelLoggingPolicy for EndOfLogChannel
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 box LogRunnerExampleBox
 {
-    new example_cog_subscriber: ExampleCogSubscriber;
-    new example_cog_publisher: ExampleCogPublisher;
-    connect Chan1 to example_cog_subscriber.test_message_input;
-    connect example_cog_publisher.test_message_output to Chan2;
-    connect EndOfLogChannel to example_cog_subscriber.end_of_log;
+  new example_cog_subscriber: ExampleCogSubscriber;
+  new example_cog_publisher: ExampleCogPublisher;
+  connect Chan1 to example_cog_subscriber.test_message_input;
+  connect example_cog_publisher.test_message_output to Chan2;
+  connect EndOfLogChannel to example_cog_subscriber.end_of_log;
 }
 
 cpu_domain SimCpu;
 
 box LogRunnerExample
 {
-    new box: LogRunnerExampleBox;
-    new proc: Process(executable=log_runner_example_clk_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=SimCpu) to proc;
+  new box: LogRunnerExampleBox;
+  new proc: Process(executable=log_runner_example_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=SimCpu) to proc;
 }

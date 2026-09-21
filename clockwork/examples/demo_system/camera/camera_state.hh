@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -32,6 +32,9 @@ public:
   [[nodiscard]] uint16_t generate_noise();
 
 private:
+  /// Memory resource for the state
+  jewels::memory::MemoryResource memory_resource_;
+
   /// Random device
   std::random_device rand_dev_;
 

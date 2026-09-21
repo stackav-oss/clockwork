@@ -1,0 +1,40 @@
+#![generate()]
+use clockwork::dsl::composition::tests::support::aligned_consumer_boxes::{
+  RawDataChannel,
+  SensorChannel,
+  CameraChannel,
+  LidarChannel,
+  RadarChannel,
+  EchoChannel,
+};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+
+policy LogReaderPolicy for RawDataChannel
+{
+  source_name = 'RawDataChannel';
+}
+
+policy LogReaderPolicy for SensorChannel
+{
+  source_name = 'SensorChannel';
+}
+
+policy LogReaderPolicy for CameraChannel
+{
+  source_name = 'CameraChannel';
+}
+
+policy LogReaderPolicy for LidarChannel
+{
+  source_name = 'LidarChannel';
+}
+
+policy LogReaderPolicy for RadarChannel
+{
+  source_name = 'RadarChannel';
+}
+
+policy ChannelLoggingPolicy for EchoChannel
+{
+  log_type = LogType::non_redundant_telemetry;
+}

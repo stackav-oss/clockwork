@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,6 +6,8 @@
 #include "jewels/uuid/uuid.hh"
 
 #include <xxh3.h>
+
+#include <cstddef>
 
 namespace jewels
 {

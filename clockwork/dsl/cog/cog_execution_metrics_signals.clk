@@ -1,0 +1,138 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate()]
+
+use clockwork::dsl::cog::ten_nanosecond::{TenNanoseconds};
+
+// Execution start timestamp
+signal cog_exec_start_time: SyncTime
+{
+  multi_instance: true;
+}
+
+// Dial start timestamp passed to the cog execution
+signal cog_dial_start_time: SyncTime
+{
+  multi_instance: true;
+}
+
+// Duration of cog execution
+signal cog_exec_duration: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Wall time spent only in the generated cog execution body
+signal execute_cog_wall_duration: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Thread CPU time spent only in the generated cog execution body
+signal execute_cog_thread_cpu_duration: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Thread user CPU time spent only in the generated cog execution body
+signal execute_cog_thread_user_duration: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Thread system CPU time spent only in the generated cog execution body
+signal execute_cog_thread_system_duration: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Latency from first-ready to execution start
+signal cog_ready_to_exec_latency: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Latency from first execution attempt to execution
+signal cog_attempt_to_exec_latency: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Number of re-queues before execution
+signal cog_requeue_count: UInt16
+{
+  multi_instance: true;
+}
+
+// Count of unseen messages at execution time
+signal input_unseen_messages: UInt16
+{
+  multi_instance: true;
+}
+
+// Max delta between newest unseen message and execution time
+signal input_staleness: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Messages dropped since last execution
+signal input_dropped_messages: UInt16
+{
+  multi_instance: true;
+}
+
+// Messages published on this output
+signal output_num_messages: UInt16
+{
+  multi_instance: true;
+}
+
+// First sequence number published on this output
+signal output_first_sequence_number: UInt64
+{
+  multi_instance: true;
+}
+
+// Whether this execution condition was active at execution
+signal execution_condition_active: Bool
+{
+  multi_instance: true;
+}
+
+// Count of times this condition was active in the aggregation window
+signal execution_condition_active_count: UInt16
+{
+  multi_instance: true;
+}
+
+// Period between consecutive executions
+signal cog_exec_period: TenNanoseconds
+{
+  multi_instance: true;
+}
+
+// Memory allocator peak allocated bytes
+signal memory_resource_peak_allocated: UInt64
+{
+  multi_instance: true;
+}
+
+// Memory resource currently allocated bytes
+signal memory_resource_current_allocated: UInt64
+{
+  multi_instance: true;
+}
+
+// Number of bytes allocated during last cog execution
+signal memory_resource_total_allocated: UInt64
+{
+  multi_instance: true;
+}
+
+// Number of bytes deallocated during last cog execution
+signal memory_resource_total_deallocated: UInt64
+{
+  multi_instance: true;
+}

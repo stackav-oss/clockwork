@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/init_aws_api.hh"
@@ -42,6 +42,7 @@ struct AwsManager
 {
   AwsManager()
   {
+
     if (s3_logging_is_enabled())
     {
       options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;

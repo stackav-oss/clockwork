@@ -1,14 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 
 #include "clockwork/logging/log_timestamp.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -16,6 +18,7 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <ranges>
 #include <utility>
 
 namespace clockwork_logging::tests
@@ -42,7 +45,7 @@ TestPublisher::TestPublisher(
     jewels::log_cerr_error("Failed to create the shared memory channel factory for {}", channel_name);
     return jewels::unexpected(jewels::MonoError{});
   }
-  auto publisher_result = factory_result->open_publisher(
+  auto publisher_result = factory_result->open_shm_publisher(
     uuid_str,
     channel_name,
     clockwork::pinion::BufferLayout{
@@ -94,7 +97,7 @@ TestPublisher::try_publish(LogTimestamp message_time, std::span<const std::byte>
     return jewels::unexpected(jewels::MonoError{});
   }
   auto& reserved_slot = reserve_result.value();
-  auto slot = reserved_slot.slot();
+  auto slot = reserved_slot.slots().begin().slot();
   std::memcpy(slot.message().data(), data.data(), std::min(slot.message().size(), data.size()));
   if (const auto result = reserved_slot.commit(message_time.get_time()); !result)
   {

@@ -1,2 +1,5 @@
 # keep-sorted start
+clrernet-pkg===0.1.1.dev6
+mmcv-full==1.7.2.dev0
+torch===2.11.0+cu130
 # keep-sorted end

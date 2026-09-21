@@ -1,0 +1,274 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_cc_binding")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "realtime_playback_conversion_config.clk",
+    "realtime_playback_policy.clk",
+    "realtime_playback_stream_kind.clk",
+])
+
+cc_library(
+    name = "bundle_converter",
+    srcs = ["bundle_converter.cc"],
+    hdrs = ["bundle_converter.hh"],
+    deps = [
+        ":camera_conversion",
+        ":converter_request",
+        ":converter_setup",
+        ":initialization_converter",
+        ":initialization_writer",  # keep: Implements convert_initialization_logs declared by initialization_converter.
+        ":realtime_playback_conversion_config_clk_cc",
+        ":realtime_playback_stream_kind_clk_cc",
+        ":regular_converter",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/logging/realtime_playback/v1:realtime_playback_converter_manifest_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/scope_guard",
+        "//jewels/std:span",
+        "//jewels/uuid",
+        "@protobuf",
+        "@xxhash",
+    ],
+)
+
+cc_library(
+    name = "camera_conversion",
+    hdrs = ["camera_conversion.hh"],
+    deps = [
+        ":converter_request",
+        ":converter_setup",
+        "//clockwork/logging:log_timestamp",
+        "//jewels/callsig:outcome",
+    ],
+)
+
+cc_library(
+    name = "converter_request",
+    srcs = ["converter_request.cc"],
+    hdrs = ["converter_request.hh"],
+    deps = [
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/log_cerr",
+        "@tclap",
+    ],
+)
+
+cc_library(
+    name = "converter_setup",
+    srcs = ["converter_setup.cc"],
+    hdrs = ["converter_setup.hh"],
+    deps = [
+        ":converter_request",
+        ":realtime_playback_conversion_config_clk_cc",
+        ":realtime_playback_stream_kind_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/logging:channel_publisher_config_clk_cc",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//clockwork/serialization/cpp:clk_type",
+        "//clockwork/serialization/cpp:tachyon_model",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
+        "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/scope_guard",
+        "//jewels/std:expected",
+        "//jewels/std:span",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "converter_writer",
+    srcs = [
+        "converter_writer.cc",
+        "converter_writer.inl",
+    ],
+    hdrs = ["converter_writer.hh"],
+    deps = [
+        ":converter_request",
+        ":converter_setup",
+        "//clockwork/logging:channel_type_clk_cc",
+        "//clockwork/logging:compression_type",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
+        "//clockwork/logging/onboard:clockwork_writer_policy",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/logging/onboard:writer",
+        "//clockwork/serialization/cpp:tachyon_upgrader",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/memory:pointers",
+        "//jewels/scope_guard",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "initialization_converter",
+    srcs = ["initialization_converter.cc"],
+    hdrs = ["initialization_converter.hh"],
+    deps = [
+        ":converter_request",
+        ":converter_setup",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/scope_guard",
+    ],
+)
+
+cc_library(
+    name = "initialization_writer",
+    srcs = ["initialization_writer.cc"],
+    deps = [
+        ":converter_request",
+        ":converter_setup",
+        ":converter_writer",
+        ":initialization_converter",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/scope_guard",
+        "//jewels/shared_pool:ref_counted_pool",
+        "//jewels/uuid",
+    ],
+)
+
+py_cc_binding(
+    name = "nb_xxh3_checksum",
+    srcs = ["nb_xxh3_checksum.cc"],
+    deps = [
+        "//clockwork/logging:xxh3_checksum",
+        "@nanobind",
+        "@xxhash",
+    ],
+)
+
+clk(
+    name = "realtime_playback_conversion_config_clk",
+    srcs = ["realtime_playback_conversion_config.clk"],
+    outs = [
+        "realtime_playback_conversion_config_clk_cc.cc",
+        "realtime_playback_conversion_config_clk_cc.hh",
+        "realtime_playback_conversion_config_clk_cc.inl",
+        "realtime_playback_conversion_config_clk_cc_types.cc",
+        "realtime_playback_conversion_config_clk_cc_types.hh",
+        "realtime_playback_conversion_config_clk_cc_types.inl",
+        "realtime_playback_conversion_config_clk_py.py",
+    ],
+    cpp_deps = [
+        ":realtime_playback_stream_kind_clk_cc",
+        "//clockwork/common:constants_clk_cc",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/logging:channel_publisher_config_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+    py_deps = [
+        ":realtime_playback_stream_kind_clk_py",
+        "//clockwork/common:constants_clk_py",
+        "//clockwork/common:process_description_clk_py",
+        "//clockwork/logging:channel_publisher_config_clk_py",
+    ],
+    deps = [
+        ":realtime_playback_stream_kind_clk",
+        "//clockwork/common:constants_clk",
+        "//clockwork/common:process_description_clk",
+        "//clockwork/logging:channel_publisher_config_clk",
+    ],
+)
+
+clk(
+    name = "realtime_playback_policy_clk",
+    srcs = ["realtime_playback_policy.clk"],
+    generate = ["none"],
+    visibility = ["//visibility:public"],
+    deps = [":realtime_playback_stream_kind_clk"],
+)
+
+clk(
+    name = "realtime_playback_stream_kind_clk",
+    srcs = ["realtime_playback_stream_kind.clk"],
+    outs = [
+        "realtime_playback_stream_kind_clk_cc.cc",
+        "realtime_playback_stream_kind_clk_cc.hh",
+        "realtime_playback_stream_kind_clk_cc.inl",
+        "realtime_playback_stream_kind_clk_cc_types.cc",
+        "realtime_playback_stream_kind_clk_cc_types.hh",
+        "realtime_playback_stream_kind_clk_cc_types.inl",
+        "realtime_playback_stream_kind_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+)
+
+cc_library(
+    name = "regular_converter",
+    srcs = ["regular_converter.cc"],
+    hdrs = ["regular_converter.hh"],
+    deps = [
+        ":converter_request",
+        ":converter_setup",
+        ":converter_writer",
+        ":realtime_playback_stream_kind_clk_cc",
+        "//clockwork/logging:log_error",
+        "//clockwork/logging:log_interval",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:abstract_log_reader",
+        "//clockwork/logging/readers:log_reader_factory",
+        "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/scope_guard",
+    ],
+)

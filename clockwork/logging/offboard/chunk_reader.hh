@@ -1,14 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
-#include "jewels/memory/memory_resource.hh"
 
 #include <cstddef>
-#include <memory>
 #include <vector>
 
 namespace clockwork_logging::offboard

@@ -1,17 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/tests/support/mock_slot.hh"
 #include "jewels/std/span.hh"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <iterator>
-#include <limits>
-#include <span>
 
 namespace clockwork::pinion::support
 {

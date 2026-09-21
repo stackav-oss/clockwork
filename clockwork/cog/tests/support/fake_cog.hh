@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,40 +9,24 @@
 #include "clockwork/cog/cog_inputs.hh"
 #include "clockwork/cog/cog_memory_resources.hh"
 #include "clockwork/cog/cog_publishers.hh"
-#include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/cog_states.hh"
 #include "clockwork/cog/cog_statistics.hh"
 #include "clockwork/cog/cog_timers.hh"
-#include "clockwork/cog/detail.hh"
-#include "clockwork/cog/simple_cog.hh"
-#include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/reporter.hh"
-#include "clockwork/runners/online_cog_queue.hh"
-#include "clockwork/runners/online_runner.hh"
-#include "clockwork/runners/thread_pool.hh"
-#include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pmr_shared_ptr.hh"
-#include "jewels/memory/pointers.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/meta/integer_sequence.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
-#include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <memory_resource>
-#include <thread>
+#include <string_view>
 #include <tuple>
-#include <utility>
-#include <variant>
-#include <vector>
 
 namespace clockwork::testing
 {

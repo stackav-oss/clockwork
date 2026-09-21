@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
@@ -19,7 +20,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <new>
 #include <ranges>

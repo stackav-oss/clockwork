@@ -1,12 +1,21 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+
+#include <cstdint>
+#include <functional>
+#include <list>
+#include <memory>
+#include <memory_resource>
+#include <optional>
+#include <unordered_map>
+#include <vector>
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/runners/deterministic_cog_queue.hh"
 #include "clockwork/runners/deterministic_timer.hh"
 #include "jewels/callsig/outcome.hh"
@@ -20,20 +29,11 @@
 #include "jewels/uuid/uuid.hh"
 #include "jewels/uuid/uuid_hasher.hh"
 
-#include <cstdint>
-#include <functional>
-#include <list>
-#include <memory>
-#include <memory_resource>
-#include <optional>
-#include <unordered_map>
-#include <vector>
-
 namespace clockwork
 {
 using ChannelMap = std::pmr::unordered_map<
   jewels::Uuid<::clockwork::common::EndpointInstanceId>,
-  std::shared_ptr<::clockwork::pinion::ShmPublisher>,
+  std::shared_ptr<::clockwork::pinion::AbstractPublisher>,
   jewels::UuidHasher<::clockwork::common::EndpointInstanceId>>;
 
 ///
@@ -137,6 +137,7 @@ private:
   void update_timers();
   [[nodiscard]] std::optional<jewels::time::SyncTime> get_next_timer_time() const;
   jewels::time::SyncTime maybe_update_time(const jewels::time::SyncTime& new_time);
+  void prepare_and_execute_cog(jewels::memory::ObjectPtr<AbstractCog> cog, jewels::time::SyncTime current_time);
 
   DeterministicRunnerConfig config_;
   std::pmr::list<std::shared_ptr<DeterministicTimer>> timers_;

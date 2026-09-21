@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Clockwork expression IR and evaluation logic."""
@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, node, parse, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.module_id import ModuleID
@@ -33,7 +33,7 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
     resolved_value: typesys.Value | None
 
     @classmethod
-    def from_cst(cls: type[Expr], cst_node: cst.Expr, module: node.Module) -> Expr:  # noqa: PLR0911 This is a factory method.
+    def from_cst(cls: type[Expr], cst_node: cst.Expr, module: node.Module) -> Expr:  # noqa: C901, PLR0911, PLR0912 (This is a factory method with many cases to handle. Most of the logic exists in helper consturctors)
         """Construct the appropriate Expr subclass from a CST Expr."""
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
@@ -55,15 +55,15 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
         if (instantiate := cst_node.maybe_instantiate()) is not None:
             arg_list = instantiate.maybe_arg_list()
             args = arg_list.children_arg() if arg_list else []
+            arguments: list[tuple[str | None, Expr]] = []
+            for arg in args:
+                name = None
+                if (cst_name := arg.maybe_name()) is not None:
+                    name = get_span(cst_name.child_value(), module.terminals)
+                arguments.append((name, Expr.from_cst(arg.child_expr(), module=module)))
             result = InstantiateExpr(
                 operand=Expr.from_cst(instantiate.child_operand(), module=module),
-                arguments=[
-                    (
-                        ((cst_name := arg.maybe_name()) and get_span(cst_name.child_value(), module.terminals)) or None,
-                        Expr.from_cst(arg.child_expr(), module=module),
-                    )
-                    for arg in args
-                ],
+                arguments=arguments,
                 resolved_value=None,
                 cst_node=cst_node,
                 module=module,
@@ -80,24 +80,43 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
                 module=module,
                 type_info=literal_value.type_info,
             )
+        if union_cst := cst_node.maybe_type_union():
+            return TypeUnionExpr.from_child_cst(union_cst, cst_node, module)
         if dotted_identifier_cst := cst_node.maybe_dotted_identifier():
             return DottedIdentifierExpr.from_child_cst(dotted_identifier_cst, cst_node, module)
         if call_cst := cst_node.maybe_call():
             arg_list = call_cst.maybe_arg_list()
             args = arg_list.children_arg() if arg_list else []
+            arguments: list[tuple[str | None, Expr]] = []
+            for arg in args:
+                name = None
+                if (cst_name := arg.maybe_name()) is not None:
+                    name = get_span(cst_name.child_value(), module.terminals)
+                arguments.append((name, Expr.from_cst(arg.child_expr(), module=module)))
             return CallExpr(
                 module=module,
                 cst_node=cst_node,
                 type_info=typesys.InferenceVar.make(cst_node=call_cst, context=module),
                 resolved_value=None,
                 operand=Expr.from_cst(call_cst.child_operand(), module=module),
-                arguments=[
-                    (
-                        ((cst_name := arg.maybe_name()) and get_span(cst_name.child_value(), module.terminals)) or None,
-                        Expr.from_cst(arg.child_expr(), module=module),
-                    )
-                    for arg in args
-                ],
+                arguments=arguments,
+            )
+        if macro_call_cst := cst_node.maybe_macro_call():
+            arg_list = macro_call_cst.maybe_arg_list()
+            args = arg_list.children_arg() if arg_list else []
+            arguments: list[tuple[str | None, Expr]] = []
+            for arg in args:
+                name = None
+                if (cst_name := arg.maybe_name()) is not None:
+                    name = get_span(cst_name.child_value(), module.terminals)
+                arguments.append((name, Expr.from_cst(arg.child_expr(), module=module)))
+            return MacroCallExpr(
+                module=module,
+                cst_node=cst_node,
+                type_info=typesys.InferenceVar.make(cst_node=macro_call_cst, context=module),
+                resolved_value=None,
+                operand=Expr.from_cst(macro_call_cst.child_operand(), module=module),
+                arguments=arguments,
             )
         if subscript_cst := cst_node.maybe_subscript():
             if subscript_cst.maybe_index():
@@ -118,6 +137,16 @@ class Expr(typesys.Value, node.CstNode[cst.Expr], ABC):
                 operand=Expr.from_cst(subscript_cst.child_operand(), module=module),
                 index=index_expr,
             )
+
+        if list_cst := cst_node.maybe_list():
+            return ListLiteral(
+                module=module,
+                cst_node=cst_node,
+                type_info=clkbuiltins.LIST,
+                resolved_value=None,
+                elements=[Expr.from_cst(element, module=module) for element in list_cst.children_element()],
+            )
+
         msg = f"Expression type {cst_node} not yet implemented."
         raise NotImplementedError(msg)
 
@@ -406,7 +435,38 @@ class CallExpr(Expr):
         operand = self.operand.evaluate()
         if not isinstance(operand, typesys.CallableEntity):
             msg = self.operand.append_error_line(
-                f"Operand of instantiation expression is not callable: {operand}",
+                f"Operand of call expression is not callable: {operand}",
+            )
+            raise TypeError(msg)
+        args = [(name, value.evaluate()) for name, value in self.arguments]
+        self.resolved_value = operand.evaluate_call(ir_node=self, module=self.module, args=args)
+        typesys.unify(self.type_info, self.resolved_value.type_info)
+        return self.resolved_value
+
+
+@dataclass
+class MacroCallExpr(Expr):
+    """IR node class holding a macro call expression."""
+
+    operand: Expr
+    arguments: Sequence[tuple[str | None, Expr]]
+
+    @override
+    def evaluate(self) -> typesys.Value:
+        """Evaluate the expression.
+
+        Returns:
+            The resolved value.
+
+        Raises:
+            ValueError: if there is any error in expression evaluation.
+        """
+        if self.resolved_value is not None:
+            return self.resolved_value
+        operand = self.operand.evaluate()
+        if not isinstance(operand, typesys.MacroCallableEntity):
+            msg = self.operand.append_error_line(
+                f"Operand of macro call expression is not macro callable: {operand}",
             )
             raise TypeError(msg)
         args = [(name, value.evaluate()) for name, value in self.arguments]
@@ -449,6 +509,101 @@ class SubscriptExpr(Expr):
 
         msg = self.operand.append_error_line(f"Type {type(operand).__name__} does not support subscript operations")
         raise TypeError(msg)
+
+
+@dataclass
+class ListLiteral(Expr):
+    """IR node for list literals."""
+
+    elements: list[Expr]
+
+    @override
+    def evaluate(self) -> typesys.Value:
+        """Evaluate a list literal.
+
+        Returns:
+            A list containing evaluated elements.
+
+        Raises:
+            ValueError: if there is any error in expression evaluation.
+        """
+        if self.resolved_value is not None:
+            return self.resolved_value
+
+        self.resolved_value = typesys.Values(
+            type_info=self.type_info,
+            elements=[element.evaluate() for element in self.elements],
+        )
+        return self.resolved_value
+
+
+@dataclass
+class TypeUnionExpr(Expr):
+    """IR node for union type expressions."""
+
+    member_types: list[Expr]
+
+    @classmethod
+    def from_child_cst(
+        cls: type[TypeUnionExpr], cst_node: cst.TypeUnion, expr_node: cst.Expr, module: node.Module
+    ) -> TypeUnionExpr:
+        """Construct a TypeUnionExpr from a CST node."""
+        return TypeUnionExpr(
+            module=module,
+            cst_node=expr_node,
+            type_info=clkbuiltins.TYPE_TYPE,
+            resolved_value=None,
+            member_types=[
+                _type_id_from_cst(member_cst, expr_node, module) for member_cst in cst_node.children_type_id()
+            ],
+        )
+
+    @override
+    def evaluate(self) -> typesys.Value:
+        """Evaluate a list literal.
+
+        Returns:
+            A list containing evaluated elements.
+
+        Raises:
+            ValueError: if there is any error in expression evaluation.
+        """
+        if self.resolved_value is not None:
+            return self.resolved_value
+
+        evaluated_members: list[typesys.TypeVal] = []
+        for member in self.member_types:
+            evaluated = member.evaluate()
+            if not isinstance(evaluated, typesys.TypeVal):
+                msg = member.append_error_line(f"Expected a type but got {evaluated}")
+                raise TypeError(msg)
+            evaluated_members.append(evaluated)
+
+        self.resolved_value = typesys.TypeUnion(
+            type_info=self.type_info,
+            types=evaluated_members,
+        )
+        return self.resolved_value
+
+
+def _type_id_from_cst(cst_node: cst.TypeId, expr_node: cst.Expr, module: node.Module) -> Expr:
+    if (identifier := cst_node.maybe_identifier()) is not None:
+        return SimpleExpr(
+            value=node.DeferredLookup.make(
+                cst_identifier=identifier,
+                expected_type=typesys.Value | node.NameProxy,  # pyright: ignore[reportArgumentType] Type not known ahead of time,
+                terminals=module.terminals,
+            ),
+            resolved_value=None,
+            cst_node=expr_node,
+            module=module,
+            type_info=typesys.InferenceVar.make(cst_node=identifier, context=module),
+        )
+    if (ns_identifier := cst_node.maybe_namespaced_identifier()) is not None:
+        return NamespaceLookupExpr.from_child_cst(ns_identifier, expr_node, module)
+
+    msg = f"TypeId type {cst_node} not yet implemented."
+    raise NotImplementedError(msg)
 
 
 @dataclass

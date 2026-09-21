@@ -1,0 +1,362 @@
+#![generate(cpp, cpp_cog, cpp_test_cog)]
+#![cpp(namespace=clockwork::cogs::testing)]
+use clockwork::cog::wrappers::tests::support::unit_test_configs;
+use clockwork::cog::tests::support::unit_test_states;
+use clockwork::cog::wrappers::tests::support::unit_test_messages;
+use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupPolicyConfig, ReportGroupLogType};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+
+// Resource test cog
+cog ResourceCog
+{
+  resources
+  {
+    memres1: persistent;
+    memres2: persistent;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// Configuration test cog
+cog ConfigCog
+{
+  configs
+  {
+    config1: Tappy<unit_test_configs::Config1>;
+    config2: Tappy<unit_test_configs::Config2>;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// State test cog
+cog StateInitCog
+{
+  states
+  {
+    clk_state: Tappy<unit_test_states::ClkState>
+    {
+      mutable: true;
+    }
+    cxx_state: unit_test_states::CxxState
+    {
+      mutable: true;
+    }
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+// State test cog
+cog StatePeriodicCog
+{
+  states
+  {
+    clk_state: Tappy<unit_test_states::ClkState>
+    {
+      mutable: true;
+    }
+    cxx_state: unit_test_states::CxxState
+    {
+      mutable: true;
+    }
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+// Input test cog
+cog InputCog
+{
+  states
+  {
+    state: Tappy<unit_test_states::InputCogState>
+    {
+      mutable: true;
+    }
+  }
+  inputs
+  {
+    input1: Tappy<unit_test_messages::Message1>;
+    input2: Tappy<unit_test_messages::Message2>;
+    input3: Tappy<unit_test_messages::Message3>
+    {
+      max_msgs: 3;
+    }
+  }
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=2);
+    condition new_input3: new_message(input3, max=3);
+    execute when: new_input1 or new_input2 or new_input3;
+  }
+}
+
+// Output test cog
+cog OutputCog
+{
+  states
+  {
+    state: Tappy<unit_test_states::OutputCogState>
+    {
+      mutable: true;
+    }
+  }
+  outputs
+  {
+    output1: Tappy<unit_test_messages::Message1>;
+    output2: Tappy<unit_test_messages::Message2>;
+  }
+  execution
+  {
+    rate limit output1: 1 every 1s;
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+// Multi connect input test cog
+cog MultiConnectInputCog
+{
+  inputs
+  {
+    input1: Tappy<unit_test_messages::Message1>
+    {
+      multi_connect: 2;
+    }
+    input2: Tappy<unit_test_messages::Message2>
+    {
+      multi_connect: 3;
+      max_msgs: 3;
+    }
+  }
+  outputs
+  {
+    output1_0: Tappy<unit_test_messages::Message1>;
+    output1_1: Tappy<unit_test_messages::Message1>;
+    output2_0: Tappy<unit_test_messages::Message2>;
+    output2_1: Tappy<unit_test_messages::Message2>;
+    output2_2: Tappy<unit_test_messages::Message2>;
+  }
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=3);
+    execute when: new_input1 or new_input2;
+  }
+}
+
+// Diagnostics test cog
+cog DiagnosticsCog
+{
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  diagnostics
+  {
+    group_id: "fault_injector_b";
+    instance_id: "a";
+  }
+}
+
+// Diagnostics test cog
+cog DiagnosticsCog2
+{
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  diagnostics
+  {
+    diag1
+    {
+      group_id: "fault_injector_a";
+    }
+    diag2
+    {
+      group_id: "fault_injector_b";
+      instance_id: "a";
+    }
+  }
+}
+
+// Signals test cog
+cog SignalsCog
+{
+  states
+  {
+    state: Tappy<unit_test_states::SignalsCogState>
+    {
+      mutable: true;
+    }
+  }
+
+  signalsgroup
+  {
+    // Doc
+    value: signal Int64
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+  }
+
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
+}
+
+policy ReportGroupPolicy for SignalsCog.group
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::none;
+  max_observations = 2;
+}
+
+// Signals test cog
+cog SignalsCog2
+{
+  states
+  {
+    state: Tappy<unit_test_states::SignalsCogState>
+    {
+      mutable: true;
+    }
+  }
+
+  signalsgroup1
+  {
+    // Doc
+    value1: signal Int64
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+
+    // Doc
+    value2: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+      post_aggregation: ["mean", "max"];
+      multi_instance: true;
+    }
+  }
+
+  signalsgroup2
+  {
+    // Doc
+    value3: signal Int64
+    {
+      pre_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+
+    // Doc
+    value4: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+      multi_instance: true;
+    }
+  }
+
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
+}
+
+policy ReportGroupPolicy for SignalsCog2.group1
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::none;
+  max_observations = 2;
+}
+
+policy ReportGroupPolicy for SignalsCog2.group2
+{
+  reporting_strategy = ReportingStrategy::batched;
+  log_type = ReportGroupLogType::none;
+  max_observations = 3;
+}
+policy CogEventMetricsPolicy for StatePeriodicCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for StatePeriodicCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for InputCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for InputCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for OutputCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for OutputCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for DiagnosticsCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for DiagnosticsCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for DiagnosticsCog2
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for DiagnosticsCog2
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for SignalsCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for SignalsCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for SignalsCog2
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for SignalsCog2
+{
+  enabled = false;
+}

@@ -1,0 +1,6 @@
+use clockwork::dsl::composition::tests::support::realtime_playback_system_boxes;
+
+system_target RealtimePlaybackSystem
+{
+  box: realtime_playback_system_boxes::PlaybackSystem;
+}

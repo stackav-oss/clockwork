@@ -9,7 +9,7 @@ use clockwork::examples::demo_system::perception::perception_channels;
 // channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
 policy ChannelLoggingPolicy for perception_channels::PerceptionDebugChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 // Defining this policy adds the channel to both the telemetry log writer configuration and
@@ -20,6 +20,6 @@ policy ChannelLoggingPolicy for perception_channels::PerceptionDebugChannel
 // message published prior to the start of the slice.
 policy ChannelLoggingPolicy for perception_channels::PerceptionAlignerConfigChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
   channel_type = ChannelType::persistent;
 }

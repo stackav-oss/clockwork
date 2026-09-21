@@ -1,0 +1,26 @@
+#![generate()]
+
+use clockwork::logging::realtime_playback::realtime_playback_stream_kind::{RealtimePlaybackStreamKind};
+
+// Configures one channel to be supplied by distributed real-time log playback.
+schema RealtimePlaybackPolicySchema
+{
+  fields
+  {
+    // Source channel name in the recorded log, or the destination name when omitted.
+    #0 source_name: Optional<String> = nullopt;
+
+    // CPU domain that owns the generated replay publisher.
+    #1 playback_cpu_domain: CpuDomain;
+
+    // Node-local output stream receiving the replayed channel.
+    #2 stream_kind: RealtimePlaybackStreamKind = RealtimePlaybackStreamKind::regular;
+  }
+}
+
+// Marks a channel as supplied by distributed real-time log playback.
+def policy RealtimePlaybackPolicy
+{
+  binds_to: Channel;
+  schema: RealtimePlaybackPolicySchema;
+}

@@ -1,0 +1,17 @@
+#![generate()]
+
+use jewels::simplelaunch::simplelaunch_status;
+
+// Simplelaunch status
+channel SimplelaunchStatus
+{
+  parameters
+  {
+    cpu: CpuDomain;
+  }
+
+  name: fmt!("/{snake_case_name(cpu)}/simplelaunch_status");
+  message_type: Tachyon<simplelaunch_status::SimplelaunchRunnerStatus>;
+  max_num_messages: 3;
+  publishers: simplelaunch_status;
+}

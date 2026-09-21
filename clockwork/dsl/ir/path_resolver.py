@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """File path resolution."""
@@ -61,14 +61,14 @@ class BazelPathResolver(PathResolver):
         if (
             _BAZEL_RUNFILES
             and os.getenv("RUNFILES_DIR")
-            and (runfiles_path := _BAZEL_RUNFILES.Rlocation(f"_main/{base_path}"))
+            and (runfiles_path := _BAZEL_RUNFILES.Rlocation(f"_main/{base_path}", source_repo=""))
         ):
             yield Path(runfiles_path)
         if (
             _BAZEL_RUNFILES
             and module_id.repo != ROOT_REPO
             and os.getenv("RUNFILES_DIR")
-            and (runfiles_path := _BAZEL_RUNFILES.Rlocation(f"{module_id.repo}+/{base_path}"))
+            and (runfiles_path := _BAZEL_RUNFILES.Rlocation(f"{module_id.repo}+/{base_path}", source_repo=""))
         ):
             yield Path(runfiles_path)
 

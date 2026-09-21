@@ -7,11 +7,12 @@
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/io/network_var_packet_clk_cc.hh"
 #include "clockwork/io/var_packet_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "jewels/filesystem/error_code.hh"
@@ -30,6 +31,7 @@
 #include <fmt/format.h> // IWYU pragma: keep
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <memory_resource>
@@ -42,6 +44,7 @@
 #include <string>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <tuple>
 #include <utility>
 #include <vector>

@@ -1,10 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/examples/demo_system/camera/camera_state.hh"
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
+#include <memory_resource>
+#include <utility>
+#include <vector>
 
 namespace clockwork::demo_system::camera
 {
@@ -20,8 +24,8 @@ constexpr auto std_dev = mean / 2.0;
 
 } // namespace
 
-CameraState::CameraState(jewels::memory::MemoryResource /*memory_resource*/)
-  : generator_(rand_dev_()), dist_(mean, std_dev)
+CameraState::CameraState(jewels::memory::MemoryResource memory_resource)
+  : memory_resource_(std::move(memory_resource)), generator_(rand_dev_()), dist_(mean, std_dev)
 {
 }
 
@@ -29,7 +33,9 @@ CameraState::CameraState(jewels::memory::MemoryResource /*memory_resource*/)
 {
   constexpr auto min_value = static_cast<double>(std::numeric_limits<uint16_t>::min());
   constexpr auto max_value = static_cast<double>(std::numeric_limits<uint16_t>::max());
-  return static_cast<uint16_t>(std::max(min_value, std::min(max_value, dist_(generator_))));
+  auto noise = static_cast<uint16_t>(std::max(min_value, std::min(max_value, dist_(generator_))));
+  std::pmr::vector<uint8_t> noise_vector{static_cast<size_t>(noise), memory_resource_};
+  return noise;
 }
 
 } // namespace clockwork::demo_system::camera

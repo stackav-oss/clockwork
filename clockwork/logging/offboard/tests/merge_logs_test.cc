@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -6,16 +6,21 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/amendment_writer.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/merge_logs.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/types.hh"
+#include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/v1/log_union.pb.h"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -25,13 +30,16 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <fmt/format.h>
+#include <google/protobuf/repeated_ptr_field.h>
 
+#include <array>
 #include <chrono>
-#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -45,6 +53,8 @@ namespace clockwork_logging::offboard
 namespace
 {
 
+using jewels::ok;
+
 TEST_CASE("merge_logs")
 {
   constexpr auto source_log1_name = "source_log1";
@@ -56,6 +66,7 @@ TEST_CASE("merge_logs")
   CAPTURE(recover_metadata);
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto source_log1_path = test_dir.get_path() / source_log1_name;
   const std::string source_log1_path_str{source_log1_path.c_str()};
@@ -75,137 +86,98 @@ TEST_CASE("merge_logs")
   constexpr LogTimestamp time4{std::chrono::seconds(4)};
 
   constexpr auto channel_name1 = "channel1";
-  constexpr auto metadata1 = LoggedChannelMetadata{
+  const auto metadata1 = LoggedChannelMetadata{
     .channel_name = channel_name1,
-    .message_encoding = MessageEncoding::unspecified,
+    .message_encoding = MessageEncoding::tachyon,
     .channel_type = ChannelType::regular,
-    .schema_name = "schema1",
-    .schema_encoding = SchemaEncoding::unspecified,
-    .schema_definition = "Schema definition 1",
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_name,
+    .schema_encoding = SchemaEncoding::clockwork_tachyon,
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.size()},
   };
-  constexpr auto header1_size = 123U;
-  std::vector<std::byte> header1(header1_size);
-  onboard::tests::fill_with_random_bytes(header1);
-  constexpr auto data1_size = 1234U;
-  std::vector<std::byte> data1(data1_size);
-  onboard::tests::fill_with_random_bytes(data1);
+  clockwork::Tappy<clockwork_logging::tests::TestMessage1> message1;
+  onboard::tests::fill_with_random_bytes(message1.get_mutable_data());
 
   constexpr auto channel_name2 = "channel2";
-  constexpr auto metadata2 = LoggedChannelMetadata{
+  const auto metadata2 = LoggedChannelMetadata{
     .channel_name = channel_name2,
-    .message_encoding = MessageEncoding::unspecified,
-    .channel_type = ChannelType::persistent,
-    .schema_name = "schema2",
-    .schema_encoding = SchemaEncoding::unspecified,
-    .schema_definition = "Schema definition 2",
+    .message_encoding = MessageEncoding::tachyon,
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_name,
+    .schema_encoding = SchemaEncoding::clockwork_tachyon,
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.size()},
   };
-  constexpr auto header2_size = 234U;
-  std::vector<std::byte> header2(header2_size);
-  onboard::tests::fill_with_random_bytes(header2);
-  constexpr auto data2_size = 2345U;
-  std::vector<std::byte> data2(data2_size);
-  onboard::tests::fill_with_random_bytes(data2);
+  clockwork::Tappy<clockwork_logging::tests::TestMessage2> message2;
+  onboard::tests::fill_with_random_bytes(message2.get_mutable_data());
 
   REQUIRE(writer1.open(source_log1_path_str));
-  REQUIRE(writer1.create_channel(metadata1));
-  REQUIRE(writer1.create_channel(metadata2));
+  REQUIRE(writer1.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>(channel_name1));
+  REQUIRE(writer1.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>(channel_name2));
 
-  REQUIRE(writer1.write(
-    LoggedMessage{
-      .channel_name = channel_name1,
-      .sequence_number = 1U,
-      .log_time = time1,
-      .transmit_time = time1,
-      .header = header1,
-      .data = data1,
-      .is_repeated_persistent = false,
-    }));
-
-  REQUIRE(writer1.write(
-    LoggedMessage{
-      .channel_name = channel_name2,
-      .sequence_number = 2U,
-      .log_time = time3,
-      .transmit_time = time3,
-      .header = header2,
-      .data = data2,
-      .is_repeated_persistent = false,
-    }));
+  REQUIRE(writer1.write(channel_name1, 1U, time1, time1, message1));
+  REQUIRE(writer1.write(channel_name2, 2U, time3, time3, message2));
 
   REQUIRE(writer1.close());
 
   constexpr auto channel_name3 = "channel3";
-  constexpr auto metadata3 = LoggedChannelMetadata{
+  const auto metadata3 = LoggedChannelMetadata{
     .channel_name = channel_name3,
-    .message_encoding = MessageEncoding::unspecified,
+    .message_encoding = MessageEncoding::tachyon,
     .channel_type = ChannelType::regular,
-    .schema_name = "schema3",
-    .schema_encoding = SchemaEncoding::unspecified,
-    .schema_definition = "Schema definition 3",
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_name,
+    .schema_encoding = SchemaEncoding::clockwork_tachyon,
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.size()},
   };
-  constexpr auto header3_size = 124U;
-  std::vector<std::byte> header3(header3_size);
-  onboard::tests::fill_with_random_bytes(header3);
-  constexpr auto data3_size = 1235U;
-  std::vector<std::byte> data3(data3_size);
-  onboard::tests::fill_with_random_bytes(data3);
+  clockwork::Tappy<clockwork_logging::tests::TestMessage1> message3;
+  onboard::tests::fill_with_random_bytes(message3.get_mutable_data());
 
   constexpr auto channel_name4 = "channel4";
-  constexpr auto metadata4 = LoggedChannelMetadata{
+  const auto metadata4 = LoggedChannelMetadata{
     .channel_name = channel_name4,
-    .message_encoding = MessageEncoding::unspecified,
-    .channel_type = ChannelType::persistent,
-    .schema_name = "schema4",
-    .schema_encoding = SchemaEncoding::unspecified,
-    .schema_definition = "schema definition 4",
+    .message_encoding = MessageEncoding::tachyon,
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_name,
+    .schema_encoding = SchemaEncoding::clockwork_tachyon,
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.size()},
   };
-  constexpr auto header4_size = 235U;
-  std::vector<std::byte> header4(header4_size);
-  onboard::tests::fill_with_random_bytes(header4);
-  constexpr auto data4_size = 2346U;
-  std::vector<std::byte> data4(data4_size);
-  onboard::tests::fill_with_random_bytes(data4);
+  clockwork::Tappy<clockwork_logging::tests::TestMessage2> message4;
+  onboard::tests::fill_with_random_bytes(message4.get_mutable_data());
 
   REQUIRE(writer2.open(source_log2_path_str));
-  REQUIRE(writer2.create_channel(metadata3));
-  REQUIRE(writer2.create_channel(metadata4));
+  REQUIRE(writer2.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>(channel_name3));
+  REQUIRE(writer2.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>(channel_name4));
 
-  REQUIRE(writer2.write(
-    LoggedMessage{
-      .channel_name = channel_name3,
-      .sequence_number = 3U,
-      .log_time = time2,
-      .transmit_time = time2,
-      .header = header3,
-      .data = data3,
-      .is_repeated_persistent = false,
-    }));
-
-  REQUIRE(writer2.write(
-    LoggedMessage{
-      .channel_name = channel_name4,
-      .sequence_number = 4U,
-      .log_time = time4,
-      .transmit_time = time4,
-      .header = header4,
-      .data = data4,
-      .is_repeated_persistent = false,
-    }));
+  REQUIRE(writer2.write(channel_name3, 3U, time2, time2, message3));
+  REQUIRE(writer2.write(channel_name4, 4U, time4, time4, message4));
 
   REQUIRE(writer2.close());
 
   constexpr auto channel_name5 = "channel5";
-  constexpr auto metadata5 = LoggedChannelMetadata{
+  const auto metadata5 = LoggedChannelMetadata{
     .channel_name = channel_name5,
-    .message_encoding = MessageEncoding::unspecified,
-    .channel_type = ChannelType::persistent,
-    .schema_name = "schema5",
-    .schema_encoding = SchemaEncoding::unspecified,
-    .schema_definition = "Schema definition 5",
+    .message_encoding = MessageEncoding::tachyon,
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_name,
+    .schema_encoding = SchemaEncoding::clockwork_tachyon,
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_definition.size()},
   };
 
   REQUIRE(writer3.open(source_log3_path_str));
-  REQUIRE(writer3.create_channel(metadata5));
+  REQUIRE(writer3.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>(channel_name5));
   REQUIRE(writer3.close());
 
   if (recover_metadata)
@@ -224,7 +196,7 @@ TEST_CASE("merge_logs")
   {
     REQUIRE(merge_logs(memory_resource, source_logs, dest_log_path));
 
-    Reader reader{memory_resource, dest_log_path};
+    Reader reader{memory_resource, dest_log_path, chunk_reader_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -237,22 +209,20 @@ TEST_CASE("merge_logs")
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
     REQUIRE((*metrics_result)->message_count == 4U);
-    REQUIRE(
-      (*metrics_result)->byte_count == data1.size() + data2.size() + header1.size() + header2.size() + data3.size() +
-                                         header3.size() + data4.size() + header4.size());
+    REQUIRE((*metrics_result)->byte_count == sizeof(message1) + sizeof(message2) + sizeof(message3) + sizeof(message4));
     REQUIRE((*metrics_result)->transmit_time_interval == LogInterval{time1, time4});
     REQUIRE((*metrics_result)->metrics_map.size() == 4U);
     REQUIRE((*metrics_result)->metrics_map.at(channel_name1).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).byte_count == data1.size() + header1.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).byte_count == sizeof(message1));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name1).transmit_time_interval == LogInterval{time1, time1});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == data2.size() + header2.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == sizeof(message2));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).transmit_time_interval == LogInterval{time3, time3});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == data3.size() + header3.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == sizeof(message3));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).transmit_time_interval == LogInterval{time2, time2});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name4).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).byte_count == data4.size() + header4.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).byte_count == sizeof(message4));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name4).transmit_time_interval == LogInterval{time4, time4});
 
     REQUIRE(reader.open());
@@ -264,10 +234,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 1U);
     REQUIRE(read_result->log_time == time1);
     REQUIRE(read_result->transmit_time == time1);
-    REQUIRE(read_result->header.size() == header1.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header1.data(), header1.size()) == 0);
-    REQUIRE(read_result->data.size() == data1.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data1.data(), data1.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message1));
+    REQUIRE(std::memcmp(read_result->data.data(), &message1, sizeof(message1)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -276,10 +245,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 3U);
     REQUIRE(read_result->log_time == time2);
     REQUIRE(read_result->transmit_time == time2);
-    REQUIRE(read_result->header.size() == header3.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header3.data(), header3.size()) == 0);
-    REQUIRE(read_result->data.size() == data3.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data3.data(), data3.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message3));
+    REQUIRE(std::memcmp(read_result->data.data(), &message3, sizeof(message3)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -288,10 +256,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 2U);
     REQUIRE(read_result->log_time == time3);
     REQUIRE(read_result->transmit_time == time3);
-    REQUIRE(read_result->header.size() == header2.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header2.data(), header2.size()) == 0);
-    REQUIRE(read_result->data.size() == data2.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data2.data(), data2.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message2));
+    REQUIRE(std::memcmp(read_result->data.data(), &message2, sizeof(message2)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -300,10 +267,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 4U);
     REQUIRE(read_result->log_time == time4);
     REQUIRE(read_result->transmit_time == time4);
-    REQUIRE(read_result->header.size() == header4.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header4.data(), header4.size()) == 0);
-    REQUIRE(read_result->data.size() == data4.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data4.data(), data4.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message4));
+    REQUIRE(std::memcmp(read_result->data.data(), &message4, sizeof(message4)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     REQUIRE_FALSE(reader);
@@ -327,7 +293,7 @@ TEST_CASE("merge_logs")
       REQUIRE(merge_logs(memory_resource, source_logs, dest_log_path, desired_channels, {}));
     }
 
-    Reader reader{memory_resource, dest_log_path};
+    Reader reader{memory_resource, dest_log_path, chunk_reader_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -340,14 +306,14 @@ TEST_CASE("merge_logs")
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
     REQUIRE((*metrics_result)->message_count == 2U);
-    REQUIRE((*metrics_result)->byte_count == data2.size() + header2.size() + data3.size() + header3.size());
+    REQUIRE((*metrics_result)->byte_count == sizeof(message2) + sizeof(message3));
     REQUIRE((*metrics_result)->transmit_time_interval == LogInterval{time2, time3});
     REQUIRE((*metrics_result)->metrics_map.size() == 2U);
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == data2.size() + header2.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == sizeof(message2));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).transmit_time_interval == LogInterval{time3, time3});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == data3.size() + header3.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == sizeof(message3));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).transmit_time_interval == LogInterval{time2, time2});
 
     REQUIRE(reader.open());
@@ -359,10 +325,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 3U);
     REQUIRE(read_result->log_time == time2);
     REQUIRE(read_result->transmit_time == time2);
-    REQUIRE(read_result->header.size() == header3.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header3.data(), header3.size()) == 0);
-    REQUIRE(read_result->data.size() == data3.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data3.data(), data3.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message3));
+    REQUIRE(std::memcmp(read_result->data.data(), &message3, sizeof(message3)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -371,10 +336,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 2U);
     REQUIRE(read_result->log_time == time3);
     REQUIRE(read_result->transmit_time == time3);
-    REQUIRE(read_result->header.size() == header2.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header2.data(), header2.size()) == 0);
-    REQUIRE(read_result->data.size() == data2.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data2.data(), data2.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message2));
+    REQUIRE(std::memcmp(read_result->data.data(), &message2, sizeof(message2)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     REQUIRE_FALSE(reader);
@@ -392,41 +356,39 @@ TEST_CASE("merge_logs")
     const auto union2_path = test_dir.get_path() / union2_name;
     const auto& union2_path_str = union2_path.string();
     const auto union_merge_path = test_dir.get_path() / union_merge_name;
-    REQUIRE(write_merge_union(memory_resource, source_logs, union1_path.string()));
-    REQUIRE(write_merge_union(memory_resource, source_logs, union2_path.string()));
 
-    ChunkReaderWriterFactory chunk_reader_factory{memory_resource};
+    std::vector<std::string_view> source_logs1{source_log1_path_str, source_log2_path_str};
+    std::vector<std::string_view> source_logs2{source_log2_path_str, source_log3_path_str};
+
+    REQUIRE(write_merge_union(memory_resource, source_logs1, union1_path.string()));
+    REQUIRE(write_merge_union(memory_resource, source_logs2, union2_path.string()));
 
     const auto log_union1_path = union1_path / log_union_filename;
     const auto union1_result =
-      chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union1_path.string());
+      chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union1_path.string());
     REQUIRE(union1_result);
     const auto& union1 = union1_result.value();
-    REQUIRE(union1.log_union_entry_size() == 3);
+    REQUIRE(union1.log_union_entry_size() == 2);
     REQUIRE(union1.log_union_entry(0).has_absolute_path());
     REQUIRE(union1.log_union_entry(0).absolute_path() == source_log1_path_str);
     REQUIRE(union1.log_union_entry(1).has_absolute_path());
     REQUIRE(union1.log_union_entry(1).absolute_path() == source_log2_path_str);
-    REQUIRE(union1.log_union_entry(2).has_absolute_path());
-    REQUIRE(union1.log_union_entry(2).absolute_path() == source_log3_path_str);
 
     const auto log_union2_path = union2_path / log_union_filename;
     const auto union2_result =
-      chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union2_path.string());
+      chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union2_path.string());
     REQUIRE(union2_result);
     const auto& union2 = union2_result.value();
-    REQUIRE(union2.log_union_entry_size() == 3);
+    REQUIRE(union2.log_union_entry_size() == 2);
     REQUIRE(union2.log_union_entry(0).has_absolute_path());
-    REQUIRE(union2.log_union_entry(0).absolute_path() == source_log1_path_str);
+    REQUIRE(union2.log_union_entry(0).absolute_path() == source_log2_path_str);
     REQUIRE(union2.log_union_entry(1).has_absolute_path());
-    REQUIRE(union2.log_union_entry(1).absolute_path() == source_log2_path_str);
-    REQUIRE(union2.log_union_entry(2).has_absolute_path());
-    REQUIRE(union2.log_union_entry(2).absolute_path() == source_log3_path_str);
+    REQUIRE(union2.log_union_entry(1).absolute_path() == source_log3_path_str);
 
     std::vector<std::string_view> union_logs{union1_path_str, union2_path_str};
     REQUIRE(write_merge_union(memory_resource, union_logs, union_merge_path.string()));
 
-    const auto union_merge_result = chunk_reader_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
+    const auto union_merge_result = chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
       (union_merge_path / log_union_filename).string());
     REQUIRE(union_merge_result);
     const auto& union_merge = union_merge_result.value();
@@ -438,7 +400,7 @@ TEST_CASE("merge_logs")
     REQUIRE(union_merge.log_union_entry(2).has_absolute_path());
     REQUIRE(union_merge.log_union_entry(2).absolute_path() == source_log3_path_str);
 
-    Reader reader{memory_resource, union_merge_path.string()};
+    Reader reader{memory_resource, union_merge_path.string(), chunk_reader_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -452,22 +414,20 @@ TEST_CASE("merge_logs")
     const auto metrics_result = reader.get_metrics();
     REQUIRE(metrics_result);
     REQUIRE((*metrics_result)->message_count == 4U);
-    REQUIRE(
-      (*metrics_result)->byte_count == data1.size() + data2.size() + header1.size() + header2.size() + data3.size() +
-                                         header3.size() + data4.size() + header4.size());
+    REQUIRE((*metrics_result)->byte_count == sizeof(message1) + sizeof(message2) + sizeof(message3) + sizeof(message4));
     REQUIRE((*metrics_result)->transmit_time_interval == LogInterval{time1, time4});
     REQUIRE((*metrics_result)->metrics_map.size() == 4U);
     REQUIRE((*metrics_result)->metrics_map.at(channel_name1).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).byte_count == data1.size() + header1.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).byte_count == sizeof(message1));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name1).transmit_time_interval == LogInterval{time1, time1});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == data2.size() + header2.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == sizeof(message2));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name2).transmit_time_interval == LogInterval{time3, time3});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == data3.size() + header3.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == sizeof(message3));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name3).transmit_time_interval == LogInterval{time2, time2});
     REQUIRE((*metrics_result)->metrics_map.at(channel_name4).message_count == 1U);
-    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).byte_count == data4.size() + header4.size());
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).byte_count == sizeof(message4));
     REQUIRE((*metrics_result)->metrics_map.at(channel_name4).transmit_time_interval == LogInterval{time4, time4});
 
     REQUIRE(reader.open());
@@ -479,10 +439,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 1U);
     REQUIRE(read_result->log_time == time1);
     REQUIRE(read_result->transmit_time == time1);
-    REQUIRE(read_result->header.size() == header1.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header1.data(), header1.size()) == 0);
-    REQUIRE(read_result->data.size() == data1.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data1.data(), data1.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message1));
+    REQUIRE(std::memcmp(read_result->data.data(), &message1, sizeof(message1)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -491,10 +450,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 3U);
     REQUIRE(read_result->log_time == time2);
     REQUIRE(read_result->transmit_time == time2);
-    REQUIRE(read_result->header.size() == header3.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header3.data(), header3.size()) == 0);
-    REQUIRE(read_result->data.size() == data3.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data3.data(), data3.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message3));
+    REQUIRE(std::memcmp(read_result->data.data(), &message3, sizeof(message3)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -503,10 +461,9 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 2U);
     REQUIRE(read_result->log_time == time3);
     REQUIRE(read_result->transmit_time == time3);
-    REQUIRE(read_result->header.size() == header2.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header2.data(), header2.size()) == 0);
-    REQUIRE(read_result->data.size() == data2.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data2.data(), data2.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message2));
+    REQUIRE(std::memcmp(read_result->data.data(), &message2, sizeof(message2)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     read_result = reader.read_next();
@@ -515,10 +472,259 @@ TEST_CASE("merge_logs")
     REQUIRE(read_result->sequence_number == 4U);
     REQUIRE(read_result->log_time == time4);
     REQUIRE(read_result->transmit_time == time4);
-    REQUIRE(read_result->header.size() == header4.size());
-    REQUIRE(std::memcmp(read_result->header.data(), header4.data(), header4.size()) == 0);
-    REQUIRE(read_result->data.size() == data4.size());
-    REQUIRE(std::memcmp(read_result->data.data(), data4.data(), data4.size()) == 0);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message4));
+    REQUIRE(std::memcmp(read_result->data.data(), &message4, sizeof(message4)) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+
+    REQUIRE_FALSE(reader);
+    REQUIRE(reader.read_next() == jewels::unexpected(LogError::end_of_log));
+  }
+
+  SECTION("Merge unions of amendments")
+  {
+    constexpr auto amendment_log1_name = "amendment_log1";
+    constexpr auto amendment_log2_name = "amendment_log2";
+    constexpr auto amendment_log3_name = "amendment_log3";
+
+    const auto amendment_log1_path = test_dir.get_path() / amendment_log1_name;
+    const std::string amendment_log1_path_str{amendment_log1_path.c_str()};
+    const auto amendment_log2_path = test_dir.get_path() / amendment_log2_name;
+    const std::string amendment_log2_path_str{amendment_log2_path.c_str()};
+    const auto amendment_log3_path = test_dir.get_path() / amendment_log3_name;
+    const std::string amendment_log3_path_str{amendment_log3_path.c_str()};
+    AmendmentWriter amendment_writer1{memory_resource};
+    AmendmentWriter amendment_writer2{memory_resource};
+    AmendmentWriter amendment_writer3{memory_resource};
+
+    const auto amendment_metadata1 = LoggedChannelMetadata{
+      .channel_name = channel_name1,
+      .message_encoding = MessageEncoding::tachyon,
+      .channel_type = ChannelType::regular,
+      .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_name,
+      .schema_encoding = SchemaEncoding::clockwork_tachyon,
+      .schema_definition =
+        std::string_view{
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.data(),
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>::schema_definition.size()},
+      .is_amended = true,
+    };
+    clockwork::Tappy<clockwork_logging::tests::TestMessage2> amendment_message1;
+    onboard::tests::fill_with_random_bytes(amendment_message1.get_mutable_data());
+
+    REQUIRE(ok(amendment_writer1.open(amendment_log1_path.string(), fmt::format("../{}", source_log1_name))));
+    REQUIRE(
+      ok(amendment_writer1.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage2>>(channel_name1)));
+
+    REQUIRE(ok(amendment_writer1.write(channel_name1, 1U, time1, time1, amendment_message1)));
+
+    REQUIRE(ok(amendment_writer1.close()));
+
+    const auto amendment_metadata3 = LoggedChannelMetadata{
+      .channel_name = channel_name3,
+      .message_encoding = MessageEncoding::tachyon,
+      .channel_type = ChannelType::regular,
+      .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_name,
+      .schema_encoding = SchemaEncoding::clockwork_tachyon,
+      .schema_definition =
+        std::string_view{
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_definition.data(),
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>::schema_definition.size()},
+      .is_amended = true,
+    };
+    clockwork::Tappy<clockwork_logging::tests::TestMessage3> amendment_message3;
+    onboard::tests::fill_with_random_bytes(amendment_message3.get_mutable_data());
+
+    REQUIRE(ok(amendment_writer2.open(amendment_log2_path.string(), fmt::format("../{}", source_log2_name))));
+    REQUIRE(
+      ok(amendment_writer2.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage3>>(channel_name3)));
+
+    REQUIRE(ok(amendment_writer2.write(channel_name3, 3U, time2, time2, amendment_message3)));
+
+    REQUIRE(ok(amendment_writer2.close()));
+
+    const auto amendment_metadata5 = LoggedChannelMetadata{
+      .channel_name = channel_name5,
+      .message_encoding = MessageEncoding::tachyon,
+      .channel_type = ChannelType::regular,
+      .schema_name = clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_name,
+      .schema_encoding = SchemaEncoding::clockwork_tachyon,
+      .schema_definition =
+        std::string_view{
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.data(),
+          clockwork::LoggingTraits<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>::schema_definition.size()},
+      .is_amended = true,
+    };
+
+    REQUIRE(ok(amendment_writer3.open(amendment_log3_path.string(), fmt::format("../{}", source_log3_name))));
+    REQUIRE(
+      ok(amendment_writer3.create_channel<clockwork::Tappy<clockwork_logging::tests::TestMessage1>>(channel_name5)));
+    REQUIRE(ok(amendment_writer3.close()));
+
+    constexpr auto union1_name = "union_log1";
+    constexpr auto union2_name = "union_log2";
+    constexpr auto union_merge_name = "union_merge_log";
+
+    const auto union1_path = test_dir.get_path() / union1_name;
+    const auto& union1_path_str = union1_path.string();
+    const auto union2_path = test_dir.get_path() / union2_name;
+    const auto& union2_path_str = union2_path.string();
+    const auto union_merge_path = test_dir.get_path() / union_merge_name;
+
+    std::vector<std::string_view> source_logs1{amendment_log1_path_str, amendment_log2_path_str};
+    std::vector<std::string_view> source_logs2{amendment_log2_path_str, amendment_log3_path_str};
+
+    REQUIRE(write_merge_union(memory_resource, source_logs1, union1_path.string()));
+    REQUIRE(write_merge_union(memory_resource, source_logs2, union2_path.string()));
+
+    const auto log_union1_path = union1_path / log_union_filename;
+    const auto union1_result =
+      chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union1_path.string());
+    REQUIRE(union1_result);
+    const auto& union1 = union1_result.value();
+    REQUIRE(union1.log_union_entry_size() == 4);
+    REQUIRE(union1.log_union_entry(0).has_absolute_path());
+    REQUIRE(union1.log_union_entry(0).absolute_path() == amendment_log1_path_str);
+    REQUIRE(union1.log_union_entry(0).excluded_channel().empty());
+    REQUIRE(union1.log_union_entry(1).has_absolute_path());
+    REQUIRE(union1.log_union_entry(1).absolute_path() == amendment_log2_path_str);
+    REQUIRE(union1.log_union_entry(1).excluded_channel().empty());
+    REQUIRE(union1.log_union_entry(2).has_absolute_path());
+    REQUIRE(union1.log_union_entry(2).absolute_path() == source_log1_path_str);
+    REQUIRE(union1.log_union_entry(2).excluded_channel_size() == 1);
+    REQUIRE(union1.log_union_entry(2).excluded_channel(0) == "channel1");
+    REQUIRE(union1.log_union_entry(3).has_absolute_path());
+    REQUIRE(union1.log_union_entry(3).absolute_path() == source_log2_path_str);
+    REQUIRE(union1.log_union_entry(3).excluded_channel_size() == 1);
+    REQUIRE(union1.log_union_entry(3).excluded_channel(0) == "channel3");
+
+    const auto log_union2_path = union2_path / log_union_filename;
+    const auto union2_result =
+      chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(log_union2_path.string());
+    REQUIRE(union2_result);
+    const auto& union2 = union2_result.value();
+    REQUIRE(union2.log_union_entry_size() == 4);
+    REQUIRE(union2.log_union_entry(0).has_absolute_path());
+    REQUIRE(union2.log_union_entry(0).absolute_path() == amendment_log2_path_str);
+    REQUIRE(union2.log_union_entry(0).excluded_channel().empty());
+    REQUIRE(union2.log_union_entry(1).has_absolute_path());
+    REQUIRE(union2.log_union_entry(1).absolute_path() == amendment_log3_path_str);
+    REQUIRE(union2.log_union_entry(1).excluded_channel().empty());
+    REQUIRE(union2.log_union_entry(2).has_absolute_path());
+    REQUIRE(union2.log_union_entry(2).absolute_path() == source_log2_path_str);
+    REQUIRE(union2.log_union_entry(2).excluded_channel_size() == 1);
+    REQUIRE(union2.log_union_entry(2).excluded_channel(0) == "channel3");
+    REQUIRE(union2.log_union_entry(3).has_absolute_path());
+    REQUIRE(union2.log_union_entry(3).absolute_path() == source_log3_path_str);
+    REQUIRE(union2.log_union_entry(3).excluded_channel_size() == 1);
+    REQUIRE(union2.log_union_entry(3).excluded_channel(0) == "channel5");
+
+    std::vector<std::string_view> union_logs{union1_path_str, union2_path_str};
+    REQUIRE(write_merge_union(memory_resource, union_logs, union_merge_path.string()));
+
+    const auto union_merge_result = chunk_reader_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
+      (union_merge_path / log_union_filename).string());
+    REQUIRE(union_merge_result);
+    const auto& union_merge = union_merge_result.value();
+    REQUIRE(union_merge.log_union_entry_size() == 6);
+    REQUIRE(union_merge.log_union_entry(0).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(0).absolute_path() == amendment_log1_path_str);
+    REQUIRE(union_merge.log_union_entry(0).excluded_channel().empty());
+    REQUIRE(union_merge.log_union_entry(1).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(1).absolute_path() == amendment_log2_path_str);
+    REQUIRE(union_merge.log_union_entry(1).excluded_channel().empty());
+    REQUIRE(union_merge.log_union_entry(2).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(2).absolute_path() == amendment_log3_path_str);
+    REQUIRE(union_merge.log_union_entry(2).excluded_channel().empty());
+    REQUIRE(union_merge.log_union_entry(3).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(3).absolute_path() == source_log1_path_str);
+    REQUIRE(union_merge.log_union_entry(3).excluded_channel_size() == 1);
+    REQUIRE(union_merge.log_union_entry(3).excluded_channel(0) == "channel1");
+    REQUIRE(union_merge.log_union_entry(4).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(4).absolute_path() == source_log2_path_str);
+    REQUIRE(union_merge.log_union_entry(4).excluded_channel_size() == 1);
+    REQUIRE(union_merge.log_union_entry(4).excluded_channel(0) == "channel3");
+    REQUIRE(union_merge.log_union_entry(5).has_absolute_path());
+    REQUIRE(union_merge.log_union_entry(5).absolute_path() == source_log3_path_str);
+    REQUIRE(union_merge.log_union_entry(5).excluded_channel_size() == 1);
+    REQUIRE(union_merge.log_union_entry(5).excluded_channel(0) == "channel5");
+
+    Reader reader{memory_resource, union_merge_path.string(), chunk_reader_factory};
+
+    const auto metadata_result = reader.get_metadata();
+    REQUIRE(metadata_result);
+    REQUIRE((*metadata_result)->size() == 5U);
+    REQUIRE((*metadata_result)->at(channel_name1) == amendment_metadata1);
+    REQUIRE((*metadata_result)->at(channel_name3) == amendment_metadata3);
+    REQUIRE((*metadata_result)->at(channel_name4) == metadata4);
+    REQUIRE((*metadata_result)->at(channel_name5) == amendment_metadata5);
+
+    const auto metrics_result = reader.get_metrics();
+    REQUIRE(metrics_result);
+    REQUIRE((*metrics_result)->message_count == 4U);
+    REQUIRE(
+      (*metrics_result)->byte_count ==
+      sizeof(amendment_message1) + sizeof(message2) + sizeof(amendment_message3) + sizeof(message4));
+    REQUIRE((*metrics_result)->transmit_time_interval == LogInterval{time1, time4});
+    REQUIRE((*metrics_result)->metrics_map.size() == 4U);
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).message_count == 1U);
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).byte_count == sizeof(amendment_message1));
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name1).transmit_time_interval == LogInterval{time1, time1});
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).message_count == 1U);
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).byte_count == sizeof(message2));
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name2).transmit_time_interval == LogInterval{time3, time3});
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).message_count == 1U);
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).byte_count == sizeof(amendment_message3));
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name3).transmit_time_interval == LogInterval{time2, time2});
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).message_count == 1U);
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).byte_count == sizeof(message4));
+    REQUIRE((*metrics_result)->metrics_map.at(channel_name4).transmit_time_interval == LogInterval{time4, time4});
+
+    REQUIRE(reader.open());
+    REQUIRE(reader);
+
+    auto read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name1);
+    REQUIRE(read_result->sequence_number == 1U);
+    REQUIRE(read_result->log_time == time1);
+    REQUIRE(read_result->transmit_time == time1);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(amendment_message1));
+    REQUIRE(std::memcmp(read_result->data.data(), &amendment_message1, sizeof(amendment_message1)) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+
+    read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name3);
+    REQUIRE(read_result->sequence_number == 3U);
+    REQUIRE(read_result->log_time == time2);
+    REQUIRE(read_result->transmit_time == time2);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(amendment_message3));
+    REQUIRE(std::memcmp(read_result->data.data(), &amendment_message3, sizeof(amendment_message3)) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+
+    read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name2);
+    REQUIRE(read_result->sequence_number == 2U);
+    REQUIRE(read_result->log_time == time3);
+    REQUIRE(read_result->transmit_time == time3);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message2));
+    REQUIRE(std::memcmp(read_result->data.data(), &message2, sizeof(message2)) == 0);
+    REQUIRE_FALSE(read_result->is_repeated_persistent);
+
+    read_result = reader.read_next();
+    REQUIRE(read_result);
+    REQUIRE(read_result->channel_name == channel_name4);
+    REQUIRE(read_result->sequence_number == 4U);
+    REQUIRE(read_result->log_time == time4);
+    REQUIRE(read_result->transmit_time == time4);
+    REQUIRE(read_result->header.empty());
+    REQUIRE(read_result->data.size() == sizeof(message4));
+    REQUIRE(std::memcmp(read_result->data.data(), &message4, sizeof(message4)) == 0);
     REQUIRE_FALSE(read_result->is_repeated_persistent);
 
     REQUIRE_FALSE(reader);

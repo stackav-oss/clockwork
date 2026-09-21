@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -29,10 +29,18 @@ clk(
         "channel_publisher_config_clk_cc.cc",
         "channel_publisher_config_clk_cc.hh",
         "channel_publisher_config_clk_cc.inl",
+        "channel_publisher_config_clk_cc_types.cc",
+        "channel_publisher_config_clk_cc_types.hh",
+        "channel_publisher_config_clk_cc_types.inl",
+        "channel_publisher_config_clk_py.py",
     ],
     cpp_deps = [":log_uuid_tag_clk_cc"],
-    generate = ["cpp"],
+    generate = [
+        "cpp",
+        "py",
+    ],
     minimize_builtin_deps = True,
+    py_deps = [":log_uuid_tag_clk_py"],
     visibility = ["//visibility:public"],
     deps = [
         ":log_uuid_tag_clk",
@@ -47,6 +55,9 @@ clk(
         "channel_type_clk_cc.cc",
         "channel_type_clk_cc.hh",
         "channel_type_clk_cc.inl",
+        "channel_type_clk_cc_types.cc",
+        "channel_type_clk_cc_types.hh",
+        "channel_type_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
@@ -98,17 +109,23 @@ cc_library(
     srcs = ["lite_compressor.cc"],
     hdrs = ["lite_compressor.hh"],
     deps = [
+        ":lite_compressor_interface",
         ":log_error",
         ":nolint_helper",
         ":xxh3_checksum",
         "//jewels/aligner",
         "//jewels/callsig:outparam",
-        "//jewels/math:constants",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/std:expected",
-        "@wise_enum",
         "@xxhash",
     ],
+)
+
+cc_library(
+    name = "lite_compressor_interface",
+    hdrs = ["lite_compressor_interface.hh"],
+    deps = ["//jewels/callsig:outparam"],
 )
 
 cc_library(
@@ -119,7 +136,7 @@ cc_library(
         "//jewels/callsig:outcome",
         "//jewels/filesystem:error_code",
         "//jewels/std:expected",
-        "@aws_sdk_cpp//:aws_cpp_sdk_s3",
+        "@aws_sdk//:s3",
         "@wise_enum",
     ],
 )
@@ -158,8 +175,15 @@ clk(
         "log_uuid_tag_clk_cc.cc",
         "log_uuid_tag_clk_cc.hh",
         "log_uuid_tag_clk_cc.inl",
+        "log_uuid_tag_clk_cc_types.cc",
+        "log_uuid_tag_clk_cc_types.hh",
+        "log_uuid_tag_clk_cc_types.inl",
+        "log_uuid_tag_clk_py.py",
     ],
-    generate = ["cpp"],
+    generate = [
+        "cpp",
+        "py",
+    ],
     minimize_builtin_deps = True,
 )
 
@@ -170,6 +194,9 @@ clk(
         "log_writer_config_clk_cc.cc",
         "log_writer_config_clk_cc.hh",
         "log_writer_config_clk_cc.inl",
+        "log_writer_config_clk_cc_types.cc",
+        "log_writer_config_clk_cc_types.hh",
+        "log_writer_config_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":channel_type_clk_cc",
@@ -195,6 +222,9 @@ clk(
         "message_encoding_clk_cc.cc",
         "message_encoding_clk_cc.hh",
         "message_encoding_clk_cc.inl",
+        "message_encoding_clk_cc_types.cc",
+        "message_encoding_clk_cc_types.hh",
+        "message_encoding_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
@@ -218,6 +248,9 @@ clk(
         "schema_encoding_clk_cc.cc",
         "schema_encoding_clk_cc.hh",
         "schema_encoding_clk_cc.inl",
+        "schema_encoding_clk_cc_types.cc",
+        "schema_encoding_clk_cc_types.hh",
+        "schema_encoding_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,

@@ -1,10 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/scaffolding.hh"
 
 #include "clockwork/common/abstract_cog.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/runners/epoll_manager.hh"
 #include "clockwork/runners/online_cog_queue.hh"
 #include "clockwork/runners/online_runner.hh"
@@ -24,10 +24,9 @@
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/scope_guard/scope_guard.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
-
-#include <gsl/util>
 
 #include <cstdint>
 #include <cstdlib>
@@ -52,7 +51,7 @@ using jewels::fails;
 int run(
   const Tappy<common::ProcessDescription<>>& desc,
   AbstractCasing& casing,
-  pinion::ShmChannelFactory& channel_factory,
+  pinion::AbstractChannelFactory& channel_factory,
   jewels::cli::ExitCondition& exit,
   const ExecutionParams& execution_params)
 {
@@ -62,7 +61,7 @@ int run(
   auto memres_scratch = jewels::memory::MemoryResource(std::pmr::get_default_resource());
   auto memres_runner = jewels::memory::MemoryResource(std::pmr::get_default_resource());
 
-  const pinion::ShmChannelFactoryContext channel_factory_context(channel_factory);
+  const pinion::ChannelFactoryContext channel_factory_context(channel_factory);
 
   auto channels = setup_channels(
     desc.get_pubsub_graph().get_publish_endpoints(), memres_scratch, desc.get_process_id(), channel_factory);
@@ -88,10 +87,18 @@ int run(
     casing,
     desc.get_data_sources(),
     first_message_cache);
+
   if (!states)
   {
     return EXIT_FAILURE;
   }
+
+  // NOTE: this must be called after states is created but before anything else
+  // that can fail and cause an early return, since the CasingImpl destructor (called on early return)
+  // accesses the states vector to clear publishers.
+  // If we call the destructors on the state objects they will try to access the publishers which have already been
+  // freed, causing a use-after-free and crash.
+  const jewels::ScopeGuard shutdown_casing{[&casing] { casing.shutdown(); }};
 
   if (!setup_configs(
         desc.get_config_graph().get_config_instances(),
@@ -111,9 +118,13 @@ int run(
   }
   auto cog_queue = std::make_shared<OnlineCogQueue>(memres_runner);
 
-  const gsl::final_action shutdown_casing{[&casing] { casing.shutdown(); }};
   auto cogs = setup_cogs(desc.get_cog_instances(), memres, memres_runner, cog_queue, casing);
   if (!cogs)
+  {
+    return EXIT_FAILURE;
+  }
+  auto publisher_throttle_timers = setup_publisher_throttle_timers(*cogs, memres);
+  if (!publisher_throttle_timers)
   {
     return EXIT_FAILURE;
   }
@@ -188,6 +199,7 @@ int run(
 
   bind_channels_to_epoll(*channels, epoll);
   bind_timers_to_epoll(*timers, epoll);
+  bind_timers_to_epoll(*publisher_throttle_timers, epoll);
   bind_io_connections_to_epoll(*io_connection_epollables, epoll);
 
   std::pmr::vector<CogConfig> runner_cogs{memres};

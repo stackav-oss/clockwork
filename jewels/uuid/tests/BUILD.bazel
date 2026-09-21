@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -9,7 +9,6 @@ cc_test(
     name = "uuid5_test",
     srcs = ["uuid5_test.cc"],
     deps = [
-        "//jewels/container:compare",
         "//jewels/std:expected",
         "//jewels/uuid",
         "//jewels/uuid:uuid5",

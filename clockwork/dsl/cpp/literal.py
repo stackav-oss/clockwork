@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Utility functions for generating C++ literals."""
@@ -120,7 +120,7 @@ def decimal_value_to_cpp(value: primitive.DecimalValue) -> types.CppValueExpr:
                 raise ValueError(msg)
             suffix += "U"
         five_digits: Final = 10000
-        int_str = f"{int_val:_}".replace("_", "'") if int_val >= five_digits else str(int_val)
+        int_str = f"{int_val:_}".replace("_", "'") if abs(int_val) >= five_digits else str(int_val)
 
         return types.CppValue(None, f"{int_str}{suffix}")
     if isinstance(num_type, clkbuiltins.FloatingPointPrimitiveType):
@@ -148,3 +148,19 @@ def int_to_cpp(value: int, type_info: clkbuiltins.IntegerPrimitiveType) -> types
     """
     decimal_value = primitive.DecimalValue(type_info=type_info, value=Decimal(value))
     return decimal_value_to_cpp(decimal_value)
+
+
+def string_literal_to_cpp(value: primitive.StringLiteral) -> types.CppValueExpr:
+    """Converts a Clockwork string literal to its C++ representation.
+
+    This function formats a string literal from the Clockwork IR as a C++
+    string literal, including proper escaping and surrounding quotes.
+
+    Args:
+        value: The Clockwork string literal to be converted.
+
+    Returns:
+        A C++ literal representing the string.
+    """
+    escaped_value = value.value.replace("\\", "\\\\").replace('"', '\\"')
+    return types.CppValue(None, f'"{escaped_value}"')

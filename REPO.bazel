@@ -1,0 +1,26 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+"https://bazel.build/rules/lib/globals/repo"
+
+# We currently have to use "**" liberally in these ignore patterns to work around:
+# https://github.com/bazelbuild/bazel/pull/24203#issuecomment-4142534263
+ignore_directories([
+    # keep-sorted start
+    # Generic cache folder
+    "**/.cache/**",
+    # Git metadata
+    "**/.git/**",
+    # Mypy cache folder
+    "**/.mypy_cache/**",
+    # Pytest cache folder
+    "**/.pytest_cache/**",
+    # Ruff cache folder
+    "**/.ruff_cache/**",
+    # Ignore all bazel build directories to prevent them from breaking if
+    # another repo references this as a local_path_override.
+    "**/bazel-*/**",
+    # Third party code (external workspace)
+    "third_party/build_stack_rules_proto/**",
+    # keep-sorted end
+])

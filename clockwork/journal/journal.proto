@@ -1,0 +1,349 @@
+// Copyright 2025-2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.journal;
+
+// Top-level journal file containing data for report generation and single-cog replay.
+message JournalFile {
+  // Metadata describing the source log, request, and replay readiness.
+  JournalMetadata metadata = 1;
+
+  // Per-cog journals in the requested scope.
+  repeated CogJournal cog_journals = 2;
+
+  // Channel summaries for inputs, outputs, and alignment channels in the requested scope.
+  repeated ChannelSummary channel_summaries = 3;
+
+  // Optional report index for messages on scoped channels.
+  repeated ChannelMessage channel_messages = 4;
+}
+
+// Metadata describing the journal request and generator result.
+message JournalMetadata {
+  // Inclusive start sync time covered by this journal.
+  int64 start_time_ns = 1;
+
+  // Inclusive end sync time covered by this journal.
+  int64 end_time_ns = 2;
+
+  // Scope requested for the journal.
+  JournalScope scope = 3;
+
+  // Source log path or URI.
+  string log_uri = 4;
+
+  // Whether the log contains enough data for replay.
+  ReplayReadiness replay_readiness = 5;
+
+  // Tool or schema-version provenance for the generator that produced this journal.
+  string generator_version = 6;
+}
+
+// Scope requested for the journal.
+message JournalScope {
+  // Fully qualified cog instance paths requested for the journal.
+  repeated string cog_instance_paths = 1;
+
+  // Fully qualified box instance paths requested for report-oriented box journals.
+  repeated string box_instance_paths = 2;
+}
+
+// Replay-readiness result and actionable data gaps.
+message ReplayReadiness {
+  // True when the journal has all data required for single-cog replay.
+  bool sufficient_for_replay = 1;
+
+  // Input channels that were not logged, kept for simple reporting.
+  repeated string missing_inputs = 2;
+
+  // True when a state snapshot was found for the requested selection mode.
+  bool has_state_snapshot = 3;
+
+  // Structured replay-readiness gaps.
+  repeated ReplayReadinessGap gaps = 4;
+}
+
+// Structured replay-readiness gap.
+message ReplayReadinessGap {
+  // Machine-readable reason for the gap.
+  ReplayReadinessGapReason reason = 1;
+
+  // Human-readable detail for diagnostics and reports.
+  string message = 2;
+
+  // Cog instance path associated with this gap, when applicable.
+  string cog_instance_path = 3;
+
+  // Channel associated with this gap, when applicable.
+  string channel_name = 4;
+
+  // Execution index associated with this gap, when applicable.
+  uint64 execution_index = 5;
+}
+
+// Machine-readable replay-readiness gap reason.
+enum ReplayReadinessGapReason {
+  // Gap reason was not specified.
+  REPLAY_READINESS_GAP_REASON_UNSPECIFIED = 0;
+
+  // The requested cog was not found in metadata or topology.
+  REPLAY_READINESS_GAP_REASON_REQUESTED_COG_NOT_FOUND = 1;
+
+  // The event metrics channel is absent.
+  REPLAY_READINESS_GAP_REASON_MISSING_EVENT_METRICS_CHANNEL = 2;
+
+  // Signal metadata is absent or incomplete.
+  REPLAY_READINESS_GAP_REASON_MISSING_SIGNAL_METADATA = 3;
+
+  // A required input channel is absent from the log.
+  REPLAY_READINESS_GAP_REASON_MISSING_INPUT_CHANNEL = 4;
+
+  // Input view sequence metadata is absent for an execution input.
+  REPLAY_READINESS_GAP_REASON_MISSING_INPUT_VIEW_SEQUENCE_METADATA = 5;
+
+  // Output sequence metadata is absent for an execution output.
+  REPLAY_READINESS_GAP_REASON_MISSING_OUTPUT_SEQUENCE_METADATA = 6;
+
+  // No matching state snapshot was found.
+  REPLAY_READINESS_GAP_REASON_MISSING_STATE_SNAPSHOT = 7;
+
+  // No matching alignment result was found.
+  REPLAY_READINESS_GAP_REASON_MISSING_ALIGNMENT_RESULT = 8;
+
+  // The requested time range contains no cog executions.
+  REPLAY_READINESS_GAP_REASON_TIME_RANGE_CONTAINS_NO_EXECUTIONS = 9;
+
+  // Required execution metrics are missing for a reported cog execution.
+  REPLAY_READINESS_GAP_REASON_MISSING_EXECUTION_METRICS = 10;
+
+  reserved 11 to 13;
+}
+
+// Per-cog journal entries and schema references.
+message CogJournal {
+  // Static cog path.
+  string cog_path = 1;
+
+  // Fully qualified cog instance path.
+  string cog_instance_path = 2;
+
+  // State snapshot selected near the requested journal start time.
+  StateSnapshot state_snapshot = 3;
+
+  // Ordered sequence of executions within the requested time window.
+  repeated CogExecution executions = 4;
+
+  // Schema references for input channels.
+  repeated ChannelSchema input_schemas = 5;
+
+  // Schema references for output channels.
+  repeated ChannelSchema output_schemas = 6;
+
+  // Execution condition names, indexed by position in condition_flags.
+  repeated string condition_names = 7;
+
+  // True when the cog has at least one Clockwork state endpoint.
+  bool has_clockwork_state = 8;
+}
+
+// State snapshot selected for replay initialization.
+message StateSnapshot {
+  // Snapshot sync time.
+  int64 snapshot_time_ns = 1;
+
+  // Selection mode used to choose this snapshot.
+  SnapshotSelection selection = 2;
+
+  // Serialized state bytes, opaque to the journal format.
+  bytes state_data = 3;
+
+  // Schema UUID for deserializing state_data.
+  string state_schema_uuid = 4;
+}
+
+// State snapshot selection mode.
+enum SnapshotSelection {
+  // Snapshot selection was not specified.
+  SNAPSHOT_SELECTION_UNSPECIFIED = 0;
+
+  // First snapshot before the requested start time.
+  SNAPSHOT_SELECTION_BEFORE = 1;
+
+  // First snapshot after the requested start time.
+  SNAPSHOT_SELECTION_AFTER = 2;
+
+  // Closest snapshot in either direction.
+  SNAPSHOT_SELECTION_CLOSEST = 3;
+}
+
+// One cog execution entry.
+message CogExecution {
+  // Execution start sync time.
+  int64 execution_start_time_ns = 1;
+
+  // Execution duration.
+  int64 execution_duration_ns = 2;
+
+  // Latency from ready time to execution start.
+  int64 ready_to_exec_latency_ns = 3;
+
+  // Latency from attempted execution to execution start.
+  int64 attempt_to_exec_latency_ns = 4;
+
+  // Number of times the scheduler requeued this execution.
+  uint32 requeue_count = 5;
+
+  // Condition values, one bit per condition in CogJournal.condition_names.
+  uint64 condition_flags = 6;
+
+  // Per-input state visible at execution time.
+  repeated InputViewState input_views = 7;
+
+  // Per-output state after execution.
+  repeated OutputState outputs = 8;
+
+  // Alignment result for cogs with aligned inputs.
+  AlignmentResult alignment_result = 9;
+
+  // Stable ordinal within the containing CogJournal.executions list.
+  uint64 execution_index = 10;
+
+  // Memory statistics for this execution.
+  repeated MemoryStats memory_stats = 11;
+
+  // Timestamp passed to the cog dial for this execution.
+  int64 dial_start_time_ns = 12;
+}
+
+message MemoryStats {
+  // Name of the memory resource endpoint that produced these statistics.
+  string resource_name = 1;
+
+  // Peak allocation size through the memory resource (bytes)
+  int64 peak_allocated = 2;
+
+  // Memory allocated at the end of the Cog's execution (bytes)
+  int64 current_allocated = 3;
+
+  // Total of all allocations during Cog execution (bytes)
+  int64 total_allocated = 4;
+
+  // Total of all deallocations during Cog execution (bytes)
+  int64 total_deallocated = 5;
+}
+
+// Per-input state visible to a cog execution.
+message InputViewState {
+  // Channel this input is connected to.
+  string channel_name = 1;
+
+  // Sequence number of the oldest message the cog has not yet seen.
+  uint64 cursor_sequence_number = 2;
+
+  // Sequence numbers visible in the input view, ordered from oldest to newest.
+  repeated uint64 visible_sequence_numbers = 3;
+
+  // Index of the first new visible sequence number.
+  uint32 first_new_index = 4;
+
+  // Input member name in the consuming cog.
+  string cog_member_name = 5;
+
+  // Number of messages dropped on this input before this execution.
+  optional uint64 dropped_message_count = 6;
+}
+
+// Per-output state after a cog execution.
+message OutputState {
+  // Channel this output is connected to.
+  string channel_name = 1;
+
+  // Sequence numbers assigned to messages published during this execution.
+  repeated uint64 produced_sequence_numbers = 2;
+}
+
+// Alignment result consumed by a cog execution.
+message AlignmentResult {
+  // Aligner that produced this result.
+  string aligner_name = 1;
+
+  // Inputs selected by the aligner.
+  repeated AlignedInput aligned_inputs = 2;
+}
+
+// Input selected by an aligner.
+message AlignedInput {
+  // Input name in the consuming cog.
+  string input_name = 1;
+
+  // Selected sequence number for standard inputs.
+  uint64 selected_sequence_number = 2;
+
+  // True when an optional input was present in the alignment.
+  bool present = 3;
+
+  // True when the selected message was reused from the previous alignment cycle.
+  bool is_reused = 4;
+
+  // First selected sequence number for batch inputs.
+  uint64 batch_begin_sequence_number = 5;
+
+  // Last selected sequence number for batch inputs.
+  uint64 batch_end_sequence_number = 6;
+
+  // True when this input uses batch selection.
+  bool is_batch = 7;
+}
+
+// Schema reference for one channel.
+message ChannelSchema {
+  // Channel name.
+  string channel_name = 1;
+
+  // Schema UUID for messages on this channel.
+  string schema_uuid = 2;
+
+  // Schema name for messages on this channel.
+  string schema_name = 3;
+}
+
+// Message activity summary for one channel in the requested scope.
+message ChannelSummary {
+  // Channel name.
+  string channel_name = 1;
+
+  // Producer cog instance path.
+  string producer_cog_instance = 2;
+
+  // Consumer cog instance paths.
+  repeated string consumer_cog_instances = 3;
+
+  // First sequence number observed within the requested time window.
+  uint64 first_sequence_number = 4;
+
+  // Last sequence number observed within the requested time window.
+  uint64 last_sequence_number = 5;
+
+  // Number of messages observed within the requested time window.
+  uint64 message_count = 6;
+
+  // True when this channel is logged, even if message_count is zero.
+  bool has_logged_messages = 7;
+}
+
+// Metadata for one logged message on a scoped channel.
+message ChannelMessage {
+  // Channel name.
+  string channel_name = 1;
+
+  // Logged sequence number.
+  uint64 sequence_number = 2;
+
+  // Publish sync time.
+  int64 publish_time_ns = 3;
+
+  // Serialized payload size in bytes.
+  uint64 payload_size_bytes = 4;
+}

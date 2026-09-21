@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -14,7 +14,6 @@
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
@@ -268,6 +267,13 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
     pinion::PublisherHandle /*unused*/,
     jewels::memory::MemoryResource /*unused*/) override;
 
+  Outcome try_instantiate_state_from_snapshot(
+    jewels::Uuid<common::StateInstanceId> instance_id,
+    jewels::Uuid<RepresentationTag> repr_id,
+    jewels::Uuid<RepresentationTag> snapshot_repr_id,
+    jewels::memory::MemoryResource memres,
+    std::span<const std::byte> snapshot_data) override;
+
   ///
   /// Instantiate Config.
   /// Allocates an instance of the given ClassId and assigns it the given InstanceId
@@ -301,8 +307,8 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
   /// @return A shared pointer to the Observer for that subscriber, which should
   ///   be registered with epoll or a local publisher, or an error.
   ///
-  jewels::expected<std::shared_ptr<pinion::Observer>, Error>
-  try_connect_subscriber(jewels::Uuid<common::EndpointInstanceId> endpoint, pinion::SubscriberHandle handle) override;
+  jewels::expected<std::shared_ptr<pinion::Observer>, Error> try_connect_subscriber(
+    jewels::Uuid<common::EndpointInstanceId> endpoint, std::shared_ptr<pinion::AbstractChannel> channel) override;
 
   /// Set a publisher handle for a specific endpoint implementation
   ///
@@ -369,6 +375,19 @@ struct CasingImpl<std::tuple<Cogs...>, std::tuple<Schemas...>, std::tuple<IoConn
     jewels::Uuid<common::IoConnectionInstanceId> instance_id,
     std::span<const Tappy<common::EndpointInstanceDescription>> endpoints,
     std::optional<jewels::Uuid<common::EndpointInstanceId>> diags_endpoint_id) override;
+
+  ///
+  /// Side-effect-free check that the given representation UUID is in the
+  /// `Schemas...` tuple.  See `AbstractCasing::has_schema_representation`.
+  ///
+  [[nodiscard]] bool has_schema_representation(const jewels::Uuid<RepresentationTag>& repr_id) const noexcept override;
+
+  ///
+  /// Side-effect-free check that the given IO connection class UUID is in the
+  /// `IoConnections...` tuple.  See `AbstractCasing::has_io_connection_class`.
+  ///
+  [[nodiscard]] bool
+  has_io_connection_class(const jewels::Uuid<common::IoConnectionClassId>& io_id) const noexcept override;
 
   ///
   /// This is called after all connections are made and before execution begins (including execute_init_cog).  The

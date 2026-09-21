@@ -1,11 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/tests/support/test_io_connections.hh"
 
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tests/support/pub_sub.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 
@@ -40,7 +39,7 @@ jewels::expected<void, pinion::IoConnection::Error> TestIoConnection::connect_di
 
 jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, pinion::IoConnection::Error>
 TestIoConnection::connect_subscriber(
-  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/)
+  jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, std::shared_ptr<pinion::AbstractChannel> /*subscriber*/)
 {
   if (subscriber_set)
   {

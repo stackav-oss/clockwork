@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -20,4 +20,5 @@ using ::jewels::simplelaunch::v1::Config;
 /// @param path The path to the config file.
 /// @return The deserialized config or an error.
 expected<Config, jewels::filesystem::ErrorCode> load_config(filesystem::Filesystem& filesystem, std::string_view path);
+
 } // namespace jewels::simplelaunch

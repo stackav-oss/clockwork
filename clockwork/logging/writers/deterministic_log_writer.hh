@@ -1,14 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/offboard/writer.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/logging/writers/persistent_log_entry.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
-#include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -23,18 +23,17 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace clockwork_logging
 {
 using ChannelMap = std::pmr::unordered_map<
   jewels::Uuid<::clockwork::common::EndpointInstanceId>,
-  std::shared_ptr<::clockwork::pinion::ShmPublisher>,
+  std::shared_ptr<::clockwork::pinion::AbstractPublisher>,
   jewels::UuidHasher<::clockwork::common::EndpointInstanceId>>;
 
-inline constexpr std::string_view metrics_channel_metadata_channel_name = "/clockwork/metrics_channel_metadata";
-
-/// Class that implements the Abstract Message Writer Interface. This class is designed to write to a log file upon
-/// receiving a message.
+/// Writes to a log file upon receiving a message. Persistent config entries (e.g., metrics channel
+/// metadata, signal metadata) are written once during initialization.
 class LogMessageWriter : public clockwork::AbstractMessageWriter
 {
 public:
@@ -43,13 +42,13 @@ public:
   /// @param memory_resource Memory resource to be used
   /// @param log_writer_config Log writer config
   /// @param channels Mapping of channels that are available in the system
+  /// @param persistent_entries Persistent entries to write during initialization
   /// @param log_uri URI of the log file to write to.
   /// @param[in] init_time The start time for execution
   LogMessageWriter(
     jewels::memory::MemoryResource memory_resource,
     jewels::memory::ObjectPtr<const clockwork::Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config,
-    std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
-      metrics_channel_metadata_config,
+    std::pmr::vector<PersistentLogEntry> persistent_entries,
     ChannelMap channels,
     std::string_view log_uri,
     jewels::time::SyncTime init_time);
@@ -71,8 +70,7 @@ public:
   ~LogMessageWriter() override;
 
 private:
-  /// Write the metrics channel metadata report. This is called from initialize.
-  jewels::expected<void, jewels::MonoError> write_metrics_channel_metadata_report();
+  jewels::expected<void, jewels::MonoError> write_persistent_entries();
 
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
@@ -83,8 +81,9 @@ private:
   /// Log Writer Config file that specifies which channels are to be written.
   jewels::memory::ObjectPtr<const clockwork::Tappy<clockwork_logging::LogWriterConfig<>>> log_writer_config_;
 
-  std::shared_ptr<const clockwork::Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>
-    metrics_channel_metadata_config_;
+  /// Persistent entries to write during initialization
+  std::pmr::vector<PersistentLogEntry> persistent_entries_;
+
   /// Log writer
   clockwork_logging::offboard::Writer<> writer_;
 

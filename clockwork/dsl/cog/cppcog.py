@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Facilities for generating C++ Cog structs."""
@@ -9,6 +9,20 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Final
 
+from clockwork.dsl.cog.codegen_helpers import (
+    COG_CLASS_UUID_TYPE,
+    ENDPOINT_UUID_TYPE,
+    UUID_TEMPLATE,
+    UuidHandler,
+    formatted_struct,
+    gen_const_str,
+    get_cog_instantiation_args,
+    get_rendered_cog_instantiation_args,
+    get_template_args,
+    get_template_params,
+    to_camel,
+)
+from clockwork.dsl.cog.cppdial import DynamicTimerCodegenHandler
 from clockwork.dsl.cog.cppdial_signals import (
     BatchedReportGroupInfo,
     PostAggregatedReportGroupInfo,
@@ -23,6 +37,7 @@ from clockwork.dsl.cog.pycog import (
     ConfigsStruct,
     Diagnostics,
     DiagnosticsStruct,
+    DynamicTimerCondition,
     Input,
     InputsStruct,
     MessagesPresentCondition,
@@ -49,8 +64,15 @@ from clockwork.dsl.cpp.types import (
     Ref,
     const_qualify,
 )
-from clockwork.dsl.ir import cog, primitive, schema_reg, units, uuid_reg
-from clockwork.dsl.ir.clkbuiltins import REPRESENTATION_TAG_TYPE
+from clockwork.dsl.ir import aligner as aligner_ir
+from clockwork.dsl.ir import cog, primitive, schema_reg, typesys, units, uuid_reg
+from clockwork.dsl.ir.clkbuiltins import REPRESENTATION_TAG_TYPE, TAPPY
+from clockwork.dsl.ir.cog_components import DynamicTimer
+from clockwork.dsl.ir.cog_metrics_report_groups import (
+    EVENT_METRICS_GROUP_NAME,
+    TELEMETRY_METRICS_GROUP_NAME,
+    TELEMETRY_SIGNAL_PREFIX,
+)
 from clockwork.dsl.ir.cog_metrics_schema_generation import get_underlying_enum_type
 from clockwork.dsl.ir.diagnostics import (
     COG_INFRA_DIAGS_GROUP_DEF_NAME,
@@ -65,12 +87,21 @@ from pydantic.alias_generators import to_snake
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from uuid import UUID
 
     from clockwork.dsl.compiler_context import CompilerContext
+    from clockwork.dsl.ir.cog_parameters import CogParameterRef
 
 
 _UUID_TEMPLATE = CppTemplate([Header(JEWELS_REPO, "jewels/uuid/uuid/hh")], "Uuid", "jewels")
+
+_OUT_TEMPLATE = CppTemplate(
+    [Header(JEWELS_REPO, "jewels/callsig/outparam.hh")],
+    "Out",
+    "jewels",
+)
+_STALE_ALIGNMENT_INDEX_OUT: Final = "stale_alignment_index_out"
+
+
 _COG_CLASS_TYPE = CppType(
     [Header(CLK_REPO, "clockwork/common/process_description_clk_cc.hh")],
     "CogClassId",
@@ -85,39 +116,21 @@ _COG_CLASS_UUID_TYPE = _UUID_TEMPLATE.instantiate([_COG_CLASS_TYPE])
 _ENDPOINT_UUID_TYPE = _UUID_TEMPLATE.instantiate([_ENDPOINT_TYPE])
 
 
+def _is_cog_metrics_group(name: str) -> bool:
+    """Return True if the report group name is an infrastructure cog metrics group."""
+    return name in (EVENT_METRICS_GROUP_NAME, TELEMETRY_METRICS_GROUP_NAME)
+
+
 def _get_representation_uuid_type(context: CompilerContext) -> CppTemplateType:
     """Get the UUID type for representations."""
-    return _UUID_TEMPLATE.instantiate([get_cpp_type(context, REPRESENTATION_TAG_TYPE)])
-
-
-def to_camel(snake: str) -> str:
-    """Convert from snake to camel case."""
-    toks = snake.split("_")
-    return "".join(tok.title() for tok in toks)
-
-
-def _formatted_struct(name: str, declarations: str | list[str]) -> CppChunk:
-    """Helper function to format a struct."""
-    chunk = CppChunk()
-    chunk.append(
-        [
-            f"struct {name}",
-            "{",
-        ],
-    )
-    # Body
-    chunk.append(
-        declarations,
-        indent=1,
-    )
-    # Closing
-    chunk.append("};")
-    return chunk
+    return UUID_TEMPLATE.instantiate([get_cpp_type(context, REPRESENTATION_TAG_TYPE)])
 
 
 def _cond_type_present(
     root: cog.ConditionExpr,
-    looking_for: type[cog.LogConditionExpr | cog.InitConditionExpr | cog.TimeSinceLastExec | cog.MessagesPresent],
+    looking_for: type[
+        cog.LogConditionExpr | cog.InitConditionExpr | cog.TimeSinceLastExec | cog.MessagesPresent | DynamicTimer
+    ],
 ) -> bool:
     """Recursively traverse conditon expr tree to search for instance of a type."""
     if isinstance(root, cog.InitConditionExpr):
@@ -137,7 +150,7 @@ def _cond_type_present(
 
 def _execute_expr_render_helper(
     root: cog.ConditionExpr,
-    timer_handle_map: dict[str, TimeSinceLastExecHandler],
+    timer_handle_map: dict[str, TimerHandler],
     arg_timers: str,
     input_condition_handler_map: dict[str, InputConditionHandler],
     arg_input_conditions: str,
@@ -183,12 +196,6 @@ def _execute_expr_render_helper(
     raise TypeError(msg)
 
 
-def _gen_const_str(terms: str | Iterable[str], name: str = "name") -> str:
-    full_str = terms if isinstance(terms, str) else ".".join(terms)
-    init = f' = "{full_str}"' if full_str else "{}"
-    return f"static constexpr ::std::string_view {name}{init};"
-
-
 def _gen_const_size(value: int, name: str) -> str:
     return f"static constexpr size_t {name} = {value};"
 
@@ -197,56 +204,169 @@ def _gen_const_milliseconds(value: primitive.UnitValue, name: str) -> str:
     return f"static constexpr auto {name} = ::std::chrono::milliseconds({value.value});"
 
 
-def _gen_factory(
-    uuid: UuidHandler, class_name: str, base_name: str, make_params: str, make_body: str
+def _gen_factory(  # noqa: PLR0912, PLR0913 (Factory generation needs these branches and parameters)
+    uuid: UuidHandler,
+    class_name: str,
+    base_name: str,
+    make_params: str,
+    make_body: str,
+    template_args: str = "",
+    is_specialization: bool = False,
+    snapshot_make: tuple[str, list[str]] | None = None,
 ) -> CppModuleChunks:
     fq_base_name = f"::{CLOCKWORK_NAMESPACE}::{base_name}"
     cpp_mod = CppModuleChunks()
-    cpp_mod.header_chunk.append(f"struct {class_name}Factory : {fq_base_name}\n{{")
-    cpp_mod.header_chunk.append(
-        [
-            f"static constexpr auto type_id = {uuid.render_from_string_func()};",
-            f"[[nodiscard]] const {fq_base_name}::IdType &id() const override;",
-            f"[[nodiscard]] {fq_base_name}::Ptr make({make_params}) const override;",
-        ],
-        indent=1,
-    )
+    if is_specialization:
+        cpp_mod.header_chunk.append("template<>")
+    if template_args:
+        cpp_mod.header_chunk.append(f"struct {class_name}Factory<{template_args}> : {fq_base_name}\n{{")
+    else:
+        cpp_mod.header_chunk.append(f"struct {class_name}Factory : {fq_base_name}\n{{")
+    factory_header = [
+        f"static constexpr auto type_id = {uuid.render_from_string_func()};",
+        f"[[nodiscard]] const {fq_base_name}::IdType &id() const override;",
+        f"[[nodiscard]] {fq_base_name}::Ptr make({make_params}) const override;",
+    ]
+    if snapshot_make:
+        snapshot_make_params, _ = snapshot_make
+        factory_header.append(
+            f"[[nodiscard]] {fq_base_name}::StateRestoreOutcome make({snapshot_make_params}) const override;"
+        )
+    factory_header.append(f"static {class_name}Factory instance;")
+    cpp_mod.header_chunk.append(factory_header, indent=1)
     cpp_mod.header_chunk.append("};")
 
-    cpp_mod.implementation_chunk.append(
-        f"const {fq_base_name}::IdType &{class_name}Factory::id() const",
-    )
+    if template_args:
+        cpp_mod.implementation_chunk.append(
+            f"const {fq_base_name}::IdType &{class_name}Factory<{template_args}>::id() const",
+        )
+    else:
+        cpp_mod.implementation_chunk.append(
+            f"const {fq_base_name}::IdType &{class_name}Factory::id() const",
+        )
     cpp_mod.implementation_chunk.append("{")
     cpp_mod.implementation_chunk.append("return type_id;", indent=1)
     cpp_mod.implementation_chunk.append("}")
-    cpp_mod.implementation_chunk.append(f"{fq_base_name}::Ptr {class_name}Factory::make({make_params}) const")
+    if template_args:
+        cpp_mod.implementation_chunk.append(
+            f"{fq_base_name}::Ptr {class_name}Factory<{template_args}>::make({make_params}) const",
+        )
+    else:
+        cpp_mod.implementation_chunk.append(f"{fq_base_name}::Ptr {class_name}Factory::make({make_params}) const")
     cpp_mod.implementation_chunk.append("{")
     cpp_mod.implementation_chunk.append(
         f"{make_body}",
         indent=1,
     )
     cpp_mod.implementation_chunk.append("}")
-    cpp_mod.implementation_chunk.append(
-        f"static {class_name}Factory {to_snake(class_name.replace('::', '__'))}_factory_inst;"
-    )
+    if snapshot_make:
+        snapshot_make_params, snapshot_make_body = snapshot_make
+        if template_args:
+            cpp_mod.implementation_chunk.append(
+                f"{fq_base_name}::StateRestoreOutcome {class_name}Factory<{template_args}>::make({snapshot_make_params}) const"
+            )
+        else:
+            cpp_mod.implementation_chunk.append(
+                f"{fq_base_name}::StateRestoreOutcome {class_name}Factory::make({snapshot_make_params}) const"
+            )
+        cpp_mod.implementation_chunk.append("{")
+        cpp_mod.implementation_chunk.append(snapshot_make_body, indent=1)
+        cpp_mod.implementation_chunk.append("}")
+    if template_args:
+        cpp_mod.implementation_chunk.append(
+            f"{class_name}Factory<{template_args}> {class_name}Factory<{template_args}>::instance;"
+        )
+    else:
+        cpp_mod.implementation_chunk.append(f"{class_name}Factory {class_name}Factory::instance;")
     return cpp_mod
+
+
+def _serializable_state_factory(
+    state_type: str, serialized_type: str, snapshot_uuid: UuidHandler
+) -> tuple[str, list[str]]:
+    """Generate the restoration overload for a serializable external state."""
+    restore_result = f"::{CLOCKWORK_NAMESPACE}::CogStateFactory::StateRestoreResult"
+    make_params = (
+        f"::jewels::Out<::{CLOCKWORK_NAMESPACE}::CogStateFactory::Ptr> state_out, "
+        "::jewels::memory::MemoryResource memres_sys, "
+        "::jewels::memory::MemoryResource memres_state, "
+        f"::jewels::Uuid<::{CLOCKWORK_NAMESPACE}::RepresentationTag> snapshot_representation_id, "
+        "::std::span<const ::std::byte> snapshot_data"
+    )
+    make_body = [
+        f"if (snapshot_representation_id != {snapshot_uuid.render_from_string_func()})",
+        "{",
+        f"    return {restore_result}::invalid_class_uuid;",
+        "}",
+        f"if (snapshot_data.size() != sizeof({serialized_type}))",
+        "{",
+        f"    return {restore_result}::buffer_error;",
+        "}",
+        f"::jewels::memory::AlignedStorage<{serialized_type}> snapshot_storage{{}};",
+        "::std::memcpy(snapshot_storage.bytes, snapshot_data.data(), snapshot_data.size());",
+        f"const auto snapshot = ::{CLOCKWORK_NAMESPACE}::start_lifetime_as<{serialized_type}>(",
+        f"  ::std::span<std::byte, sizeof({serialized_type})>{{snapshot_storage.bytes}});",
+        f"auto state = ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::CogStateDataImpl<{state_type}>>(",
+        "  memres_sys, std::move(memres_state));",
+        "if (!state)",
+        "{",
+        f"    return {restore_result}::init_failure;",
+        "}",
+        f"if (::jewels::fails(::{CLOCKWORK_NAMESPACE}::Serializable<{state_type}>::deserialize(",
+        "      ::jewels::Out{state->state}, *snapshot)))",
+        "{",
+        f"    return {restore_result}::init_failure;",
+        "}",
+        "*state_out = std::move(state);",
+        f"return {restore_result}::success;",
+    ]
+    return make_params, make_body
+
+
+def _add_serializable_state_factory_includes(cpp_mod: CppModuleChunks) -> None:
+    """Add implementation-only headers required by serialized state restoration."""
+    cpp_mod.implementation_chunk.context.add_includes(
+        [
+            Header(CLK_REPO, "clockwork/memory/start_lifetime_as.hh"),
+            Header(CLK_REPO, "clockwork/serializable.hh"),
+            Header(JEWELS_REPO, "jewels/callsig/outcome.hh"),
+            Header(JEWELS_REPO, "jewels/callsig/outparam.hh"),
+            Header(JEWELS_REPO, "jewels/memory/aligned_storage.hh"),
+            Header(JEWELS_REPO, "jewels/memory/pmr_shared_ptr.hh"),
+            SystemHeader("cstring"),
+            SystemHeader("span"),
+            SystemHeader("utility"),
+        ]
+    )
+
+
+def _get_serializable_state_factory(
+    compiler_context: CompilerContext,
+    message_type: object,
+    state_type: str,
+    enclosing_namespace: str,
+) -> tuple[str, list[str]] | None:
+    """Return a snapshot restoration overload for a serializable extern type."""
+    if not isinstance(message_type, ExternType) or message_type.serialized_form is None:
+        return None
+    assert isinstance(message_type.serialized_form, typesys.Instantiation)
+    schema_type = message_type.serialized_form.arguments["schema"]
+    serialized_type = typereg.get_cpp_template(message_type.module.context, TAPPY).instantiate(
+        [typereg.get_cpp_type(message_type.module.context, schema_type)]
+    )
+    return _serializable_state_factory(
+        state_type,
+        serialized_type.render(enclosing_namespace, with_qualifiers=False),
+        UuidHandler(
+            _get_representation_uuid_type(compiler_context),
+            uuid_reg.lookup_uuid(compiler_context, message_type.serialized_form),
+        ),
+    )
 
 
 def _comma_append(lines: list[str], end: str = "") -> list[str]:
     """Append a comma to all but the last line, where an optional end is appended instead. Used to help code gen lists."""
     return [i + j for i, j in zip(lines, (",",) * (len(lines) - 1) + (end,), strict=False)]
-
-
-@dataclass(frozen=True)
-class UuidHandler:
-    """Manage UUID."""
-
-    uuid_cpp_type: CppTemplateType
-    uuid: UUID
-
-    def render_from_string_func(self) -> str:
-        """Render Uuid::from_string(...).value() ."""
-        return f'{self.uuid_cpp_type.render("")}::from_string("{self.uuid}").value()'
 
 
 @dataclass
@@ -263,7 +383,7 @@ class ResourceHandle:
     def make(cls: type[ResourceHandle], resource: Resource, cog_name: str, index: int) -> ResourceHandle:
         """Make a ResourceHandle instance."""
         resource_name = resource.identifier
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, resource.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, resource.uuid)
         policy_name = to_camel(resource_name) + "Policy"
         return cls(
             resource_name=resource_name,
@@ -293,9 +413,9 @@ class ResourceHandle:
         body = [
             "using MemoryResourceType = ::jewels::memory::MemoryResource;",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, self.policy_name]),
+            gen_const_str([self.cog_name, self.policy_name]),
         ]
-        chunk.append(_formatted_struct(self.policy_name, body))
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_get(self, arg_resources: str) -> str:
@@ -359,7 +479,7 @@ class ConfigHandle:
     def make(cls: type[ConfigHandle], config: Config, cog_name: str, index: int) -> ConfigHandle:
         """Make a ConfigHandle instance."""
         config_name = config.identifier
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, config.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, config.uuid)
         policy_name = to_camel(config_name) + "Policy"
         return cls(
             config_name=config_name,
@@ -390,9 +510,9 @@ class ConfigHandle:
         body = [
             f"using ConfigType = {self.msg_type.render(enclosing_namespace, with_qualifiers=False)};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, self.policy_name]),
+            gen_const_str([self.cog_name, self.policy_name]),
         ]
-        chunk.append(_formatted_struct(self.policy_name, body))
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_get(self, arg_configs: str) -> str:
@@ -441,7 +561,7 @@ class StateHandle:
     """Manage all aspects of an State."""
 
     state_name: str
-    msg_type: schema_reg.InterfaceInfo | ExternType
+    msg_type: schema_reg.InterfaceInfo | CogParameterRef | typesys.Instantiation | ExternType
     cpp_type: CppType | CppTemplateType
     endpoint_id: UuidHandler
     read_only: bool
@@ -453,7 +573,7 @@ class StateHandle:
     def make(cls: type[StateHandle], state: State, cog_name: str, index: int) -> StateHandle:
         """Make a StateHandle instance."""
         state_name = state.identifier
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, state.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, state.uuid)
         policy_name = to_camel(state_name) + "Policy"
         return cls(
             state_name=state_name,
@@ -485,14 +605,38 @@ class StateHandle:
                 SystemHeader("string_view"),
             ]
         )
-        body = [
-            f"using StateType = {self.cpp_type.render(enclosing_namespace, with_qualifiers=False)};",
-            "struct Factory;",
-            f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            f"static constexpr bool read_only = {'true' if self.read_only else 'false'};",
-            _gen_const_str([self.cog_name, self.policy_name]),
-        ]
-        chunk.append(_formatted_struct(self.policy_name, body))
+        if isinstance(self.msg_type, ExternType):
+            if self.msg_type.serialized_form is not None:
+                assert isinstance(self.msg_type.serialized_form, typesys.Instantiation)
+                schema_type = self.msg_type.serialized_form.arguments["schema"]
+                serialized_type = typereg.get_cpp_template(self.msg_type.module.context, TAPPY).instantiate(
+                    [typereg.get_cpp_type(self.msg_type.module.context, schema_type)]
+                )
+                chunk.context.add_includes(
+                    [
+                        Header(CLK_REPO, "clockwork/serializable.hh"),
+                        *serialized_type.includes,
+                    ]
+                )
+                serialized_type_str = serialized_type.render(enclosing_namespace, with_qualifiers=False)
+            else:
+                serialized_type_str = None
+        elif isinstance(self.msg_type, schema_reg.InterfaceInfo | typesys.Instantiation):
+            serialized_type_str = "StateType"
+        else:
+            serialized_type_str = None
+        body = [f"using StateType = {self.cpp_type.render(enclosing_namespace, with_qualifiers=False)};"]
+        if serialized_type_str:
+            body.append(f"using SerializedType = {serialized_type_str};")
+        body.extend(
+            [
+                "struct Factory;",
+                f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
+                f"static constexpr bool read_only = {'true' if self.read_only else 'false'};",
+                gen_const_str([self.cog_name, self.policy_name]),
+            ]
+        )
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_factory_struct(
@@ -503,7 +647,7 @@ class StateHandle:
             make_params = "::jewels::memory::MemoryResource memres_state"
             make_args = "std::move(memres_state)"
             repr_uuid = uuid_reg.lookup_uuid(compiler_context, self.msg_type)
-        elif isinstance(self.msg_type, schema_reg.InterfaceInfo):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+        elif isinstance(self.msg_type, schema_reg.InterfaceInfo):
             make_params = f"::{CLOCKWORK_NAMESPACE}::pinion::PublisherHandle publisher"
             make_args = "std::move(publisher)"
             assert self.msg_type.interface_ir.representation is not None
@@ -511,13 +655,23 @@ class StateHandle:
         else:
             msg = f"Unknown state message type {self.msg_type}"
             raise TypeError(msg)
-        return _gen_factory(
+        snapshot_make = _get_serializable_state_factory(
+            compiler_context,
+            self.msg_type,
+            const_qualify(self.cpp_type, False).render(enclosing_namespace),
+            enclosing_namespace,
+        )
+        cpp_mod = _gen_factory(
             UuidHandler(_get_representation_uuid_type(compiler_context), repr_uuid),
             f"{parent_policy_name}::{self.policy_name}::",
             "CogStateFactory",
             "::jewels::memory::MemoryResource memres_sys, " + make_params,
             f"return ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::CogStateDataImpl<{const_qualify(self.cpp_type, False).render(enclosing_namespace)}>>(memres_sys, {make_args});",
+            snapshot_make=snapshot_make,
         )
+        if snapshot_make:
+            _add_serializable_state_factory_includes(cpp_mod)
+        return cpp_mod
 
     def render_get(self, arg_states: str) -> str:
         """Generate get expression."""
@@ -588,7 +742,7 @@ class TimeSinceLastExecHandler:
         index: int,
     ) -> TimeSinceLastExecHandler:
         """Make a TimeSinceLastExecHandler instance."""
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, condition.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, condition.uuid)
         name = condition.identifier
         policy_name = to_camel(name) + "Policy"
         return cls(
@@ -621,9 +775,9 @@ class TimeSinceLastExecHandler:
         body = [
             f"static constexpr int64_t threshold_ns = {self.threshold_ns};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, self.policy_name]),
+            gen_const_str([self.cog_name, self.policy_name]),
         ]
-        chunk.append(_formatted_struct(self.policy_name, body))
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_get(self, arg_timers: str) -> str:
@@ -631,12 +785,17 @@ class TimeSinceLastExecHandler:
         return f"::std::get<{self.index}>({arg_timers})"
 
 
+# Type alias for any timer handler used in the codegen.
+TimerHandler = TimeSinceLastExecHandler | DynamicTimerCodegenHandler
+
+
 @dataclass
 class Timers:
     """Manage timers."""
 
-    timer_registry: tuple[TimeSinceLastExecHandler, ...]
-    cond_name_to_timer: dict[str, TimeSinceLastExecHandler]
+    timer_registry: tuple[TimerHandler, ...]
+    cond_name_to_timer: dict[str, TimerHandler]
+    dynamic_timer_handler: DynamicTimerCodegenHandler | None
 
     @classmethod
     def make(
@@ -645,33 +804,58 @@ class Timers:
         cog_name: str,
     ) -> Timers:
         """Make Timers."""
-        timer_conditions = [
-            cond for cond in cog_exec_conditions.conditions.values() if isinstance(cond, TimeSinceLastExecCondition)
+        timer_conditions: list[TimeSinceLastExecCondition | DynamicTimerCondition] = [
+            cond
+            for cond in cog_exec_conditions.conditions.values()
+            if isinstance(cond, TimeSinceLastExecCondition | DynamicTimerCondition)
         ]
-        registry = [TimeSinceLastExecHandler.make(cond, cog_name, idx) for idx, cond in enumerate(timer_conditions)]
+        registry: list[TimerHandler] = []
+        dynamic_handler: DynamicTimerCodegenHandler | None = None
+        for idx, cond in enumerate(timer_conditions):
+            if isinstance(cond, TimeSinceLastExecCondition):
+                registry.append(TimeSinceLastExecHandler.make(cond, cog_name, idx))
+            else:
+                assert isinstance(cond, DynamicTimerCondition)
+                handler = DynamicTimerCodegenHandler.make(cond, cog_name, idx)
+                registry.append(handler)
+                dynamic_handler = handler
         cond_name_to_timer = {timer.name: timer for timer in registry}
-        return cls(timer_registry=tuple(registry), cond_name_to_timer=cond_name_to_timer)
+        return cls(
+            timer_registry=tuple(registry), cond_name_to_timer=cond_name_to_timer, dynamic_timer_handler=dynamic_handler
+        )
 
     def render_timers(self) -> CppChunk:
-        """Render Timers section."""
+        """Render Timers section.
+
+        Note: The dynamic timer policy struct (if any) is NOT rendered here.
+        It is rendered in the dial header by cppdial.py, since the dial needs
+        access to the concrete handler type for AlignerTimerControl.
+        """
         chunk = CppChunk()
 
         # Add relevant headers
         chunk.context.add_includes([Header(CLK_REPO, "clockwork/cog/cog_timers.hh")])
 
-        # Render policies and CogTimers
         chunk.append("/// Timers ///")
         for timer in self.timer_registry:
-            chunk.append(timer.render_policy_struct())
+            if not isinstance(timer, DynamicTimerCodegenHandler):
+                chunk.append(timer.render_policy_struct())
         policy_template_args = ", ".join([timer.policy_name for timer in self.timer_registry])
         chunk.append(f"using TimersType = ::{CLOCKWORK_NAMESPACE}::CogTimers<{policy_template_args}>;")
+
+        if self.dynamic_timer_handler is not None:
+            chunk.append("")
+            chunk.append("static constexpr bool has_dynamic_timer = true;")
+            chunk.append(f"static constexpr ::std::size_t dynamic_timer_index = {self.dynamic_timer_handler.index};")
+            chunk.context.add_includes([SystemHeader("cstddef")])
+
         return chunk
 
     def __len__(self) -> int:
         """Convenience size getter."""
         return len(self.timer_registry)
 
-    def __iter__(self) -> Iterator[TimeSinceLastExecHandler]:
+    def __iter__(self) -> Iterator[TimerHandler]:
         """Convenience iterator."""
         return iter(self.timer_registry)
 
@@ -693,11 +877,12 @@ class InputHandler:
         cog_input: Input,
         cog_name: str,
         index: int,
+        policy_prefix: str = "",
     ) -> InputHandler:
         """Make InputHandler."""
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, cog_input.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, cog_input.uuid)
         input_name = cog_input.identifier
-        policy_name = to_camel(input_name) + "Policy"
+        policy_name = to_camel((policy_prefix + "_" + input_name) if policy_prefix else input_name) + "Policy"
         return cls(
             input_name=input_name,
             cog_input=cog_input,
@@ -748,21 +933,29 @@ class InputHandler:
             "std::nullopt" if self.cog_input.skip_threshold is None else f"{self.cog_input.skip_threshold}U"
         )
         manual_cursor = f"{self.cog_input.manual_cursor}"
+        expose_seqno = f"{self.cog_input.expose_seqno}"
+        use_device_ptr = f"{self.cog_input.use_device_ptr}"
 
-        policy_name = to_camel(self.input_name) + "Policy"
+        # fmt: off
         body = [
             f"using MsgType = {msg_type};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, policy_name]),
+            gen_const_str([self.cog_name, self.policy_name]),
             f"static constexpr auto max_view_size = {max_view_size};",
             f"static constexpr auto min_msgs = {min_msgs};",
             f"static constexpr auto min_new_msgs = {min_new_msgs};",
             f"static constexpr std::optional<::ssize_t> safety_margin = {safety_margin};",
             f"static constexpr std::optional<size_t> skip_threshold = {skip_threshold};",
             f"static constexpr auto copy_inputs = {str(self.cog_input.copy_inputs).lower()};",
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             f"static constexpr auto manual_cursor = {str(manual_cursor).lower()};",
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            f"static constexpr auto expose_seqno = {str(expose_seqno).lower()};",
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+            f"static constexpr auto use_device_ptr = {str(use_device_ptr).lower()};",
         ]
-        chunk.append(_formatted_struct(policy_name, body))
+        # fmt: on
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_get(self, arg_name: str) -> str:
@@ -771,11 +964,23 @@ class InputHandler:
 
 
 @dataclass
+class AlignedInputGroup:
+    """Tracks InputHandlers for an aligned input group."""
+
+    group_name: str
+    alignment_handler: InputHandler
+    upstream_handlers: list[InputHandler]
+    resolved_inputs: dict[str, aligner_ir.ResolvedAlignerInput]
+
+
+@dataclass
 class Inputs:
     """Manage all Inputs."""
 
     inputs_registry: tuple[InputHandler, ...]
     input_uuid_map: dict[str, UuidHandler]
+    regular_handlers: list[InputHandler]
+    aligned_groups: list[AlignedInputGroup]
 
     @classmethod
     def make(
@@ -784,14 +989,58 @@ class Inputs:
         cog_name: str,
     ) -> Inputs:
         """Make Inputs."""
-        registry = [
-            InputHandler.make(ipt, cog_name, idx)
-            for idx, ipt in enumerate(cog_ipt for cog_ipt in cog_inputs.inputs.values() if not cog_ipt.no_dial)
-        ]
-        input_uuid_map = {ipt.input_name: ipt.endpoint_id for ipt in registry}
+        registry: list[InputHandler] = []
+        regular_handlers: list[InputHandler] = []
+        aligned_groups: list[AlignedInputGroup] = []
+        idx = 0
+
+        for cog_ipt in cog_inputs.inputs.values():
+            if cog_ipt.no_dial:
+                continue
+            handler = InputHandler.make(cog_ipt, cog_name, idx)
+            registry.append(handler)
+            regular_handlers.append(handler)
+            idx += 1
+
+        for aligned in cog_inputs.aligned_inputs:
+            alignment_handler = InputHandler.make(
+                aligned.alignment_msg_input,
+                cog_name,
+                idx,
+            )
+            registry.append(alignment_handler)
+            idx += 1
+
+            upstream_handlers: list[InputHandler] = []
+            for upstream in aligned.upstream_inputs:
+                handler = InputHandler.make(
+                    upstream,
+                    cog_name,
+                    idx,
+                    policy_prefix=aligned.group_name,
+                )
+                registry.append(handler)
+                upstream_handlers.append(handler)
+                idx += 1
+
+            aligned_groups.append(
+                AlignedInputGroup(
+                    group_name=aligned.group_name,
+                    alignment_handler=alignment_handler,
+                    upstream_handlers=upstream_handlers,
+                    resolved_inputs=aligned.resolved_aligner_inputs,
+                )
+            )
+
+        input_uuid_map: dict[str, UuidHandler] = {}
+        for ipt in registry:
+            assert ipt.input_name not in input_uuid_map, f"Duplicate input name '{ipt.input_name}' in cog '{cog_name}'"
+            input_uuid_map[ipt.input_name] = ipt.endpoint_id
         return cls(
             inputs_registry=tuple(registry),
             input_uuid_map=input_uuid_map,
+            regular_handlers=regular_handlers,
+            aligned_groups=aligned_groups,
         )
 
     def render_inputs(self) -> CppChunk:
@@ -811,6 +1060,7 @@ class Inputs:
             chunk.append(ipt.render_policy_struct())
         policy_template_args = ", ".join([ipt.policy_name for ipt in self.inputs_registry])
         chunk.append(f"using InputsType = ::{CLOCKWORK_NAMESPACE}::CogInputs<{policy_template_args}>;")
+
         return chunk
 
     def __len__(self) -> int:
@@ -896,12 +1146,12 @@ class InputConditionHandler:
         policy_name = to_camel(self.name) + "Policy"
         body = [
             f"static constexpr auto endpoint_id = {self.input_endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, policy_name]),
+            gen_const_str([self.cog_name, policy_name]),
             f"static constexpr auto bounds_min = {bounds_min};",
             f"static constexpr auto bounds_max = {bounds_max};",
             f"static constexpr auto condition_type = {condition_type};",
         ]
-        chunk.append(_formatted_struct(policy_name, body))
+        chunk.append(formatted_struct(policy_name, body))
         return chunk
 
     def render_get(self, arg_name: str) -> str:
@@ -978,6 +1228,7 @@ class PublisherHandler:
     cog_name: str
     rate_limit: cog.ResolvedRateLimitSpec | None
     metrics_log_type: cog.MetricsLogType
+    max_msgs_per_exec: int
     cog_metrics_output: bool
     is_report_group: bool
 
@@ -985,7 +1236,7 @@ class PublisherHandler:
     def make(cls: type[PublisherHandler], output: Output, cog_name: str, index: int) -> PublisherHandler:
         """Make a TimeSinceLastExecHandler instance."""
         output_name = output.identifier
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, output.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, output.uuid)
         policy_name = to_camel(output_name) + "Policy"
         return cls(
             output_name=output_name,
@@ -996,6 +1247,7 @@ class PublisherHandler:
             cog_name=cog_name,
             rate_limit=output.rate_limit,
             metrics_log_type=output.metrics_log_type,
+            max_msgs_per_exec=output.max_msgs_per_exec,
             cog_metrics_output=output.cog_metrics_output,
             is_report_group=output.is_report_group,
         )
@@ -1014,6 +1266,7 @@ class PublisherHandler:
         chunk.context.add_includes(
             [
                 Header(JEWELS_REPO, "jewels/uuid/uuid.hh"),
+                SystemHeader("cstddef"),
                 SystemHeader("cstdint"),
                 SystemHeader("string_view"),
                 SystemHeader("optional"),
@@ -1026,8 +1279,9 @@ class PublisherHandler:
         body = [
             f"using MsgType = {self.msg_type.render('')};",
             f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-            _gen_const_str([self.cog_name, self.policy_name]),
+            gen_const_str([self.cog_name, self.policy_name]),
             f"static constexpr bool has_diagnostics = {'true' if has_diag else 'false'};",
+            f"static constexpr size_t max_msgs_per_exec = {self.max_msgs_per_exec}U;",
         ]
         if self.rate_limit:
             period_ns = int(self.rate_limit.period_s * 1e9)
@@ -1037,7 +1291,7 @@ class PublisherHandler:
         else:
             body.append("static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{};")
 
-        chunk.append(_formatted_struct(self.policy_name, body))
+        chunk.append(formatted_struct(self.policy_name, body))
         return chunk
 
     def render_get(self, arg_publishables: str) -> str:
@@ -1081,7 +1335,10 @@ class Publishers:
         chunk.append(f"using PublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{policy_template_args}>;")
         # create a constexpr index for each of the metrics logging publishers in the registry
         for publisher in self.publisher_registry:
-            if publisher.cog_metrics_output and publisher.metrics_log_type == cog.MetricsLogType.telemetry:
+            if (
+                publisher.cog_metrics_output
+                and publisher.metrics_log_type == cog.MetricsLogType.non_redundant_telemetry
+            ):
                 chunk.append(_gen_const_size(publisher.index, "telemetry_metrics_index"))
             elif publisher.cog_metrics_output and publisher.metrics_log_type == cog.MetricsLogType.event:
                 chunk.append(_gen_const_size(publisher.index, "event_metrics_index"))
@@ -1093,7 +1350,7 @@ class Publishers:
         non_metrics_template_args = [
             publisher.policy_name
             for publisher in self.publisher_registry
-            if publisher.metrics_log_type not in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+            if publisher.metrics_log_type not in (cog.MetricsLogType.non_redundant_telemetry, cog.MetricsLogType.event)
             and not publisher.is_report_group
         ]
         chunk.append(
@@ -1104,15 +1361,18 @@ class Publishers:
             publisher.policy_name
             for publisher in self.publisher_registry
             if publisher.cog_metrics_output
-            and publisher.metrics_log_type in (cog.MetricsLogType.telemetry, cog.MetricsLogType.event)
+            and publisher.metrics_log_type in (cog.MetricsLogType.non_redundant_telemetry, cog.MetricsLogType.event)
         ]
         chunk.append(
             f"using MetricsPublishersType = ::{CLOCKWORK_NAMESPACE}::CogPublishers<{', '.join(metrics_template_args)}>;"
         )
 
         if any(
-            (publisher.metrics_log_type == cog.MetricsLogType.telemetry)
-            | (publisher.metrics_log_type == cog.MetricsLogType.event)
+            not publisher.is_report_group
+            and (
+                (publisher.metrics_log_type == cog.MetricsLogType.non_redundant_telemetry)
+                | (publisher.metrics_log_type == cog.MetricsLogType.event)
+            )
             for publisher in self.publisher_registry
         ):
             chunk.append("static constexpr auto publish_metrics = true;")
@@ -1149,8 +1409,10 @@ class ExecuteExprHandler:
         return _cond_type_present(self.execute_when_condition, cog.LogConditionExpr)
 
     def time_condition_present(self) -> bool:
-        """Check for presence of any timer condition."""
-        return _cond_type_present(self.execute_when_condition, cog.TimeSinceLastExec)
+        """Check for presence of any timer condition (TimeSinceLastExec or DynamicTimer)."""
+        return _cond_type_present(self.execute_when_condition, cog.TimeSinceLastExec) or _cond_type_present(
+            self.execute_when_condition, DynamicTimer
+        )
 
     def message_condition_present(self) -> bool:
         """Check for presence of any message condition."""
@@ -1158,7 +1420,7 @@ class ExecuteExprHandler:
 
     def render(
         self,
-        timer_handle_map: dict[str, TimeSinceLastExecHandler],
+        timer_handle_map: dict[str, TimerHandler],
         arg_timers: str,
         input_condition_handle_map: dict[str, InputConditionHandler],
         arg_input_conditions: str,
@@ -1174,8 +1436,8 @@ class DiagnosticsHandler:
     """Manage diagnostics."""
 
     name: str
-    group_id: str | None
-    instance_id: str | None
+    group_id: str | CogParameterRef | None
+    instance_id: str | CogParameterRef | None
     manager_type: CppType | CppTemplateType
     reporter_type: CppType | CppTemplateType
     endpoint_id: UuidHandler
@@ -1188,7 +1450,7 @@ class DiagnosticsHandler:
         cls: type[DiagnosticsHandler], cog_diagnostics: Diagnostics, cog_name: str, index: int
     ) -> DiagnosticsHandler:
         """Make Diagnostics."""
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, cog_diagnostics.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, cog_diagnostics.uuid)
         policy_name = to_camel(cog_diagnostics.identifier) + "Policy"
         return cls(
             name=cog_diagnostics.identifier,
@@ -1232,14 +1494,14 @@ class DiagnosticsHandler:
         else:
             manager_def = [f"using ManagerType = {self.manager_type.render('')};"]
         chunk.append(
-            _formatted_struct(
+            formatted_struct(
                 self.policy_name,
                 [
                     f"static constexpr auto endpoint_id = {self.endpoint_id.render_from_string_func()};",
-                    _gen_const_str([self.cog_name, self.name]),
-                    _gen_const_str(name="member_name", terms=self.name),
-                    _gen_const_str(name="group_name", terms=(self.group_id or "")),
-                    _gen_const_str(name="instance_name", terms=(self.instance_id or "")),
+                    gen_const_str([self.cog_name, self.name]),
+                    gen_const_str(name="member_name", terms=self.name),
+                    gen_const_str(name="group_name", terms=(self.group_id or "")),
+                    gen_const_str(name="instance_name", terms=(self.instance_id or "")),
                     *manager_def,
                     *extra_defs,
                 ],
@@ -1306,18 +1568,21 @@ class InfraDiagnostics:
     cog_class_name: str
     fault_header: Header
     signals: list[DiagnosticsSignalDef]
+    is_template: bool = False
 
     @classmethod
-    def make(
+    def make(  # noqa: PLR0913 (these could possibly be made into a dataclass or named tuple for parameter packing)
         cls: type[InfraDiagnostics],
         cog_diagnostics: Diagnostics,
         infra_diagnostics: InfraDiagnosticsDef,
         cog_name: str,
         cog_class_name: str,
         dial_header: Header,
+        *,
+        is_template: bool = False,
     ) -> InfraDiagnostics:
         """Make infra diagnostics."""
-        endpoint_id = UuidHandler(_ENDPOINT_UUID_TYPE, cog_diagnostics.uuid)
+        endpoint_id = UuidHandler(ENDPOINT_UUID_TYPE, cog_diagnostics.uuid)
         policy_name = to_camel(cog_diagnostics.identifier) + "Policy"
         fault_header = infra_defs_header_from_dial_header(dial_header)
         assert infra_diagnostics.signals is not None
@@ -1336,6 +1601,7 @@ class InfraDiagnostics:
             cog_class_name=cog_class_name,
             fault_header=fault_header,
             signals=infra_diagnostics.signals,
+            is_template=is_template,
         )
 
     def render_diagnostics(self, enclosing_namespace: str) -> CppChunk:
@@ -1373,6 +1639,20 @@ class InfraDiagnostics:
         return chunk
 
 
+@dataclass(frozen=True)
+class EventMetricsSignalPopulation:
+    """Additional inputs needed for event metrics signal population."""
+
+    input_sequence_metadata_types: dict[str, str]
+    """Input name to metadata type for input sequence-number metadata."""
+
+    outputs_with_first_sequence_number_signal: set[str]
+    """Output names whose event metrics group includes a first-sequence-number signal."""
+
+    publishables_arg_name: str
+    """Argument name to use when accessing output publishables."""
+
+
 @dataclass
 class Cog:
     """Representation of a C++ Cog."""
@@ -1394,6 +1674,8 @@ class Cog:
     diagnostics: Diagnosticses | None = None
     infra_diags: InfraDiagnostics | None = None
     signals_struct: SignalsStruct | None = None
+    template_params: str = ""
+    template_args: str = ""
 
     cog_policy_name: str = ""
 
@@ -1445,22 +1727,52 @@ class Cog:
         cpp_mod.header_chunk.context.add_include(self.dial_header)
         cpp_mod.implementation_chunk.context.add_include(self.dial_header)
 
-        dial_type = CppType([], self.dial_name, self.cpp_namespace)
+        if self.cog_ir.is_generic():
+            cpp_mod.implementation_chunk.context.add_include(
+                Header(
+                    self.dial_header.repo,
+                    self.dial_header.path.with_name(self.dial_header.path.name.replace("_dial.hh", "_impl.hh")),
+                )
+            )
+            self.template_params = ", ".join(
+                param.render(self.cpp_namespace)
+                for param in get_template_params(self.cog_ir.module.context, self.cog_ir.parameters)
+            )
+            self.template_args = (
+                f"<{', '.join(arg.render(self.cpp_namespace) for arg in get_template_args(self.cog_ir.parameters))}>"
+            )
+            dial_type = CppType([], self.dial_name + self.template_args, self.cpp_namespace)
 
-        self.cog_policy_name = self.class_name + "Policy"
-        cpp_mod.header_chunk.append(
-            [
-                f"struct {self.cog_policy_name}",
-                "{",
-            ]
-        )
+            self.cog_policy_name = self.class_name + "PolicyBase" + self.template_args
+            cpp_mod.header_chunk.append(
+                [
+                    f"template <{self.template_params}>",
+                    f"struct {self.class_name}Policy",
+                    "{};",
+                    f"template <{self.template_params}>",
+                    f"struct {self.class_name}PolicyBase",
+                    "{",
+                ]
+            )
+        else:
+            dial_type = CppType([], self.dial_name, self.cpp_namespace)
+
+            self.cog_policy_name = self.class_name + "Policy"
+            cpp_mod.header_chunk.append(
+                [
+                    f"struct {self.cog_policy_name}",
+                    "{",
+                ]
+            )
 
         cog_fqn: Final = self.cog_ir.fqn
 
-        cpp_mod.header_chunk.append(
-            _gen_const_str([cog_fqn, self.cog_policy_name]),
-            indent=1,
-        )
+        if not self.cog_ir.is_generic():
+            cpp_mod.header_chunk.append(
+                gen_const_str([cog_fqn, self.cog_policy_name]),
+                indent=1,
+            )
+
         sim_execution_duration_const = "simulated_execution_duration"
         if sim_options := self.cog_ir.simulation_options:
             cpp_mod.header_chunk.append(
@@ -1483,10 +1795,18 @@ class Cog:
             indent=1,
         )
 
-        self.signals_struct = SignalsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.report_groups)
+        self.signals_struct = SignalsStruct.from_ir(
+            self.cog_ir.module.context, self.cog_ir.report_groups | self.cog_ir.cog_metrics_report_groups
+        )
         has_batched_signals = any(signal.is_batched for signal in self.signals_struct.signals.values())
         cpp_mod.header_chunk.append(
             f"static constexpr auto has_signals = {'true' if has_batched_signals else 'false'};",
+            indent=1,
+        )
+
+        has_cog_metrics_rgs = any(_is_cog_metrics_group(name) for name in self.cog_ir.cog_metrics_report_groups)
+        cpp_mod.header_chunk.append(
+            f"static constexpr auto has_cog_metrics_report_groups = {'true' if has_cog_metrics_rgs else 'false'};",
             indent=1,
         )
 
@@ -1495,10 +1815,11 @@ class Cog:
             indent=1,
         )
 
-        cpp_mod.header_chunk.append(
-            f"static constexpr auto cog_id = {UuidHandler(_COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.cog_ir.module.context, self.cog_ir)).render_from_string_func()};",
-            indent=1,
-        )
+        if not self.cog_ir.is_generic():
+            cpp_mod.header_chunk.append(
+                f"static constexpr auto cog_id = {UuidHandler(COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.cog_ir.module.context, self.cog_ir)).render_from_string_func()};",
+                indent=1,
+            )
 
         self.resources = Resources.make(
             ResourcesStruct.from_ir(self.cog_ir.module.context, self.cog_ir.resources), cog_fqn
@@ -1512,7 +1833,13 @@ class Cog:
         cpp_mod.header_chunk.append(self.timers.render_timers(), indent=1)
 
         self.inputs = Inputs.make(
-            InputsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.inputs, self.cog_ir.execution_spec),
+            InputsStruct.from_ir(
+                self.cog_ir.module.context,
+                self.cog_ir.inputs,
+                self.cog_ir.execution_spec,
+                aligned_input_defs=self.cog_ir.aligned_inputs,
+                expanded_aligned_input_defs=self.cog_ir.expanded_aligned_input_defs,
+            ),
             cog_fqn,
         )
         cpp_mod.header_chunk.append(self.inputs.render_inputs(), indent=1)
@@ -1524,7 +1851,12 @@ class Cog:
         )
         cpp_mod.header_chunk.append(self.input_conditions.render_input_conditions(), indent=1)
 
-        output_dict = self.cog_ir.outputs | self.cog_ir.metrics_outputs | self.cog_ir.report_groups
+        output_dict = (
+            self.cog_ir.outputs
+            | self.cog_ir.metrics_outputs
+            | self.cog_ir.report_groups
+            | self.cog_ir.cog_metrics_report_groups
+        )
         self.publishers = Publishers.make(
             OutputsStruct.from_ir(self.cog_ir.module.context, output_dict, self.cog_ir.rate_limits),
             cog_fqn,
@@ -1545,6 +1877,7 @@ class Cog:
             cog_fqn,
             self.class_name,
             self.dial_header,
+            is_template=self.cog_ir.is_generic(),
         )
 
         cpp_mod.header_chunk.append(self.diagnostics.render_diagnostics(), indent=1)
@@ -1552,6 +1885,9 @@ class Cog:
 
         cpp_mod.append(self._generate_is_ready_method())
         cpp_mod.append(self._generate_make_dial_method())
+        if self.inputs and self.inputs.aligned_groups:
+            cpp_mod.append(self._generate_resolve_alignment_method())
+            cpp_mod.append(self._generate_commit_alignment_method())
         cpp_mod.append(self._generate_execute_method())
         if self.cog_ir.metrics_options.metrics_enabled:
             self._append_metrics_methods(cpp_mod)
@@ -1559,22 +1895,33 @@ class Cog:
         cpp_mod.append(self._generate_signal_infra_methods())
         cpp_mod.header_chunk.append("};")
 
-        cpp_mod.header_chunk.append(
-            f"using {self.class_name} = ::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.cog_policy_name}>;"
-        )
-
-        cpp_mod.append(
-            _gen_factory(
-                UuidHandler(_COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.cog_ir.module.context, self.cog_ir)),
-                self.class_name,
-                "CogFactory",
-                f"::jewels::memory::MemoryResource resource, const ::jewels::Uuid<::{CLOCKWORK_NAMESPACE}::common::CogInstanceId>& instance_id, ::jewels::memory::ObjectPtr<::{CLOCKWORK_NAMESPACE}::AbstractCogQueue> queue",
-                f"return ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.class_name}Policy>>(resource, resource, instance_id, queue);",
+        if self.cog_ir.is_generic():
+            cpp_mod.header_chunk.append(
+                [
+                    f"template <{self.template_params}>",
+                    f"using {self.class_name} = ::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.class_name + 'Policy'}{self.template_args}>;",
+                    f"template <{self.template_params}>",
+                    f"struct {self.class_name}Factory",
+                    "{};",
+                ]
             )
-        )
-        cpp_mod.append(
-            self.states.render_factories(self.cog_ir.module.context, self.cog_policy_name, self.cpp_namespace)
-        )
+        else:
+            cpp_mod.header_chunk.append(
+                f"using {self.class_name} = ::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.cog_policy_name}>;"
+            )
+
+            cpp_mod.append(
+                _gen_factory(
+                    UuidHandler(COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.cog_ir.module.context, self.cog_ir)),
+                    self.class_name,
+                    "CogFactory",
+                    f"::jewels::memory::MemoryResource resource, const ::jewels::Uuid<::{CLOCKWORK_NAMESPACE}::common::CogInstanceId>& instance_id, ::jewels::memory::ObjectPtr<::{CLOCKWORK_NAMESPACE}::AbstractCogQueue> queue",
+                    f"return ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.class_name}Policy>>(resource, resource, instance_id, queue);",
+                )
+            )
+            cpp_mod.append(
+                self.states.render_factories(self.cog_ir.module.context, self.cog_policy_name, self.cpp_namespace)
+            )
 
         return cpp_mod
 
@@ -1662,9 +2009,10 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_telemetry_triggers_method.render(
+        cpp_mod = populate_telemetry_triggers_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_condition_trigger_vals_method(self) -> CppModuleChunks:
         """Generate populate_condition_trigger_vals method to count condition triggers."""
@@ -1734,9 +2082,10 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_condition_trigger_vals_method.render(
+        cpp_mod = populate_condition_trigger_vals_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_is_ready_method(self) -> CppModuleChunks:
         execute_when = ExecuteExprHandler(self.cog_ir.execution_spec.condition)
@@ -1803,7 +2152,8 @@ class Cog:
         )
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
-        return is_ready_method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace)
+        cpp_mod = is_ready_method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_make_dial_method(self) -> CppModuleChunks:  # noqa: PLR0915, PLR0912, C901 naturally large with no easy breaks
         arg_params = CppNamedType(
@@ -1860,12 +2210,15 @@ class Cog:
         arg_publishables = CppNamedType(
             CppType(
                 [Header(CLK_REPO, "clockwork/cog/cog_publishers.hh")],
-                "PublishersType::PublishablesTuple",
+                "PublishersType::PublishablesTuple&",
                 None,
             ),
             "publishables"
             if self.publishers
-            and any(publisher.metrics_log_type == cog.MetricsLogType.none for publisher in self.publishers)
+            and any(
+                publisher.metrics_log_type == cog.MetricsLogType.none and not publisher.is_report_group
+                for publisher in self.publishers
+            )
             else "/*publishables*/",
             ["typename"],
         )
@@ -1916,9 +2269,36 @@ class Cog:
         def make_obj_ptr(statement: str) -> str:
             return f"::jewels::memory::make_non_null_from_ref({statement})"
 
-        return_type = CppType([], self.dial_name, None)
+        has_dynamic_timer = self.timers is not None and self.timers.dynamic_timer_handler is not None
+        arg_dynamic_timer: CppNamedType | None = None
+        if has_dynamic_timer:
+            assert self.timers is not None  # pyright type narrowing
+            assert self.timers.dynamic_timer_handler is not None  # pyright type narrowing
+            policy_name = self.timers.dynamic_timer_handler.policy_name
+            handler_cpp_type = f"DynamicTimerHandler<{policy_name}>"
+            arg_dynamic_timer = CppNamedType(
+                CppType(
+                    [Header(CLK_REPO, "clockwork/cog/dynamic_timer_handler.hh")],
+                    handler_cpp_type,
+                    CLOCKWORK_NAMESPACE,
+                    False,
+                    Ref.L,
+                ),
+                "dynamic_timer_handler",
+            )
+
+        return_type = CppType([], self.dial_name + self.template_args, self.cpp_namespace)
 
         body = CppChunk()
+
+        # For aligned inputs: declare local view variables before the return statement.
+        # These views reference the narrowed InputView buffers after resolve_alignment().
+        if self.inputs:
+            for group in self.inputs.aligned_groups:
+                for h in group.upstream_handlers:
+                    get_expr = h.render_get(arg_inputs.argument_name)
+                    body.append(f"auto& {h.input_name}_resolved = {get_expr};")
+
         body.append(f"return {return_type.type_name}(")
         # start_time
         start_time_inner_chunk = CppChunk()
@@ -1926,7 +2306,7 @@ class Cog:
         body.append(start_time_inner_chunk, indent=1)
         # resources
         resources_inner_chunk = CppChunk()
-        resources_inner_chunk.append(f"{self.dial_name}Resources(")
+        resources_inner_chunk.append(f"{self.dial_name}Resources{self.template_args}(")
         if self.resources:
             resources_inner_chunk.append(
                 [
@@ -1939,7 +2319,7 @@ class Cog:
         body.append(resources_inner_chunk, indent=1)
         # configs
         configs_inner_chunk = CppChunk()
-        configs_inner_chunk.append(f"{self.dial_name}Configs(")
+        configs_inner_chunk.append(f"{self.dial_name}Configs{self.template_args}(")
         if self.configs:
             configs_inner_chunk.append(
                 [
@@ -1952,7 +2332,7 @@ class Cog:
         body.append(configs_inner_chunk, indent=1)
         # states
         states_inner_chunk = CppChunk()
-        states_inner_chunk.append(f"{self.dial_name}States(")
+        states_inner_chunk.append(f"{self.dial_name}States{self.template_args}(")
         if self.states:
             states_inner_chunk.append(
                 [
@@ -1969,7 +2349,7 @@ class Cog:
         # iterate through the conditions IR and search for the corresponding TimerHandle or InputConditionHandle
         # then call the corresponding rendering function.
         conditions_inner_chunk = CppChunk()
-        conditions_inner_chunk.append(f"{self.dial_name}Conditions(")
+        conditions_inner_chunk.append(f"{self.dial_name}Conditions{self.template_args}(")
         cond_struct = ConditionsStruct.from_ir(self.cog_ir.module.context, self.cog_ir.conditions)
         for idx, cond_name in enumerate(cond_struct.conditions):
             if self.timers and cond_name in self.timers.cond_name_to_timer:
@@ -1991,20 +2371,41 @@ class Cog:
         body.append(conditions_inner_chunk, indent=1)
         # inputs
         inputs_inner_chunk = CppChunk()
-        inputs_inner_chunk.append(f"{self.dial_name}Inputs(")
+        inputs_inner_chunk.append(f"{self.dial_name}Inputs{self.template_args}(")
         if self.inputs:
-            inputs_inner_chunk.append(
-                [
-                    f"{make_obj_ptr(ipt.render_get(arg_inputs.argument_name))}{',' if (idx < len(self.inputs) - 1) else ''}"
-                    for idx, ipt in enumerate(self.inputs)
-                ],
-                indent=1,
-            )
+            dial_entry_count = len(self.inputs.regular_handlers) + len(self.inputs.aligned_groups)
+            dial_entry_idx = 0
+
+            for ipt in self.inputs.regular_handlers:
+                comma = "," if dial_entry_idx < dial_entry_count - 1 else ""
+                inputs_inner_chunk.append(
+                    f"{make_obj_ptr(ipt.render_get(arg_inputs.argument_name))}{comma}",
+                    indent=1,
+                )
+                dial_entry_idx += 1
+
+            for group in self.inputs.aligned_groups:
+                comma = "," if dial_entry_idx < dial_entry_count - 1 else ""
+                aligned_struct_name = f"{self.dial_name}{to_camel(group.group_name)}Inputs"
+                assert group.upstream_handlers, f"Aligned group '{group.group_name}' has no upstream inputs"
+                # Construct user-facing dials from the narrowed internal tuple entries.
+                # The view variables were declared before the return statement.
+                upstream_args = ", ".join(
+                    f"::std::remove_cvref_t<decltype(::std::declval<{aligned_struct_name}>().get_{h.input_name}())>"
+                    + f"({h.input_name}_resolved.get_view(), {h.input_name}_resolved.get_cursor(), {h.input_name}_resolved.get_first_new())"
+                    for h in group.upstream_handlers
+                )
+                inputs_inner_chunk.append(
+                    f"{aligned_struct_name}({upstream_args}){comma}",
+                    indent=1,
+                )
+                dial_entry_idx += 1
+
         inputs_inner_chunk.append("),")
         body.append(inputs_inner_chunk, indent=1)
         # outputs
         outputs_inner_chunk = CppChunk()
-        outputs_inner_chunk.append(f"{self.dial_name}Outputs(")
+        outputs_inner_chunk.append(f"{self.dial_name}Outputs{self.template_args}(")
         if self.publishers:
             non_metrics_publishers = [
                 publisher
@@ -2026,7 +2427,7 @@ class Cog:
         if self.diagnostics and len(self.diagnostics) == 1:
             diagnostics_inner_chunk.append(make_obj_ptr(arg_diagnostics.argument_name))
         else:
-            diagnostics_inner_chunk.append(f"{self.dial_name}Diagnostics(")
+            diagnostics_inner_chunk.append(f"{self.dial_name}Diagnostics{self.template_args}(")
             if self.diagnostics:
                 diagnostics_inner_chunk.append(
                     [
@@ -2039,9 +2440,25 @@ class Cog:
         diagnostics_inner_chunk.append(",")
         body.append(diagnostics_inner_chunk, indent=1)
 
+        # signals
         signals_inner_chunk = CppChunk()
-        signals_inner_chunk.append(f"{arg_signals.argument_name}")
+        if has_dynamic_timer:
+            signals_inner_chunk.append(f"{arg_signals.argument_name},")
+        else:
+            signals_inner_chunk.append(f"{arg_signals.argument_name}")
         body.append(signals_inner_chunk, indent=1)
+
+        if has_dynamic_timer:
+            assert arg_dynamic_timer is not None  # pyright type narrowing
+            timer_control_chunk = CppChunk()
+            timer_control_chunk.context.add_includes([Header(CLK_REPO, "clockwork/aligner/timer_control.hh")])
+            # Construct AlignerTimerControl from the handler reference
+            timer_control_chunk.append(f"::{CLOCKWORK_NAMESPACE}::aligner::AlignerTimerControl(")
+            timer_control_chunk.append(
+                f"  {arg_dynamic_timer.argument_name})",
+                indent=1,
+            )
+            body.append(timer_control_chunk, indent=1)
 
         body.append(");")
         body.context.add_includes(
@@ -2050,8 +2467,10 @@ class Cog:
                 SystemHeader("tuple"),
             ]
         )
+        if self.inputs and self.inputs.aligned_groups:
+            body.context.add_include(SystemHeader("type_traits"))
 
-        arguments = [
+        make_dial_arguments = [
             arg_params,
             arg_resources,
             arg_configs,
@@ -2063,12 +2482,15 @@ class Cog:
             arg_diagnostics,
             arg_signals,
         ]
+        if has_dynamic_timer:
+            assert arg_dynamic_timer is not None
+            make_dial_arguments.append(arg_dynamic_timer)
 
         make_dial_method = CppMethod(
             name="make_dial",
             doc=None,
             return_type=return_type,
-            arguments=arguments,
+            arguments=make_dial_arguments,
             leading_qualifiers=[],
             trailing_qualifiers=[],
             body=body,
@@ -2078,7 +2500,379 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace if self.cpp_namespace is not None else ""  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        return make_dial_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+
+        cpp_mod = make_dial_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
+
+    def _generate_resolve_alignment_method(self) -> CppModuleChunks:
+        """Generate resolve_alignment static method for aligned cogs.
+
+        This method reads the alignment message's per-input seqno fields,
+        narrows the upstream InputView buffers to the resolved messages,
+        and replaces the InputDialTuple entries. Handles batch, optional,
+        and reuse inputs.
+        """
+        assert self.inputs is not None
+        assert self.inputs.aligned_groups
+
+        arg_cog_inputs = CppNamedType(
+            CppType([], "InputsType", None, const=False, ref=Ref.L),
+            "cog_inputs",
+        )
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::InputDialTuple", None, const=False, ref=Ref.L),
+            "inputs",
+        )
+        stale_alignment_index_type = _OUT_TEMPLATE.instantiate(
+            [CppType([SystemHeader("cstddef")], "size_t", None)],
+        )
+        arg_stale_alignment_index = CppNamedType(
+            stale_alignment_index_type,
+            _STALE_ALIGNMENT_INDEX_OUT,
+        )
+
+        body = CppChunk()
+        body.append("bool any_pending = false;")
+
+        for group in self.inputs.aligned_groups:
+            alignment_handler = group.alignment_handler
+            alignment_candidates_name = f"alignment_{group.group_name}_candidates"
+            body.append(
+                f"const auto {alignment_candidates_name} = {alignment_handler.render_get('inputs')}.get_cursor_view();",
+            )
+
+            body.append(f"if ({alignment_candidates_name}.empty())")
+            body.append("{")
+            if alignment_handler.cog_input.min_msgs > 0:
+                body.append("any_pending = true;", indent=1)
+            else:
+                for upstream in group.upstream_handlers:
+                    body.append(
+                        f"{upstream.render_get('inputs')} = cog_inputs.template prepare_empty_aligned_input<{upstream.index}>();",
+                        indent=1,
+                    )
+            body.append("}")
+            body.append("else")
+            body.append("{")
+            body.append(
+                f"const auto& alignment_{group.group_name} = {alignment_candidates_name}.back();",
+                indent=1,
+            )
+
+            resolved_body = CppChunk()
+
+            for upstream in group.upstream_handlers:
+                resolved_input = group.resolved_inputs[upstream.input_name]
+                is_batch = resolved_input.batch_size is not None
+                is_optional = resolved_input.optional
+
+                if is_optional and is_batch:
+                    self._gen_optional_batch_resolve(
+                        resolved_body,
+                        arg_cog_inputs,
+                        group.group_name,
+                        alignment_handler.index,
+                        upstream,
+                    )
+                elif is_optional:
+                    self._gen_optional_resolve(
+                        resolved_body,
+                        arg_cog_inputs,
+                        group.group_name,
+                        alignment_handler.index,
+                        upstream,
+                    )
+                elif is_batch:
+                    self._gen_batch_resolve(
+                        resolved_body,
+                        arg_cog_inputs,
+                        group.group_name,
+                        alignment_handler.index,
+                        upstream,
+                    )
+                else:
+                    self._gen_simple_resolve(
+                        resolved_body,
+                        arg_cog_inputs,
+                        group.group_name,
+                        alignment_handler.index,
+                        upstream,
+                    )
+
+            body.append(resolved_body, indent=1)
+            body.append("}")
+
+        body.append("if (any_pending)")
+        body.append("{")
+        body.append(
+            f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::pending;",
+            indent=1,
+        )
+        body.append("}")
+        body.append(f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::resolved;")
+
+        return_type = CppType([], "AlignedLookupOutcome", CLOCKWORK_NAMESPACE)
+
+        resolve_method = CppMethod(
+            name="resolve_alignment",
+            doc=(
+                "Resolve aligned inputs.\n"
+                "@post stale_alignment_index_out is written if and only if the returned result is stale."
+            ),
+            return_type=return_type,
+            arguments=[arg_stale_alignment_index, arg_cog_inputs, arg_inputs],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=True,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        cpp_mod = resolve_method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
+
+    @staticmethod
+    def _gen_simple_resolve(
+        body: CppChunk,
+        arg_cog_inputs: CppNamedType,
+        group_name: str,
+        alignment_index: int,
+        upstream: InputHandler,
+    ) -> None:
+        """Generate resolve code for a non-batch, non-optional input."""
+        seqno_expr = f"alignment_{group_name}.get_{upstream.input_name}_seq()"
+        inner = CppChunk()
+        inner.append(
+            f"const auto result = {arg_cog_inputs.argument_name}.template prepare_aligned_input<{upstream.index}>("
+            + f"::jewels::Out{{{upstream.render_get('inputs')}}}, {seqno_expr});",
+        )
+        inner.append("switch (result.get())")
+        inner.append("{")
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::resolved:", indent=1)
+        inner.append("break;", indent=2)
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale:", indent=1)
+        inner.append(
+            f"*{_STALE_ALIGNMENT_INDEX_OUT} = {alignment_index};",
+            indent=2,
+        )
+        inner.append(
+            f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale;",
+            indent=2,
+        )
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::pending:", indent=1)
+        inner.append("any_pending = true;", indent=2)
+        inner.append("break;", indent=2)
+        inner.append("}")
+        body.append("{")
+        body.append(inner, indent=1)
+        body.append("}")
+
+    @staticmethod
+    def _gen_batch_resolve(
+        body: CppChunk,
+        arg_cog_inputs: CppNamedType,
+        group_name: str,
+        alignment_index: int,
+        upstream: InputHandler,
+    ) -> None:
+        """Generate resolve code for a batch, non-optional input."""
+        begin_expr = f"alignment_{group_name}.get_{upstream.input_name}_begin_seq()"
+        end_expr = f"alignment_{group_name}.get_{upstream.input_name}_end_seq()"
+        inner = CppChunk()
+        inner.append(
+            f"const auto result = {arg_cog_inputs.argument_name}.template prepare_aligned_input_range<{upstream.index}>("
+            + f"::jewels::Out{{{upstream.render_get('inputs')}}}, {begin_expr}, {end_expr});",
+        )
+        inner.append("switch (result.get())")
+        inner.append("{")
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::resolved:", indent=1)
+        inner.append("break;", indent=2)
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale:", indent=1)
+        inner.append(
+            f"*{_STALE_ALIGNMENT_INDEX_OUT} = {alignment_index};",
+            indent=2,
+        )
+        inner.append(
+            f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale;",
+            indent=2,
+        )
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::pending:", indent=1)
+        inner.append("any_pending = true;", indent=2)
+        inner.append("break;", indent=2)
+        inner.append("}")
+        body.append("{")
+        body.append(inner, indent=1)
+        body.append("}")
+
+    @staticmethod
+    def _gen_optional_resolve(
+        body: CppChunk,
+        arg_cog_inputs: CppNamedType,
+        group_name: str,
+        alignment_index: int,
+        upstream: InputHandler,
+    ) -> None:
+        """Generate resolve code for a non-batch, optional input."""
+        has_expr = f"alignment_{group_name}.get_has_{upstream.input_name}()"
+        seqno_expr = f"alignment_{group_name}.get_{upstream.input_name}_seq()"
+        body.append(f"if ({has_expr})")
+        body.append("{")
+        inner = CppChunk()
+        inner.append(
+            f"const auto result = {arg_cog_inputs.argument_name}.template prepare_aligned_input<{upstream.index}>("
+            + f"::jewels::Out{{{upstream.render_get('inputs')}}}, {seqno_expr});",
+        )
+        inner.append("switch (result.get())")
+        inner.append("{")
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::resolved:", indent=1)
+        inner.append("break;", indent=2)
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale:", indent=1)
+        inner.append(
+            f"*{_STALE_ALIGNMENT_INDEX_OUT} = {alignment_index};",
+            indent=2,
+        )
+        inner.append(
+            f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale;",
+            indent=2,
+        )
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::pending:", indent=1)
+        inner.append("any_pending = true;", indent=2)
+        inner.append("break;", indent=2)
+        inner.append("}")
+        body.append(inner, indent=1)
+        body.append("}")
+        body.append("else")
+        body.append("{")
+        body.append(
+            f"{upstream.render_get('inputs')} = {arg_cog_inputs.argument_name}.template prepare_empty_aligned_input<{upstream.index}>();",
+            indent=1,
+        )
+        body.append("}")
+
+    @staticmethod
+    def _gen_optional_batch_resolve(
+        body: CppChunk,
+        arg_cog_inputs: CppNamedType,
+        group_name: str,
+        alignment_index: int,
+        upstream: InputHandler,
+    ) -> None:
+        """Generate resolve code for a batch + optional input."""
+        has_expr = f"alignment_{group_name}.get_has_{upstream.input_name}()"
+        begin_expr = f"alignment_{group_name}.get_{upstream.input_name}_begin_seq()"
+        end_expr = f"alignment_{group_name}.get_{upstream.input_name}_end_seq()"
+        body.append(f"if ({has_expr})")
+        body.append("{")
+        inner = CppChunk()
+        inner.append(
+            f"const auto result = {arg_cog_inputs.argument_name}.template prepare_aligned_input_range<{upstream.index}>("
+            + f"::jewels::Out{{{upstream.render_get('inputs')}}}, {begin_expr}, {end_expr});",
+        )
+        inner.append("switch (result.get())")
+        inner.append("{")
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::resolved:", indent=1)
+        inner.append("break;", indent=2)
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale:", indent=1)
+        inner.append(
+            f"*{_STALE_ALIGNMENT_INDEX_OUT} = {alignment_index};",
+            indent=2,
+        )
+        inner.append(
+            f"return ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::stale;",
+            indent=2,
+        )
+        inner.append(f"case ::{CLOCKWORK_NAMESPACE}::AlignedLookupResult::pending:", indent=1)
+        inner.append("any_pending = true;", indent=2)
+        inner.append("break;", indent=2)
+        inner.append("}")
+        body.append(inner, indent=1)
+        body.append("}")
+        body.append("else")
+        body.append("{")
+        body.append(
+            f"{upstream.render_get('inputs')} = {arg_cog_inputs.argument_name}.template prepare_empty_aligned_input<{upstream.index}>();",
+            indent=1,
+        )
+        body.append("}")
+
+    def _generate_commit_alignment_method(self) -> CppModuleChunks:
+        """Generate commit_alignment static method for aligned cogs.
+
+        Advances aligned_cursor_seqno_ on each upstream InputView after successful execution.
+        """
+        assert self.inputs is not None
+        assert self.inputs.aligned_groups
+
+        arg_cog_inputs = CppNamedType(
+            CppType([], "InputsType", None, const=False, ref=Ref.L),
+            "cog_inputs",
+        )
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::InputDialTuple", None, const=True, ref=Ref.L),
+            "inputs",
+        )
+
+        body = CppChunk()
+
+        for group in self.inputs.aligned_groups:
+            alignment_handler = group.alignment_handler
+            alignment_candidates_name = f"alignment_{group.group_name}_candidates"
+            body.append(
+                f"const auto {alignment_candidates_name} = {alignment_handler.render_get('inputs')}.get_cursor_view();",
+            )
+            body.append(f"if (!{alignment_candidates_name}.empty())")
+            body.append("{")
+            body.append(
+                f"const auto& alignment_{group.group_name} = {alignment_candidates_name}.back();",
+                indent=1,
+            )
+
+            commit_body = CppChunk()
+
+            for upstream in group.upstream_handlers:
+                resolved_input = group.resolved_inputs[upstream.input_name]
+                is_batch = resolved_input.batch_size is not None
+                is_optional = resolved_input.optional
+
+                if is_batch:
+                    seqno_expr = f"alignment_{group.group_name}.get_{upstream.input_name}_end_seq()"
+                else:
+                    seqno_expr = f"alignment_{group.group_name}.get_{upstream.input_name}_seq()"
+
+                advance_stmt = (
+                    f"{arg_cog_inputs.argument_name}.template advance_aligned_cursor<{upstream.index}>({seqno_expr});"
+                )
+
+                if is_optional:
+                    has_expr = f"alignment_{group.group_name}.get_has_{upstream.input_name}()"
+                    commit_body.append(f"if ({has_expr})")
+                    commit_body.append("{")
+                    commit_body.append(advance_stmt, indent=1)
+                    commit_body.append("}")
+                else:
+                    commit_body.append(advance_stmt)
+
+            body.append(commit_body, indent=1)
+            body.append("}")
+
+        return_type = VOID
+
+        commit_method = CppMethod(
+            name="commit_alignment",
+            doc=None,
+            return_type=return_type,
+            arguments=[arg_cog_inputs, arg_inputs],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        cpp_mod = commit_method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_get_conditions_mask_method(self, context: CompilerContext) -> CppModuleChunks:
         """Generate populate_trigger_conditions."""
@@ -2140,7 +2934,8 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return get_conditions_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        cpp_mod = get_conditions_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_trigger_mask_method(self) -> CppModuleChunks:
         """Generate populate trigger mask."""
@@ -2193,7 +2988,8 @@ class Cog:
         )
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_trigger_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        cpp_mod = populate_trigger_mask_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_input_telemetry_metrics_method(self) -> CppModuleChunks:
         """Generate populate_input_telemetry_metrics."""
@@ -2235,9 +3031,10 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_input_telemetry_metrics_method.render(
+        cpp_mod = populate_input_telemetry_metrics_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_input_event_metrics_method(self) -> CppModuleChunks:
         """Generate populate_input_event_metrics."""
@@ -2300,12 +3097,14 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_input_event_metrics_method.render(
+        cpp_mod = populate_input_event_metrics_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_output_event_metrics_method(self) -> CppModuleChunks:
         """Generate populate_output_event_metrics."""
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         output_publishers = []
         if self.publishers:
             # Filter out metrics publishers to get only actual output publishers
@@ -2368,6 +3167,37 @@ class Cog:
                     chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_{publisher.output_name}_num_messages(0);",
                 )
                 body.append(indent=1, chunk="}")
+                if publisher.rate_limit:
+                    body.append(
+                        indent=1,
+                        chunk=f"if ({arg_event_metrics.argument_name}.at(i).publisher_throttle_counts.contains({index}))",
+                    )
+                    body.append(indent=1, chunk="{")
+                    body.append(
+                        indent=2,
+                        chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_{publisher.output_name}_throttle_count({arg_event_metrics.argument_name}.at(i).publisher_throttle_counts.at({index}));",
+                    )
+                    body.append(indent=1, chunk="}")
+                    body.append(indent=1, chunk="else")
+                    body.append(indent=1, chunk="{")
+                    body.append(
+                        indent=2,
+                        chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_{publisher.output_name}_throttle_count(0);",
+                    )
+                    body.append(indent=1, chunk="}")
+            if any(publisher.rate_limit for publisher in output_publishers):
+                body.append(
+                    indent=1,
+                    chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_publisher_throttle_wait_duration({arg_event_metrics.argument_name}.at(i).publisher_throttle_wait_duration);",
+                )
+                body.append(
+                    indent=1,
+                    chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_post_throttle_exec_latency({arg_event_metrics.argument_name}.at(i).post_throttle_exec_latency);",
+                )
+                body.append(
+                    indent=1,
+                    chunk=f"{arg_tachyon.argument_name}.get_mutable_event_metrics()[i].set_last_throttled_until({arg_event_metrics.argument_name}.at(i).last_throttled_until);",
+                )
             body.append("}")
 
         populate_output_event_metrics_method = CppMethod(
@@ -2384,12 +3214,14 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_output_event_metrics_method.render(
+        cpp_mod = populate_output_event_metrics_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_output_telemetry_metrics_method(self) -> CppModuleChunks:
         """Generate populate_output_telemetry_metrics."""
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         output_publishers = []
         if self.publishers:
             # Filter out metrics publishers and report groups to get only actual output publishers
@@ -2429,6 +3261,32 @@ class Cog:
                     chunk=f"populate_tachyon_min_max_mean(it->second, {arg_tachyon.argument_name}.get_mutable_{publisher.output_name}_num_messages());",
                 )
                 body.append("}")
+                if publisher.rate_limit:
+                    body.append(
+                        f"if (auto it = {arg_telemetry_metrics.argument_name}.publisher_throttle_counts.find({index}); it != {arg_telemetry_metrics.argument_name}.publisher_throttle_counts.end())"
+                    )
+                    body.append("{")
+                    body.append(
+                        indent=1,
+                        chunk="if (const auto count = it->second.sum(); count)",
+                    )
+                    body.append(indent=1, chunk="{")
+                    body.append(
+                        indent=2,
+                        chunk=f"{arg_tachyon.argument_name}.set_{publisher.output_name}_throttle_count(*count);",
+                    )
+                    body.append(indent=1, chunk="}")
+                    body.append("}")
+            if any(publisher.rate_limit for publisher in output_publishers):
+                body.append(
+                    f"{arg_tachyon.argument_name}.set_throttled_execution_count({arg_telemetry_metrics.argument_name}.throttled_execution_count);"
+                )
+                body.append(
+                    f"populate_tachyon_min_max_mean({arg_telemetry_metrics.argument_name}.publisher_throttle_wait_duration, {arg_tachyon.argument_name}.get_mutable_publisher_throttle_wait_duration());"
+                )
+                body.append(
+                    f"populate_tachyon_min_max_mean({arg_telemetry_metrics.argument_name}.post_throttle_exec_latency, {arg_tachyon.argument_name}.get_mutable_post_throttle_exec_latency());"
+                )
 
         populate_output_telemetry_metrics_method = CppMethod(
             name="populate_output_telemetry_metrics",
@@ -2444,9 +3302,10 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_output_telemetry_metrics_method.render(
+        cpp_mod = populate_output_telemetry_metrics_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_event_metrics_method(self) -> CppModuleChunks:
         """Generate populate_event_metrics."""
@@ -2494,7 +3353,10 @@ class Cog:
         )
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_event_metrics_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        cpp_mod = populate_event_metrics_method.render(
+            parent_class=parent_type, enclosing_namespace=enclosing_namespace
+        )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_populate_telemetry_metrics_method(self) -> CppModuleChunks:
         """Generate populate_telemetry_metrics."""
@@ -2541,9 +3403,10 @@ class Cog:
         )
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return populate_telemetry_metrics_method.render(
+        cpp_mod = populate_telemetry_metrics_method.render(
             parent_class=parent_type, enclosing_namespace=enclosing_namespace
         )
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_publish_report_groups_method(self) -> CppModuleChunks:
         """Generate publish_report_groups method to publish report group data from signals API.
@@ -2644,7 +3507,8 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace
-        return publish_report_groups_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        cpp_mod = publish_report_groups_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_execute_method(self) -> CppModuleChunks:
         """Generate execute."""
@@ -2670,7 +3534,8 @@ class Cog:
 
         parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
         enclosing_namespace = self.cpp_namespace if self.cpp_namespace is not None else ""  # pyright: ignore[reportUnnecessaryComparison] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-        return execute_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        cpp_mod = execute_method.render(parent_class=parent_type, enclosing_namespace=enclosing_namespace)
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _collect_signal_group_info(
         self,
@@ -2729,11 +3594,17 @@ class Cog:
             no_discard=False,
             static=True,
         )
-        cpp_mod.append(start_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+
+        start_cpp_mod = start_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+        cpp_mod.append(_insert_template_params(self.template_params, start_cpp_mod))
 
         end_body = CppChunk()
-        if has_report_groups:
-            for group_name in all_group_names:
+        # Infra cog metrics groups are excluded from the aggregate end_of_execution_signals call.
+        # Their end_of_execution is called explicitly in populate_cog_metrics_signals after
+        # signal values have been populated with completed execution data.
+        user_group_names = [name for name in all_group_names if not _is_cog_metrics_group(name)]
+        if user_group_names:
+            for group_name in user_group_names:
                 end_body.append(f"signals.end_of_execution_{group_name}(current_time);")
         else:
             end_body.append("(void)signals;")
@@ -2750,7 +3621,8 @@ class Cog:
             no_discard=False,
             static=True,
         )
-        cpp_mod.append(end_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+        end_cpp_mod = end_method.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+        cpp_mod.append(_insert_template_params(self.template_params, end_cpp_mod))
 
         return cpp_mod
 
@@ -2796,7 +3668,10 @@ class Cog:
                 no_discard=False,
                 static=True,
             )
-            cpp_mod.append(fwd_start.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+            method_chunks = fwd_start.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+            if self.cog_ir.is_generic():
+                method_chunks.implementation_chunk.lines.insert(0, f"template <{self.template_params}>")
+            cpp_mod.append(method_chunks)
 
             # end_of_execution_<group>
             fwd_end_body = CppChunk()
@@ -2812,7 +3687,10 @@ class Cog:
                 no_discard=False,
                 static=True,
             )
-            cpp_mod.append(fwd_end.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+            method_chunks = fwd_end.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+            if self.cog_ir.is_generic():
+                method_chunks.implementation_chunk.lines.insert(0, f"template <{self.template_params}>")
+            cpp_mod.append(method_chunks)
 
             # should_publish_<group>
             fwd_sp_body = CppChunk()
@@ -2828,7 +3706,10 @@ class Cog:
                 no_discard=True,
                 static=True,
             )
-            cpp_mod.append(fwd_sp.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+            method_chunks = fwd_sp.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+            if self.cog_ir.is_generic():
+                method_chunks.implementation_chunk.lines.insert(0, f"template <{self.template_params}>")
+            cpp_mod.append(method_chunks)
 
             # populate_<group>
             arg_msg = CppNamedType(CppType([], "auto", None, ref=Ref.L), "msg")
@@ -2845,7 +3726,10 @@ class Cog:
                 no_discard=False,
                 static=True,
             )
-            cpp_mod.append(fwd_pop.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+            method_chunks = fwd_pop.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+            if self.cog_ir.is_generic():
+                method_chunks.inline_chunk.lines.insert(0, f"template <{self.template_params}>")
+            cpp_mod.append(method_chunks)
 
             # reset_<group> / reset_batch_<group>
             if is_batched:
@@ -2876,9 +3760,397 @@ class Cog:
                     no_discard=False,
                     static=True,
                 )
-            cpp_mod.append(fwd_reset.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace))
+            method_chunks = fwd_reset.render(parent_class=ctx.parent_type, enclosing_namespace=ctx.enclosing_namespace)
+            if self.cog_ir.is_generic():
+                method_chunks.implementation_chunk.lines.insert(0, f"template <{self.template_params}>")
+            cpp_mod.append(method_chunks)
 
         return cpp_mod
+
+    @staticmethod
+    def _append_event_metrics_signals(  # noqa: PLR0913 # Arguments needed for full set of metrics signals
+        body: CppChunk,
+        inputs_list: list[InputHandler],
+        output_publishers: list[PublisherHandler],
+        condition_names: list[str],
+        resource_names: list[str],
+        signal_population: EventMetricsSignalPopulation,
+    ) -> None:
+        """Append event metrics signal assignments and end_of_execution to body."""
+        input_sequence_metadata_types = signal_population.input_sequence_metadata_types
+        outputs_with_first_sequence_number_signal = signal_population.outputs_with_first_sequence_number_signal
+        publishables_arg_name = signal_population.publishables_arg_name
+
+        # Global cog-level signals: unconditionally present in the event metrics group
+        body.append(
+            "signals.set_cog_dial_start_time("
+            + "::jewels::time::SyncTime{std::chrono::nanoseconds{event_metrics.dial_start_time}});"
+        )
+        body.append(
+            "signals.set_cog_exec_start_time("
+            + "::jewels::time::SyncTime{std::chrono::nanoseconds{event_metrics.execution_start_time}});"
+        )
+        body.append("signals.set_cog_exec_duration(event_metrics.execution_duration);")
+        body.append("if (event_metrics.execute_cog_wall_duration) {")
+        body.append("  signals.set_execute_cog_wall_duration(*event_metrics.execute_cog_wall_duration);")
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_cpu_duration) {")
+        body.append("  signals.set_execute_cog_thread_cpu_duration(*event_metrics.execute_cog_thread_cpu_duration);")
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_user_duration) {")
+        body.append("  signals.set_execute_cog_thread_user_duration(*event_metrics.execute_cog_thread_user_duration);")
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_system_duration) {")
+        body.append(
+            "  signals.set_execute_cog_thread_system_duration(*event_metrics.execute_cog_thread_system_duration);"
+        )
+        body.append("}")
+        body.append("signals.set_cog_ready_to_exec_latency(event_metrics.latency_first_ready_to_execution);")
+        body.append("signals.set_cog_attempt_to_exec_latency(event_metrics.latency_first_attempt_to_execution);")
+        body.append("signals.set_cog_requeue_count(event_metrics.num_requeues_before_execution);")
+
+        # Per-input signals
+        for idx, inpt in enumerate(inputs_list):
+            input_name = inpt.input_name
+            var = f"{input_name}_em"
+            metadata_type_str = input_sequence_metadata_types.get(input_name)
+            if metadata_type_str is not None:
+                body.append("{")
+                body.append(f"  {metadata_type_str} {input_name}_seqno_meta{{}};")
+                body.append(
+                    f"  static_cast<void>({input_name}_seqno_meta.try_set_message_sequence_numbers("
+                    + f"std::get<{idx}>(inputs)->get_metrics_sequence_numbers()));"
+                )
+                body.append(
+                    f"  {input_name}_seqno_meta.set_cursor_position("
+                    + f"std::get<{idx}>(inputs)->get_metrics_cursor_position());"
+                )
+                body.append(
+                    f"  signals.set_{input_name}_unseen_messages("
+                    + f"{var}.empty() ? static_cast<uint16_t>(0) : {var}.back().num_unseen_messages, "
+                    + f"{input_name}_seqno_meta);"
+                )
+                body.append("}")
+            else:
+                body.append(
+                    f"signals.set_{input_name}_unseen_messages("
+                    + f"{var}.empty() ? static_cast<uint16_t>(0) : {var}.back().num_unseen_messages);"
+                )
+            body.append(
+                f"signals.set_{input_name}_staleness("
+                + f"{var}.empty() ? ::clockwork::TenNanoseconds{{}} : {var}.back().message_staleness);"
+            )
+            body.append(
+                f"signals.set_{input_name}_dropped_messages("
+                + f"{var}.empty() ? static_cast<uint16_t>(0) : {var}.back().messages_dropped);"
+            )
+
+        # Per-output signals
+        for idx, pub in enumerate(output_publishers):
+            value_expr = (
+                f"event_metrics.output_metrics.contains({idx}) "
+                + f"? event_metrics.output_metrics.at({idx}) : static_cast<uint16_t>(0)"
+            )
+            body.append(f"signals.set_{pub.output_name}_num_messages({value_expr});")
+            if pub.output_name in outputs_with_first_sequence_number_signal:
+                body.append(
+                    f"signals.set_{pub.output_name}_first_sequence_number("
+                    + f"std::get<{pub.index}>({publishables_arg_name})"
+                    + ".get_metrics_first_sequence_number().value_or(static_cast<uint64_t>(0U)));"
+                )
+
+        # Per-condition signals: bool indicating whether this condition was active at execution
+        for bit_index, condition_name in enumerate(condition_names):
+            body.append(
+                f"signals.set_{condition_name}_active("
+                + f"(event_metrics.conditions_mask & (1ULL << {bit_index}U)) != 0U);"
+            )
+
+        for idx, resource in enumerate(resource_names):
+            for metric in ["peak_allocated", "current_allocated", "total_allocated", "total_deallocated"]:
+                body.append(f"signals.set_{resource}_{metric}( event_metrics.resource_metrics.at({idx}).{metric});")
+
+        # Close the event metrics observation window now that all signals are set
+        body.append(f"signals.end_of_execution_{EVENT_METRICS_GROUP_NAME}(current_time);")
+
+    @staticmethod
+    def _append_telemetry_metrics_signals(
+        body: CppChunk,
+        inputs_list: list[InputHandler],
+        output_publishers: list[PublisherHandler],
+        condition_names: list[str],
+        resource_names: list[str],
+    ) -> None:
+        """Append telemetry metrics signal assignments and end_of_execution to body."""
+        # Global signals shared with the event group carry the telemetry prefix to avoid
+        # API identifier collisions between the two groups.
+        body.append(f"signals.set_{TELEMETRY_SIGNAL_PREFIX}cog_exec_duration(event_metrics.execution_duration);")
+        body.append("if (event_metrics.execute_cog_wall_duration) {")
+        body.append(
+            f"  signals.set_{TELEMETRY_SIGNAL_PREFIX}execute_cog_wall_duration("
+            + "*event_metrics.execute_cog_wall_duration);"
+        )
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_cpu_duration) {")
+        body.append(
+            f"  signals.set_{TELEMETRY_SIGNAL_PREFIX}execute_cog_thread_cpu_duration("
+            + "*event_metrics.execute_cog_thread_cpu_duration);"
+        )
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_user_duration) {")
+        body.append(
+            f"  signals.set_{TELEMETRY_SIGNAL_PREFIX}execute_cog_thread_user_duration("
+            + "*event_metrics.execute_cog_thread_user_duration);"
+        )
+        body.append("}")
+        body.append("if (event_metrics.execute_cog_thread_system_duration) {")
+        body.append(
+            f"  signals.set_{TELEMETRY_SIGNAL_PREFIX}execute_cog_thread_system_duration("
+            + "*event_metrics.execute_cog_thread_system_duration);"
+        )
+        body.append("}")
+        body.append(
+            f"signals.set_{TELEMETRY_SIGNAL_PREFIX}cog_ready_to_exec_latency("
+            + "event_metrics.latency_first_ready_to_execution);"
+        )
+        body.append(
+            f"signals.set_{TELEMETRY_SIGNAL_PREFIX}cog_attempt_to_exec_latency("
+            + "event_metrics.latency_first_attempt_to_execution);"
+        )
+        body.append(
+            f"signals.set_{TELEMETRY_SIGNAL_PREFIX}cog_requeue_count(" + "event_metrics.num_requeues_before_execution);"
+        )
+
+        # Telemetry-only signal: execution period is passed as a dedicated parameter because
+        # EventMetrics does not carry a per-execution period value.
+        body.append("signals.set_cog_exec_period(execution_period);")
+
+        # Per-input agg signals
+        for inpt in inputs_list:
+            input_name = inpt.input_name
+            var = f"{input_name}_em"
+            body.append(
+                f"signals.set_{TELEMETRY_SIGNAL_PREFIX}{input_name}_unseen_messages("
+                + f"{var}.empty() ? static_cast<uint16_t>(0) : {var}.back().num_unseen_messages);"
+            )
+            body.append(
+                f"signals.set_{TELEMETRY_SIGNAL_PREFIX}{input_name}_staleness("
+                + f"{var}.empty() ? ::clockwork::TenNanoseconds{{}} : {var}.back().message_staleness);"
+            )
+            body.append(
+                f"signals.set_{TELEMETRY_SIGNAL_PREFIX}{input_name}_dropped_messages("
+                + f"{var}.empty() ? static_cast<uint16_t>(0) : {var}.back().messages_dropped);"
+            )
+
+        # Per-output agg signals
+        for idx, pub in enumerate(output_publishers):
+            body.append(
+                f"signals.set_{TELEMETRY_SIGNAL_PREFIX}{pub.output_name}_num_messages("
+                + f"event_metrics.output_metrics.contains({idx}) "
+                + f"? event_metrics.output_metrics.at({idx}) : static_cast<uint16_t>(0));"
+            )
+
+        # Per-condition count signals: record whether each condition fired in this execution
+        for bit_index, condition_name in enumerate(condition_names):
+            body.append(
+                f"signals.set_{condition_name}_active_count("
+                + f"static_cast<uint16_t>((event_metrics.conditions_mask & (1ULL << {bit_index}U)) != 0U));"
+            )
+
+        for idx, resource in enumerate(resource_names):
+            body.append(
+                f"signals.set_{TELEMETRY_SIGNAL_PREFIX}{resource}_peak_allocated(event_metrics.resource_metrics.at({idx}).peak_allocated);"
+            )
+
+        # Close the telemetry metrics observation window now that all signals are set
+        body.append(f"signals.end_of_execution_{TELEMETRY_METRICS_GROUP_NAME}(current_time);")
+
+    def _collect_input_seqno_metadata(self, body: CppChunk, inputs_list: list[InputHandler]) -> dict[str, str]:
+        """Build input name to metadata type mapping for sequence number metadata."""
+        if self.signals_struct is None:
+            return {}
+
+        input_seqno_metadata: dict[str, str] = {}
+        for inpt in inputs_list:
+            signal_key = f"{EVENT_METRICS_GROUP_NAME}_{inpt.input_name}_unseen_messages"
+            signal_entry = self.signals_struct.signals.get(signal_key)
+            if signal_entry is None or signal_entry.metadata_type is None:
+                continue
+            input_seqno_metadata[inpt.input_name] = signal_entry.metadata_type.render(
+                self.cpp_namespace, with_qualifiers=False
+            )
+            for inc in signal_entry.metadata_type.includes:
+                body.context.add_include(inc)
+
+        if input_seqno_metadata:
+            body.context.add_include(SystemHeader("span"))
+        return input_seqno_metadata
+
+    def _collect_outputs_with_first_sequence_number_signal(self, output_publishers: list[PublisherHandler]) -> set[str]:
+        """Build output names that have first sequence number signals."""
+        if self.signals_struct is None:
+            return set()
+
+        outputs_with_first_sequence_number_signal: set[str] = set()
+        for pub in output_publishers:
+            signal_key = f"{EVENT_METRICS_GROUP_NAME}_{pub.output_name}_first_sequence_number"
+            signal_entry = self.signals_struct.signals.get(signal_key)
+            if signal_entry is None:
+                continue
+            outputs_with_first_sequence_number_signal.add(pub.output_name)
+
+        return outputs_with_first_sequence_number_signal
+
+    def _generate_populate_cog_metrics_signals(self) -> CppModuleChunks:
+        """Generate populate_cog_metrics_signals for the cog metrics infrastructure report groups.
+
+        Generated when either the event or telemetry infrastructure report group is present on the
+        cog. The generated method sets signal values from a single EventMetrics observation and
+        calls end_of_execution for each present infrastructure report group.
+
+        Returns:
+            CppModuleChunks containing the generated method, or an empty CppModuleChunks if
+            neither cog metrics group is present on this cog.
+        """
+        cpp_mod = CppModuleChunks()
+
+        has_event_group = EVENT_METRICS_GROUP_NAME in self.cog_ir.cog_metrics_report_groups
+        has_telemetry_group = TELEMETRY_METRICS_GROUP_NAME in self.cog_ir.cog_metrics_report_groups
+
+        if not has_event_group and not has_telemetry_group:
+            return cpp_mod
+
+        # Collect real inputs (in tuple index order)
+        inputs_list = list(self.inputs.inputs_registry) if self.inputs else []
+
+        # Collect real outputs (not metrics publishers, not report groups), in index order
+        output_publishers = (
+            [
+                pub
+                for pub in self.publishers.publisher_registry
+                if pub.metrics_log_type == cog.MetricsLogType.none and not pub.is_report_group
+            ]
+            if self.publishers
+            else []
+        )
+
+        # Bit i in conditions_mask corresponds to the i-th condition (timers first, then input conditions).
+        condition_names: list[str] = []
+        if self.timers:
+            condition_names.extend(self.timers.cond_name_to_timer.keys())
+        if self.input_conditions:
+            condition_names.extend(self.input_conditions.input_conditions_registry.keys())
+
+        resource_names = [res.resource_name for res in self.resources.resource_registry] if self.resources else []
+        state_with_memory_resource_names = (
+            [
+                state.state_name
+                for state in self.states.state_registry
+                if isinstance(state.msg_type, ExternType) and not state.read_only
+            ]
+            if self.states
+            else []
+        )
+
+        resource_names.extend(state_with_memory_resource_names)
+
+        body = CppChunk()
+        body.context.add_include(SystemHeader("chrono"))
+        outputs_with_first_sequence_number_signal: set[str] = set()
+
+        # Pre-define per-input metric variables shared by both the event and telemetry blocks.
+        for idx, inpt in enumerate(inputs_list):
+            input_name = inpt.input_name
+            var = f"{input_name}_em"
+            body.append(f"const auto& {var} = std::get<{idx}>(inputs)->get_aggregated_input_metrics().event_metrics;")
+
+        if has_event_group:
+            input_seqno_metadata = self._collect_input_seqno_metadata(body, inputs_list)
+            outputs_with_first_sequence_number_signal = self._collect_outputs_with_first_sequence_number_signal(
+                output_publishers
+            )
+            self._append_event_metrics_signals(
+                body,
+                inputs_list,
+                output_publishers,
+                condition_names,
+                resource_names,
+                EventMetricsSignalPopulation(
+                    input_sequence_metadata_types=input_seqno_metadata,
+                    outputs_with_first_sequence_number_signal=outputs_with_first_sequence_number_signal,
+                    publishables_arg_name="output_publishables",
+                ),
+            )
+
+        if has_telemetry_group:
+            self._append_telemetry_metrics_signals(
+                body, inputs_list, output_publishers, condition_names, resource_names
+            )
+
+        # Build argument types
+        arg_signals = CppNamedType(CppType([], "SignalApiType", None, const=False, ref=Ref.L), "signals")
+
+        event_metrics_type = CppType(
+            includes=[Header(CLK_REPO, "clockwork/cog/cog_statistics.hh")],
+            type_name="EventMetrics",
+            cpp_namespace="clockwork",
+            const=True,
+            ref=Ref.L,
+        )
+        arg_event_metrics = CppNamedType(event_metrics_type, "event_metrics")
+
+        arg_inputs = CppNamedType(
+            CppType([], "typename InputsType::SubscribersTuple", None, const=True, ref=Ref.L),
+            "inputs" if inputs_list else "/*inputs*/",
+        )
+
+        arg_output_publishables = CppNamedType(
+            CppType([], "typename PublishersType::PublishablesTuple", None, const=True, ref=Ref.L),
+            "output_publishables" if outputs_with_first_sequence_number_signal else "/*output_publishables*/",
+        )
+
+        ten_ns_type = CppType(
+            includes=[Header(CLK_REPO, "clockwork/dsl/cog/ten_nanosecond_type.hh")],
+            type_name="TenNanoseconds",
+            cpp_namespace="clockwork",
+        )
+        arg_execution_period = CppNamedType(
+            argument_type=ten_ns_type,
+            argument_name="execution_period" if has_telemetry_group else "/*execution_period*/",
+        )
+
+        sync_time_type = CppType(
+            includes=[Header(CLK_REPO, "jewels/time/sync_time.hh")],
+            type_name="SyncTime",
+            cpp_namespace="jewels::time",
+        )
+        arg_current_time = CppNamedType(argument_type=sync_time_type, argument_name="current_time")
+
+        method = CppMethod(
+            name="populate_cog_metrics_signals",
+            doc=(
+                "Populate cog metrics signals from a single execution observation and close"
+                " the observation window for each present infrastructure report group."
+            ),
+            return_type=VOID,
+            arguments=[
+                arg_signals,
+                arg_event_metrics,
+                arg_inputs,
+                arg_output_publishables,
+                arg_execution_period,
+                arg_current_time,
+            ],
+            leading_qualifiers=[],
+            trailing_qualifiers=[],
+            body=body,
+            no_discard=False,
+            static=True,
+        )
+
+        parent_type = CppType([], self.cog_policy_name, self.cpp_namespace)
+        cpp_mod.append(method.render(parent_class=parent_type, enclosing_namespace=self.cpp_namespace))
+        return _insert_template_params(self.template_params, cpp_mod)
 
     def _generate_signal_infra_methods(self) -> CppModuleChunks:
         """Generate signal infrastructure methods on the Policy.
@@ -2925,6 +4197,7 @@ class Cog:
 
         cpp_mod.append(self._generate_aggregate_signal_lifecycle_methods(all_group_names, ctx))
         cpp_mod.append(self._generate_per_group_signal_forwarding_methods(all_group_names, batched_groups, ctx))
+        cpp_mod.append(self._generate_populate_cog_metrics_signals())
 
         return cpp_mod
 
@@ -2941,3 +4214,152 @@ class _SignalMethodGenerationContext:
     arg_current_time: CppNamedType
     parent_type: CppType
     enclosing_namespace: str
+
+
+@dataclass
+class InstantiatedCog:
+    """Representation of an instantiated C++ Cog."""
+
+    instantiation: cog.InstantiatedCog
+    class_name: str
+    dial_name: str
+    header_name: str | None
+    cpp_namespace: str
+    dial_header: Header
+
+    template_args: str = ""
+    cog_policy_name: str = ""
+
+    @classmethod
+    def make(  # noqa: PLR0913 (this is the central cog generation function so needs several parameters)
+        cls: type[InstantiatedCog],
+        instantiation: cog.InstantiatedCog,
+        class_name: str,
+        dial_name: str | None,
+        header_name: str | None,
+        cpp_namespace: str,
+        dial_header: Header,
+    ) -> InstantiatedCog:
+        """Make InstantiatedCog instance."""
+        if not dial_name:
+            dial_name = to_dial_name(class_name)
+        return cls(
+            instantiation=instantiation,
+            class_name=class_name,
+            header_name=header_name,
+            dial_name=dial_name,
+            cpp_namespace=cpp_namespace,
+            dial_header=dial_header,
+        )
+
+    def render(self) -> CppModuleChunks:
+        """Generate header and source skeleton for InstantiatedCog."""
+        cpp_mod = CppModuleChunks()
+
+        for cpp_arg in get_cog_instantiation_args(self.instantiation):
+            cpp_mod.header_chunk.context.add_includes(cpp_arg.includes)
+        rendered_template_args = get_rendered_cog_instantiation_args(self.instantiation, self.cpp_namespace)
+
+        cog_policy_name = f"{self.class_name}Policy<{rendered_template_args}>"
+        cog_policy_base_name = f"{self.class_name}PolicyBase<{rendered_template_args}>"
+        cog_fqn: Final = self.instantiation.cog_ir.fqn
+
+        cpp_mod.header_chunk.append(
+            [
+                "template<>",
+                f"struct {cog_policy_name} : public {cog_policy_base_name}",
+                "{",
+            ]
+        )
+
+        cpp_mod.header_chunk.append(
+            [
+                gen_const_str([cog_fqn, cog_policy_name.replace('"', "")]),
+                f"static constexpr auto cog_id = {UuidHandler(COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.instantiation.module.context, self.instantiation)).render_from_string_func()};",
+            ],
+            indent=1,
+        )
+
+        cpp_mod.header_chunk.append("};")
+
+        cpp_mod.implementation_chunk.append(f"template struct {cog_policy_base_name};")
+
+        cpp_mod.append(
+            _gen_factory(
+                UuidHandler(
+                    COG_CLASS_UUID_TYPE, uuid_reg.lookup_uuid(self.instantiation.module.context, self.instantiation)
+                ),
+                self.class_name,
+                "CogFactory",
+                f"::jewels::memory::MemoryResource resource, const ::jewels::Uuid<::{CLOCKWORK_NAMESPACE}::common::CogInstanceId>& instance_id, ::jewels::memory::ObjectPtr<::{CLOCKWORK_NAMESPACE}::AbstractCogQueue> queue",
+                f"return ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::SimpleCog<{self.class_name}Policy<{rendered_template_args}>>>(resource, resource, instance_id, queue);",
+                rendered_template_args,
+                True,
+            )
+        )
+
+        for state_def in self.instantiation.states.values():
+            cpp_mod.append(self.render_state_factory(state_def, cog_policy_name, self.cpp_namespace))
+
+        return cpp_mod
+
+    def render_state_factory(
+        self, state_def: cog.StateDef, parent_policy_name: str, enclosing_namespace: str
+    ) -> CppModuleChunks:
+        """Render the state factory struct implementation."""
+        if isinstance(state_def.message_type, ExternType):
+            make_params = "::jewels::memory::MemoryResource memres_state"
+            make_args = "std::move(memres_state)"
+            repr_uuid = uuid_reg.lookup_uuid(self.instantiation.module.context, state_def.message_type)
+            cpp_type = typereg.get_cpp_type(state_def.module.context, state_def.message_type)
+        elif isinstance(state_def.message_type, schema_reg.InterfaceInfo):
+            make_params = f"::{CLOCKWORK_NAMESPACE}::pinion::PublisherHandle publisher"
+            make_args = "std::move(publisher)"
+            assert state_def.message_type.interface_ir.representation is not None
+            repr_uuid = uuid_reg.lookup_uuid(
+                self.instantiation.module.context, state_def.message_type.interface_ir.representation.typespec
+            )
+            cpp_type = typereg.get_cpp_type(state_def.module.context, state_def.message_type.interface_ir.typespec)
+        else:
+            msg = self.instantiation.cog_ir.append_error_line(f"Unknown state message type {state_def.message_type}")
+            raise TypeError(msg)
+        snapshot_make = _get_serializable_state_factory(
+            self.instantiation.module.context,
+            state_def.message_type,
+            const_qualify(cpp_type, False).render(enclosing_namespace),
+            enclosing_namespace,
+        )
+        cpp_mod = _gen_factory(
+            UuidHandler(_get_representation_uuid_type(self.instantiation.module.context), repr_uuid),
+            f"{parent_policy_name}::{to_camel(state_def.name) + 'Policy'}::",
+            "CogStateFactory",
+            "::jewels::memory::MemoryResource memres_sys, " + make_params,
+            f"return ::jewels::memory::make_pmr_shared<::{CLOCKWORK_NAMESPACE}::CogStateDataImpl<{const_qualify(cpp_type, False).render(enclosing_namespace)}>>(memres_sys, {make_args});",
+            "",
+            True,
+            snapshot_make,
+        )
+        if snapshot_make:
+            _add_serializable_state_factory_includes(cpp_mod)
+        return cpp_mod
+
+
+def _insert_template_params(params_str: str, cpp_mod: CppModuleChunks) -> CppModuleChunks:
+    """Insert a template parameter line `template<params>` before the first line in the module.
+
+    Checks whether the chunk is producing inline or implementation and inserts the
+    template parameters into the appropriate chunk.
+
+    Args:
+        params_str: Template parameters string like 'class T1, int n'.
+        cpp_mod: CppModuleChunks to update.
+
+    Returns:
+        Updated module chunks.
+    """
+    if params_str:
+        if cpp_mod.inline_chunk.produce:
+            cpp_mod.inline_chunk.lines.insert(0, f"template <{params_str}>")
+        else:
+            cpp_mod.implementation_chunk.lines.insert(0, f"template <{params_str}>")
+    return cpp_mod

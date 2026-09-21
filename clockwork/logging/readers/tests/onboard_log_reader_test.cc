@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -9,6 +9,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
 #include "clockwork/logging/onboard/types.hh"
@@ -20,6 +21,7 @@
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/container/circular_buffer.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -31,21 +33,25 @@
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_message.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <fmt/format.h>
+#include <gsl/util>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace clockwork_logging
@@ -56,8 +62,54 @@ namespace
 using TestWriterPolicy = onboard::WriterPolicy<onboard::NullMessageHandle>;
 using MsgType = clockwork::Tappy<tests::TestMessage>;
 
-TEST_CASE("Onboard Log Reader")
+enum class RepeatedPersistentFlag : bool
 {
+  not_repeated = false,
+  repeated = true,
+};
+
+using RepeatedPersistentFlags = std::vector<RepeatedPersistentFlag>;
+
+/// Helper function to make a log reader
+/// @param[in] log_uri Log URI
+/// @param[in] maybe_log_interval The interval to read from the log
+/// @param[in] maybe_relative_interval The interval to read from the log relative to the sart of the log
+/// @param[in] decompress_option Option for whether to decompress lite-compressed messages found in the log
+template <typename OnboardLogReaderType>
+[[nodiscard]] OnboardLogReaderType make_onboard_reader(
+  std::string_view log_uri,
+  std::optional<LogInterval> maybe_log_interval,
+  std::optional<RelativeInterval> maybe_relative_interval,
+  DecompressOption decompress_option)
+  requires(std::is_same_v<OnboardLogReaderType, OnboardLogReader>)
+{
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  auto buffered_reader = std::make_shared<OnboardBufferedReader>(memory_resource);
+  return OnboardLogReaderType{
+    log_uri, maybe_log_interval, maybe_relative_interval, decompress_option, std::move(buffered_reader)};
+}
+
+/// Helper function to make a log reader
+template <typename OnboardLogReaderType>
+[[nodiscard]] OnboardLogReaderType make_onboard_reader(
+  std::string_view log_uri,
+  std::optional<LogInterval> maybe_log_interval,
+  std::optional<RelativeInterval> maybe_relative_interval,
+  DecompressOption decompress_option)
+  requires(std::is_same_v<OnboardLogReaderType, OffboardOnboardLogReader>)
+{
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  auto chunk_reader_factory = std::make_shared<offboard::ChunkReaderWriterFactory<>>(memory_resource);
+  auto buffered_reader =
+    std::make_shared<OffboardOnboardBufferedReader>(memory_resource, std::move(chunk_reader_factory));
+  return OnboardLogReaderType{
+    log_uri, maybe_log_interval, maybe_relative_interval, decompress_option, std::move(buffered_reader)};
+}
+
+TEMPLATE_TEST_CASE("Onboard Log Reader", "", OnboardLogReader, OffboardOnboardLogReader)
+{
+  using OnboardLogReaderType = TestType;
+
   const auto decompress_option = GENERATE(DecompressOption::decompress, DecompressOption::dont_decompress);
   CAPTURE(decompress_option);
 
@@ -71,7 +123,7 @@ TEST_CASE("Onboard Log Reader")
 
   auto topics = std::vector<std::string>({"/topic1", "/topic2"});
   auto msgs = std::map<std::string, std::vector<MsgType>>();
-  auto is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>();
+  auto is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>();
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   LiteCompressor lite_compressor{memory_resource};
@@ -142,7 +194,7 @@ TEST_CASE("Onboard Log Reader")
           (i % 2U) == 0U,
           jewels::time::SteadyClock::now()));
         msgs[topics.at(j)].push_back(msg);
-        is_repeated_persistent_flags[topics.at(j)].push_back(false);
+        is_repeated_persistent_flags[topics.at(j)].push_back(RepeatedPersistentFlag::not_repeated);
       }
     }
     REQUIRE(writer.close_log(jewels::time::SteadyClock::now()));
@@ -151,7 +203,7 @@ TEST_CASE("Onboard Log Reader")
 
   SECTION("Topics")
   {
-    OnboardLogReader reader(log_path, {}, {}, decompress_option);
+    auto reader = make_onboard_reader<OnboardLogReaderType>(log_path, {}, {}, decompress_option);
 
     auto expected = std::vector<TopicMetadata>({
       {
@@ -164,6 +216,7 @@ TEST_CASE("Onboard Log Reader")
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
             clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+        .is_amended = false,
       },
       {
         .name = "/topic2",
@@ -175,6 +228,7 @@ TEST_CASE("Onboard Log Reader")
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
             clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+        .is_amended = false,
 
       },
     });
@@ -195,11 +249,11 @@ TEST_CASE("Onboard Log Reader")
 
   SECTION("Read all messages")
   {
-    OnboardLogReader reader(log_path, {}, {}, decompress_option);
+    auto reader = make_onboard_reader<OnboardLogReaderType>(log_path, {}, {}, decompress_option);
     REQUIRE(reader.open({}));
 
     auto actual_msgs = std::map<std::string, std::vector<MsgType>>();
-    auto actual_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>();
+    auto actual_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>();
     while (auto msg_result = reader.next_message())
     {
       auto msg = msg_result.value();
@@ -213,7 +267,8 @@ TEST_CASE("Onboard Log Reader")
       REQUIRE(
         msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
-      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
+      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(
+        static_cast<RepeatedPersistentFlag>(msg.is_repeated_persistent));
     }
 
     REQUIRE(msgs.size() == actual_msgs.size());
@@ -228,11 +283,11 @@ TEST_CASE("Onboard Log Reader")
   {
     const auto& filter_topic = topics.back();
 
-    OnboardLogReader reader(log_path, {}, {}, decompress_option);
+    auto reader = make_onboard_reader<OnboardLogReaderType>(log_path, {}, {}, decompress_option);
     REQUIRE(reader.open([&filter_topic](const auto& topic) { return topic == filter_topic; }));
 
     auto actual_msgs = std::map<std::string, std::vector<MsgType>>();
-    auto actual_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>();
+    auto actual_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>();
     while (auto msg_result = reader.next_message())
     {
       auto msg = msg_result.value();
@@ -246,7 +301,8 @@ TEST_CASE("Onboard Log Reader")
       REQUIRE(
         msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       deserialize_tachyon(actual_msgs[std::string(msg.topic)].emplace_back(), msg.data);
-      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
+      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(
+        static_cast<RepeatedPersistentFlag>(msg.is_repeated_persistent));
     }
 
     REQUIRE(1 == actual_msgs.size());
@@ -258,11 +314,12 @@ TEST_CASE("Onboard Log Reader")
 
   SECTION("Interval")
   {
-    OnboardLogReader reader(log_path, LogInterval(LogTimestamp(4), LogTimestamp(9)), {}, decompress_option);
+    auto reader = make_onboard_reader<OnboardLogReaderType>(
+      log_path, LogInterval(LogTimestamp(4), LogTimestamp(9)), {}, decompress_option);
     REQUIRE(reader.open({}));
 
     auto actual_timestamps = std::map<std::string, std::vector<LogTimestamp>>();
-    auto actual_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>();
+    auto actual_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>();
     while (auto msg_result = reader.next_message())
     {
       auto msg = msg_result.value();
@@ -274,16 +331,25 @@ TEST_CASE("Onboard Log Reader")
       REQUIRE(
         msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       actual_timestamps[std::string(msg.topic)].emplace_back(msg.publish_time);
-      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
+      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(
+        static_cast<RepeatedPersistentFlag>(msg.is_repeated_persistent));
     }
 
     auto expected_timestamps = std::map<std::string, std::vector<LogTimestamp>>({
       {topics.at(0), {LogTimestamp(4), LogTimestamp(6), LogTimestamp(8)}},
       {topics.at(1), {LogTimestamp(4), LogTimestamp(5), LogTimestamp(7), LogTimestamp(9)}},
     });
-    auto expected_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>({
-      {topics.at(0), {false, false, false}},
-      {topics.at(1), {true, false, false, false}},
+
+    auto expected_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>({
+      {topics.at(0),
+       {RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated}},
+      {topics.at(1),
+       {RepeatedPersistentFlag::repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated}},
     });
 
     REQUIRE(expected_timestamps.size() == actual_timestamps.size());
@@ -298,7 +364,7 @@ TEST_CASE("Onboard Log Reader")
 
   SECTION("Relative Interval")
   {
-    OnboardLogReader reader(
+    auto reader = make_onboard_reader<OnboardLogReaderType>(
       log_path,
       {},
       RelativeInterval{.start_offset = std::chrono::nanoseconds{4}, .end_offset = std::chrono::nanoseconds{9}},
@@ -306,7 +372,7 @@ TEST_CASE("Onboard Log Reader")
     REQUIRE(reader.open({}));
 
     auto actual_timestamps = std::map<std::string, std::vector<LogTimestamp>>();
-    auto actual_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>();
+    auto actual_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>();
     while (auto msg_result = reader.next_message())
     {
       auto msg = msg_result.value();
@@ -318,16 +384,25 @@ TEST_CASE("Onboard Log Reader")
       REQUIRE(
         msg.message_encoding == static_cast<MessageEncoding>(clockwork::LoggingTraits<MsgType>::message_encoding));
       actual_timestamps[std::string(msg.topic)].emplace_back(msg.publish_time);
-      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(msg.is_repeated_persistent);
+      actual_is_repeated_persistent_flags[std::string(msg.topic)].emplace_back(
+        static_cast<RepeatedPersistentFlag>(msg.is_repeated_persistent));
     }
 
     auto expected_timestamps = std::map<std::string, std::vector<LogTimestamp>>({
       {topics.at(0), {LogTimestamp(4), LogTimestamp(6), LogTimestamp(8)}},
       {topics.at(1), {LogTimestamp(4), LogTimestamp(5), LogTimestamp(7), LogTimestamp(9)}},
     });
-    auto expected_is_repeated_persistent_flags = std::map<std::string, std::vector<bool>>({
-      {topics.at(0), {false, false, false}},
-      {topics.at(1), {true, false, false, false}},
+
+    auto expected_is_repeated_persistent_flags = std::map<std::string, RepeatedPersistentFlags>({
+      {topics.at(0),
+       {RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated}},
+      {topics.at(1),
+       {RepeatedPersistentFlag::repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated,
+        RepeatedPersistentFlag::not_repeated}},
     });
 
     REQUIRE(expected_timestamps.size() == actual_timestamps.size());

@@ -7,68 +7,68 @@ use clockwork::tests::support::signal_messages::{TriggerMessage, AckMessage};
 // Cog that accumulates signal values from incoming trigger messages
 cog SignalCog
 {
-    signals test_group
+  signalstest_group
+  {
+    // Simple value signal with post-aggregation min and max
+    tracked_value: signal Int64
     {
-        // Simple value signal with post-aggregation min and max
-        tracked_value: signal Int64
-        {
-            post_aggregation: ["min", "max"];
-            multi_instance: true;
-        }
-
-        // Signal with sum pre-aggregation and mean/max post-aggregation
-        accumulated_value: signal UInt32
-        {
-            pre_aggregation: ["sum"];
-            post_aggregation: ["mean", "max"];
-            multi_instance: true;
-        }
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
     }
 
-    signals batched_group
+    // Signal with sum pre-aggregation and mean/max post-aggregation
+    accumulated_value: signal UInt32
     {
-        // Batched value signal with min and max pre-aggregation
-        batched_value: signal Int64
-        {
-            pre_aggregation: ["min", "max"];
-            multi_instance: true;
-        }
+      pre_aggregation: ["sum"];
+      post_aggregation: ["mean", "max"];
+      multi_instance: true;
+    }
+  }
 
-        // Batched count signal with sum pre-aggregation
-        batched_count: signal UInt32
-        {
-            pre_aggregation: ["sum"];
-            multi_instance: true;
-        }
+  signalsbatched_group
+  {
+    // Batched value signal with min and max pre-aggregation
+    batched_value: signal Int64
+    {
+      pre_aggregation: ["min", "max"];
+      multi_instance: true;
     }
 
-    inputs
+    // Batched count signal with sum pre-aggregation
+    batched_count: signal UInt32
     {
-        trigger: Tappy<TriggerMessage>;
+      pre_aggregation: ["sum"];
+      multi_instance: true;
     }
+  }
 
-    outputs
-    {
-        ack: Tappy<AckMessage>;
-    }
+  inputs
+  {
+    trigger: Tappy<TriggerMessage>;
+  }
 
-    execution
-    {
-        condition new_trigger: new_message(trigger);
-        execute when: new_trigger;
-    }
+  outputs
+  {
+    ack: Tappy<AckMessage>;
+  }
+
+  execution
+  {
+    condition new_trigger: new_message(trigger);
+    execute when: new_trigger;
+  }
 }
 
 policy ReportGroupPolicy for SignalCog.test_group
 {
-    reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::event;
-    max_observations = 5;
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::event;
+  max_observations = 5;
 }
 
 policy ReportGroupPolicy for SignalCog.batched_group
 {
-    reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::event;
-    max_observations = 3;
+  reporting_strategy = ReportingStrategy::batched;
+  log_type = ReportGroupLogType::event;
+  max_observations = 3;
 }

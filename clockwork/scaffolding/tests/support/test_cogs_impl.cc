@@ -1,19 +1,20 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/dial/msg_input.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
 #include "clockwork/scaffolding/tests/support/test_cogs_dial.hh"
 #include "clockwork/scaffolding/tests/support/test_msgs_clk_cc.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
+#include "jewels/uuid/uuid.hh"
 
 #include <cstdint>
 #include <functional>
-#include <iterator>
 #include <memory_resource>
 #include <tuple>
 #include <vector>

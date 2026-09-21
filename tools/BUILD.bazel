@@ -1,10 +1,17 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//tools/rules:python.bzl", "py_binary")
+load("@rules_multirun//:defs.bzl", "multirun")
+load("//tools/rules:python.bzl", "py_library")
 
-py_binary(
+py_library(
     name = "sort_build_file",
     srcs = ["sort_build_file.py"],
     visibility = ["//:__subpackages__"],
+)
+
+multirun(
+    name = "update_wrappers",
+    commands = ["//tools/gazelle:write_gazelle_wrapper"],
+    jobs = 0,
 )

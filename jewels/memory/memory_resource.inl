@@ -4,6 +4,10 @@
 
 #include "jewels/memory/memory_resource.hh"
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/memory/instrumented_pmr_resource.hh"
+
 #include <memory_resource>
 
 namespace jewels::memory
@@ -44,4 +48,24 @@ inline bool operator==(const MemoryResource& lhs, const MemoryResource& rhs) noe
 {
   return *static_cast<const std::pmr::memory_resource*>(lhs) == *static_cast<const std::pmr::memory_resource*>(rhs);
 }
+
+inline jewels::BinaryOutcome
+MemoryResource::get_memory_resource_metrics(jewels::Out<MemoryResourceMetrics> metrics) const noexcept
+{
+  if (const auto* instrumented_resource = dynamic_cast<InstrumentedPmrResource*>(memory_resource_ptr_.get()))
+  {
+    instrumented_resource->get_memory_resource_metrics(jewels::Out{*metrics});
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+inline void MemoryResource::reset_incremental_metrics() noexcept
+{
+  if (auto* instrumented_resource = dynamic_cast<InstrumentedPmrResource*>(memory_resource_ptr_.get()))
+  {
+    instrumented_resource->reset_incremental_metrics();
+  }
+}
+
 } // namespace jewels::memory

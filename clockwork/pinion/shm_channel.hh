@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/common/abstract_epoll_manager.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
-#include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/mmap_region.hh"
@@ -15,13 +15,12 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
-#include <wise_enum.h>
-
-#include <cstdint>
+#include <cstddef>
 #include <memory_resource>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <variant>
 
 namespace clockwork::pinion
 {
@@ -29,33 +28,15 @@ namespace clockwork::pinion
 ///
 /// Common base class for shared memory backed channels
 ///
-class ShmChannel : public AbstractEPollCallback
+class ShmChannel : public virtual AbstractChannel
 {
 public:
   using BufferPtr = jewels::memory::pmr_unique_ptr<Buffer>;
-  WISE_ENUM_CLASS_MEMBER(
-    (Error, uint8_t),
-    fatal,  // Assorted failures with no clear resolution
-    dirty,  // Shm file exists but can't be resumed
-    missing // Shm file doesn't exist and creating it wasn't attempted
-  )
-  enum class Role : uint8_t
-  {
-    publisher,
-    subscriber,
-  };
-  WISE_ENUM_CLASS_MEMBER(
-    (ResumeBehavior, uint8_t),
-    no_resume,   // Channels will not be reestablished
-    dirty_resume // Reestablish channels. Previously enqueued "dirty" data (i.e. data published that has not yet been
-                 // read by subscribers when the connection is disconnected) will be read upon reconnection.
-  )
 
   /// Internal message used to communicate notifications between ShmPublisher and ShmSubscriber
   struct NotifyMsg
   {
-    uint64_t tail; /// The id / BufferIndex of the oldest valid message a time of publish
-    uint64_t head; /// The id / BufferIndex of the published message
+    std::byte placeholder; /// Simply 0 so the packet is not empty
   };
 
   ~ShmChannel() override;
@@ -64,18 +45,21 @@ public:
   ShmChannel(ShmChannel&&) noexcept = default;
   ShmChannel& operator=(ShmChannel&&) noexcept = default;
 
+  /// Get the layout of the subscribed buffer.
+  [[nodiscard]] const BufferLayout& layout() const noexcept override;
+
+  /// Create a subscriber for the channel
+  [[nodiscard]] std::ranges::subrange<SlotRef> available() const override;
+
+  /// Returns the number of messages that have been published on the channel
+  [[nodiscard]] size_t get_publish_count() const noexcept override;
+
   /// Create a subscriber for the channel
   [[nodiscard]] SubscriberHandle make_subscriber();
 
-  /// Adds the given observer to the channel's notification list.  For ShmPublishers, this means in-process
-  /// notifications while ShmSubscribers forward socket notifications to the observer.
-  /// @param observer the observer to add
-  /// @return true if the observer was added, false otherwise (likely the observer collection is full)
-  [[nodiscard]] virtual bool add_observer(jewels::memory::ObjectPtr<Observer> observer) noexcept = 0;
-
   /// Get the file descriptor of the unix socket
   /// @return -1 if the socket is unix closed
-  [[nodiscard]] int socket() const noexcept;
+  [[nodiscard]] int socket() const noexcept override;
 
   /// Set the unix socket
   /// @param[in] socket Unix socket
@@ -84,17 +68,23 @@ public:
   /// Get the underlying comms buffer pointer
   [[nodiscard]] jewels::memory::ObjectPtr<Buffer> buffer() const noexcept;
 
-  //// Close the notification socket.
+  /// Close the notification socket.
   void close_socket();
+
+  /// Always retuns true as SHM channels connect fully at creation
+  [[nodiscard]] bool handshake() override;
 
   /// Get the socket namespace of the channel
   [[nodiscard]] const std::pmr::string& socket_ns() const noexcept;
+  [[nodiscard]] const std::pmr::string& scope() const noexcept override;
 
   /// Get the shm filename (not full path, usually a uuid) of the channel
   [[nodiscard]] const std::pmr::string& filename() const noexcept;
+  [[nodiscard]] const std::pmr::string& identifier() const noexcept override;
 
   /// Get the human readable channel name of the channel
   [[nodiscard]] const std::pmr::string& channel_name() const noexcept;
+  [[nodiscard]] const std::pmr::string& name() const noexcept override;
 
   /// Get the resume behavior of the channel
   [[nodiscard]] ResumeBehavior resume_behavior() const noexcept;

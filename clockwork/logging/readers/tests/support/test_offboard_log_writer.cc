@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/tests/support/test_offboard_log_writer.hh"
 
 #include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"

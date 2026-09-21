@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/python/python_init.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/serialization/cpp/clk_builtin_type.hh"
 #include "clockwork/serialization/cpp/clk_type.hh"
+#include "clockwork/serialization/cpp/tachyon_model.hh"
 #include "clockwork/serialization/cpp/tachyon_python_upgrader.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 #include "clockwork/serialization/cpp/tests/support/test_schema_v1_clk_cc.hh"
@@ -16,8 +17,11 @@
 #include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/optional.hh"
+#include "jewels/container/tap/tensor.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/std/span.hh"
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -38,13 +42,14 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <memory_resource>
 #include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <typeinfo>
-#include <utility>
+#include <variant>
 
 namespace clockwork::serialization
 {
@@ -187,6 +192,37 @@ TEST_CASE("optional_has_value_offset")
   REQUIRE(offsetof(Layout7, has_value) == optional_has_value_offset(7U));
   using Layout8 = jewels::tap::detail::OptionalLayout<std::array<char, 8U>>;
   REQUIRE(offsetof(Layout8, has_value) == optional_has_value_offset(8U));
+}
+
+TEST_CASE("load/store_soa_size")
+{
+  struct __attribute__((packed)) TestType
+  {
+    uint64_t size8{};
+    uint32_t size4{};
+    uint16_t size2{};
+    uint8_t size1{};
+  } test_struct{};
+  const auto test_span = std::as_writable_bytes(jewels::as_single_item_span(test_struct));
+
+  REQUIRE_THROWS(load_soa_size(test_span, 0U, 0U));
+  REQUIRE_THROWS(load_soa_size(test_span, 0U, 5U));
+
+  REQUIRE(load_soa_size(test_span, 0U, sizeof(uint64_t)) == 0U);
+  store_soa_size(test_span, 0U, sizeof(uint64_t), 0x0123456789abcdefU);
+  REQUIRE(load_soa_size(test_span, 0U, sizeof(uint64_t)) == 0x0123456789abcdefU);
+
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t), sizeof(uint32_t)) == 0U);
+  store_soa_size(test_span, sizeof(uint64_t), sizeof(uint32_t), 0x01234567U);
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t), sizeof(uint32_t)) == 0x01234567U);
+
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t), sizeof(uint16_t)) == 0U);
+  store_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t), sizeof(uint16_t), 0x0123U);
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t), sizeof(uint16_t)) == 0x0123U);
+
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint8_t)) == 0U);
+  store_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint8_t), 0x01U);
+  REQUIRE(load_soa_size(test_span, sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint16_t), sizeof(uint8_t)) == 0x01U);
 }
 
 TEST_CASE("Smoke test")
@@ -2824,6 +2860,128 @@ TEST_CASE("VarSoa to Optional un-transposition")
     const auto& dest_optional = cpp_instance.get_underlying_soa_field();
     REQUIRE_FALSE(dest_optional.has_value());
   }
+}
+
+TEST_CASE("UUID to VarString upgrade")
+{
+  // Initialize python for the log schema upgrader
+  python::python_init(python::InitializationMode::unit_test);
+
+  const auto python_upgrader = make_python_upgrader<
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV1>,
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV2>>();
+  REQUIRE(python_upgrader->upgrade_required());
+
+  const auto cpp_upgrader = make_cpp_upgrader<
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV1>,
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV2>>();
+  REQUIRE(cpp_upgrader->upgrade_required());
+
+  validate_upgradability<
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV1>,
+    Tappy<tests::UuidToVarStringUpgradeTestSchemaV2>>();
+
+  Tappy<tests::UuidToVarStringUpgradeTestSchemaV1> input_instance{};
+  const auto test_uuid = SchemaUuid::random_uuid();
+  input_instance.set_uuid_field(test_uuid);
+  input_instance.set_int32_field(42);
+  Tappy<tests::UuidToVarStringUpgradeTestSchemaV2> python_instance{};
+  Tappy<tests::UuidToVarStringUpgradeTestSchemaV2> cpp_instance{};
+  std::memset(&python_instance, 0, sizeof(python_instance));
+  std::memset(&cpp_instance, 0, sizeof(cpp_instance));
+
+  python_upgrader->upgrade(
+    std::as_bytes(std::span{&input_instance, 1U}), std::as_writable_bytes(std::span{&python_instance, 1U}));
+  cpp_upgrader->upgrade(
+    std::as_bytes(std::span{&input_instance, 1U}), std::as_writable_bytes(std::span{&cpp_instance, 1U}));
+
+  const auto check_python = GENERATE(true, false);
+  CAPTURE(check_python);
+  const auto checked_instance = check_python ? python_instance : cpp_instance;
+
+  REQUIRE(std::string_view{checked_instance.get_uuid_field()} == test_uuid.to_string());
+  REQUIRE(checked_instance.get_int32_field() == 42);
+
+  REQUIRE(
+    std::ranges::equal(std::as_bytes(std::span{&cpp_instance, 1U}), std::as_bytes(std::span{&python_instance, 1U})));
+}
+
+TEST_CASE("FixedArray to Tensor")
+{
+  const auto upgrader = make_cpp_upgrader<Tappy<tests::FixedArrayToTensorV1>, Tappy<tests::FixedArrayToTensorV2>>();
+  // While these schemas are technivally wire-compatible, their hashes don't
+  // match because FixedArray and Tensor are instantiated differently in the
+  // DSL. The underlying transformation should be a trivial memcpy, though.
+  REQUIRE(upgrader->upgrade_required());
+
+  validate_upgradability<Tappy<tests::FixedArrayToTensorV1>, Tappy<tests::FixedArrayToTensorV2>>();
+
+  Tappy<tests::FixedArrayToTensorV1> instance_v1{};
+  for (size_t i = 0; i < instance_v1.get_mutable_tensor().size(); i++)
+  {
+    instance_v1.get_mutable_tensor()[i] = static_cast<float>(i);
+  }
+
+  Tappy<tests::FixedArrayToTensorV2> instance_v2{};
+  std::memset(&instance_v2, 0, sizeof(instance_v2));
+  upgrader->upgrade(std::as_bytes(std::span{&instance_v1, 1U}), std::as_writable_bytes(std::span{&instance_v2, 1U}));
+
+  REQUIRE(std::ranges::equal(std::as_bytes(std::span{&instance_v1, 1U}), std::as_bytes(std::span{&instance_v2, 1U})));
+}
+
+TEST_CASE("FixedArray to Tensor - Mismatched Type")
+{
+  validate_no_upgradability<Tappy<tests::FixedArrayToTensorV1>, Tappy<tests::BadTypeFixedArrayToTensorV2>>();
+}
+
+TEST_CASE("FixedArray to Tensor - Mismatched Shape")
+{
+  validate_no_upgradability<Tappy<tests::FixedArrayToTensorV1>, Tappy<tests::BadShapeFixedArrayToTensorV2>>();
+}
+
+TEST_CASE("Tensor Element Type Change")
+{
+  const auto upgrader = make_cpp_upgrader<Tappy<tests::TensorElementChangeV1>, Tappy<tests::TensorElementChangeV2>>();
+  REQUIRE(upgrader->upgrade_required());
+
+  validate_upgradability<Tappy<tests::TensorElementChangeV1>, Tappy<tests::TensorElementChangeV2>>();
+
+  Tappy<tests::TensorElementChangeV1> instance_v1{};
+  for (size_t i = 0; i < instance_v1.get_mutable_tensor().storage().size(); i++)
+  {
+    instance_v1.get_mutable_tensor().storage()[i] = static_cast<int32_t>(i);
+  }
+
+  Tappy<tests::TensorElementChangeV2> instance_v2{};
+  std::memset(&instance_v2, 0, sizeof(instance_v2));
+  upgrader->upgrade(std::as_bytes(std::span{&instance_v1, 1U}), std::as_writable_bytes(std::span{&instance_v2, 1U}));
+
+  REQUIRE_FALSE(
+    std::ranges::equal(std::as_bytes(std::span{&instance_v1, 1U}), std::as_bytes(std::span{&instance_v2, 1U})));
+  for (size_t i = 0; i < instance_v2.get_mutable_tensor().storage().size(); i++)
+  {
+    REQUIRE(instance_v2.get_tensor().storage()[i] == static_cast<float>(i));
+  }
+}
+
+TEST_CASE("Unexpected Tensor Shape Change")
+{
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto model1 = TachyonModel::from_type<Tappy<tests::UnexpectedTensorShapeChangeV1>>(memory_resource);
+  const auto model2 = TachyonModel::from_type<Tappy<tests::UnexpectedTensorShapeChangeV2>>(memory_resource);
+  REQUIRE_THROWS(model2->check_for_unexpected_schema_changes(*model1));
+  validate_no_upgradability<Tappy<tests::UnexpectedTensorShapeChangeV1>, Tappy<tests::UnexpectedTensorShapeChangeV2>>();
+}
+
+TEST_CASE("Unexpected Tensor Element Change")
+{
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto model1 = TachyonModel::from_type<Tappy<tests::UnexpectedTensorElementChangeV1>>(memory_resource);
+  const auto model2 = TachyonModel::from_type<Tappy<tests::UnexpectedTensorElementChangeV2>>(memory_resource);
+  REQUIRE_THROWS(model2->check_for_unexpected_schema_changes(*model1));
+  validate_no_upgradability<
+    Tappy<tests::UnexpectedTensorElementChangeV1>,
+    Tappy<tests::UnexpectedTensorElementChangeV2>>();
 }
 
 } // namespace

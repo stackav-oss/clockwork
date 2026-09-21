@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Signal related IR nodes."""
@@ -8,11 +8,15 @@ from __future__ import annotations
 import enum
 from ast import literal_eval
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, clkenum, cst_util, expr, node, primitive, strongtypes, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class AggregationType(enum.Enum):
@@ -31,6 +35,65 @@ class AggregationType(enum.Enum):
     FIRST_VALUE = "first_value"
 
 
+# Aggregation types that require numeric ordering or arithmetic operations.
+# These are incompatible with Bool and enum signal types:
+# - Bool: arithmetic operations (sum, mean) produce incorrect results; comparison operations
+#   (min, max) are semantically ambiguous for boolean values.
+# - Enum: arithmetic and comparison operations are not meaningful for unordered enumerations
+#   and will fail to compile for enum class types that lack these operators.
+_NUMERIC_ONLY_AGGREGATIONS: frozenset[AggregationType] = frozenset(
+    {
+        AggregationType.MIN,
+        AggregationType.MAX,
+        AggregationType.SUM,
+        AggregationType.MEAN,
+    }
+)
+
+
+def _get_effective_signal_type(signal_type: typesys.TypeVal) -> typesys.TypeVal:
+    """Get the effective underlying type by unwrapping StrongType wrappers."""
+    if isinstance(signal_type, strongtypes.StrongType):
+        return _get_effective_signal_type(signal_type.get_underlying_type())
+    return signal_type
+
+
+def validate_aggregations_for_type(
+    signal_type: typesys.TypeVal,
+    aggregations: set[AggregationType],
+    error_fn: Callable[[str], str],
+) -> None:
+    """Validate that aggregation types are compatible with the signal type.
+
+    Args:
+        signal_type: The resolved type of the signal.
+        aggregations: The set of aggregation types to validate.
+        aggregation_kind: A label for the kind of aggregation (e.g., "pre-aggregation").
+        error_fn: A callable that takes an error message string and returns it formatted
+            with source location context.
+
+    Raises:
+        TypeError: If any aggregation types are incompatible with the signal type.
+    """
+    effective_type = _get_effective_signal_type(signal_type)
+
+    if effective_type is clkbuiltins.BOOL:
+        type_description = "Bool"
+    elif isinstance(effective_type, clkenum.ClkEnum | clkenum.ResolvedEnum):
+        type_description = f"enum '{effective_type.name}'"
+    else:
+        return  # All aggregations are valid for numeric and other supported types.
+
+    invalid_aggs = aggregations & _NUMERIC_ONLY_AGGREGATIONS
+    if not invalid_aggs:
+        return
+
+    invalid_names = ", ".join(f'"{a.value}"' for a in sorted(invalid_aggs, key=lambda a: a.value))
+    error_msg = f"Aggregations: {invalid_names} not valid for {type_description} signals. "
+    msg = error_fn(error_msg)
+    raise TypeError(msg)
+
+
 def _is_valid_signal_type(type_val: typesys.TypeVal) -> bool:
     """Check if a type is valid for use as a signal type (scalar types only)."""
     if isinstance(
@@ -47,8 +110,6 @@ def _is_valid_signal_type(type_val: typesys.TypeVal) -> bool:
     if isinstance(type_val, strongtypes.StrongType):
         underlying = type_val.get_underlying_type()
         return _is_valid_signal_type(underlying)
-    return False
-
     return False
 
 
@@ -133,7 +194,7 @@ def _parse_signal_options(
             pre_aggregation, pre_aggregation_text = parse_aggregation(pre_agg_cst, module, "pre-aggregation")
         elif post_agg_cst := option.maybe_signal_option_post_aggregation():
             # Validate that post_aggregation is only allowed on cog-scope signals
-            if isinstance(cst_node, cst.ModuleScopeSignal):
+            if cst_node.kind == cst.ModuleScopeSignal.kind:
                 if module.terminals is None:
                     msg = "Cannot construct IR nodes from CST without a TerminalSource"
                     raise ValueError(msg)
@@ -247,7 +308,7 @@ class Signal(
             post_aggregation_text=post_aggregation_text,
             resolved=None,
         )
-        if isinstance(cst_node, cst.ModuleScopeSignal):
+        if cst_node.kind == cst.ModuleScopeSignal.kind:
             scope.define(name, result, module.terminals)
         return result
 
@@ -287,6 +348,14 @@ class Signal(
             )
             msg = self.signal_type.append_error_line(error_msg)
             raise TypeError(msg)
+
+        validate_aggregations_for_type(
+            signal_type=signal_type,
+            aggregations=self.pre_aggregation | self.post_aggregation
+            if self.post_aggregation
+            else self.pre_aggregation,
+            error_fn=self.signal_type.append_error_line,
+        )
 
         resolved_metadata: typesys.TypeVal | None = None
         if self.metadata is not None:

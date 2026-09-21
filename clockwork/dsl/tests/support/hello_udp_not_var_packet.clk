@@ -28,15 +28,15 @@ udp_socket OutgoingUdpSocket
 
 cpp_target hello_udp_not_var_packet
 {
-    options
-    {
-        namespace clockwork::testing;
-    }
+  options
+  {
+    namespace clockwork::testing;
+  }
 
-    schema NotVarPacket;
-    representation Tachyon<NotVarPacket>;
-    interface Tap<Tachyon<NotVarPacket>>;
+  schema NotVarPacket;
+  representation Tachyon<NotVarPacket>;
+  interface Tap<Tachyon<NotVarPacket>>;
 
-    udp_socket IncomingUdpSocket;
-    udp_socket OutgoingUdpSocket;
+  udp_socket IncomingUdpSocket;
+  udp_socket OutgoingUdpSocket;
 }

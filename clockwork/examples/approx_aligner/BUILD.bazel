@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -16,9 +16,15 @@ clk(
         "approx_aligner_cog_clk_cc.cc",
         "approx_aligner_cog_clk_cc.hh",
         "approx_aligner_cog_clk_cc.inl",
+        "approx_aligner_cog_clk_cc_cog.cc",
+        "approx_aligner_cog_clk_cc_cog.hh",
+        "approx_aligner_cog_clk_cc_cog.inl",
         "approx_aligner_cog_clk_cc_dial.cc",
         "approx_aligner_cog_clk_cc_dial.hh",
         "approx_aligner_cog_clk_cc_dial.inl",
+        "approx_aligner_cog_clk_cc_types.cc",
+        "approx_aligner_cog_clk_cc_types.hh",
+        "approx_aligner_cog_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":approx_aligner_msgs_clk_cc",
@@ -44,11 +50,13 @@ cc_library(
         "//clockwork/dial:approx_aligner",
         "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
-        "@boost//:iterator",
+        "//jewels/uuid",
     ],
 )
 
@@ -59,6 +67,9 @@ clk(
         "approx_aligner_msgs_clk_cc.cc",
         "approx_aligner_msgs_clk_cc.hh",
         "approx_aligner_msgs_clk_cc.inl",
+        "approx_aligner_msgs_clk_cc_types.cc",
+        "approx_aligner_msgs_clk_cc_types.hh",
+        "approx_aligner_msgs_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/dial:approx_aligner_config_clk_cc"],
     generate = ["cpp"],

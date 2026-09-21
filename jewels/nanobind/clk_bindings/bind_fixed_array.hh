@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 // Nanobind provides <nanobind/stl/bind_vector.h> and <nanobind/stl/bind_map.h>, but there is no

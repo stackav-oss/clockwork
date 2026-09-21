@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/cog/input_condition.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/slot_ref.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
@@ -51,7 +51,7 @@ public:
   /// @tparam CogType The cog type setting the handle, it is expected to have a `notify()` call to be invoked on
   /// updates.
   [[nodiscard]] jewels::expected<void, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle handle);
+  set_handle(jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> channel);
 
   /// Set up a condition for an endpoint without a subscriber handle
   /// @param[in] endpoint_id UUID of the endpoint to set up the condition for
@@ -83,7 +83,7 @@ public:
   /// @tparam index Condition index
   /// @param[in] handle Pinion subscriber handle
   template <size_t index>
-  void set_unit_test_condition(pinion::SubscriberHandle handle);
+  void set_unit_test_condition(std::shared_ptr<pinion::AbstractChannel> channel);
 
 private:
   /// Memory resource

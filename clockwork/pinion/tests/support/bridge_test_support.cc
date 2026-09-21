@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/tests/support/bridge_test_support.hh"
@@ -34,6 +34,8 @@
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -69,7 +71,7 @@ using jewels::Out;
     .msg_controllen = 0,
     .msg_flags = 0,
   };
-  const auto send_rc = ::sendmsg(sock, &msg, 0);
+  const auto send_rc = ::sendmsg(sock, &msg, MSG_NOSIGNAL);
   CHECK(send_rc == static_cast<ssize_t>(payload_size));
   return send_rc == static_cast<ssize_t>(payload_size);
 }
@@ -415,7 +417,7 @@ void send_extended_payload(
 [[nodiscard]] bool send_acknowledgement(int sock, uint64_t sequence_number)
 {
   auto ack_byte = static_cast<uint8_t>(sequence_number);
-  auto send_bytes = ::send(sock, &ack_byte, 1U, 0);
+  auto send_bytes = ::send(sock, &ack_byte, 1U, MSG_NOSIGNAL);
   return send_bytes == 1;
 }
 

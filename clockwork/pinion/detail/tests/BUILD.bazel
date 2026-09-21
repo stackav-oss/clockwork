@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -17,6 +17,8 @@ cc_test(
         "//jewels/filesystem:file_descriptor",
         "//jewels/networking:socket_address",
         "//jewels/std:expected",
+        "//jewels/testing:error_code_stringmakers",
+        "//jewels/testing:expected_stringmakers",
         "//jewels/uuid",
         "@catch2//:catch2_main",
     ],

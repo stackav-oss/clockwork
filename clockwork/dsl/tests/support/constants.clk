@@ -16,8 +16,8 @@ schema ThingHolder
 {
   uuid: 5e6e923b-cbde-4afa-b25b-db1d4e62be12;
 
-	parameters
-	{
+  parameters
+  {
     // Doc.
     #1 max_things: UInt64 = a_number;
   }
@@ -60,17 +60,17 @@ cpp_target dummy
     namespace dummy;
   }
 
-  constant a_bool;
-  constant a_float;
-  constant a_string;
-  constant another_number;
+  constanta_bool;
+  constanta_float;
+  constanta_string;
+  constantanother_number;
   representation Tachyon<ThingHolder<another_number>>;
 }
 
 py_target dummy_py
 {
-  constant a_bool;
-  constant a_float;
-  constant a_string;
-  constant another_number;
+  constanta_bool;
+  constanta_float;
+  constanta_string;
+  constantanother_number;
 }

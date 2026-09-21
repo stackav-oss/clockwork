@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Utilities for Clockwork cog metrics schema generation.
@@ -27,6 +27,32 @@ def get_cog_metrics_imports(module: node.Module) -> Iterable[node.Module.UseResu
                 "common_cog_telemetry_metrics",
                 "InputChannelTelemetryMetrics",
             ),
+            alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
+            cst_node=None,
+        )
+    )
+    imports.append(
+        node.Module.UseResult(
+            repo=repo,
+            path=(
+                "clockwork",
+                "dsl",
+                "cog",
+                "common_cog_telemetry_metrics",
+                "MinMaxMean10ns",
+            ),
+            alias=None,
+            use_targets=None,
+            use_type=node.UseResultType.entity,
+            cst_node=None,
+        )
+    )
+    imports.append(
+        node.Module.UseResult(
+            repo=repo,
+            path=("clockwork", "dsl", "cog", "ten_nanosecond", "TenNanoseconds"),
             alias=None,
             use_targets=None,
             use_type=node.UseResultType.entity,

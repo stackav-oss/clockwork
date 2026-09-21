@@ -1,0 +1,17 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::pinion)]
+
+// Backend to use for the channel
+enum ChannelType
+{
+  uuid: f837403d-5906-4bb4-868b-0699c316504b;
+  values
+  {
+    // No particular type requested, usually shared_memory
+    #0 unspecified default;
+    // Standard shared memory channel for interprocess communications
+    #1 shared_memory;
+    // Generic gpu backed buffer
+    #2 gpu;
+  }
+}

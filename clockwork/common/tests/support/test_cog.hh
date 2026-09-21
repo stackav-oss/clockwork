@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -68,7 +68,8 @@ public:
   [[nodiscard]] std::string_view get_name() const override;
 
   jewels::expected<void, jewels::MonoError> prime(jewels::time::SyncTime /*start_time*/) override;
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override;
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> throttled_until_out, jewels::time::SyncTime current_time) override;
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams params) override;
 
   void push(TestMsg msg);

@@ -1,14 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/tests/support/test_offboard_log_writer.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/filesystem/path.hh"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/time/sync_time.hh"
@@ -23,6 +25,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ratio>
@@ -49,7 +52,11 @@ TEST_CASE("Offboard reader topics")
   const TestOffboardLogWriter test_writer;
   REQUIRE(test_writer.write_clockwork_test_log(test_log_path.string(), message_count));
 
-  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option);
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
+  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option, chunk_reader_factory);
   REQUIRE(reader.type() == "offboard");
 
   auto expected = std::vector<TopicMetadata>({
@@ -60,6 +67,7 @@ TEST_CASE("Offboard reader topics")
       .channel_type = TestOffboardLogWriter::clockwork_metadata1.channel_type,
       .schema_encoding = TestOffboardLogWriter::clockwork_metadata1.schema_encoding,
       .schema_definition = std::string{TestOffboardLogWriter::clockwork_metadata1.schema_definition},
+      .is_amended = true,
     },
     {
       .name = std::string{TestOffboardLogWriter::clockwork_metadata2.channel_name},
@@ -68,6 +76,7 @@ TEST_CASE("Offboard reader topics")
       .channel_type = TestOffboardLogWriter::clockwork_metadata2.channel_type,
       .schema_encoding = TestOffboardLogWriter::clockwork_metadata2.schema_encoding,
       .schema_definition = std::string{TestOffboardLogWriter::clockwork_metadata2.schema_definition},
+      .is_amended = false,
     },
     {
       .name = std::string{TestOffboardLogWriter::clockwork_metadata3.channel_name},
@@ -76,6 +85,7 @@ TEST_CASE("Offboard reader topics")
       .channel_type = TestOffboardLogWriter::clockwork_metadata3.channel_type,
       .schema_encoding = TestOffboardLogWriter::clockwork_metadata3.schema_encoding,
       .schema_definition = std::string{TestOffboardLogWriter::clockwork_metadata3.schema_definition},
+      .is_amended = true,
     },
   });
 
@@ -110,7 +120,11 @@ TEST_CASE("Offboard reader metrics")
   const TestOffboardLogWriter test_writer;
   REQUIRE(test_writer.write_clockwork_test_log(test_log_path.string(), message_count));
 
-  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option);
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
+  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option, chunk_reader_factory);
 
   const auto metrics_result = reader.get_metrics();
   REQUIRE(metrics_result);
@@ -176,7 +190,11 @@ TEST_CASE("Offboard reader read all messages")
   const TestOffboardLogWriter test_writer;
   REQUIRE(test_writer.write_clockwork_test_log(test_log_path.string(), message_count));
 
-  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option);
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
+  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option, chunk_reader_factory);
   REQUIRE(reader.open({}));
   REQUIRE(reader.start_time() == LogTimestamp{TestOffboardLogWriter::start_time});
   REQUIRE(
@@ -248,7 +266,11 @@ TEST_CASE("Offboard reader filter topics")
   const TestOffboardLogWriter test_writer;
   REQUIRE(test_writer.write_clockwork_test_log(test_log_path.string(), message_count));
 
-  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option);
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
+  OffboardLogReader reader(test_log_path.string(), {}, {}, decompress_option, chunk_reader_factory);
   REQUIRE(reader.open([](const auto& topic) { return topic == "channel1"; }));
 
   auto expected_time = LogTimestamp{TestOffboardLogWriter::start_time};
@@ -288,7 +310,12 @@ TEST_CASE("Offboard reader interval")
       TestOffboardLogWriter::message_interval * static_cast<int64_t>(first_message_index),
     TestOffboardLogWriter::start_time + TestOffboardLogWriter::message_interval * 40};
 
-  OffboardLogReader reader(test_log_path.string(), log_interval, {}, DecompressOption::decompress);
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
+  OffboardLogReader reader(
+    test_log_path.string(), log_interval, {}, DecompressOption::decompress, chunk_reader_factory);
   REQUIRE(reader.open({}));
 
   auto expected_time = LogTimestamp{TestOffboardLogWriter::start_time};
@@ -386,13 +413,18 @@ TEST_CASE("Offboard reader relative interval")
       TestOffboardLogWriter::message_interval * static_cast<int64_t>(first_message_index),
     TestOffboardLogWriter::start_time + TestOffboardLogWriter::message_interval * 40};
 
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
   OffboardLogReader reader(
     test_log_path.string(),
     {},
     RelativeInterval{
       .start_offset = TestOffboardLogWriter::message_interval * static_cast<int64_t>(first_message_index),
       .end_offset = TestOffboardLogWriter::message_interval * 40},
-    DecompressOption::decompress);
+    DecompressOption::decompress,
+    chunk_reader_factory);
   REQUIRE(reader.open({}));
 
   auto expected_time = LogTimestamp{TestOffboardLogWriter::start_time};
@@ -490,12 +522,17 @@ TEST_CASE("Offboard reader relative interval with just start offset")
       TestOffboardLogWriter::message_interval * static_cast<int64_t>(first_message_index),
     jewels::time::SyncTime{std::chrono::nanoseconds(std::numeric_limits<int64_t>::max())}};
 
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+
   OffboardLogReader reader(
     test_log_path.string(),
     {},
     RelativeInterval{
       .start_offset = TestOffboardLogWriter::message_interval * static_cast<int64_t>(first_message_index)},
-    DecompressOption::decompress);
+    DecompressOption::decompress,
+    chunk_reader_factory);
   REQUIRE(reader.open({}));
 
   auto expected_time = LogTimestamp{TestOffboardLogWriter::start_time};

@@ -1,8 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
@@ -10,7 +12,6 @@
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 
-#include <__stddef_offsetof.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/python/gil_lock_guard.hh"
@@ -7,9 +7,11 @@
 #include "clockwork/serialization/cpp/tachyon_model.hh"
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
+#include "jewels/memory/memory_resource.hh"
 
 #include <cstddef>
 #include <memory>
+#include <memory_resource>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -151,6 +153,7 @@ void TachyonPythonUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
   std::span<const std::byte> incoming_metadata,
   std::string_view incoming_schema_name)
 {
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   const std::string current_metadata_str{
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Converting serialized metadata from bytes to string
     reinterpret_cast<const char*>(current_metadata.data()),
@@ -160,7 +163,7 @@ void TachyonPythonUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
   {
     throw std::runtime_error("Failed to parse destination metadata");
   }
-  auto current_model = TachyonModel::from_proto(std::move(current_proto));
+  auto current_model = TachyonModel::from_proto(memory_resource, std::move(current_proto));
   const std::string incoming_metadata_str{
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Converting serialized metadata from bytes to string
     reinterpret_cast<const char*>(incoming_metadata.data()),
@@ -170,7 +173,7 @@ void TachyonPythonUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
   {
     throw std::runtime_error("Failed to parse source metadata");
   }
-  auto incoming_model = TachyonModel::from_proto(std::move(incoming_proto));
+  auto incoming_model = TachyonModel::from_proto(memory_resource, std::move(incoming_proto));
   if (auto python_upgrader = TachyonPythonUpgrader::make_upgrader(
         current_module_name,
         current_source_file_name,

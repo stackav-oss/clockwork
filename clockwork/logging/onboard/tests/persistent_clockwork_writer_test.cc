@@ -1,25 +1,31 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
-#include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
+#include "clockwork/logging/onboard/tests/support/test_message_clk_cc.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
+#include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_lite_compressor.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/container/tap/var_array.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -35,11 +41,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <iterator>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -111,12 +118,11 @@ struct TestWriterPolicy
 
 TEST_CASE("Log persistent clockwork messages")
 {
-  constexpr size_t message_data_size = 1373U;
   constexpr size_t num_slots = 5U;
 
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
-    .message_size = message_data_size,
+    .message_size = sizeof(clockwork::Tappy<tests::TestMessage1384>),
     .is_published_once = false,
   };
 
@@ -129,7 +135,10 @@ TEST_CASE("Log persistent clockwork messages")
   auto pinion_buffer = *maybe_pinion_buffer;
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
-  LiteCompressor compressor{memory_resource};
+  const auto compressor =
+    clockwork::serialization::TachyonLiteCompressor::make_compressor<clockwork::Tappy<tests::TestMessage1384>>(
+      memory_resource);
+
   static constexpr size_t max_write_mib_per_sec = 100U;
   static constexpr auto max_log_file_duration = std::chrono::seconds{0};
   const auto* log_file_prefix = "log_file_";
@@ -137,14 +146,7 @@ TEST_CASE("Log persistent clockwork messages")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const auto* schema_name1 = "Schema 1";
-  const auto schema_encoding1 = SchemaEncoding::clockwork_tachyon;
-  const auto* schema_desc1 = "Schema description 1";
-
   const auto* channel_name1 = "Channel 1";
-  const auto compression_type1 = CompressionType::none;
-  const auto message_encoding1 = MessageEncoding::tachyon;
-  const auto channel_type1 = ChannelType::persistent;
 
   const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
 
@@ -153,18 +155,23 @@ TEST_CASE("Log persistent clockwork messages")
 
   const LoggedChannelMetadata channel_metadata1{
     .channel_name = channel_name1,
-    .compression_type = compression_type1,
-    .message_encoding = message_encoding1,
-    .channel_type = channel_type1,
-    .schema_name = schema_name1,
-    .schema_encoding = schema_encoding1,
-    .schema_definition = schema_desc1,
+    .compression_type = CompressionType::none,
+    .message_encoding = static_cast<MessageEncoding>(
+      clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::message_encoding),
+    .channel_type = ChannelType::persistent,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_definition.size()},
   };
 
   Writer<TestWriterPolicy> writer{
     memory_resource, memory_resource, max_write_mib_per_sec, max_log_file_duration, WriterEnvironment::normal};
   REQUIRE(writer.add_channel(channel_metadata1, time1));
-  schema_id_map[schema_name1] = 1U;
+  schema_id_map[channel_metadata1.schema_name] = 1U;
   channel_id_map[channel_name1] = 1U;
 
   const LogTimestamp message_time1{std::chrono::nanoseconds(100)};
@@ -172,9 +179,12 @@ TEST_CASE("Log persistent clockwork messages")
   auto buffer_iterator1 = std::end(pinion_buffer);
   REQUIRE(pinion_buffer.increment_head(0U, 1UL));
   auto slot1 = buffer_iterator1.dereference();
-  std::memset(slot1.message().data(), '\0', slot1.message().size());
   slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
   slot1.header()->sequence_number = 1U;
+  auto& slot1_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+  slot1_message.get_underlying_data().resize(692);
+  std::memset(slot1_message.get_mutable_data().data(), 'A', slot1_message.get_mutable_data().size());
 
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name1,
@@ -188,9 +198,12 @@ TEST_CASE("Log persistent clockwork messages")
   auto buffer_iterator2 = std::end(pinion_buffer);
   REQUIRE(pinion_buffer.increment_head(1U, 1UL));
   auto slot2 = buffer_iterator2.dereference();
-  std::memset(slot2.message().data(), 'B', slot2.message().size());
   slot2.header()->publish_timestamp = message_time2.get_nanoseconds();
   slot2.header()->sequence_number = 2U;
+  auto& slot2_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot2.message()).value();
+  slot2_message.get_underlying_data().resize(1384);
+  std::memset(slot2_message.get_mutable_data().data(), 'B', slot2_message.get_mutable_data().size());
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
@@ -205,9 +218,12 @@ TEST_CASE("Log persistent clockwork messages")
   auto buffer_iterator3 = std::end(pinion_buffer);
   REQUIRE(pinion_buffer.increment_head(2U, 1UL));
   auto slot3 = buffer_iterator3.dereference();
-  std::memset(slot3.message().data(), 'C', slot3.message().size());
   slot3.header()->publish_timestamp = message_time3.get_nanoseconds();
   slot3.header()->sequence_number = 3U;
+  auto& slot3_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot3.message()).value();
+  slot3_message.get_underlying_data().resize(1384);
+  std::memset(slot3_message.get_mutable_data().data(), 'C', slot3_message.get_mutable_data().size());
 
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name1,
@@ -219,9 +235,12 @@ TEST_CASE("Log persistent clockwork messages")
   auto buffer_iterator4 = std::end(pinion_buffer);
   REQUIRE(pinion_buffer.increment_head(3U, 1UL));
   auto slot4 = buffer_iterator4.dereference();
-  std::memset(slot4.message().data(), '\0', slot4.message().size());
   slot4.header()->publish_timestamp = message_time4.get_nanoseconds();
   slot4.header()->sequence_number = 4U;
+  auto& slot4_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot4.message()).value();
+  slot4_message.get_underlying_data().resize(346);
+  std::memset(slot4_message.get_mutable_data().data(), 'D', slot4_message.get_mutable_data().size());
 
   REQUIRE(writer.save_persistent_clockwork_message(
     channel_name1,
@@ -235,9 +254,12 @@ TEST_CASE("Log persistent clockwork messages")
   auto buffer_iterator5 = std::end(pinion_buffer);
   REQUIRE(pinion_buffer.increment_head(4U, 1UL));
   auto slot5 = buffer_iterator5.dereference();
-  std::memset(slot5.message().data(), 'E', slot5.message().size());
   slot5.header()->publish_timestamp = message_time5.get_nanoseconds();
   slot5.header()->sequence_number = 5U;
+  auto& slot5_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot5.message()).value();
+  slot5_message.get_underlying_data().resize(1384);
+  std::memset(slot5_message.get_mutable_data().data(), 'E', slot2_message.get_mutable_data().size());
 
   REQUIRE(writer.log_clockwork_message_wait(
     channel_name1,
@@ -267,7 +289,7 @@ TEST_CASE("Log persistent clockwork messages")
       .log_time = log_time1,
       .message_time = message_time1,
       .header = {},
-      .data = compressor.compress(slot1.message()),
+      .data = compressor->compress(slot1.message()),
     },
     channel_id_map,
     true,
@@ -319,7 +341,7 @@ TEST_CASE("Log persistent clockwork messages")
       .log_time = log_time4,
       .message_time = message_time4,
       .header = {},
-      .data = compressor.compress(slot4.message()),
+      .data = compressor->compress(slot4.message()),
     },
     channel_id_map,
     true,

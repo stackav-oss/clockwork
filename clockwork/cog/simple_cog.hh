@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -12,9 +12,9 @@
 #include "clockwork/common/forward.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -104,7 +104,7 @@ public:
   /// @param[in] handle The underlying subscriber
   /// @return The observer to associate with the subscriber on success
   [[nodiscard]] jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::SubscriberHandle handle) override;
+  set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<pinion::AbstractChannel> channel) override;
 
   /// Set the publisher
   /// @param[in] uuid The id of the publisher endpoint
@@ -140,12 +140,18 @@ public:
   /// E.g. Aquire any necessary locks (e.g. shared state mutexes).
   /// @note Every successfull call to prepare_for_exection __must__ be followed
   ///   by a call to execute.
-  /// @return true if the Cog is is ready to be executed.
-  [[nodiscard]] jewels::expected<void, CogExecutionError>
-  prepare_for_execution(jewels::time::SyncTime current_time) override;
+  /// @param[out] throttled_until_out The publisher eligibility deadline when publisher throttled.
+  /// @param[in] current_time The current synchronized time.
+  /// @return The preparation result.
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> throttled_until_out, jewels::time::SyncTime current_time) override;
+
+  /// Check whether this Cog has rate-limited publishers.
+  /// @return True when any publisher policy has rate-limit parameters.
+  [[nodiscard]] bool has_rate_limited_publishers() const override;
 
   /// Execute the cog and unlock any shared resoures.
-  /// @pre prepare_for_execution() was called and returned true.
+  /// @pre prepare_for_execution() was called and returned ready.
   /// @param[in] params Execution parameters (start time, etc).
   /// @return true if the Cog executed successfully.
   [[nodiscard]] jewels::expected<void, CogExecutionError> execute(CogExecuteParams params) override;
@@ -177,6 +183,64 @@ private:
   /// @tparam PublishablesType The type of the publishables
   template <typename PublishablesType>
   void update_output_metrics(PublishablesType& publishables);
+
+  /// Update the output metrics for the publishers
+  /// @param resources The resources to use for updating metrics
+  /// @tparam ResourcesType The type of the resources
+  /// @tparam StatesType the type of the states
+  template <typename ResourcesType, typename StatesType>
+  void update_resource_metrics(ResourcesType& resources, StatesType& states);
+
+  /// Create the dial by dispatching to Policy::make_dial, appending the dynamic
+  /// timer handler argument when the policy uses dynamic timers.
+  /// @tparam DialArgs Forwarded argument types for Policy::make_dial
+  /// @param args Arguments to forward to Policy::make_dial
+  /// @return The constructed dial object
+  template <typename... DialArgs>
+  auto make_dial_impl(DialArgs&&... args);
+
+  /// Populate cog metrics report group signals from the current execution data.
+  /// @param publishables The publishables from this execution
+  /// @param exec_complete_time The time the execution completed
+  /// @tparam PublishablesType The type of the publishables
+  template <typename PublishablesType>
+  void populate_cog_metrics_signals(PublishablesType& publishables, jewels::time::SyncTime exec_complete_time);
+
+  /// Compute the conditions mask for the current execution.
+  ///
+  /// For cogs that publish structured metrics (`publish_metrics`), delegates to the
+  /// policy's generated `get_conditions_mask`. For signals-only cogs
+  /// (`has_cog_metrics_report_groups`), computes the mask generically using
+  /// `is_active()` on each condition handle.
+  /// @tparam TimerConds The timer conditions type
+  /// @tparam InputConds The input conditions type
+  /// @param timer_conditions The timer conditions for this execution
+  /// @param input_conditions The input conditions for this execution
+  /// @return The computed conditions mask
+  template <typename TimerConds, typename InputConds>
+  [[nodiscard]] uint64_t
+  get_conditions_mask(const TimerConds& timer_conditions, const InputConds& input_conditions) const noexcept;
+
+  /// Execute user code with start/end signals and metrics bookkeeping.
+  /// @tparam DialType The type of the dial
+  /// @tparam TimerConds The timer conditions type
+  /// @tparam InputConds The input conditions type
+  /// @param dial The constructed dial to pass to Policy::execute
+  /// @param start_time The execution start time
+  /// @param timer_conditions The prepared timer conditions
+  /// @param input_conditions The prepared input conditions
+  template <typename DialType, typename TimerConds, typename InputConds>
+  void run_cog_execution(
+    DialType& dial, jewels::time::SyncTime start_time, TimerConds& timer_conditions, InputConds& input_conditions);
+
+  /// Handle alignment resolution miss (stale or pending).
+  /// @param inputs The constructed dial inputs tuple
+  /// @param guard The optional scope guard (reset on early return)
+  /// @param start_time The execution start time
+  /// @return true if execution should be skipped (miss handled), false if resolved
+  template <typename InputDialTuple, typename GuardType>
+  bool handle_alignment_miss(InputDialTuple& inputs, GuardType& guard, jewels::time::SyncTime start_time)
+    requires(requires { &Policy::resolve_alignment; });
 
   /// Memory resource
   jewels::memory::MemoryResource memory_resource_;
@@ -235,6 +299,12 @@ private:
 
   /// The last time event metrics were sent
   std::optional<jewels::time::SyncTime> last_event_sent_time_;
+
+  /// The start time of the previous execution, for computing execution period
+  /// for cog metrics signals. Tracked separately from CogMetrics because
+  /// CogMetrics' internal previous_execution_start_time_ is overwritten during
+  /// commit_metrics() before we can read it.
+  std::optional<jewels::time::SyncTime> previous_exec_start_for_signals_;
 
   /// Stored conditions from prepare execution.
   std::optional<typename TimersType::ConditionsTuple> prepared_timer_conditions_;

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/bridge_status_clk_cc.hh"
@@ -30,6 +30,8 @@ TEST_CASE("combine_client_server_counters")
     .max_transfer_time = std::chrono::nanoseconds(19),
     .max_compression_time = std::chrono::nanoseconds(110),
     .max_bridge_latency = std::chrono::nanoseconds(120),
+    .null_header_count = 20U,
+    .keep_alive_count = 21U,
   };
 
   TcpBridgeClientServerCounters counters2{
@@ -44,6 +46,8 @@ TEST_CASE("combine_client_server_counters")
     .max_transfer_time = std::chrono::nanoseconds(29),
     .max_compression_time = std::chrono::nanoseconds(210),
     .max_bridge_latency = std::chrono::nanoseconds(220),
+    .null_header_count = 30U,
+    .keep_alive_count = 31U,
   };
 
   SECTION("1 into 2")
@@ -61,6 +65,8 @@ TEST_CASE("combine_client_server_counters")
     CHECK(counters2.max_transfer_time.count() == 29);
     CHECK(counters2.max_compression_time.count() == 210);
     CHECK(counters2.max_bridge_latency.count() == 220);
+    CHECK(counters2.null_header_count == 50);
+    CHECK(counters2.keep_alive_count == 52);
   }
 
   SECTION("2 into 1")
@@ -78,6 +84,8 @@ TEST_CASE("combine_client_server_counters")
     CHECK(counters1.max_transfer_time.count() == 29);
     CHECK(counters1.max_compression_time.count() == 210);
     CHECK(counters1.max_bridge_latency.count() == 220);
+    CHECK(counters1.null_header_count == 50);
+    CHECK(counters1.keep_alive_count == 52);
   }
 }
 
@@ -95,6 +103,8 @@ TEST_CASE("store_client_server_counters")
     .max_transfer_time = std::chrono::nanoseconds(100),
     .max_compression_time = std::chrono::nanoseconds(110),
     .max_bridge_latency = std::chrono::nanoseconds(120),
+    .null_header_count = 130U,
+    .keep_alive_count = 140U,
   };
 
   Tappy<BridgeClientServerCounters> bridge_counters{};
@@ -113,6 +123,8 @@ TEST_CASE("store_client_server_counters")
   CHECK(bridge_counters.get_max_transfer_time().count() == 100);
   CHECK(bridge_counters.get_max_compression_time().count() == 110);
   CHECK(bridge_counters.get_max_bridge_latency().count() == 120);
+  CHECK(bridge_counters.get_null_header_rate_hz() == 65.0f);
+  CHECK(bridge_counters.get_keep_alive_rate_hz() == 70.0f);
 }
 
 TEST_CASE("diagnostics state")
@@ -263,6 +275,73 @@ TEST_CASE("diagnostics state")
                                                .max_bulk_data_latency_channel_name = "channel3"});
     REQUIRE(diag_state.get_and_reset_counters() == TcpBridgeDiagnosticsCounters{});
   }
+}
+
+TEST_CASE("combine_diagnostics_counters")
+{
+  TcpBridgeDiagnosticsCounters dest{};
+  TcpBridgeDiagnosticsCounters source{
+    .drop_count = 1U,
+    .failed_sends = 2U,
+    .closed_socket_count = 3U,
+    .failed_recvs = 4U,
+    .failed_reservations = 5U,
+    .malformed_messages = 6U,
+    .failed_commits = 7U,
+    .failed_discards = 8U,
+    .client_socket_errors = 9U,
+    .progress_errors = 10U,
+    .epoll_errors = 11U,
+    .status_errors = 12U,
+    .max_bridge_latency = std::chrono::seconds(13),
+    .max_latency_channel_name = "Channel14",
+    .max_bridge_bulk_data_latency = std::chrono::seconds(15),
+    .max_bulk_data_latency_channel_name = "Channel16",
+  };
+
+  combine_diagnostics_counters(source, dest);
+  combine_diagnostics_counters(source, dest);
+
+  REQUIRE(dest.drop_count == 2U);
+  REQUIRE(dest.failed_sends == 4U);
+  REQUIRE(dest.closed_socket_count == 6U);
+  REQUIRE(dest.failed_recvs == 8U);
+  REQUIRE(dest.failed_reservations == 10U);
+  REQUIRE(dest.malformed_messages == 12U);
+  REQUIRE(dest.failed_commits == 14U);
+  REQUIRE(dest.failed_discards == 16U);
+  REQUIRE(dest.client_socket_errors == 18U);
+  REQUIRE(dest.progress_errors == 20U);
+  REQUIRE(dest.epoll_errors == 22U);
+  REQUIRE(dest.status_errors == 24U);
+  REQUIRE(dest.max_bridge_latency == std::chrono::seconds(13));
+  REQUIRE(dest.max_latency_channel_name == "Channel14");
+  REQUIRE(dest.max_bridge_bulk_data_latency == std::chrono::seconds(15));
+  REQUIRE(dest.max_bulk_data_latency_channel_name == "Channel16");
+
+  source.max_bridge_latency = std::chrono::seconds(39);
+  source.max_latency_channel_name = "Channel42";
+  source.max_bridge_bulk_data_latency = std::chrono::seconds(45);
+  source.max_bulk_data_latency_channel_name = "Channel48";
+
+  combine_diagnostics_counters(source, dest);
+
+  REQUIRE(dest.drop_count == 3U);
+  REQUIRE(dest.failed_sends == 6U);
+  REQUIRE(dest.closed_socket_count == 9U);
+  REQUIRE(dest.failed_recvs == 12U);
+  REQUIRE(dest.failed_reservations == 15U);
+  REQUIRE(dest.malformed_messages == 18U);
+  REQUIRE(dest.failed_commits == 21U);
+  REQUIRE(dest.failed_discards == 24U);
+  REQUIRE(dest.client_socket_errors == 27U);
+  REQUIRE(dest.progress_errors == 30U);
+  REQUIRE(dest.epoll_errors == 33U);
+  REQUIRE(dest.status_errors == 36U);
+  REQUIRE(dest.max_bridge_latency == std::chrono::seconds(39));
+  REQUIRE(dest.max_latency_channel_name == "Channel42");
+  REQUIRE(dest.max_bridge_bulk_data_latency == std::chrono::seconds(45));
+  REQUIRE(dest.max_bulk_data_latency_channel_name == "Channel48");
 }
 
 } // namespace

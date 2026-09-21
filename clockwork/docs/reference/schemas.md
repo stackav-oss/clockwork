@@ -121,21 +121,62 @@ User-defined types include schemas, enums, and tags (explained below).
 
 Built-in types are in the table below.
 
-| Type                                     | C++                                                                               | Python                                        | Notes                                                                                                 |
-| ---------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `Bool`                                   | `bool`                                                                            | `bool`                                        | Not convertible to integers; values are `true` or `false`                                             |
-| `Byte`                                   | `std::byte`                                                                       | `int` when alone, `bytes` when in a container |                                                                                                       |
-| `Float32`, `Float64`                     | `float`, `double`                                                                 | `float`                                       |                                                                                                       |
-| `Int8`, `Int16`, `Int32`, `Int64`        | `int8_t`, `int16_t`, `int32_t`, `int64_t`                                         | `int`                                         |                                                                                                       |
-| `UInt8`, `UInt16`, `UInt32`, `UInt64`    | `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`                                     | `int`                                         |                                                                                                       |
-| `VarString<max_size: UInt64>`            | Custom bounded analog of `std::string`, typically accessed via `std::string_view` | `str`                                         |                                                                                                       |
-| `FixedArray<type: Type, size: UInt64>`   | `std::array<type, size>` but accessed via span                                    | `list[type]`                                  |                                                                                                       |
-| `VarArray<type: Type, max_size: UInt64>` | Similar interface to a `std::vector` but a custom Clockwork implementation        | `list[type]`                                  | In C++ prefer to use spans, ranges, and iterators and avoid hard-coding the container type.           |
-| `FixedSoa<type: Type, size: UInt64>`     | `clockwork::FixedSoa<type, size>`                                                 | Dataclass with list fields                    | Struct-of-Arrays layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md).  |
-| `VarSoa<type: Type, max_size: UInt64>`   | `clockwork::VarSoa<type, max_size>`                                               | Dataclass with list fields                    | Variable-size SoA layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md). |
-| `Duration`                               | `std::chrono::nanoseconds`                                                        | Clockwork-specific `Duration` type            | This is a strong type in Clockwork with [unit literal syntax](common_syntax.md#unit-literals).        |
-| `SyncTime`                               | `jewels::time::SyncTime`                                                          | Clockwork-specific `SyncTime` type            | This is also a strong type but without any literal syntax.                                            |
-| `Uuid<tag: Type>`                        | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                   | Tag type is discarded in Python. See below for defining tag types in Clockwork.                       |
+| Type                                                            | C++                                                                               | Python                                                           | Notes                                                                                                 |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Bool`                                                          | `bool`                                                                            | `bool`                                                           | Not convertible to integers; values are `true` or `false`                                             |
+| `Byte`                                                          | `std::byte`                                                                       | `int` when alone, `bytes` when in a container                    |                                                                                                       |
+| `Float32`, `Float64`                                            | `float`, `double`                                                                 | `float`                                                          |                                                                                                       |
+| `Int8`, `Int16`, `Int32`, `Int64`                               | `int8_t`, `int16_t`, `int32_t`, `int64_t`                                         | `int`                                                            |                                                                                                       |
+| `UInt8`, `UInt16`, `UInt32`, `UInt64`                           | `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`                                     | `int`                                                            |                                                                                                       |
+| `VarString<max_size: UInt64>`                                   | Custom bounded analog of `std::string`, typically accessed via `std::string_view` | `str`                                                            |                                                                                                       |
+| `Bitset<size: UInt64>`                                          | `jewels::tap::Bitset<size>`                                                       | `int`                                                            | Fixed number of anonymous bits; `size` must be greater than zero.                                     |
+| `FixedArray<type: Type, size: UInt64>`                          | `std::array<type, size>` but accessed via span                                    | `list[type]`                                                     |                                                                                                       |
+| `VarArray<type: Type, max_size: UInt64>`                        | Similar interface to a `std::vector` but a custom Clockwork implementation        | `list[type]`                                                     | In C++ prefer to use spans, ranges, and iterators and avoid hard-coding the container type.           |
+| `FixedSoa<type: Type, size: UInt64>`                            | `clockwork::FixedSoa<type, size>`                                                 | Dataclass with list fields                                       | Struct-of-Arrays layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md).  |
+| `VarSoa<type: Type, max_size: UInt64>`                          | `clockwork::VarSoa<type, max_size>`                                               | Dataclass with list fields                                       | Variable-size SoA layout. Requires `soa_enabled: true` on the element schema. See [SoA docs](soa.md). |
+| `Tensor<type: Type, shape: List, layout: List \| TensorLayout>` | `jewels::tap::Tensor<type, shape, layout>`                                        | Dataclass with list fields for the elements, shape, and strides. | See section about tensors below for more details.                                                     |
+| `Duration`                                                      | `std::chrono::nanoseconds`                                                        | Clockwork-specific `Duration` type                               | This is a strong type in Clockwork with [unit literal syntax](common_syntax.md#unit-literals).        |
+| `SyncTime`                                                      | `jewels::time::SyncTime`                                                          | Clockwork-specific `SyncTime` type                               | This is also a strong type but without any literal syntax.                                            |
+| `Uuid<tag: Type>`                                               | `jewels::Uuid<tag>`                                                               | `uuid.UUID`                                                      | Tag type is discarded in Python. See below for defining tag types in Clockwork.                       |
+
+#### Bitsets
+
+`Bitset<size>` represents a fixed number of anonymous, index-addressed bits. The size is a compile-time `UInt64` value greater than zero:
+
+```clockwork
+// Availability of configured sensors.
+#0 sensor_present: Bitset<37>;
+```
+
+Its Tachyon representation occupies `ceil(size / 8)` bytes with one-byte alignment.
+Bit `i` is byte `i / 8`, mask `1 << (i % 8)`.
+Bit zero is the least-significant bit of byte zero.
+The unused high bits of a non-byte-aligned final byte are written as zero.
+Readers ignore those unused bits so malformed historical data does not change the logical value.
+
+In C++, a field is `jewels::tap::Bitset<size>`.
+It provides `test`, `try_set`, `try_reset`, `try_flip`, `reset`, `flip`, `all`, `any`, `none`, `count`, equality, and a read-only `bytes()` span.
+Indexing outside `[0, size)` is invalid; use the callsig-safe `test(Out<bool>, index)`, `try_set`, `try_reset`, and `try_flip` when an untrusted index must be handled without throwing.
+The throwing `test`, `set`, `reset(index)`, and `flip(index)` overloads are only for STL algorithm compatibility.
+
+Generated and dynamic Python Tachyon APIs expose a bitset as a nonnegative `int`, where bit `i` is `1 << i`.
+Serialization rejects negative values and values greater than or equal to `2**size`.
+Bitsets have no nonzero schema init-value syntax; their default value is zero.
+
+#### Tensors
+
+The `Tensor` builtin is a convenient way to represent multi-dimensional data.
+Its parameters are slightly richer than those of the other builtins.
+The sizes of each of a tensor's dimensions are specified with the `shape` parameter, which must be a list literal whose elements can all bind to `UInt64` (constants and integer are both acceptable).
+For example, setting `shape` to `[2, 3]` will yield a two-dimensional tensor where the first dimension has two elements and the second has three.
+The memory layout can be specified with the builtin `TensorLayout` enum (see the table below).
+You can also explicitly set the stride for each dimension by providing a list literal, like you would for the `shape` parameter.
+If no layout is specified, `TensorLayout::row_major` is used.
+
+| Value                        | Description                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `TensorLayout::row_major`    | Stride[i] is the product of Dimensions[j] for all j in (i, n). Stride[n-1] is always 1. |
+| `TensorLayout::column_major` | Stride[i] is the product of Dimensions[j] for all j in (0, i). Stride[0] is always 1.   |
 
 ### Clockwork strong types (Duration, SyncTime, UUID, tags)
 

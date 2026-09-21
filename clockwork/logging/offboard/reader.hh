@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -188,7 +188,10 @@ public:
   /// Constructor
   /// @param[in] memory_resource Memory resource
   /// @param[in] uri_str Log URI
-  Reader(jewels::memory::MemoryResource memory_resource, std::string_view uri_str);
+  Reader(
+    jewels::memory::MemoryResource memory_resource,
+    std::string_view uri_str,
+    std::shared_ptr<ChunkReaderWriterFactory<>> chunk_reader_factory);
 
   ~Reader() = default;
 
@@ -261,7 +264,7 @@ private:
   std::pmr::string uri_str_;
 
   /// Chunk reader factory pointer
-  ChunkReaderWriterFactory<> chunk_reader_factory_;
+  std::shared_ptr<ChunkReaderWriterFactory<>> chunk_reader_factory_;
 
   /// Chunk compressor pointer
   jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr_;

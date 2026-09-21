@@ -1,0 +1,19 @@
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+#![cpp(namespace=clockwork::aligner_csr_test)]
+
+use clockwork::dsl::aligner::gen::tests::support::aligner_test_msgs::{TestSensorMsg};
+
+// Aligner that verifies a maximum-size batch can fill its input view exactly.
+aligner ExactBatchAligner
+{
+  inputs
+  {
+    // Samples selected into one exact-size batch.
+    samples: Tappy<TestSensorMsg>
+    {
+      max_msgs: 4;
+      batch_size: [4, 4];
+      arbitrary_selection: true;
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Facilities for generating the C++ cogs to run python cogs."""
@@ -156,24 +156,31 @@ class CppPythonCog:
             input_class_name = python_cog_dial.get_input_class_name(self.dial_class_name, input_name)
             inputs_args.append(f"inputs_{input_name}_obj")
             cpp_chunk.append(
+                self._render_single_input(input_name, f"dial.get_inputs().get_{input_name}()", input_class_name)
+            )
+        # Preserve the Python dial shape for aligned inputs: dial.inputs.<group>.<upstream>.
+        for aligned_name, aligned_def in self.cog_ir.aligned_inputs.items():
+            inputs_args.append(f"inputs_{aligned_name}_obj")
+            cpp_chunk.append(f"const auto& inputs_{aligned_name} = dial.get_inputs().get_{aligned_name}();")
+            aligned_args: list[str] = []
+            # Compiler validation resolves aligned inputs to aligners.
+            assert hasattr(aligned_def.aligned_type, "inputs")
+            for upstream_name in aligned_def.aligned_type.inputs:
+                aligned_input_name = f"{aligned_name}_{upstream_name}"
+                aligned_args.append(f"inputs_{aligned_input_name}_obj")
+                input_class_name = python_cog_dial.get_input_class_name(self.dial_class_name, aligned_input_name)
+                cpp_chunk.append(
+                    self._render_single_input(
+                        aligned_input_name,
+                        f"inputs_{aligned_name}.get_{upstream_name}()",
+                        input_class_name,
+                    )
+                )
+            aligned_class_name = python_cog_dial.get_input_class_name(self.dial_class_name, aligned_name)
+            cpp_chunk.append(
                 [
-                    f"const auto& inputs_{input_name} = dial.get_inputs().get_{input_name}();",
-                    f"const auto& inputs_{input_name}_view = inputs_{input_name}.get_view();",
-                    f"std::vector<::clockwork::python::PythonObject> inputs_{input_name}_buffers;",
-                    f"inputs_{input_name}_buffers.reserve(inputs_{input_name}_view.size());",
-                    f"for (const auto& msg : inputs_{input_name}_view)",
-                    "{",
-                    f"    inputs_{input_name}_buffers.emplace_back(",
-                    "        ::clockwork::python::PythonObject::make_read_only_memory_view(&msg, sizeof(msg)));",
-                    "}",
-                    f"const auto inputs_{input_name}_buffers_obj =",
-                    f"    ::clockwork::python::PythonObject::make_list(inputs_{input_name}_buffers);",
-                    f"const auto inputs_{input_name}_new_index =",
-                    f"    std::distance(inputs_{input_name}_view.begin(), inputs_{input_name}.get_first_new());",
-                    f'const auto inputs_{input_name}_class = dial_dict.get_dictionary_item("{input_class_name}");',
-                    f"const auto inputs_{input_name}_obj = inputs_{input_name}_class.call_object(",
-                    f"    inputs_{input_name}_buffers_obj,",
-                    f"    ::clockwork::python::PythonObject::make_integer(inputs_{input_name}_new_index));",
+                    f'const auto inputs_{aligned_name}_class = dial_dict.get_dictionary_item("{aligned_class_name}");',
+                    f"const auto inputs_{aligned_name}_obj = inputs_{aligned_name}_class.call_object({', '.join(aligned_args)});",
                 ]
             )
         inputs_class_name = python_cog_dial.get_inputs_class_name(self.dial_class_name)
@@ -181,6 +188,32 @@ class CppPythonCog:
             [
                 f'const auto inputs_class = dial_dict.get_dictionary_item("{inputs_class_name}");',
                 f"const auto inputs_obj = inputs_class.call_object({', '.join(inputs_args)});",
+            ]
+        )
+        return cpp_chunk
+
+    def _render_single_input(self, input_name: str, input_expr: str, input_class_name: str) -> CppChunk:
+        """Render a single Python input object from a C++ message input dial."""
+        cpp_chunk = CppChunk()
+        cpp_chunk.append(
+            [
+                f"const auto& inputs_{input_name} = {input_expr};",
+                f"const auto& inputs_{input_name}_view = inputs_{input_name}.get_view();",
+                f"std::vector<::clockwork::python::PythonObject> inputs_{input_name}_buffers;",
+                f"inputs_{input_name}_buffers.reserve(inputs_{input_name}_view.size());",
+                f"for (const auto& msg : inputs_{input_name}_view)",
+                "{",
+                f"    inputs_{input_name}_buffers.emplace_back(",
+                "        ::clockwork::python::PythonObject::make_read_only_memory_view(&msg, sizeof(msg)));",
+                "}",
+                f"const auto inputs_{input_name}_buffers_obj =",
+                f"    ::clockwork::python::PythonObject::make_list(inputs_{input_name}_buffers);",
+                f"const auto inputs_{input_name}_new_index =",
+                f"    std::distance(inputs_{input_name}_view.begin(), inputs_{input_name}.get_first_new());",
+                f'const auto inputs_{input_name}_class = dial_dict.get_dictionary_item("{input_class_name}");',
+                f"const auto inputs_{input_name}_obj = inputs_{input_name}_class.call_object(",
+                f"    inputs_{input_name}_buffers_obj,",
+                f"    ::clockwork::python::PythonObject::make_integer(inputs_{input_name}_new_index));",
             ]
         )
         return cpp_chunk
@@ -194,19 +227,44 @@ class CppPythonCog:
         cpp_chunk = CppChunk()
         outputs_args: list[str] = []
         for output_name in self.cog_ir.outputs:
+            output_def = self.cog_ir.outputs[output_name]
             output_class_name = python_cog_dial.get_output_class_name(self.dial_class_name, output_name)
             outputs_args.append(f"outputs_{output_name}_obj")
-            cpp_chunk.append(
-                [
-                    f"auto& outputs_{output_name} = dial.get_outputs().get_{output_name}();",
-                    f"const auto outputs_{output_name}_buffer =",
-                    "    ::clockwork::python::PythonObject::make_writable_memory_view(",
-                    f"        &outputs_{output_name}.message(), sizeof(outputs_{output_name}.message()));",
-                    f'const auto outputs_{output_name}_class = dial_dict.get_dictionary_item("{output_class_name}");',
-                    f"const auto outputs_{output_name}_obj = outputs_{output_name}_class.call_object(",
-                    f"    outputs_{output_name}_buffer);",
-                ]
-            )
+
+            max_msgs = output_def.max_msgs_per_exec
+
+            if max_msgs > 1:
+                cpp_chunk.append(
+                    [
+                        f"auto& outputs_{output_name} = dial.get_outputs().get_{output_name}();",
+                        f"auto messages_{output_name} = outputs_{output_name}.messages();",
+                        f"::std::vector<::clockwork::python::PythonObject> buffers_{output_name};",
+                        f"buffers_{output_name}.reserve(messages_{output_name}.size());",
+                        f"for (::std::size_t i = 0U; i < messages_{output_name}.size(); ++i)",
+                        "{",
+                        f"    buffers_{output_name}.emplace_back(",
+                        "        ::clockwork::python::PythonObject::make_writable_memory_view(",
+                        f"            messages_{output_name}[i], sizeof(*messages_{output_name}[i])));",
+                        "}",
+                        f"const auto outputs_{output_name}_buffers_obj =",
+                        f"    ::clockwork::python::PythonObject::make_list(buffers_{output_name});",
+                        f'const auto outputs_{output_name}_class = dial_dict.get_dictionary_item("{output_class_name}");',
+                        f"const auto outputs_{output_name}_obj = outputs_{output_name}_class.call_object(",
+                        f"    outputs_{output_name}_buffers_obj);",
+                    ]
+                )
+            else:
+                cpp_chunk.append(
+                    [
+                        f"auto& outputs_{output_name} = dial.get_outputs().get_{output_name}();",
+                        f"const auto outputs_{output_name}_buffer =",
+                        "    ::clockwork::python::PythonObject::make_writable_memory_view(",
+                        f"        &outputs_{output_name}.message(), sizeof(outputs_{output_name}.message()));",
+                        f'const auto outputs_{output_name}_class = dial_dict.get_dictionary_item("{output_class_name}");',
+                        f"const auto outputs_{output_name}_obj = outputs_{output_name}_class.call_object(",
+                        f"    outputs_{output_name}_buffer);",
+                    ]
+                )
         outputs_class_name = python_cog_dial.get_outputs_class_name(self.dial_class_name)
         cpp_chunk.append(
             [
@@ -242,14 +300,30 @@ class CppPythonCog:
             ]
         )
         for output_name in self.cog_ir.outputs:
-            cpp_chunk.append(
-                [
-                    f'if (outputs_{output_name}_obj.get_attribute("is_published").is_true())',
-                    "{",
-                    f"    outputs_{output_name}.mark_for_publish();",
-                    "}",
-                ]
-            )
+            output_def = self.cog_ir.outputs[output_name]
+            max_msgs = output_def.max_msgs_per_exec
+
+            if max_msgs > 1:
+                cpp_chunk.append(
+                    [
+                        f"const auto outputs_{output_name}_publish_count =",
+                        f'    outputs_{output_name}_obj.get_attribute("publish_count").get_integer();',
+                        f"if (outputs_{output_name}_publish_count >= 0)",
+                        "{",
+                        f"    outputs_{output_name}.mark_for_publish(",
+                        f"        static_cast<::std::size_t>(outputs_{output_name}_publish_count));",
+                        "}",
+                    ]
+                )
+            else:
+                cpp_chunk.append(
+                    [
+                        f'if (outputs_{output_name}_obj.get_attribute("is_published").is_true())',
+                        "{",
+                        f"    outputs_{output_name}.mark_for_publish();",
+                        "}",
+                    ]
+                )
         return cpp_chunk
 
     def render(self) -> CppModuleChunks:
@@ -265,6 +339,7 @@ class CppPythonCog:
         cpp_mod.implementation_chunk.context.add_include(Header(CLK_REPO, "clockwork/python/gil_lock_guard.hh"))
         cpp_mod.implementation_chunk.context.add_include(Header(CLK_REPO, "clockwork/python/python_init.hh"))
         cpp_mod.implementation_chunk.context.add_include(Header(CLK_REPO, "clockwork/python/python_object.hh"))
+        cpp_mod.implementation_chunk.context.add_include(SystemHeader("cstddef"))
         cpp_mod.implementation_chunk.context.add_include(SystemHeader("iterator"))
         cpp_mod.implementation_chunk.context.add_include(SystemHeader("exception"))
         cpp_mod.implementation_chunk.context.add_include(SystemHeader("vector"))

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,7 +7,7 @@
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"
@@ -77,7 +77,7 @@ private:
 
   jewels::Uuid<common::EndpointClassId> publisher_id_;
   std::optional<pinion::PublisherHandle> publisher_;
-  std::optional<pinion::BatchReservedSlot> reserved_batch_;
+  std::optional<pinion::PublisherReservation> reserved_batch_;
   std::pmr::vector<::iovec> io_vecs_;
   std::pmr::vector<::mmsghdr> mmsg_hdrs_;
   std::pmr::vector<::sockaddr_in> msg_names_;

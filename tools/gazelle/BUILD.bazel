@@ -1,16 +1,17 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@build_stack_rules_proto//rules:proto_plugin.bzl", "proto_plugin")
+load("@clockwork//tools/rules:write_binary_wrapper_source_file.bzl", "write_binary_wrapper_source_file")
 load("@clockwork_pip//:requirements.bzl", "all_whl_requirements")
 load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
 load("@rules_python_gazelle_plugin//modules_mapping:def.bzl", "modules_mapping")
 load("//tools/rules:python.bzl", "py_binary")
 
-exports_files(
-    ["build_stack_rules_proto.yaml"],
-    visibility = ["//visibility:public"],
-)
+exports_files([
+    "build_stack_rules_proto.yaml",
+    "gazelle_wrapper.sh",
+])
 
 gazelle(
     name = "gazelle",
@@ -61,4 +62,11 @@ py_binary(
     data = [":build_stack_rules_proto.yaml"],
     visibility = ["//:__subpackages__"],
     deps = ["@clockwork_pip//protobuf"],
+)
+
+write_binary_wrapper_source_file(
+    name = "write_gazelle_wrapper",
+    binary = ":gazelle",
+    out_file = "gazelle_wrapper.sh",
+    visibility = ["//tools:__pkg__"],
 )

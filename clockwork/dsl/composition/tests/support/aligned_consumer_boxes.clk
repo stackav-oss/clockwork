@@ -1,0 +1,85 @@
+#![generate(cpp, cpp_exe)]
+#![cpp(namespace=clockwork::testing::aligned_consumer)]
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner::{
+  SimpleAligner,
+  SimpleAlignerAlignmentMsg,
+  TestMsg,
+  ConsumerEchoMsg,
+};
+use clockwork::dsl::composition::tests::support::aligned_consumer_cog::{ConsumerCog};
+use std::aligners::state::{AlignerState};
+
+// Channel for raw data (regular input)
+channel RawDataChannel
+{
+  message_type: Tachyon<TestMsg>;
+  max_num_messages: 10;
+}
+
+// Input channel for sensor
+channel SensorChannel
+{
+  message_type: Tachyon<TestMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for camera
+channel CameraChannel
+{
+  message_type: Tachyon<TestMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for lidar
+channel LidarChannel
+{
+  message_type: Tachyon<TestMsg>;
+  max_num_messages: 40;
+}
+
+// Input channel for radar
+channel RadarChannel
+{
+  message_type: Tachyon<TestMsg>;
+  max_num_messages: 20;
+}
+
+// Channel for the alignment output
+channel AlignmentChannel
+{
+  message_type: Tachyon<SimpleAlignerAlignmentMsg>;
+  max_num_messages: 10;
+}
+
+// Channel for consumer echo output
+channel EchoChannel
+{
+  message_type: Tachyon<ConsumerEchoMsg>;
+  max_num_messages: 10;
+}
+
+box AlignedConsumerBox
+{
+  new aligner: SimpleAligner;
+  new consumer: ConsumerCog;
+  new aligner_state: State(representation=Tachyon<AlignerState>);
+  connect aligner_state to aligner.aligner_state;
+  connect SensorChannel to aligner.sensor;
+  connect CameraChannel to aligner.camera;
+  connect LidarChannel to aligner.lidar;
+  connect RadarChannel to aligner.radar;
+  connect aligner.alignment to AlignmentChannel;
+  connect RawDataChannel to consumer.raw_data;
+  connect AlignmentChannel to consumer.aligned;
+  connect consumer.echo to EchoChannel;
+}
+
+cpu_domain AlignedConsumerTestCpu;
+
+box AlignedConsumerSystem
+{
+  new box: AlignedConsumerBox;
+  new proc: Process(executable=aligned_consumer_boxes_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=AlignedConsumerTestCpu) to proc;
+}

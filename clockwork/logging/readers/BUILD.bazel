@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -70,11 +70,20 @@ cc_library(
         ":onboard_log_reader",
         ":types",
         "//clockwork/logging:decompress_option",
+        "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
         "//clockwork/logging/offboard:log_format",
+        "//clockwork/logging/offboard:log_uri",
+        "//clockwork/logging/onboard:buffered_reader",
         "//clockwork/logging/onboard:log_format",
+        "//clockwork/logging/onboard:offboard_buffered_reader",
+        "//jewels/container:circular_buffer",
         "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
         "@fmt",
+        "@gsl//:util",
     ],
 )
 
@@ -112,7 +121,6 @@ py_cc_binding(
         "//clockwork/logging:log_timestamp",
         "//jewels/std:expected",
         "@nanobind",
-        "@python_3_10//:python_headers",
     ],
 )
 
@@ -128,10 +136,12 @@ py_cc_binding(
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
         "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:span",
         "@fmt",
         "@nanobind",
-        "@python_3_10//:python_headers",
     ],
 )
 
@@ -149,7 +159,6 @@ py_cc_binding(
         "//clockwork/logging:schema_encoding_clk_cc",
         "@fmt",
         "@nanobind",
-        "@python_3_10//:python_headers",
         "@wise_enum",
     ],
 )
@@ -165,6 +174,7 @@ cc_library(
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:chunk_reader_writer_factory",
         "//clockwork/logging/offboard:reader",
         "//clockwork/logging/offboard:types",
         "//jewels/memory:memory_resource",
@@ -175,7 +185,7 @@ cc_library(
 
 cc_library(
     name = "onboard_log_reader",
-    srcs = ["onboard_log_reader.cc"],
+    srcs = ["onboard_log_reader.inl"],
     hdrs = ["onboard_log_reader.hh"],
     deps = [
         ":abstract_log_reader",
@@ -184,18 +194,16 @@ cc_library(
         "//clockwork/logging:log_error",
         "//clockwork/logging:log_interval",
         "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/offboard:s3_utils",
         "//clockwork/logging/onboard:buffered_reader",
         "//clockwork/logging/onboard:log_format",
+        "//clockwork/logging/onboard:offboard_buffered_reader",
         "//clockwork/logging/onboard:reader",
         "//clockwork/logging/onboard:types",
-        "//jewels/container:circular_buffer",
         "//jewels/filesystem",
-        "//jewels/filesystem:path",
         "//jewels/math:constants",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "@gsl//:util",
     ],
 )
 
@@ -238,7 +246,7 @@ cc_library(
     hdrs = ["serialization.hh"],
     deps = [
         "//clockwork:repr_iface",
-        "@boost//:core",
+        "@boost.core",
         "@fmt",
     ],
 )

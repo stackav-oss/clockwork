@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -87,6 +87,8 @@ def test_logsim_system(fs_importer: FilesystemImporter, tmp_path: Path) -> None:
             Path("logsimsys.logsim_system1.LogSimCpu_channel_allocations.csv"),
             Path("logsimsys.logsim_system1.LogSimCpu_metrics_channel_metadata_config.tachyon"),
             Path("logsimsys.logsim_system1.LogSimCpu_signal_metadata_config.tachyon"),
+            Path("logsimsys.logsim_system1.LogSimCpu_system_metadata.tachyon"),
+            Path("logsimsys.logsim_system1.LogSimCpu_journal_topology.tachyon"),
         ],
     )
     assert output_targets == {

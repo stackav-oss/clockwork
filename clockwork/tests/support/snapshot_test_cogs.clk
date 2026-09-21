@@ -1,5 +1,60 @@
 use clockwork::tests::support::exec_time::{ExecState};
-use clockwork::tests::support::snapshot_test_messages::{StateUpdateMessage, SnapshotTestConfig};
+use clockwork::tests::support::snapshot_test_messages::{
+  SerializableStateSnapshot,
+  StateUpdateMessage,
+  SnapshotTestConfig,
+};
+
+// External state used by the online snapshot and offline restore fixture
+extern_type SerializableState
+{
+  serialized_form
+  {
+    representation: Tachyon<SerializableStateSnapshot>;
+  }
+}
+
+// Updates the state before taking an online snapshot
+cog SerializableStateWriterCog
+{
+  states
+  {
+    state: SerializableState
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    update: Tappy<SerializableStateSnapshot>;
+  }
+
+  execution
+  {
+    condition new_update: new_message(update);
+    execute when: new_update;
+  }
+}
+
+// Reads restored state during its first execution
+cog SerializableStateReaderCog
+{
+  states
+  {
+    state: SerializableState;
+  }
+
+  outputs
+  {
+    observed: Tappy<SerializableStateSnapshot>;
+  }
+
+  execution
+  {
+    execute when: init;
+  }
+}
 
 // Stateful cog that maintains a counter and responds to update messages
 cog StatefulCog
@@ -40,5 +95,17 @@ cpp_target snapshot_test_cogs
     namespace clockwork::testing;
   }
 
+  extern
+  {
+    header_file: "clockwork/tests/support/serializable_state.hh";
+    namespace: clockwork::testing;
+    type
+    {
+      name: SerializableState;
+    }
+  }
+
+  cog SerializableStateWriterCog;
+  cog SerializableStateReaderCog;
   cog StatefulCog;
 }

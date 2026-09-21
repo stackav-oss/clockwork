@@ -1,0 +1,20 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+py_library(
+    name = "signal_extractor",
+    srcs = ["signal_extractor.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":report_group_decoder",
+        "//clockwork/logging/readers:py_log_reader",
+    ],
+)
+
+py_library(
+    name = "report_group_decoder",
+    srcs = ["report_group_decoder.py"],
+    visibility = ["//visibility:public"],
+)

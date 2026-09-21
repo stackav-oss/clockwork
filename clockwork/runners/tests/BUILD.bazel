@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -44,6 +44,7 @@ cc_test(
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
+        "//jewels/testing:expected_stringmakers",
         "//jewels/time:sync_time",
         "@catch2//:catch2_main",
     ],
@@ -57,16 +58,17 @@ cc_test(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:abstract_timer",
-        "//clockwork/common:cog_execution_error_clk_cc",
-        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:buffer_layout",
         "//clockwork/pinion:in_memory_channel",
         "//clockwork/pinion:observer",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publisher_slot_ref",
         "//clockwork/pinion:subscriber_handle",
         "//clockwork/runners:deterministic_cog_queue",
         "//clockwork/runners:deterministic_runner",
         "//clockwork/runners:deterministic_timer",
         "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/cli:exit_condition_signal",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_unique_ptr",
@@ -110,9 +112,9 @@ cc_test(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:cog_envelope",
-        "//clockwork/common:cog_execution_error_clk_cc",
         "//clockwork/common/tests/support:test_cog",
         "//clockwork/runners:online_cog_queue",
+        "//jewels/callsig:outparam",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -137,7 +139,7 @@ cc_test(
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/time:sync_time",
-        "@boost//:lockfree",
+        "@boost.lockfree",
         "@catch2//:catch2_main",
     ],
 )
@@ -162,7 +164,7 @@ cc_test(
         "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/time:sync_time",
-        "@boost//:lockfree",
+        "@boost.lockfree",
         "@catch2//:catch2_main",
     ],
 )

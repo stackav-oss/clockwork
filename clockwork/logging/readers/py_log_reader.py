@@ -1,10 +1,10 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python log reader library."""
 
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Final, cast
@@ -53,6 +53,18 @@ class SerializedMessage:
         finally:
             del self._data
         return message
+
+    @property
+    def serialized_bytes(self) -> bytes:
+        """Return the raw payload before lazy deserialization consumes it.
+
+        Consumers that need both the raw-byte fast path and the decoded message
+        must read this property before accessing :attr:`message`.
+        """
+        try:
+            return self._data
+        except AttributeError as error:
+            raise RuntimeError(_ := "Serialized message bytes are unavailable after deserialization.") from error
 
 
 class DeserializingIterator:
@@ -162,10 +174,25 @@ class LogReader(_NBLogReader):
             )
             self.topic_cb_map[topic] = tachyon_type.deserialize_tachyon
 
-    def messages(self) -> DeserializingIterator:
-        """Get an iterator for the messages in the log."""
+    def messages(self, sequence_numbers: Mapping[str, int | Collection[int]] | None = None) -> DeserializingIterator:
+        """Get an iterator for selected messages in the log.
+
+        Args:
+            sequence_numbers: Sequence number or sequence numbers to read, keyed by channel. None reads all messages.
+        """
 
         def topic_filter(topic: str) -> bool:
             return topic in self.topic_cb_map
 
-        return DeserializingIterator(super().raw_messages(topic_filter), self.topic_cb_map)
+        if sequence_numbers is None:
+            return DeserializingIterator(super().raw_messages(topic_filter), self.topic_cb_map)
+
+        requested_sequence_numbers = {
+            topic: frozenset((numbers,)) if isinstance(numbers, int) else frozenset(numbers)
+            for topic, numbers in sequence_numbers.items()
+        }
+
+        def sequence_number_filter(topic: str, candidate: int) -> bool:
+            return candidate in requested_sequence_numbers.get(topic, ())
+
+        return DeserializingIterator(super().raw_messages(topic_filter, sequence_number_filter), self.topic_cb_map)

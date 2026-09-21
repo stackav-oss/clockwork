@@ -1,43 +1,45 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
 
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "atomic",
+    srcs = ["atomic.inl"],
+    hdrs = ["atomic.hh"],
+)
+
 cc_library(
     name = "expected",
     hdrs = ["expected.hh"],
-    visibility = ["//visibility:public"],
     deps = ["@tl_expected"],
 )
 
 cc_library(
     name = "functional",
     hdrs = ["functional.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "source_location",
     testonly = True,
     hdrs = ["source_location.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "span",
     srcs = ["span.inl"],
     hdrs = ["span.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "type_traits",
     hdrs = ["type_traits.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "utility",
     hdrs = ["utility.hh"],
-    visibility = ["//visibility:public"],
 )

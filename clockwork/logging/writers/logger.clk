@@ -16,7 +16,7 @@ cog LoggerInitCog
 {
   configs
   {
-    logger_config : Tappy<LoggerConfig>;
+    logger_config: Tappy<LoggerConfig>;
     log_writer_config: Tappy<LogWriterConfig<>>;
     channel_rates_config: Tappy<ChannelMessageRatesConfig>;
   }
@@ -36,7 +36,7 @@ cog LoggerInitCog
 
   execution
   {
-      execute when: init;
+    execute when: init;
   }
 }
 

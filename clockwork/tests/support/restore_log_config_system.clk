@@ -12,8 +12,7 @@ channel DummyChannel
 }
 
 policy LogReaderPolicy for DummyChannel
-{
-}
+{}
 
 // Channel for state snapshots (output)
 channel StateSnapshotChannel
@@ -25,7 +24,7 @@ channel StateSnapshotChannel
 // We listen to state snapshots
 policy ChannelLoggingPolicy for StateSnapshotChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
   channel_type = ChannelType::persistent;
 }
 
@@ -46,23 +45,23 @@ channel ConfigLogChannel
 // We listen to config snapshots
 policy ChannelLoggingPolicy for ConfigSnapshotChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
   channel_type = ChannelType::persistent;
 }
 
 // We can inject config restoration here
 policy LogReaderPolicy for ConfigLogChannel
-{
-}
+{}
 
 // Box for Tachyon log-based config restoration with fallback
 box RestoreLogConfigBox
 {
-  new memory: HeapMemory(max_size=10'000'000);
-  new state: State(representation=Tachyon<ExecState>, memory_resource=memory);
+  new state: State(representation=Tachyon<ExecState>);
   new config: FirstMessage(channel=ConfigLogChannel);
-
-  new fallback_config: SerializedDataFile(representation=Protobuf<SnapshotTestConfig>, path="clockwork/tests/resources/restore_test_config.textproto");
+  new fallback_config: SerializedDataFile(
+    representation=Protobuf<SnapshotTestConfig>,
+    path="clockwork/tests/resources/restore_test_config.textproto",
+  );
 
   new cog: RestoreTestCog;
 

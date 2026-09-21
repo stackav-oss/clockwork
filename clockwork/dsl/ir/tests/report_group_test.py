@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -75,21 +75,21 @@ cog ReportCog
 policy ReportGroupPolicy for ReportCog.default
 {
     reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
 policy ReportGroupPolicy for ReportCog.status_group
 {
     reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 
 policy ReportGroupPolicy for ReportCog.metrics_group
 {
     reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 100;
 }
 """
@@ -213,7 +213,7 @@ cog IdentifierTestCog
 policy ReportGroupPolicy for IdentifierTestCog.default
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 50;
 }
 """
@@ -281,7 +281,7 @@ cog PostAggTestCog
 policy ReportGroupPolicy for PostAggTestCog.default
 {
    reporting_strategy = ReportingStrategy::post_aggregated;
-   log_type = ReportGroupLogType::telemetry;
+   log_type = ReportGroupLogType::non_redundant_telemetry;
    max_observations = 10;
 }
 """
@@ -311,7 +311,7 @@ policy ReportGroupPolicy for PostAggTestCog.default
 
     log_type = bound_policy.data.data["log_type"]
     assert isinstance(log_type, clkenum.ValueRef)
-    assert log_type.value_def.name == "telemetry"
+    assert log_type.value_def.name == "non_redundant_telemetry"
 
     # Create an instance
     cog_instance_fqn = "test::PostAggTestCog"
@@ -383,12 +383,12 @@ cog TestCog
     [
         # Test batched strategy with observation counts
         (
-            "reporting_strategy = ReportingStrategy::batched;\n    max_observations = 50;\n    min_observations = 10;\n    log_type = ReportGroupLogType::telemetry;",
+            "reporting_strategy = ReportingStrategy::batched;\n    max_observations = 50;\n    min_observations = 10;\n    log_type = ReportGroupLogType::non_redundant_telemetry;",
             ReportingStrategy.BATCHED,
             {"max_observations": 50, "min_observations": 10, "min_duration": None, "max_duration": None},
             False,
-            ReportGroupLogType.TELEMETRY,
-            cog_components.MetricsLogType.telemetry,
+            ReportGroupLogType.NON_REDUNDANT_TELEMETRY,
+            cog_components.MetricsLogType.non_redundant_telemetry,
         ),
         # Test post_aggregated strategy
         (
@@ -429,7 +429,7 @@ def test_report_group_config_variants(  # noqa: PLR0913
     # Verify enum values inline
     assert ReportingStrategy.BATCHED.value == "batched"
     assert ReportingStrategy.POST_AGGREGATED.value == "post_aggregated"
-    assert ReportGroupLogType.TELEMETRY.value == "telemetry"
+    assert ReportGroupLogType.NON_REDUNDANT_TELEMETRY.value == "non_redundant_telemetry"
     assert ReportGroupLogType.EVENT.value == "event"
     assert ReportGroupLogType.NONE.value == "none"
 
@@ -651,7 +651,7 @@ cog TestCog
 policy ReportGroupPolicy for TestCog.test_group
 {
     reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 50;
 }
 """
@@ -662,3 +662,247 @@ policy ReportGroupPolicy for TestCog.test_group
         compiler.compile_source_text(
             source, ModuleID(CLK_REPO, "post_aggregated_requires_post_agg_test"), importer=fs_importer
         )
+
+
+def test_bool_cog_scope_signal_rejects_numeric_post_aggregation(fs_importer: FilesystemImporter) -> None:
+    """Test that a Bool cog-scope signal rejects numeric post-aggregation types."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Doc.
+cog TestCog
+{
+    signals test_group
+    {
+        // Bool signal with an invalid post-aggregation
+        flag_signal: signal Bool
+        {
+            post_aggregation: ["sum"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for TestCog.test_group
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+}
+"""
+    with pytest.raises(TypeError) as exc_info:
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "bool_invalid_post_agg_test"), importer=fs_importer)
+
+    error_text = str(exc_info.value)
+    assert "sum" in error_text
+    assert "Bool" in error_text
+
+
+def test_enum_cog_scope_signal_rejects_numeric_post_aggregation(fs_importer: FilesystemImporter) -> None:
+    """Test that an enum cog-scope signal rejects numeric post-aggregation types."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// A simple status enum
+enum Status
+{
+    values
+    {
+        // Active state
+        #0 active default;
+        // Inactive state
+        #1 inactive;
+    }
+}
+
+// Doc.
+cog TestCog
+{
+    signals test_group
+    {
+        // Enum signal with an invalid post-aggregation
+        state_signal: signal Status
+        {
+            post_aggregation: ["min"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for TestCog.test_group
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+}
+"""
+    with pytest.raises(TypeError) as exc_info:
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "enum_invalid_post_agg_test"), importer=fs_importer)
+
+    error_text = str(exc_info.value)
+    assert "min" in error_text
+    assert "Status" in error_text
+
+
+def test_bool_signal_reference_rejects_numeric_post_aggregation(fs_importer: FilesystemImporter) -> None:
+    """Test that a Bool signal reference rejects numeric post-aggregation on the reference."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// A module-scope Bool signal
+signal enabled : Bool;
+
+// Doc.
+cog TestCog
+{
+    signals test_group
+    {
+        // Reference to a Bool signal with invalid post-aggregation
+        enabled
+        {
+            post_aggregation: ["mean"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for TestCog.test_group
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+}
+"""
+    with pytest.raises(TypeError) as exc_info:
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "bool_ref_invalid_post_agg_test"), importer=fs_importer)
+
+    error_text = str(exc_info.value)
+    assert "mean" in error_text
+    assert "Bool" in error_text
+
+
+def test_enum_signal_reference_rejects_numeric_post_aggregation(fs_importer: FilesystemImporter) -> None:
+    """Test that an enum signal reference rejects numeric post-aggregation on the reference."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// A simple status enum
+enum Mode
+{
+    values
+    {
+        // Manual mode
+        #0 manual default;
+        // Automatic mode
+        #1 automatic;
+    }
+}
+
+// A module-scope enum signal
+signal operation_mode : Mode;
+
+// Doc.
+cog TestCog
+{
+    signals test_group
+    {
+        // Reference to an enum signal with invalid post-aggregation
+        operation_mode
+        {
+            post_aggregation: ["max"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for TestCog.test_group
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+}
+"""
+    with pytest.raises(TypeError) as exc_info:
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "enum_ref_invalid_post_agg_test"), importer=fs_importer)
+
+    error_text = str(exc_info.value)
+    assert "max" in error_text
+    assert "Mode" in error_text
+
+
+def test_bool_and_enum_signals_accept_valid_post_aggregation(fs_importer: FilesystemImporter) -> None:
+    """Test that Bool and enum cog-scope signals accept valid post-aggregation types."""
+    source = """
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// A simple status enum
+enum Status
+{
+    values
+    {
+        // Active state
+        #0 active default;
+        // Inactive state
+        #1 inactive;
+    }
+}
+
+// Doc.
+cog TestCog
+{
+    signals test_group
+    {
+        // Bool signal with valid post-aggregation
+        flag_signal: signal Bool
+        {
+            post_aggregation: ["count", "final_value"];
+        }
+
+        // Enum signal with valid post-aggregation
+        state_signal: signal Status
+        {
+            post_aggregation: ["first_value", "count"];
+        }
+    }
+
+    execution
+    {
+        condition periodic: time_since_last_exec(100ms);
+        execute when: periodic;
+    }
+}
+
+policy ReportGroupPolicy for TestCog.test_group
+{
+    reporting_strategy = ReportingStrategy::post_aggregated;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
+    max_observations = 50;
+}
+"""
+    # Should compile without error
+    module = compiler.compile_source_text(
+        source, ModuleID(CLK_REPO, "bool_enum_valid_post_agg_test"), importer=fs_importer
+    )
+    test_cog = module.inner_scope.lookup("TestCog")
+    assert isinstance(test_cog, cog.Cog)
+    assert "test_group" in test_cog.report_groups

@@ -1,0 +1,105 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::dsl::composition::tests::support)]
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+use clockwork::dsl::tests::support::clk_hellomsg;
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// A signal defined at module level with pre-aggregation
+signal module_signal: UInt32
+{
+  pre_aggregation: ["min", "max"];
+  multi_instance: true;
+}
+
+// Non-init cog with inputs, outputs, conditions, a user-defined report group,
+// and both cog metrics policies enabled.
+cog CogMetricsSignalTestCog
+{
+  signalsuser_report_group
+  {
+    module_signal
+    {
+      post_aggregation: ["min", "max"];
+    }
+
+    // Cog-private signal for testing user-defined report groups
+    cog_signal: signal Int32
+    {
+      post_aggregation: ["sum", "count"];
+      multi_instance: true;
+    }
+  }
+
+  inputs
+  {
+    sensor_a: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+    }
+
+    sensor_b: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+    }
+  }
+
+  outputs
+  {
+    result: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+    }
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    condition new_msg: any_message(sensor_a);
+
+    execute when: periodic or new_msg;
+  }
+
+  metrics_options
+  {
+    enabled: false;
+  }
+}
+
+policy CogEventMetricsPolicy for CogMetricsSignalTestCog
+{
+  enabled = true;
+  batch_size = 20;
+  max_duration = 2s;
+}
+
+policy CogTelemetryMetricsPolicy for CogMetricsSignalTestCog
+{
+  enabled = true;
+  max_duration = 2s;
+}
+
+policy ReportGroupPolicy for CogMetricsSignalTestCog.user_report_group
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::event;
+  max_observations = 25;
+}
+
+box CogMetricsSignalTestBox
+{
+  new test_cog1: CogMetricsSignalTestCog;
+  new test_cog2: CogMetricsSignalTestCog;
+}
+
+cpu_domain TestCpu;
+
+box CogMetricsSignalTestSystemBox
+{
+  new box: CogMetricsSignalTestBox;
+  new proc: Process(executable=cog_metrics_signals_test_system_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+}

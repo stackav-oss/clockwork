@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace clockwork_logging::offboard
 {
@@ -21,6 +22,7 @@ namespace clockwork_logging::offboard
 /// @param[in] memory_resource Memory resource
 /// @param[in] metrics_location Metrics chunk location
 /// @param[in] channel_info_map Map from channel ID to logged channel info
+/// @param[in] excluded_channel_ids Channel IDs to exclude from the metric
 /// @param[in] chunk_reader Chunk reader
 /// @param[in] chunk_compressor Chunk compressor
 /// @return Log metrics or LogError on failure
@@ -28,6 +30,7 @@ namespace clockwork_logging::offboard
   jewels::memory::MemoryResource memory_resource,
   ChunkLocation metrics_location,
   const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>& channel_info_map,
+  const std::pmr::unordered_set<uint16_t>& excluded_channel_ids,
   ChunkReader& chunk_reader,
   ChunkCompressor& chunk_compressor);
 

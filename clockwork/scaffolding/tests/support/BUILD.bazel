@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -19,7 +19,19 @@ cc_library(
     name = "mock_casing",
     hdrs = ["mock_casing.hh"],
     deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:observer",
         "//clockwork/scaffolding:abstract_casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:expected",
+        "//jewels/uuid",
         "@trompeloeil",
     ],
 )
@@ -28,26 +40,17 @@ cc_library(
     name = "runtime_tools",
     hdrs = ["runtime_tools.hh"],
     deps = [
-        ":mock_casing",
-        "//clockwork/common:abstract_cog",
-        "//clockwork/common:exec_tools",
-        "//clockwork/common:forward",
+        "//clockwork:repr_iface",
         "//clockwork/common:process_description_clk_cc",
-        "//clockwork/common/tests/support:fake_cog",
-        "//clockwork/pinion:observer",
-        "//clockwork/pinion/tests/support:tmp_shm_namespace",
-        "//clockwork/scaffolding",
-        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//clockwork/pinion:buffer_layout",
+        "//jewels/cli:exit_condition",
         "//jewels/cli/tests/support:simple_exit_condition",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
+        "//jewels/container:compare",
         "//jewels/filesystem:file",
         "//jewels/filesystem:path",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
-        "//jewels/std:expected",
         "//jewels/std:span",
-        "//jewels/testing:tmp_directory_guard",
         "//jewels/uuid",
         "@catch2//:catch2_main",
         "@protobuf",
@@ -63,14 +66,12 @@ cc_library(
     hdrs = ["test_cogs.hh"],
     data = [":test_cogs_clk"],
     deps = [
-        ":cxx_state",
+        ":test_cogs_cog",
         ":test_cogs_diags",
         ":test_cogs_dial",
         ":test_cogs_impl",
-        ":test_msgs_clk_cc",
+        ":test_cogs_types",
         "//clockwork/cog:include_common",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/diagnostics:reporter",
     ],
     alwayslink = True,
 )
@@ -82,14 +83,39 @@ clk(
         "test_cogs.cc",
         "test_cogs.hh",
         "test_cogs.inl",
+        "test_cogs_cog.cc",
+        "test_cogs_cog.hh",
+        "test_cogs_cog.inl",
         "test_cogs_dial.cc",
         "test_cogs_dial.hh",
         "test_cogs_dial.inl",
+        "test_cogs_types.cc",
+        "test_cogs_types.hh",
+        "test_cogs_types.inl",
     ],
     deps = [
         ":test_msgs_clk",
         "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
     ],
+)
+
+cc_library(
+    name = "test_cogs_cog",
+    srcs = [
+        "test_cogs_cog.cc",
+        "test_cogs_cog.inl",
+    ],
+    hdrs = ["test_cogs_cog.hh"],
+    data = [":test_cogs_clk"],
+    deps = [
+        ":test_cogs_dial",
+        ":test_msgs_clk_cc",
+        "//clockwork/cog:include_common",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -123,11 +149,25 @@ cc_library(
         ":test_msgs_clk_cc",
         "//clockwork/diagnostics:report_definitions",
         "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/container:compare",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
-        "@boost//:iterator",
+        "//jewels/uuid",
     ],
+)
+
+cc_library(
+    name = "test_cogs_types",
+    srcs = [
+        "test_cogs_types.cc",
+        "test_cogs_types.inl",
+    ],
+    hdrs = ["test_cogs_types.hh"],
+    data = [":test_cogs_clk"],
+    deps = [":cxx_state"],
 )
 
 cc_library(
@@ -137,9 +177,8 @@ cc_library(
     deps = [
         "//clockwork/common:abstract_epoll_manager",
         "//clockwork/common:process_description_clk_cc",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/pinion:io_connection",
-        "//clockwork/pinion:publisher_handle",
-        "//clockwork/pinion:subscriber_handle",
         "//clockwork/pinion/tests/support:pub_sub",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_shared_ptr",
@@ -158,6 +197,9 @@ clk(
         "test_msgs_clk_cc.cc",
         "test_msgs_clk_cc.hh",
         "test_msgs_clk_cc.inl",
+        "test_msgs_clk_cc_types.cc",
+        "test_msgs_clk_cc_types.hh",
+        "test_msgs_clk_cc_types.inl",
         "test_msgs_clk_proto.proto",
         "test_msgs_clk_proto_conv.cc",
         "test_msgs_clk_proto_conv.hh",

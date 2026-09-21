@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_interval.hh"
@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <fmt/format.h>
 
 #include <fstream>
 #include <memory>
@@ -46,6 +47,19 @@ TEST_CASE("Log reader factory")
     REQUIRE(reader->type() == "onboard");
   }
 
+  SECTION("onboard with offboard URI")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    const auto onboard_file_path = log_path / "foo.olog";
+    (void)std::ofstream{onboard_file_path.c_str()};
+
+    auto reader = make_reader(fmt::format("file:{}", log_path.string()), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "onboard");
+  }
+
   SECTION("offboard log")
   {
     const jewels::testing::TmpDirectoryGuard test_dir;
@@ -65,6 +79,19 @@ TEST_CASE("Log reader factory")
     const auto& log_path = test_dir.get_path();
     const auto log_union_path = log_path / "stack_log_union.pbtxt";
     (void)std::ofstream{log_union_path.c_str()};
+
+    auto reader = make_reader(log_path.string(), {}, {});
+    REQUIRE(reader);
+
+    REQUIRE(reader->type() == "offboard");
+  }
+
+  SECTION("offboard log amendment")
+  {
+    const jewels::testing::TmpDirectoryGuard test_dir;
+    const auto& log_path = test_dir.get_path();
+    const auto log_amendment_path = log_path / "stack_log_amendment.pbtxt";
+    (void)std::ofstream{log_amendment_path.c_str()};
 
     auto reader = make_reader(log_path.string(), {}, {});
     REQUIRE(reader);

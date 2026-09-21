@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/include_common.hh"
+#include "clockwork/dsl/tests/support/clk_hellocog_clk_cc.hh"
+#include "clockwork/dsl/tests/support/clk_hellomsg_clk_cc.hh"
 #include "clockwork/dsl/tests/support/goodbyecog.hh"
-#include "clockwork/dsl/tests/support/hellocog.hh"
 #include "clockwork/tags.hh"
 #include "jewels/memory/memory_resource.hh"
 
@@ -98,6 +99,8 @@ concept InputPolicy = requires {
   { T::max_view_size } -> std::convertible_to<unsigned int>;
   { T::copy_inputs } -> std::convertible_to<bool>;
   { T::manual_cursor } -> std::convertible_to<bool>;
+  { T::expose_seqno } -> std::convertible_to<bool>;
+  { T::use_device_ptr } -> std::convertible_to<bool>;
 };
 
 // Concept for condition policy
@@ -204,6 +207,8 @@ TEST_CASE("HelloCogPolicy sub-policies satisfy their concepts")
   static_assert(clockwork::testing::concepts::StatePolicy<HelloCogPolicy::RoHelloPolicy>);
   static_assert(clockwork::testing::concepts::StatePolicy<HelloCogPolicy::RwHelloPolicy>);
   static_assert(clockwork::testing::concepts::StatePolicy<HelloCogPolicy::ExternHelloPolicy>);
+  static_assert(
+    std::is_same_v<HelloCogPolicy::ExternHelloPolicy::SerializedType, clockwork::Tappy<clockwork::demo::HelloMsg>>);
 
   // Timers
   static_assert(clockwork::testing::concepts::TimerPolicy<HelloCogPolicy::PeriodicPolicy>);

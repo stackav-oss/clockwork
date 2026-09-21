@@ -1,10 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/tests/support/test_cog.hh"
 
 #include "clockwork/common/cog_envelope.hh"
-#include "clockwork/common/cog_execution_error_clk_cc.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -67,25 +67,26 @@ jewels::expected<void, jewels::MonoError> TestCog::prime(jewels::time::SyncTime 
   return {};
 }
 
-jewels::expected<void, CogExecutionError> TestCog::prepare_for_execution(jewels::time::SyncTime /*current_time*/)
+CogPrepareOutcome TestCog::prepare_for_execution(
+  jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/)
 {
   auto reentry_lock = std::unique_lock(reentry_mutex_, std::defer_lock);
 
   if (!reentry_lock.try_lock())
   {
-    return jewels::unexpected(CogExecutionError::reentry_lock_contention);
+    return CogPrepareResult::reentry_lock_contention;
   }
 
   auto shared_state_lock = std::unique_lock(*shared_state_mutex_, std::defer_lock);
   if (!shared_state_lock.try_lock())
   {
-    return jewels::unexpected(CogExecutionError::states_lock_contention);
+    return CogPrepareResult::states_lock_contention;
   }
 
   shared_state_lock_ = std::move(shared_state_lock);
   reentry_lock_ = std::move(reentry_lock);
 
-  return {};
+  return CogPrepareResult::ready;
 }
 
 jewels::expected<void, CogExecutionError> TestCog::execute(CogExecuteParams params)

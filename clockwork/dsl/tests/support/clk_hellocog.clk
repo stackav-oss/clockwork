@@ -3,103 +3,110 @@
 
 use clockwork::dsl::tests::support::clk_hellomsg;
 use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
 
 //
 #[cpp(type_header="clockwork/dsl/tests/support/cxx_state.hh", type_namespace=clockwork::testing)]
-extern_type CxxState;
+extern_type CxxState
+{
+  serialized_form
+  {
+    representation: Tachyon<clk_hellomsg::HelloMsg>;
+  }
+}
 
 // Hello, Cog!
 //
 // This cog is a minimal test case for the Clockwork framework.
 cog HelloCog
 {
-    resources
+  resources
+  {
+    mem_hello: persistent;
+  }
+
+  configs
+  {
+    cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+  }
+
+  states
+  {
+    ro_hello: Tappy<clk_hellomsg::HelloMsg>;
+    rw_hello: Tappy<clk_hellomsg::HelloMsg>
     {
-        mem_hello: persistent;
+      mutable: true;
+    }
+    extern_hello: CxxState;
+  }
+
+  inputs
+  {
+    latest_hello: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
     }
 
-    configs
+    // Multi-publisher input
+    multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
     {
-        cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+      no_dial: true;
     }
 
-    states
+    // Make sure larger views work
+    history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
     {
-        ro_hello: Tappy<clk_hellomsg::HelloMsg>;
-        rw_hello: Tappy<clk_hellomsg::HelloMsg>
-        {
-            mutable: true;
-        }
-        extern_hello: CxxState;
+      no_dial: false;
+      max_msgs: 5;
+      manual_cursor: true;
+      connect_optional: true;
     }
+  }
 
-    inputs
+  outputs
+  {
+    out_world: Tappy<clk_hellomsg::HelloMsg>
     {
-        latest_hello: Tappy<clk_hellomsg::HelloMsg>
-        {
-            connect_optional: true;
-        }
-
-        // Multi-publisher input
-        multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
-        {
-            no_dial: true;
-        }
-
-        // Make sure larger views work
-        history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
-        {
-            no_dial: false;
-            max_msgs: 5;
-            manual_cursor: true;
-            connect_optional: true;
-        }
+      connect_optional: true;
     }
-
-    outputs
+    out_goodbye: Tappy<clk_hellomsg::HelloMsg>
     {
-        out_world: Tappy<clk_hellomsg::HelloMsg>
-        {
-            connect_optional: true;
-        }
-        out_goodbye: Tappy<clk_hellomsg::HelloMsg>
-        {
-            connect_optional: true;
-        }
-        out_multi1: Tappy<clk_hellomsg::HelloMsg>
-        {
-            connect_optional: true;
-        }
-        out_multi2: Tappy<clk_hellomsg::HelloMsg>
-        {
-            connect_optional: true;
-        }
+      connect_optional: true;
     }
-
-    execution
+    out_multi1: Tappy<clk_hellomsg::HelloMsg>
     {
-        condition any_msg: any_message(latest_hello);
-        condition new_msg: new_message(max=2, input=history_of_hellos);
-        // Execute at least at 2Hz
-        condition periodic: time_since_last_exec(500ms);
-
-        execute when: (periodic and new_msg) or any_msg;
+      connect_optional: true;
     }
-
-    diagnostics
+    out_multi2: Tappy<clk_hellomsg::HelloMsg>
     {
-        group_id: "fault_injector_b";
-        instance_id: "a";
+      connect_optional: true;
     }
-    simulation_options
-    {
-       execution_duration: 2ms;
-    }
+  }
 
-    metrics_options
-    {
-        enabled: false;
-    }
+  execution
+  {
+    condition any_msg: any_message(latest_hello);
+    condition new_msg: new_message(max=2, input=history_of_hellos);
+    // Execute at least at 2Hz
+    condition periodic: time_since_last_exec(500ms);
+
+    execute when: (periodic and new_msg) or any_msg;
+  }
+
+  diagnostics
+  {
+    group_id: "fault_injector_b";
+    instance_id: "a";
+  }
+  simulation_options
+  {
+    execution_duration: 2ms;
+  }
+
+  metrics_options
+  {
+    enabled: false;
+  }
 }
 
 // Hello, Cog!
@@ -107,109 +114,125 @@ cog HelloCog
 // This cog is a minimal test case for the Clockwork framework.
 cog HelloCogWithMetrics
 {
-    resources
+  resources
+  {
+    mem_hello: persistent;
+  }
+
+  configs
+  {
+    cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+  }
+
+  states
+  {
+    ro_hello: Tappy<clk_hellomsg::HelloMsg>;
+    rw_hello: Tappy<clk_hellomsg::HelloMsg>
     {
-        mem_hello: persistent;
+      mutable: true;
+    }
+    extern_hello: CxxState;
+  }
+
+  inputs
+  {
+    latest_hello: Tappy<clk_hellomsg::HelloMsg>;
+
+    // Multi-publisher input
+    multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
+    {
+      no_dial: true;
     }
 
-    configs
+    // Make sure larger views work
+    history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
     {
-        cfg_hello: Tappy<clk_hellomsg::HelloMsg>;
+      no_dial: false;
+      max_msgs: 5;
+      manual_cursor: true;
     }
+  }
 
-    states
-    {
-        ro_hello: Tappy<clk_hellomsg::HelloMsg>;
-        rw_hello: Tappy<clk_hellomsg::HelloMsg>
-        {
-            mutable: true;
-        }
-        extern_hello: CxxState;
-    }
+  outputs
+  {
+    out_world: Tappy<clk_hellomsg::HelloMsg>;
+    out_goodbye: Tappy<clk_hellomsg::HelloMsg>;
+    out_multi1: Tappy<clk_hellomsg::HelloMsg>;
+    out_multi2: Tappy<clk_hellomsg::HelloMsg>;
+  }
 
-    inputs
-    {
-        latest_hello: Tappy<clk_hellomsg::HelloMsg>;
+  execution
+  {
+    condition any_msg: any_message(latest_hello);
+    condition new_msg: new_message(max=2, input=history_of_hellos);
+    // Execute at least at 2Hz
+    condition periodic: time_since_last_exec(500ms);
 
-        // Multi-publisher input
-        multi_publisher_hello: Tappy<clk_hellomsg::HelloMsg>
-        {
-            no_dial: true;
-        }
+    execute when: (periodic and new_msg) or any_msg;
+  }
 
-        // Make sure larger views work
-        history_of_hellos: Tappy<clk_hellomsg::HelloMsg>
-        {
-            no_dial: false;
-            max_msgs: 5;
-            manual_cursor: true;
-        }
-    }
+  diagnostics
+  {
+    group_id: "fault_injector_b";
+    instance_id: "a";
+  }
+  simulation_options
+  {
+    execution_duration: 2ms;
+  }
 
-    outputs
-    {
-        out_world: Tappy<clk_hellomsg::HelloMsg>;
-        out_goodbye: Tappy<clk_hellomsg::HelloMsg>;
-        out_multi1: Tappy<clk_hellomsg::HelloMsg>;
-        out_multi2: Tappy<clk_hellomsg::HelloMsg>;
-    }
-
-    execution
-    {
-        condition any_msg: any_message(latest_hello);
-        condition new_msg: new_message(max=2, input=history_of_hellos);
-        // Execute at least at 2Hz
-        condition periodic: time_since_last_exec(500ms);
-
-        execute when: (periodic and new_msg) or any_msg;
-    }
-
-    diagnostics
-    {
-        group_id: "fault_injector_b";
-        instance_id: "a";
-    }
-    simulation_options
-    {
-       execution_duration: 2ms;
-    }
-
-    metrics_options
-    {
-        enabled: false;
-    }
+  metrics_options
+  {
+    enabled: false;
+  }
 }
 
 // Init cog
 cog HelloInit
 {
-    states
+  states
+  {
+    result: Tappy<clk_hellomsg::HelloMsg>
     {
-        result: Tappy<clk_hellomsg::HelloMsg>
-        {
-            mutable: true;
-        }
+      mutable: true;
     }
-    execution
-    {
-        execute when: init;
-    }
+  }
+  execution
+  {
+    execute when: init;
+  }
 }
 
 // Init cog
 cog HelloInit2
 {
-    states
+  states
+  {
+    result: Tappy<clk_hellomsg::HelloMsg>
     {
-        result: Tappy<clk_hellomsg::HelloMsg>
-        {
-            mutable: true;
-        }
+      mutable: true;
+    }
 
-        input: Tappy<clk_hellomsg::HelloMsg>;
-    }
-    execution
-    {
-        execute when: init;
-    }
+    input: Tappy<clk_hellomsg::HelloMsg>;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+policy CogEventMetricsPolicy for HelloCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for HelloCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for HelloCogWithMetrics
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for HelloCogWithMetrics
+{
+  enabled = false;
 }

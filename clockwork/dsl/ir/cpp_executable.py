@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """CppTarget-related IR nodes."""
@@ -10,10 +10,11 @@ from dataclasses import dataclass, field
 from textwrap import dedent
 from typing import TYPE_CHECKING, Any, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label, get_bazel_label_for_python_type
 from clockwork.dsl.cog.cpp_python_cog import CppPythonCog as PythonCogImplGenerator
 from clockwork.dsl.cog.cppcog import Cog as CogGenerator
+from clockwork.dsl.cog.cppcog import InstantiatedCog as InstantiatedCogGenerator
 from clockwork.dsl.cog.cppcog import to_dial_name
 from clockwork.dsl.cpp import typereg, types, values
 from clockwork.dsl.cpp.context import (
@@ -34,12 +35,13 @@ from clockwork.dsl.ir import (
     primitive,
     proto_to_tap,
     schema_reg,
+    statement,
     typesys,
     udp,
     units,
     uuid_reg,
 )
-from clockwork.dsl.ir.cog import Cog
+from clockwork.dsl.ir.cog import Cog, InstantiatedCog
 from clockwork.dsl.ir.conversion_utils import protobuf_repr_to_cpp_type
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.extern_type import ExternType
@@ -130,6 +132,37 @@ class CppCog:
 
 
 @dataclass(eq=True, slots=True)
+class CppInstantiatedCog:
+    """Instantiates a cog type inside cpp_target."""
+
+    instantiation: InstantiatedCog
+    dial_header: Header | None
+    cog_header: Header | None
+
+    # ARG002 suppressed because compiler_context not used here but it's part of the standard interface
+    def render(self, compiler_context: CompilerContext, namespace: str) -> CppModuleChunks:  # noqa: ARG002 (see above)
+        """Convert the cog to C++."""
+        if not self.dial_header:
+            msg = "Dial header was not resolved."
+            raise TypeError(msg)
+        if not self.cog_header:
+            msg = "Cog header was not resolved."
+            raise TypeError(msg)
+
+        dial_class_name = to_dial_name(self.instantiation.name)
+
+        instantiation_gen = InstantiatedCogGenerator(
+            instantiation=self.instantiation,
+            class_name=self.instantiation.cog_ir.name,
+            dial_name=dial_class_name,
+            header_name=None,
+            cpp_namespace=namespace,
+            dial_header=self.dial_header,
+        )
+        return instantiation_gen.render()
+
+
+@dataclass(eq=True, slots=True)
 class CppPythonCog:
     """A wrapper around a CppCog to render the implementation for python cogs."""
 
@@ -163,6 +196,7 @@ class CppPythonCog:
             # This is resolved by the CppCog.  No need for an extra resolve here.
             msg = "Attempt to render before resolving."
             raise TypeError(msg)
+        assert not self.cpp_cog.cog_ir.is_generic()
         if not self.cpp_cog.cog_ir.python_options:
             msg = node.append_error_line(
                 self.cst_node, self.module, "Python options required to instantiate python cog"
@@ -647,7 +681,7 @@ class CasingEntities:
     externs: dict[str, ExternType] = field(default_factory=dict)
     representations: dict[schema_reg.RepresentationInfo, schema_reg.RepresentationInfo] = field(default_factory=dict)
     interfaces: dict[schema_reg.InterfaceInfo, schema_reg.InterfaceInfo] = field(default_factory=dict)
-    cogs: dict[str, CppCog] = field(default_factory=dict)
+    cogs: dict[str, CppCog | CppInstantiatedCog] = field(default_factory=dict)
     python_cogs: dict[str, CppPythonCog] = field(default_factory=dict)
     udp_sockets: dict[str, CppUdpSocket] = field(default_factory=dict)
     audio_sources: dict[str, CppAudioSource] = field(default_factory=dict)
@@ -730,11 +764,12 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     externs: Sequence[ExternType] | Sequence[expr.Expr]
     representations: Sequence[schema_reg.RepresentationInfo] | Sequence[expr.Expr]
     interfaces: Sequence[schema_reg.InterfaceInfo] | Sequence[expr.Expr]
-    cogs: Sequence[CppCog]
+    cogs: Sequence[CppCog | CppInstantiatedCog]
     python_cogs: Sequence[CppPythonCog]
     udp_sockets: Sequence[CppUdpSocket]
     audio_sources: Sequence[CppAudioSource]
     boxes: Sequence[CasingEntitySource] | Sequence[expr.Expr]
+    instantiations: Sequence[statement.InstantiateStmt]
     resolved: ResolvedCasing | None
     entities_are_resolved: bool
 
@@ -759,6 +794,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
         udp_sockets = []
         audio_sources = []
         boxes = []
+        instantiations = []
         for element in cst_node.children_casing_element():
             if extern_cst := element.maybe_casing_extern():
                 externs.append(expr.Expr.from_cst(extern_cst.child_typespec(), module))
@@ -780,6 +816,9 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
                 audio_sources.append(audio_source_ir)
             elif box_cst := element.maybe_casing_box():
                 boxes.append(expr.Expr.from_cst(box_cst.child_typespec(), module))
+            elif instantiation_cst := element.maybe_casing_instantiate_stmt():
+                instantiation_ir = statement.InstantiateStmt.from_cst(instantiation_cst, module)
+                instantiations.append(instantiation_ir)
             else:
                 msg = node.append_error_line(element, module, "Unrecognized statement within casing")
                 raise NotImplementedError(msg)
@@ -795,6 +834,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             udp_sockets=udp_sockets,
             audio_sources=audio_sources,
             boxes=boxes,
+            instantiations=instantiations,
             resolved=None,
             entities_are_resolved=False,
         )
@@ -804,6 +844,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
         self.representations = [self._resolve_representation(representation) for representation in self.representations]
         self.interfaces = [self._resolve_interface(interface) for interface in self.interfaces]
         for cpp_cog in self.cogs:
+            assert isinstance(cpp_cog, CppCog)
             cpp_cog.resolve()
         for cpp_udp_socket in self.udp_sockets:
             cpp_udp_socket.resolve()
@@ -817,7 +858,16 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
                 msg = box.append_error_line(f"Expected a CasingEntitySource instance, got {type(box_eval)}")
                 raise TypeError(msg)
             boxes.append(box_eval)
+        for instantiate_stmt in self.instantiations:
+            instantiate_stmt.resolve()
+            if not isinstance(instantiate_stmt.instantiated, CasingEntitySource):
+                msg = instantiate_stmt.append_error_line(
+                    f"Expected a CasingEntitySource instance, got {type(instantiate_stmt.instantiated)}"
+                )
+                raise TypeError(msg)
+            boxes.append(instantiate_stmt.instantiated)
         self.boxes = boxes
+        self.instantiations = []
         self.entities_are_resolved = True
 
     def resolve(self) -> ResolvedCasing:
@@ -842,7 +892,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             externs=externs,
             representations=representations,
             interfaces=interfaces,
-            cogs={cpp_cog.cog_ir.value_key(): cpp_cog for cpp_cog in self.cogs},
+            cogs={cpp_cog.cog_ir.value_key(): cpp_cog for cpp_cog in self.cogs if isinstance(cpp_cog, CppCog)},
             python_cogs={
                 cpp_python_cog.cpp_cog.cog_ir.value_key(): cpp_python_cog for cpp_python_cog in self.python_cogs
             },
@@ -870,6 +920,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
             udp_sockets=[],
             audio_sources=[],
             boxes=entities.boxes,
+            instantiations=[],
             resolved=None,
             entities_are_resolved=True,
         )
@@ -884,7 +935,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     def _resolve_extern(self, typespec: ExternType | expr.Expr) -> ExternType:
         """Transform extern expressions into ExternTypes."""
         if isinstance(typespec, ExternType):
-            msg = node.append_error_line(self, self.module, f"Attempt to resolve extern twice: {typespec}")
+            msg = node.append_error_line(self.cst_node, self.module, f"Attempt to resolve extern twice: {typespec}")
             raise RuntimeError(msg)  # noqa: TRY004 (resolving twice is a runtime error)
         eval_result = typespec.evaluate()
         if not isinstance(eval_result, ExternType):
@@ -899,7 +950,9 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     ) -> schema_reg.RepresentationInfo:
         """Transform representation expressions into RepresentationInfo."""
         if isinstance(typespec, schema_reg.RepresentationInfo):
-            msg = node.append_error_line(self, self.module, f"Attempt to resolve representation twice: {typespec}")
+            msg = node.append_error_line(
+                self.cst_node, self.module, f"Attempt to resolve representation twice: {typespec}"
+            )
             raise RuntimeError(msg)  # noqa: TRY004 (resolving twice is a runtime error)
         eval_result = typespec.evaluate()
         representation_ref = RepresentationReference.from_typespec(eval_result)
@@ -917,7 +970,7 @@ class Casing(node.CstNode[cst.Casing], node.DocableEntity):
     def _resolve_interface(self, typespec: schema_reg.InterfaceInfo | expr.Expr) -> schema_reg.InterfaceInfo:
         """Transform interface expressions into Schema_reg.InterfaceInfos."""
         if isinstance(typespec, schema_reg.InterfaceInfo):
-            msg = node.append_error_line(self, self.module, f"Attempt to resolve interface twice: {typespec}")
+            msg = node.append_error_line(self.cst_node, self.module, f"Attempt to resolve interface twice: {typespec}")
             raise RuntimeError(msg)  # noqa: TRY004 (resolving twice is a runtime error)
         eval_result = typespec.evaluate()
         interface_ref = InterfaceReference.from_typespec(eval_result)
@@ -968,9 +1021,20 @@ class ResolvedCasing(node.CstNode[cst.Casing], node.DocableEntity):
         extra_cpp_headers = []
         all_cpp_cog_types = []
         if full_includes:
-            for cpp_cog in entities.cogs.values():
-                assert isinstance(cpp_cog.cog_ir, Cog)
-                all_cpp_cog_types.append(typereg.get_cpp_type(cpp_cog.cog_ir.module.context, cpp_cog.cog_ir))
+            all_cpp_cog_types.extend(
+                typereg.get_cpp_type(cpp_cog.cog_ir.module.context, cpp_cog.cog_ir)
+                for cpp_cog in entities.cogs.values()
+                if isinstance(cpp_cog, CppCog)
+            )
+            # Generic cog instantiations from boxes produce CppInstantiatedCog entries.
+            # Their containing module's umbrella cc_library must be in the binary deps so
+            # the factory-registration statics are linked in.  Resolve the instantiation
+            # to its C++ type here so the umbrella header flows into the dep list.
+            all_cpp_cog_types.extend(
+                typereg.get_cpp_type(cpp_cog.instantiation.module.context, cpp_cog.instantiation.instantiation)
+                for cpp_cog in entities.cogs.values()
+                if isinstance(cpp_cog, CppInstantiatedCog)
+            )
 
         all_cpp_schema_types: list[types.CppTypeExpr] = []
         for extern in entities.externs.values():
@@ -1201,7 +1265,13 @@ class CppExecutable(node.CstNode[cst.CppExecutable], node.DocableEntity, typesys
         write_dir = root_dir / BazelPathResolver().to_buildtime_path(self.module.module_id).parent
         include_dir = self.module.module_id.get_base_path().parent
 
-        write_to_file(exe_mod, write_dir, include_dir, self.name, self.module.module_id.repo)
+        write_to_file(
+            rendered_cpp_mod=exe_mod,
+            write_dir=write_dir,
+            include_dir=include_dir,
+            stem=self.name,
+            current_repo=self.module.module_id.repo,
+        )
 
     def output_targets(self) -> list[CcBinary | CcBinaryWithEmbeddedPy]:
         """Extract language target dependency information."""

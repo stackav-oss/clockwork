@@ -1,0 +1,52 @@
+#![generate(cpp, nanobind)]
+#![cpp(namespace=stack::clk)]
+
+// Some type
+schema SomeType
+{
+  uuid: 12345678-1234-1234-1234-123456789abc;
+
+  fields
+  {
+    // field
+    #0 some_field: Int32;
+  }
+}
+
+// Generic type
+schema GenericMessage
+{
+  uuid: e7171b62-3896-4dc4-b9a1-f9bc0ec39d9b;
+
+  parameters
+  {
+    // type
+    #0 the_type: Type;
+  }
+
+  fields
+  {
+    // field
+    #1 field: the_type;
+  }
+}
+
+instantiate GenericMessageSomeType: GenericMessage<SomeType>;
+
+// Schema with instantiated generic type
+schema SchemaWithInstantiatedType
+{
+  uuid: 77ee93d7-ba3b-4422-b69b-aa5509106796;
+
+  fields
+  {
+    // Field 0
+    #0 generic_optional: Optional<GenericMessageSomeType>;
+
+    // Field 1
+    #1 generic_fixed_array: FixedArray<GenericMessageSomeType, size=2>;
+
+    // Field 2
+    #2 generic_var_array: VarArray<GenericMessageSomeType, max_size=2>;
+  }
+}

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -141,6 +141,7 @@ TEST_CASE("Convert to offboard log format")
        .schema_encoding =
          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
        .schema_definition = schema_definition,
+       .is_amended = false,
      },
      {
        .name = "/channel2",
@@ -151,6 +152,7 @@ TEST_CASE("Convert to offboard log format")
        .schema_encoding =
          static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_encoding),
        .schema_definition = schema_definition,
+       .is_amended = false,
      }});
 
   auto actual_topics = reader->get_metadata();

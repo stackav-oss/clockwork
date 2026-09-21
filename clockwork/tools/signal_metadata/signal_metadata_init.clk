@@ -8,16 +8,16 @@ cog SignalMetadataInitCog
 {
   configs
   {
-    signal_metadata_config : Tappy<SignalMetadataConfig<>>;
+    signal_metadata_config: Tappy<SignalMetadataConfig<>>;
   }
 
   outputs
   {
-    signal_metadata : Tappy<SignalMetadataConfig<>>;
+    signal_metadata: Tappy<SignalMetadataConfig<>>;
   }
 
   execution
   {
-      execute when: init;
+    execute when: init;
   }
 }

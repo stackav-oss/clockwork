@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,7 +6,8 @@
 #include "jewels/memory/memory_resource.hh"
 
 #include <array>
-#include <memory>
+#include <cstddef>
+#include <cstdint>
 
 namespace clockwork::tests
 {

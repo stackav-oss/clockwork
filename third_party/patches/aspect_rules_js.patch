@@ -1,30 +1,35 @@
-diff --git npm/extensions.bzl npm/extensions.bzl
-index e06b3153..b588600c 100644
---- npm/extensions.bzl
-+++ npm/extensions.bzl
-@@ -119,7 +119,7 @@ def _npm_lock_imports_bzlmod(module_ctx, attr, exclude_package_contents_config):
-     npm_auth = {}
-     if attr.npmrc:
-         npmrc = parse_npmrc(module_ctx.read(attr.npmrc))
--        (registries, npm_auth) = npm_translate_lock_helpers.get_npm_auth(npmrc, module_ctx.path(attr.npmrc), module_ctx.os.environ)
-+        (registries, npm_auth) = npm_translate_lock_helpers.get_npm_auth(module_ctx, npmrc, module_ctx.path(attr.npmrc), module_ctx.os.environ)
- 
-     if attr.use_home_npmrc:
-         home_directory = repo_utils.get_home_directory(module_ctx)
-@@ -127,7 +127,7 @@ def _npm_lock_imports_bzlmod(module_ctx, attr, exclude_package_contents_config):
-             home_npmrc_path = "{}/{}".format(home_directory, ".npmrc")
-             home_npmrc = parse_npmrc(module_ctx.read(home_npmrc_path))
- 
--            (registries2, npm_auth2) = npm_translate_lock_helpers.get_npm_auth(home_npmrc, home_npmrc_path, module_ctx.os.environ)
-+            (registries2, npm_auth2) = npm_translate_lock_helpers.get_npm_auth(module_ctx, home_npmrc, home_npmrc_path, module_ctx.os.environ)
-             registries.update(registries2)
-             npm_auth.update(npm_auth2)
-         else:
+diff --git js/defs.bzl js/defs.bzl
+index fd8d5615..1ffabfea 100644
+--- js/defs.bzl
++++ js/defs.bzl
+@@ -9,6 +9,7 @@ load(
+ load(
+     "//js/private:js_image_layer.bzl",
+     _js_image_layer = "js_image_layer",
++    _DEFAULT_LAYER_GROUPS = "DEFAULT_LAYER_GROUPS"
+ )
+ load(
+     "//js/private:js_info_files.bzl",
+@@ -52,3 +53,4 @@ js_run_devserver = _js_run_devserver
+ js_run_binary = _js_run_binary
+ js_info_files = _js_info_files
+ js_image_layer = _js_image_layer
++DEFAULT_LAYER_GROUPS = _DEFAULT_LAYER_GROUPS
+diff --git js/private/js_image_layer.bzl js/private/js_image_layer.bzl
+index 6e28a6fd..551247bb 100644
+--- js/private/js_image_layer.bzl
++++ js/private/js_image_layer.bzl
+@@ -571,3 +571,5 @@ js_image_layer = rule(
+         "@rules_nodejs//nodejs:toolchain_type",
+     ],
+ )
++
++DEFAULT_LAYER_GROUPS = _DEFAULT_LAYER_GROUPS
 diff --git npm/private/npm_import.bzl npm/private/npm_import.bzl
-index 4ae293c5..523ed4b0 100644
+index 0cf4f2f..6d7e230 100644
 --- npm/private/npm_import.bzl
 +++ npm/private/npm_import.bzl
-@@ -154,7 +154,7 @@ def npm_imported_package_store_internal(
+@@ -161,7 +161,7 @@ def npm_imported_package_store_internal(
          srcs = [":{}".format(store_target_name)],
          output_group = utils.package_directory_output_group,
          visibility = ["//visibility:public"],
@@ -33,118 +38,50 @@ index 4ae293c5..523ed4b0 100644
      )
  
      if has_lifecycle_build_target:
-@@ -260,7 +260,7 @@ def npm_link_imported_package_store_internal(
-         srcs = [":" + name],
+@@ -268,7 +268,7 @@ def npm_link_imported_package_store_internal(
+         srcs = [":" + target_name],
          output_group = utils.package_directory_output_group,
          visibility = link_visibility,
 -        tags = ["manual"],
 +        tags = ["manual", "no-lint"],
      )
  
-     return [":{}".format(name)] if public_visibility else []
+ _LINK_JS_PACKAGE_LINK_IMPORTED_STORE_TMPL = """\
 diff --git npm/private/npm_link_package.bzl npm/private/npm_link_package.bzl
-index b02e1b29..4dd24588 100644
+index be0f25f..82a9e9e 100644
 --- npm/private/npm_link_package.bzl
 +++ npm/private/npm_link_package.bzl
-@@ -71,6 +71,9 @@ def npm_link_package(
+@@ -44,6 +44,9 @@ def npm_link_package(
      if auto_manual and "manual" not in tags:
          tags.append("manual")
  
 +    if "no-lint" not in tags:
 +        tags.append("no-lint")
 +
-     if is_root:
-         # link the package store when linking at the root
-         npm_package_store(
+     # link the package store when linking at the root
+     npm_package_store(
+         name = store_target_name,
+diff --git npm/private/npm_link_package_store.bzl npm/private/npm_link_package_store.bzl
+index 82bf82d..e32c3ef 100644
+--- npm/private/npm_link_package_store.bzl
++++ npm/private/npm_link_package_store.bzl
+@@ -163,5 +163,5 @@ def npm_local_link_package_store_internal(name, src, package = None, link_visibi
+         srcs = [":" + name],
+         output_group = utils.package_directory_output_group,
+         visibility = link_visibility,
+-        tags = ["manual"],
++        tags = ["manual", "no-lint"],
+     )
 diff --git npm/private/npm_translate_lock_generate.bzl npm/private/npm_translate_lock_generate.bzl
-index 52ab7b1b..e7805194 100644
+index 1dd02af..49af2bf 100644
 --- npm/private/npm_translate_lock_generate.bzl
 +++ npm/private/npm_translate_lock_generate.bzl
-@@ -60,7 +60,7 @@ _FP_DIRECT_TMPL = \
-             srcs = [":{{}}/{pkg}".format(name)],
-             output_group = "{package_directory_output_group}",
-             visibility = {link_visibility},
+@@ -23,7 +23,7 @@ _FP_STORE_TMPL = \
+             version = "{version}",
+             deps = {deps},
+             visibility = ["//visibility:public"],
 -            tags = ["manual"],
 +            tags = ["manual", "no-lint"],
          )"""
  
- _BZL_LIBRARY_TMPL = \
-diff --git npm/private/npm_translate_lock_helpers.bzl npm/private/npm_translate_lock_helpers.bzl
-index 4e8f55d2..22382403 100644
---- npm/private/npm_translate_lock_helpers.bzl
-+++ npm/private/npm_translate_lock_helpers.bzl
-@@ -3,6 +3,7 @@
- load("@aspect_bazel_lib//lib:base64.bzl", "base64")
- load("@bazel_skylib//lib:new_sets.bzl", "sets")
- load("@bazel_skylib//lib:paths.bzl", "paths")
-+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "read_user_netrc")
- load(":utils.bzl", "utils")
- 
- ################################################################################
-@@ -87,7 +88,7 @@ def _gather_values_from_matching_names(additive, keyed_lists, *names):
-     return (result, keys)
- 
- ################################################################################
--def _get_npm_auth(npmrc, npmrc_path, environ):
-+def _get_npm_auth(ctx, npmrc, npmrc_path, environ):
-     """Parses npm tokens, registries and scopes from `.npmrc`.
- 
-     - creates a token by registry dict: {registry: token}
-@@ -109,7 +110,7 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
-         //somewhere-else.com/basic/:_password=aHVudGVyMg==
-         ```
- 
--        `get_npm_auth(npmrc, npmrc_path, environ)` creates the following dict:
-+        `get_npm_auth(ctx, npmrc, npmrc_path, environ)` creates the following dict:
- 
-         ```starlark
-         registries = {
-@@ -132,6 +133,7 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
-         ```
- 
-     Args:
-+        ctx: The repo or module context.
-         npmrc: The `.npmrc` file.
-         npmrc_path: The file path to `.npmrc`.
-         environ: A map of environment variables with their values.
-@@ -211,6 +213,14 @@ def _get_npm_auth(npmrc, npmrc_path, environ):
- 
-             auth[registry]["password"] = base64.decode(v)
- 
-+    for registry, auth_dict in read_user_netrc(ctx).items():
-+        if registry not in auth:
-+            auth[registry] = {}
-+
-+        auth[registry]["username"] = auth_dict.get("login")
-+        auth[registry]["password"] = auth_dict.get("password")
-+
-+
-     return (registries, auth)
- 
- ################################################################################
-diff --git npm/private/npm_translate_lock_state.bzl npm/private/npm_translate_lock_state.bzl
-index 459dfbb6..e3eae7b5 100644
---- npm/private/npm_translate_lock_state.bzl
-+++ npm/private/npm_translate_lock_state.bzl
-@@ -452,7 +452,7 @@ def _load_npmrc(priv, rctx, npmrc_path):
-     if "registry" in contents:
-         priv["default_registry"] = utils.to_registry_url(contents["registry"])
- 
--    (registries, auth) = helpers.get_npm_auth(contents, npmrc_path, rctx.os.environ)
-+    (registries, auth) = helpers.get_npm_auth(rctx, contents, npmrc_path, rctx.os.environ)
-     priv["npm_registries"].update(registries)
-     priv["npm_auth"].update(auth)
- 
-diff --git npm/private/pnpm_repository.bzl npm/private/pnpm_repository.bzl
-index bb028820..b59060bf 100644
---- npm/private/pnpm_repository.bzl
-+++ npm/private/pnpm_repository.bzl
-@@ -41,7 +41,7 @@ def pnpm_repository(name, pnpm_version = DEFAULT_PNPM_VERSION):
-             version = pnpm_version,
-             extra_build_content = "\n".join([
-                 """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
--                """js_binary(name = "pnpm", data = glob(["package/**"]), entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
-+                """js_binary(name = "pnpm", data = glob(["package/**"]), entry_point = "package/dist/pnpm.cjs", include_npm = True, visibility = ["//visibility:public"])""",
-             ]),
-             extract_full_archive = True,
-         )
+ _FP_DIRECT_TMPL = \

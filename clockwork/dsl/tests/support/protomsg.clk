@@ -54,7 +54,7 @@ schema BetterThanInheritance
     #8 my_string: VarString<100>;
 
     // A var array bytes
-    #9 my_bytes: VarArray<Byte,100>;
+    #9 my_bytes: VarArray<Byte, 100>;
 
     // Composition in a var array
     #10 composition_var: VarArray<ProtoTester, 200>;
@@ -69,16 +69,16 @@ schema BetterThanInheritance
     #13 enum_arr: VarArray<HelloEnum, 100>;
 
     // Array of duration
-    #14 duration_ar: VarArray<Duration,32>;
+    #14 duration_ar: VarArray<Duration, 32>;
 
     // Fixed Array of enums
     #15 fixed_enum_arr: FixedArray<HelloEnum, 2>;
 
     // Array of duration
-    #16 fixed_duration_ar: FixedArray<Duration,2>;
+    #16 fixed_duration_ar: FixedArray<Duration, 2>;
 
     // A fixed array bytes
-    #17 fixed_bytes: FixedArray<Byte,100>;
+    #17 fixed_bytes: FixedArray<Byte, 100>;
 
     // Composition in a fixed array
     #18 fixed_composition: FixedArray<ProtoTester, 2>;

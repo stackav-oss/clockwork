@@ -41,7 +41,6 @@ yuv444_u4_offset: UInt64 = 9;
 yuv444_y4_offset: UInt64 = 10;
 yuv444_v4_offset: UInt64 = 11;
 
-
 // YUV411 camera image is packed lines of UYYVYYUYYVYY... starting at the top left and ending at the bottom right
 schema Yuv411Image
 {

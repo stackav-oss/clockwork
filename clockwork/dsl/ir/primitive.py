@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """IR Nodes dealing with primitive data types and values."""
@@ -9,7 +9,7 @@ from ast import literal_eval
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, node, typesys, units
 from clockwork.dsl.ir.cst_util import decimal_from_cst, get_span
 from typing_extensions import override
@@ -18,8 +18,11 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
 
+# fmt: off
 @dataclass
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class Literal(typesys.Value, node.CstNode[cst.Literal | cst.Number | cst.Integer | cst.NonnegativeInteger]):
+# fmt: on
     """Base class for literal values from Clockwork source."""
 
     @classmethod
@@ -128,7 +131,7 @@ class DecimalLiteral(Literal, DecimalValue):
         value = decimal_from_cst(cst_node, module.terminals)
         numeric_type = (
             typesys.NumericType.FLOAT
-            if isinstance(cst_node, cst.Number) and cst_node.maybe_fractional_part() is not None
+            if cst_node.kind == cst.Number.kind and cst_node.maybe_fractional_part() is not None
             else (typesys.NumericType.INTEGER if value >= 0 else typesys.NumericType.SIGNED_INTEGER)
         )
         return cls(
@@ -311,3 +314,8 @@ def value_to_bool(value: typesys.Value) -> bool:
         return False
     msg = f"Expected an bool but got {value}"
     raise ValueError(msg)
+
+
+def is_renderable_value(value: typesys.Value) -> bool:
+    """Tests whether a value can be rendered in generated code."""
+    return value in (clkbuiltins.FALSE_VALUE, clkbuiltins.TRUE_VALUE) or isinstance(value, DecimalValue | StringValue)

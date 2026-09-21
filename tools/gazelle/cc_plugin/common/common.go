@@ -1,7 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-// Package common contains any code used by two or more packages. It avoid circular dependencies.
+// Package common contains any code used by two or more packages. It avoids circular dependencies.
 package common
 
 import (

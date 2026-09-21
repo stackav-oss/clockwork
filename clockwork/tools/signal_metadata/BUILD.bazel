@@ -11,9 +11,15 @@ clk(
         "signal_metadata_init_clk_cc.cc",
         "signal_metadata_init_clk_cc.hh",
         "signal_metadata_init_clk_cc.inl",
+        "signal_metadata_init_clk_cc_cog.cc",
+        "signal_metadata_init_clk_cc_cog.hh",
+        "signal_metadata_init_clk_cc_cog.inl",
         "signal_metadata_init_clk_cc_dial.cc",
         "signal_metadata_init_clk_cc_dial.hh",
         "signal_metadata_init_clk_cc_dial.inl",
+        "signal_metadata_init_clk_cc_types.cc",
+        "signal_metadata_init_clk_cc_types.hh",
+        "signal_metadata_init_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/common:signal_metadata_config_clk_cc"],
     generate = [
@@ -30,6 +36,9 @@ cc_library(
     deps = [
         ":signal_metadata_init_clk_cc_dial",
         "//clockwork/common:signal_metadata_config_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
     ],
 )

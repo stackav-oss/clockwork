@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 // This is really a test, but the runner the shim py_binary //jewels/nanobind/tests:get_python_type_test.py that just

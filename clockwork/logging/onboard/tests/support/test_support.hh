@@ -1,15 +1,17 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/onboard/log_format.hh"
+#include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "jewels/std/expected.hh"
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <unordered_map>
@@ -154,4 +156,28 @@ void fill_with_random_bytes(std::span<std::byte> buffer);
 [[nodiscard]] jewels::expected<void, jewels::MonoError>
 corrupt_log_file(std::string_view file_path, size_t offset, std::string_view data);
 
+/// Helper function to make a buffered reader
+/// @tparam BufferedReaderType Buffered reader type
+/// @return Shared pointer to buffered reader instance
+/// @{
+template <OnboardBufferedReaderType BufferedReaderType>
+[[nodiscard]] std::shared_ptr<BufferedReaderType> make_buffered_reader();
+template <OffboardBufferedReaderType BufferedReaderType>
+[[nodiscard]] std::shared_ptr<BufferedReaderType> make_buffered_reader();
+/// @}
+
+/// Helper function to make an onboard reader
+/// @tparam BufferedReaderType Buffered reader type
+/// @param[in] log_path Log directory path
+/// @param[in] buffered_reader Buffered reader
+/// @param[in] metadata_map_option Metadata map option
+/// @return Shared pointer to onboard reader instance
+template <typename BufferedReaderType>
+[[nodiscard]] std::shared_ptr<Reader<BufferedReaderType>> make_onboard_reader(
+  std::string_view log_path,
+  std::shared_ptr<BufferedReaderType> buffered_reader,
+  MetadataMapOption metadata_map_option = MetadataMapOption::disable);
+
 } // namespace clockwork_logging::onboard::tests
+
+#include "clockwork/logging/onboard/tests/support/test_support.inl"

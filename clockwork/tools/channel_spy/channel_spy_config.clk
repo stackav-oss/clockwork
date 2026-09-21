@@ -16,7 +16,7 @@ schema PublishedChannelMetadata
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 30000;
+    #2 max_schema_definition_size = constants::MAX_SCHEMA_DEFINITION_SIZE;
   }
 
   fields
@@ -53,7 +53,7 @@ schema ChannelSpyConfig
     #1 max_schema_name_size = 511;
 
     // Maximum schema definition size
-    #2 max_schema_definition_size = 30000;
+    #2 max_schema_definition_size = constants::MAX_SCHEMA_DEFINITION_SIZE;
 
     // Maximum number of channels
     #3 max_num_channels = 2048;
@@ -66,8 +66,10 @@ schema ChannelSpyConfig
       PublishedChannelMetadata<
         max_channel_name_size=max_channel_name_size,
         max_schema_name_size=max_schema_name_size,
-        max_schema_definition_size=max_schema_definition_size>,
-      max_num_channels>;
+        max_schema_definition_size=max_schema_definition_size,
+      >,
+      max_num_channels,
+    >;
   }
 }
 

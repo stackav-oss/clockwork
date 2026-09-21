@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/log_cerr/detect_log_color_mode.hh"
@@ -14,7 +14,7 @@ namespace jewels
 DetectLogColorMode::DetectLogColorMode() noexcept
 {
   // NOLINTNEXTLINE(concurrency-mt-unsafe)  Thread safety is noted in the api docs.
-  const char* env_var = std::getenv("STACK_LOG_CERR_COLOR_MODE");
+  const char* env_var = std::getenv("CLOCKWORK_LOG_CERR_COLOR_MODE");
   if (env_var == nullptr)
   {
     return;

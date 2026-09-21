@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Update the targets in the given BUILD file based on the given clk file."""
@@ -195,8 +195,8 @@ def copy_buildifier_config(directory: Path) -> None:
     buildifier_config = None
     buildifier_tables = None
     for module in ["clockwork+", "_main"]:
-        buildifier_config = rfiles.Rlocation(f"{module}/.buildifier.json")
-        buildifier_tables = rfiles.Rlocation(f"{module}/.buildifier_tables.json")
+        buildifier_config = rfiles.Rlocation(f"{module}/.buildifier.json", source_repo="")
+        buildifier_tables = rfiles.Rlocation(f"{module}/.buildifier_tables.json", source_repo="")
         if (
             buildifier_config
             and Path(buildifier_config).exists()

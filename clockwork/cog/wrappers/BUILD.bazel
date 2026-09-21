@@ -1,0 +1,74 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "dummy_cog_queue",
+    srcs = ["dummy_cog_queue.cc"],
+    hdrs = ["dummy_cog_queue.hh"],
+    deps = [
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:cog_envelope",
+        "//jewels/std:expected",
+    ],
+)
+
+cc_library(
+    name = "dummy_timer",
+    srcs = ["dummy_timer.cc"],
+    hdrs = ["dummy_timer.hh"],
+    deps = [
+        "//clockwork/common:abstract_timer",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "unit_test_cog",
+    srcs = ["unit_test_cog.inl"],
+    hdrs = ["unit_test_cog.hh"],
+    deps = [
+        ":dummy_timer",
+        "//clockwork:repr_iface",
+        "//clockwork/cog:cog_diagnostics",
+        "//clockwork/cog:cog_passthrough_observer",
+        "//clockwork/cog:cog_publishers",
+        "//clockwork/cog:cog_state",
+        "//clockwork/cog:cog_statistics",
+        "//clockwork/cog:cog_timers",
+        "//clockwork/cog:input_view",
+        "//clockwork/cog:interface",
+        "//clockwork/cog:unit_test_support",
+        "//clockwork/common:abstract_cog",
+        "//clockwork/common:abstract_cog_queue",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:cog_execution_error_clk_cc",
+        "//clockwork/common:forward",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//clockwork/pinion:buffer_layout",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publishable",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:shm_channel_factory",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@fmt",
+    ],
+)

@@ -1,6 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/common/exec_tools.hh"
+#include "clockwork/common/simplelaunch_runner_config_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/filesystem/path.hh"
@@ -19,10 +23,12 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <map>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <utility>
 
 namespace jewels::simplelaunch
 {
@@ -49,6 +55,7 @@ int do_main(int argc, char* argv[])
     "", "listen", "Hostname to listen on. Defaults to 127.0.0.1", false, "127.0.0.1", "string", cmd);
   const TCLAP::ValueArg<uint16_t> port_arg(
     "p", "port", "Port to listen on. Defaults to 8080.", false, static_cast<uint16_t>(8080U), "PORT", cmd);
+  const clockwork::PinionArgs pinion_args{memory_resource, cmd};
 
   try
   {
@@ -66,14 +73,26 @@ int do_main(int argc, char* argv[])
     jewels::log_cerr_fatal("Failed to load config from {}: {}", config_arg.getValue(), maybe_config.error().message());
     return -1;
   }
+  std::shared_ptr<clockwork::Tappy<SimplelaunchRunnerConfig>> runner_config_ptr;
+  if (!maybe_config->runner_config_path().empty())
+  {
+    auto maybe_runner_config = clockwork::read_tachyon_config_to_heap<clockwork::Tappy<SimplelaunchRunnerConfig>>(
+      maybe_config->runner_config_path());
+    if (!maybe_runner_config)
+    {
+      jewels::log_cerr_fatal("Failed to load runner config from {}", maybe_config->runner_config_path());
+      return -1;
+    }
+    runner_config_ptr = std::move(maybe_runner_config).value();
+  }
 
   if (!check_for_running_apps(*maybe_config, memory_resource, filesystem))
   {
     return -1;
   }
 
-  std::pmr::unordered_map<std::pmr::string, bool> pre_launch_task_results;
-  run_pre_launch_tasks(*maybe_config, memory_resource, pre_launch_task_results);
+  std::pmr::map<std::pmr::string, bool> pre_launch_task_results;
+  run_pre_launch_tasks(*maybe_config, memory_resource, filesystem, pre_launch_task_results);
 
   const auto logging_directory_path = jewels::filesystem::Path{logging_arg.getValue(), memory_resource};
   if (verbose_arg.getValue())
@@ -90,12 +109,14 @@ int do_main(int argc, char* argv[])
   }
 
   return launch(
-    memory_resource,
-    *maybe_config,
-    pre_launch_task_results,
-    logging_directory_path,
-    host_arg.getValue(),
-    port_arg.getValue());
+    /*memory_resource=*/memory_resource,
+    /*config=*/*maybe_config,
+    /*runner_config_ptr=*/std::move(runner_config_ptr),
+    /*pinion_args=*/pinion_args,
+    /*pre_launch_results=*/pre_launch_task_results,
+    /*logging_directory=*/logging_directory_path,
+    /*listen_host=*/host_arg.getValue(),
+    /*listen_port=*/port_arg.getValue());
 }
 
 } // namespace jewels::simplelaunch

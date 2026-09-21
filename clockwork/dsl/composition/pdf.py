@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to Process Description Files (PDF).
@@ -39,29 +39,32 @@ DataSourceType: Final[type[pdfproto.DataSourceTypeEnum]] = tachyon_dyn.get_enum(
     PD_MODULE.context, PD_MODULE, "DataSourceType"
 )[0]
 
+# When updating this, search for all other MAX_ENDPOINTS_PER_COG and change those too
+MAX_ENDPOINTS_PER_COG = 113
+
 ProcessDescription: Final[type[pdfproto.ProcessDescription]] = tachyon_dyn.get_instantiation_dataclass(
     PD_MODULE.context,
     PD_MODULE,
     "ProcessDescription",
     max_instance_path_size=512,
-    max_cog_instances=501,
-    max_endpoints_per_cog=86,
-    max_state_instances=267,
-    max_state_connections=612,
-    max_config_instances=334,
-    max_config_connections=304,
+    max_cog_instances=551,
+    max_endpoints_per_cog=MAX_ENDPOINTS_PER_COG,
+    max_state_instances=391,
+    max_state_connections=831,
+    max_config_instances=357,
+    max_config_connections=401,
     max_file_path_size=4096,
-    max_init_cogs=202,
+    max_init_cogs=262,
     max_publishers=2048,
-    max_pubsub_connections=920,
-    max_memory_resources=504,
-    max_memory_resource_connections=488,
-    max_timers=45,
+    max_pubsub_connections=1871,
+    max_memory_resources=724,
+    max_memory_resource_connections=725,
+    max_timers=64,
     max_io_connections=32,
-    max_channel_name_len=300,
+    max_channel_name_len=380,
     max_not_connected_endpoints=1024,
     max_snapshot_configs=512,
-    max_data_sources=256,
+    max_data_sources=512,
 )[0]
 
 
@@ -70,13 +73,17 @@ PubSubGraph: Final[type[pdfproto.PubSubGraph]] = tachyon_dyn.get_instantiation_d
     PD_MODULE,
     "PubSubGraph",
     max_publishers=2048,
-    max_pubsub_connections=920,
-    max_channel_name_len=300,
+    max_pubsub_connections=1871,
+    max_channel_name_len=380,
 )[0]
 
 
 CogInstanceDescription: Final[type[pdfproto.CogInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(
-    PD_MODULE.context, PD_MODULE, "CogInstanceDescription", max_endpoints_per_cog=86, max_instance_path_size=512
+    PD_MODULE.context,
+    PD_MODULE,
+    "CogInstanceDescription",
+    max_endpoints_per_cog=MAX_ENDPOINTS_PER_COG,
+    max_instance_path_size=512,
 )[0]
 
 EndpointInstanceDescription: Final[type[pdfproto.EndpointInstanceDescription]] = tachyon_dyn.get_schema_dataclass(
@@ -84,7 +91,7 @@ EndpointInstanceDescription: Final[type[pdfproto.EndpointInstanceDescription]] =
 )[0]
 
 PublishEndpoint: Final[type[pdfproto.PublishEndpoint]] = tachyon_dyn.get_instantiation_dataclass(
-    PD_MODULE.context, PD_MODULE, "PublishEndpoint", max_channel_name_len=300
+    PD_MODULE.context, PD_MODULE, "PublishEndpoint", max_channel_name_len=380
 )[0]
 
 PinionBufferLayout: Final[type[pdfproto.PinionBufferLayout]] = tachyon_dyn.get_schema_dataclass(
@@ -99,9 +106,9 @@ StateGraph: Final[type[pdfproto.StateGraph]] = tachyon_dyn.get_instantiation_dat
     PD_MODULE.context,
     PD_MODULE,
     "StateGraph",
-    max_state_instances=267,
+    max_state_instances=391,
     max_instance_path_size=512,
-    max_state_connections=612,
+    max_state_connections=831,
 )[0]
 
 StateInstanceDescription: Final[type[pdfproto.StateInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(
@@ -117,8 +124,8 @@ ConfigGraph: Final[type[pdfproto.ConfigGraph]] = tachyon_dyn.get_instantiation_d
     PD_MODULE,
     "ConfigGraph",
     max_instance_path_size=512,
-    max_config_instances=334,
-    max_config_connections=304,
+    max_config_instances=357,
+    max_config_connections=401,
     max_file_path_size=4096,
 )[0]
 
@@ -151,8 +158,8 @@ MemoryResourceGraph: Final[type[pdfproto.MemoryResourceGraph]] = tachyon_dyn.get
     PD_MODULE,
     "MemoryResourceGraph",
     max_instance_path_size=512,
-    max_memory_resources=504,
-    max_memory_resource_connections=488,
+    max_memory_resources=724,
+    max_memory_resource_connections=725,
 )[0]
 
 TimerInstanceDescription: Final[type[pdfproto.TimerInstanceDescription]] = tachyon_dyn.get_instantiation_dataclass(

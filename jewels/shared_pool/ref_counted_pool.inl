@@ -14,7 +14,6 @@
 #include <functional>
 #include <memory>
 #include <memory_resource>
-#include <regex>
 #include <span>
 
 namespace jewels::detail

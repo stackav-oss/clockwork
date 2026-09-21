@@ -7,7 +7,6 @@
 #include "jewels/nanobind/clk_bindings/cast_maybe_by_reference.hh"
 #include "jewels/nanobind/clk_bindings/wrap_index.hh"
 
-#include <Python.h>
 #include <fmt/format.h>
 #include <nanobind/make_iterator.h>
 #include <nanobind/nanobind.h>

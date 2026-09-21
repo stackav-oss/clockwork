@@ -1,7 +1,6 @@
-"""Python type implementations for log reader."""
-
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
+"""Python type implementations for log reader."""
 
 from clockwork.logging.readers.nb_types import LoggedMessage, LogTimestamp
 

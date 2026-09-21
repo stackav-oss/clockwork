@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
@@ -41,6 +41,52 @@ exports_files([
 ])
 
 merge_simplelaunch_config(
+    name = "ClkParameterizedHost.textproto",
+    srcs = [
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_simplelaunch_config.textproto",
+        ":clk_host_a_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_channel_allocations.csv",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_channel_spy_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_event_logger_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_journal_topology.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_metrics_channel_metadata_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_signal_metadata_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_system_metadata.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_telemetry_logger_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.diagnostics_database_config.tachyon",
+        "clockwork.clockwork.dsl.tests.support.clk_parameterized_system.clk_parameterized_system.box.proc.tachyon",
+        ":clk_parameterized_box_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "ParameterizedHost.textproto",
+    srcs = [
+        "parameterized_system.parameterized_system.TestHost_simplelaunch_config.textproto",
+        ":clk_host_a_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.tests.support.parameterized_system.parameterized_system.box.proc.tachyon",
+        "parameterized_system.parameterized_system.TestHost_channel_allocations.csv",
+        "parameterized_system.parameterized_system.TestHost_channel_spy_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_event_logger_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_journal_topology.tachyon",
+        "parameterized_system.parameterized_system.TestHost_metrics_channel_metadata_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_signal_metadata_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_system_metadata.tachyon",
+        "parameterized_system.parameterized_system.TestHost_telemetry_logger_config.tachyon",
+        "parameterized_system.parameterized_system.diagnostics_database_config.tachyon",
+        ":parameterized_box_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)
+
+merge_simplelaunch_config(
     name = "a.textproto",
     srcs = [
         "hellomod.helloworld.HostA_simplelaunch_config.textproto",
@@ -54,8 +100,10 @@ merge_simplelaunch_config(
         "hellomod.helloworld.HostA_channel_allocations.csv",
         "hellomod.helloworld.HostA_channel_spy_config.tachyon",
         "hellomod.helloworld.HostA_event_logger_config.tachyon",
+        "hellomod.helloworld.HostA_journal_topology.tachyon",
         "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
         "hellomod.helloworld.HostA_signal_metadata_config.tachyon",
+        "hellomod.helloworld.HostA_system_metadata.tachyon",
         "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
         "hellomod.helloworld.diagnostics_database_config.tachyon",
         ":helloworld_exe",
@@ -114,6 +162,17 @@ cc_library(
     hdrs = ["better_than_inheritance_cpp.hh"],
     data = [":protomsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":better_than_inheritance_cpp_types"],
+)
+
+cc_library(
+    name = "better_than_inheritance_cpp_types",
+    srcs = [
+        "better_than_inheritance_cpp_types.cc",
+        "better_than_inheritance_cpp_types.inl",
+    ],
+    hdrs = ["better_than_inheritance_cpp_types.hh"],
+    data = [":protomsg_clk"],
     deps = [
         ":dependency_tester_cpp",
         "//clockwork:repr_iface",
@@ -156,8 +215,10 @@ merge_simplelaunch_config(
         "clk_hellosys.clk_hellosys.ClkHostA_channel_allocations.csv",
         "clk_hellosys.clk_hellosys.ClkHostA_channel_spy_config.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_event_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_journal_topology.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_metrics_channel_metadata_config.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_signal_metadata_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_system_metadata.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_telemetry_logger_config.tachyon",
         "clk_hellosys.clk_hellosys.diagnostics_database_config.tachyon",
         "clockwork.clockwork.dsl.tests.support.clk_hellosys.clk_hellosys.proc.tachyon",
@@ -173,6 +234,9 @@ clk(
         "clk_constants_clk_cc.cc",
         "clk_constants_clk_cc.hh",
         "clk_constants_clk_cc.inl",
+        "clk_constants_clk_cc_types.cc",
+        "clk_constants_clk_cc_types.hh",
+        "clk_constants_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )
@@ -191,6 +255,9 @@ clk(
         "clk_hello_udp_clk_cc.cc",
         "clk_hello_udp_clk_cc.hh",
         "clk_hello_udp_clk_cc.inl",
+        "clk_hello_udp_clk_cc_types.cc",
+        "clk_hello_udp_clk_cc_types.hh",
+        "clk_hello_udp_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/io:var_packet_clk_cc"],
     generate = ["cpp"],
@@ -205,6 +272,9 @@ clk(
         "clk_hellobox_clk_cc.cc",
         "clk_hellobox_clk_cc.hh",
         "clk_hellobox_clk_cc.inl",
+        "clk_hellobox_clk_cc_types.cc",
+        "clk_hellobox_clk_cc_types.hh",
+        "clk_hellobox_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     deps = [":clk_hellomod_clk"],
@@ -217,14 +287,21 @@ clk(
         "clk_hellocog_clk_cc.cc",
         "clk_hellocog_clk_cc.hh",
         "clk_hellocog_clk_cc.inl",
+        "clk_hellocog_clk_cc_cog.cc",
+        "clk_hellocog_clk_cc_cog.hh",
+        "clk_hellocog_clk_cc_cog.inl",
         "clk_hellocog_clk_cc_dial.cc",
         "clk_hellocog_clk_cc_dial.hh",
         "clk_hellocog_clk_cc_dial.inl",
+        "clk_hellocog_clk_cc_types.cc",
+        "clk_hellocog_clk_cc_types.hh",
+        "clk_hellocog_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":clk_hellomsg_clk_cc",
         ":cxx_state",
         "//clockwork/diagnostics:report_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
     ],
     generate = [
         "cpp",
@@ -234,6 +311,7 @@ clk(
     deps = [
         ":clk_hellomsg_clk",
         "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
     ],
 )
 
@@ -251,6 +329,9 @@ clk(
         "clk_hellomod_clk_cc.cc",
         "clk_hellomod_clk_cc.hh",
         "clk_hellomod_clk_cc.inl",
+        "clk_hellomod_clk_cc_types.cc",
+        "clk_hellomod_clk_cc_types.hh",
+        "clk_hellomod_clk_cc_types.inl",
         "clk_hellomod_clk_exe.cc",
         "clk_hellomod_clk_exe.hh",
         "clk_hellomod_clk_exe.inl",
@@ -284,6 +365,9 @@ clk(
         "clk_hellomsg_clk_cc.cc",
         "clk_hellomsg_clk_cc.hh",
         "clk_hellomsg_clk_cc.inl",
+        "clk_hellomsg_clk_cc_types.cc",
+        "clk_hellomsg_clk_cc_types.hh",
+        "clk_hellomsg_clk_cc_types.inl",
         "clk_hellomsg_clk_nb.cc",
         "clk_hellomsg_clk_nb.hh",
         "clk_hellomsg_clk_nb.inl",
@@ -313,9 +397,11 @@ clk(
         "clk_hellosys.clk_hellosys.ClkHostA_channel_allocations.csv",
         "clk_hellosys.clk_hellosys.ClkHostA_channel_spy_config.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_event_logger_config.tachyon",
+        "clk_hellosys.clk_hellosys.ClkHostA_journal_topology.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_metrics_channel_metadata_config.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_signal_metadata_config.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_simplelaunch_config.textproto",
+        "clk_hellosys.clk_hellosys.ClkHostA_system_metadata.tachyon",
         "clk_hellosys.clk_hellosys.ClkHostA_telemetry_logger_config.tachyon",
         "clk_hellosys.clk_hellosys.diagnostics_database_config.tachyon",
         "clk_hellosys.clk_hellosys.logged_channel_metadata.pbbin",
@@ -337,12 +423,104 @@ filegroup(
 )
 
 clk(
+    name = "clk_nanbind_bindings_clk",
+    srcs = ["clk_nanbind_bindings.clk"],
+    outs = [
+        "clk_nanbind_bindings_clk_cc.cc",
+        "clk_nanbind_bindings_clk_cc.hh",
+        "clk_nanbind_bindings_clk_cc.inl",
+        "clk_nanbind_bindings_clk_cc_types.cc",
+        "clk_nanbind_bindings_clk_cc_types.hh",
+        "clk_nanbind_bindings_clk_cc_types.inl",
+        "clk_nanbind_bindings_clk_nb.cc",
+        "clk_nanbind_bindings_clk_nb.hh",
+        "clk_nanbind_bindings_clk_nb.inl",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+    ],
+)
+
+clk(
+    name = "clk_parameterized_box_clk",
+    srcs = ["clk_parameterized_box.clk"],
+    outs = [
+        "clk_parameterized_box_clk_cc.cc",
+        "clk_parameterized_box_clk_cc.hh",
+        "clk_parameterized_box_clk_cc.inl",
+        "clk_parameterized_box_clk_cc_cog.cc",
+        "clk_parameterized_box_clk_cc_cog.hh",
+        "clk_parameterized_box_clk_cc_cog.inl",
+        "clk_parameterized_box_clk_cc_dial.cc",
+        "clk_parameterized_box_clk_cc_dial.hh",
+        "clk_parameterized_box_clk_cc_dial.inl",
+        "clk_parameterized_box_clk_cc_types.cc",
+        "clk_parameterized_box_clk_cc_types.hh",
+        "clk_parameterized_box_clk_cc_types.inl",
+        "clk_parameterized_box_clk_exe.cc",
+        "clk_parameterized_box_clk_exe.hh",
+        "clk_parameterized_box_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":cxx_state",
+        ":parameterized_types_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_exe",
+    ],
+    deps = [
+        ":parameterized_types_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
+    ],
+)
+
+cc_library(
+    name = "clk_parameterized_box_clk_cc_impl",
+    srcs = [
+        "clk_parameterized_box_clk_cc_impl.cc",
+        "clk_parameterized_box_clk_cc_impl.inl",
+    ],
+    hdrs = ["clk_parameterized_box_clk_cc_impl.hh"],
+    deps = [":clk_parameterized_box_clk_cc_dial"],
+)
+
+clk(
+    name = "clk_parameterized_system_clk",
+    srcs = ["clk_parameterized_system.clk"],
+    outs = [
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_channel_allocations.csv",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_channel_spy_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_event_logger_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_journal_topology.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_metrics_channel_metadata_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_signal_metadata_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_simplelaunch_config.textproto",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_system_metadata.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.ClkTestHost_telemetry_logger_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.diagnostics_database_config.tachyon",
+        "clk_parameterized_system.clk_parameterized_system.logged_channel_metadata.pbbin",
+        "clockwork.clockwork.dsl.tests.support.clk_parameterized_system.clk_parameterized_system.box.proc.tachyon",
+    ],
+    deps = [":clk_parameterized_box_clk"],
+)
+
+clk(
     name = "clk_protomsg_clk",
     srcs = ["clk_protomsg.clk"],
     outs = [
         "clk_protomsg_clk_cc.cc",
         "clk_protomsg_clk_cc.hh",
         "clk_protomsg_clk_cc.inl",
+        "clk_protomsg_clk_cc_types.cc",
+        "clk_protomsg_clk_cc_types.hh",
+        "clk_protomsg_clk_cc_types.inl",
         "clk_protomsg_clk_proto.proto",
         "clk_protomsg_clk_proto_conv.cc",
         "clk_protomsg_clk_proto_conv.hh",
@@ -364,6 +542,9 @@ clk(
         "clk_tapmsg_clk_cc.cc",
         "clk_tapmsg_clk_cc.hh",
         "clk_tapmsg_clk_cc.inl",
+        "clk_tapmsg_clk_cc_types.cc",
+        "clk_tapmsg_clk_cc_types.hh",
+        "clk_tapmsg_clk_cc_types.inl",
         "clk_tapmsg_clk_nb.cc",
         "clk_tapmsg_clk_nb.hh",
         "clk_tapmsg_clk_nb.inl",
@@ -390,6 +571,9 @@ clk(
         "dummy.hh",
         "dummy.inl",
         "dummy_py.py",
+        "dummy_types.cc",
+        "dummy_types.hh",
+        "dummy_types.inl",
     ],
 )
 
@@ -402,6 +586,17 @@ cc_library(
     hdrs = ["convert_hello_msg.hh"],
     data = [":protomsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":convert_hello_msg_types"],
+)
+
+cc_library(
+    name = "convert_hello_msg_types",
+    srcs = [
+        "convert_hello_msg_types.cc",
+        "convert_hello_msg_types.inl",
+    ],
+    hdrs = ["convert_hello_msg_types.hh"],
+    data = [":protomsg_clk"],
     deps = [
         ":better_than_inheritance_cc_library",
         ":better_than_inheritance_cpp",
@@ -423,6 +618,17 @@ cc_library(
     ],
     hdrs = ["convert_proto_tester.hh"],
     data = [":protomsg_clk"],
+    deps = [":convert_proto_tester_types"],
+)
+
+cc_library(
+    name = "convert_proto_tester_types",
+    srcs = [
+        "convert_proto_tester_types.cc",
+        "convert_proto_tester_types.inl",
+    ],
+    hdrs = ["convert_proto_tester_types.hh"],
+    data = [":protomsg_clk"],
     deps = [
         ":better_than_inheritance_cc_library",
         ":better_than_inheritance_cpp",
@@ -436,8 +642,16 @@ cc_library(
 
 cc_library(
     name = "cxx_state",
+    srcs = ["cxx_state.cc"],
     hdrs = ["cxx_state.hh"],
-    deps = ["//jewels/memory:memory_resource"],
+    deps = [
+        ":hello_msg_onboard",
+        "//clockwork:repr_iface",
+        "//clockwork:serializable",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+    ],
 )
 
 cc_library(
@@ -449,6 +663,17 @@ cc_library(
     hdrs = ["dependency_tester_cpp.hh"],
     data = [":protomsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":dependency_tester_cpp_types"],
+)
+
+cc_library(
+    name = "dependency_tester_cpp_types",
+    srcs = [
+        "dependency_tester_cpp_types.cc",
+        "dependency_tester_cpp_types.inl",
+    ],
+    hdrs = ["dependency_tester_cpp_types.hh"],
+    data = [":protomsg_clk"],
     deps = [
         ":dependency_tester_proto_cc_library",
         "//clockwork:repr_iface",
@@ -506,6 +731,7 @@ cc_library(
     ],
     hdrs = ["dummy.hh"],
     data = [":constants_clk"],
+    deps = [":dummy_types"],
 )
 
 py_library(
@@ -517,6 +743,16 @@ py_library(
         "//clockwork/dsl/ir:importer",
         "//clockwork/serialization/py:tachyon_dyn",
     ],
+)
+
+cc_library(
+    name = "dummy_types",
+    srcs = [
+        "dummy_types.cc",
+        "dummy_types.inl",
+    ],
+    hdrs = ["dummy_types.hh"],
+    data = [":constants_clk"],
 )
 
 cc_library(
@@ -535,8 +771,10 @@ cc_library(
     data = [":goodbyecog_clk"],
     visibility = ["//visibility:public"],
     deps = [
+        ":goodbyecog_cog",
         ":goodbyecog_dial",
         ":goodbyecog_impl",
+        ":goodbyecog_types",
         "//clockwork/cog:include_common",
     ],
     alwayslink = True,
@@ -549,12 +787,33 @@ clk(
         "goodbyecog.cc",
         "goodbyecog.hh",
         "goodbyecog.inl",
+        "goodbyecog_cog.cc",
+        "goodbyecog_cog.hh",
+        "goodbyecog_cog.inl",
         "goodbyecog_dial.cc",
         "goodbyecog_dial.hh",
         "goodbyecog_dial.inl",
+        "goodbyecog_types.cc",
+        "goodbyecog_types.hh",
+        "goodbyecog_types.inl",
     ],
     visibility = ["//visibility:public"],
     deps = [":hellomsg_clk"],
+)
+
+cc_library(
+    name = "goodbyecog_cog",
+    srcs = [
+        "goodbyecog_cog.cc",
+        "goodbyecog_cog.inl",
+    ],
+    hdrs = ["goodbyecog_cog.hh"],
+    data = [":goodbyecog_clk"],
+    deps = [
+        ":goodbyecog_dial",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -573,6 +832,16 @@ cc_library(
     name = "goodbyecog_impl",
     srcs = ["goodbyecog_impl.cc"],
     deps = [":goodbyecog_dial"],
+)
+
+cc_library(
+    name = "goodbyecog_types",
+    srcs = [
+        "goodbyecog_types.cc",
+        "goodbyecog_types.inl",
+    ],
+    hdrs = ["goodbyecog_types.hh"],
+    data = [":goodbyecog_clk"],
 )
 
 py_cc_binding(
@@ -600,6 +869,17 @@ cc_library(
     hdrs = ["hello_msg_onboard.hh"],
     data = [":hellomsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":hello_msg_onboard_types"],
+)
+
+cc_library(
+    name = "hello_msg_onboard_types",
+    srcs = [
+        "hello_msg_onboard_types.cc",
+        "hello_msg_onboard_types.inl",
+    ],
+    hdrs = ["hello_msg_onboard_types.hh"],
+    data = [":hellomsg_clk"],
     deps = [
         ":hello_msg_proto_cc_library",
         "//clockwork:repr_iface",
@@ -660,6 +940,80 @@ cc_library(
     hdrs = ["hello_udp.hh"],
     data = [":hello_udp_clk"],
     visibility = ["//visibility:public"],
+    deps = [":hello_udp_types"],
+)
+
+clk(
+    name = "hello_udp_clk",
+    srcs = ["hello_udp.clk"],
+    outs = [
+        "hello_udp.cc",
+        "hello_udp.hh",
+        "hello_udp.inl",
+        "hello_udp_types.cc",
+        "hello_udp_types.hh",
+        "hello_udp_types.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["//clockwork/io:var_packet_clk"],
+)
+
+cc_library(
+    name = "hello_udp_not_var_packet",
+    srcs = [
+        "hello_udp_not_var_packet.cc",
+        "hello_udp_not_var_packet.inl",
+    ],
+    hdrs = ["hello_udp_not_var_packet.hh"],
+    data = [":hello_udp_not_var_packet_clk"],
+    visibility = ["//visibility:public"],
+    deps = [":hello_udp_not_var_packet_types"],
+)
+
+clk(
+    name = "hello_udp_not_var_packet_clk",
+    srcs = ["hello_udp_not_var_packet.clk"],
+    outs = [
+        "hello_udp_not_var_packet.cc",
+        "hello_udp_not_var_packet.hh",
+        "hello_udp_not_var_packet.inl",
+        "hello_udp_not_var_packet_types.cc",
+        "hello_udp_not_var_packet_types.hh",
+        "hello_udp_not_var_packet_types.inl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "hello_udp_not_var_packet_types",
+    srcs = [
+        "hello_udp_not_var_packet_types.cc",
+        "hello_udp_not_var_packet_types.inl",
+    ],
+    hdrs = ["hello_udp_not_var_packet_types.hh"],
+    data = [":hello_udp_not_var_packet_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/pinion:incoming_udp",
+        "//clockwork/pinion:outgoing_udp",
+        "//jewels/memory:memory_resource",
+        "//jewels/meta:concepts",
+        "//jewels/networking:socket_endpoint",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "hello_udp_types",
+    srcs = [
+        "hello_udp_types.cc",
+        "hello_udp_types.inl",
+    ],
+    hdrs = ["hello_udp_types.hh"],
+    data = [":hello_udp_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork/common:process_description_clk_cc",
@@ -676,52 +1030,6 @@ cc_library(
     ],
 )
 
-clk(
-    name = "hello_udp_clk",
-    srcs = ["hello_udp.clk"],
-    outs = [
-        "hello_udp.cc",
-        "hello_udp.hh",
-        "hello_udp.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = ["//clockwork/io:var_packet_clk"],
-)
-
-cc_library(
-    name = "hello_udp_not_var_packet",
-    srcs = [
-        "hello_udp_not_var_packet.cc",
-        "hello_udp_not_var_packet.inl",
-    ],
-    hdrs = ["hello_udp_not_var_packet.hh"],
-    data = [":hello_udp_not_var_packet_clk"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//clockwork/common:process_description_clk_cc",
-        "//clockwork/pinion:incoming_udp",
-        "//clockwork/pinion:outgoing_udp",
-        "//jewels/memory:memory_resource",
-        "//jewels/meta:concepts",
-        "//jewels/networking:socket_endpoint",
-        "//jewels/std:expected",
-        "//jewels/uuid",
-    ],
-)
-
-clk(
-    name = "hello_udp_not_var_packet_clk",
-    srcs = ["hello_udp_not_var_packet.clk"],
-    outs = [
-        "hello_udp_not_var_packet.cc",
-        "hello_udp_not_var_packet.hh",
-        "hello_udp_not_var_packet.inl",
-    ],
-    visibility = ["//visibility:public"],
-)
-
 cc_library(
     name = "hellocog",
     srcs = [
@@ -732,21 +1040,17 @@ cc_library(
     data = [":hellocog_clk"],
     visibility = ["//visibility:public"],
     deps = [
-        ":cxx_state",
-        ":hello_msg_onboard",
+        ":hellocog_cog",
         ":hellocog_dial",
         ":hellocog_impl",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
+        ":hellocog_types",
+        "//clockwork:serializable",
         "//clockwork/cog:include_common",
-        "//clockwork/diagnostics:report_definitions",
-        "//clockwork/diagnostics:reporter",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
+        "//clockwork/memory:start_lifetime_as",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:aligned_storage",
+        "//jewels/memory:pmr_shared_ptr",
     ],
     alwayslink = True,
 )
@@ -758,9 +1062,15 @@ clk(
         "hellocog.cc",
         "hellocog.hh",
         "hellocog.inl",
+        "hellocog_cog.cc",
+        "hellocog_cog.hh",
+        "hellocog_cog.inl",
         "hellocog_dial.cc",
         "hellocog_dial.hh",
         "hellocog_dial.inl",
+        "hellocog_types.cc",
+        "hellocog_types.hh",
+        "hellocog_types.inl",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -768,7 +1078,28 @@ clk(
         "//clockwork/diagnostics:report_clk",
         "//clockwork/dsl/cog:common_cog_event_metrics_clk",
         "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+        "//clockwork/dsl/cog:ten_nanosecond_clk",
+        "//std:cog_metrics_policy_clk",
     ],
+)
+
+cc_library(
+    name = "hellocog_cog",
+    srcs = [
+        "hellocog_cog.cc",
+        "hellocog_cog.inl",
+    ],
+    hdrs = ["hellocog_cog.hh"],
+    data = [":hellocog_clk"],
+    deps = [
+        ":hello_msg_onboard",
+        ":hellocog_dial",
+        "//clockwork:serializable",
+        "//clockwork/cog:include_common",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -797,12 +1128,81 @@ cc_library(
 )
 
 cc_library(
+    name = "hellocog_types",
+    srcs = [
+        "hellocog_types.cc",
+        "hellocog_types.inl",
+    ],
+    hdrs = ["hellocog_types.hh"],
+    data = [":hellocog_clk"],
+    deps = [
+        ":cxx_state",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/utility:enum_flags",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
     name = "hellomod",
     srcs = [
         "hellomod.cc",
         "hellomod.inl",
     ],
     hdrs = ["hellomod.hh"],
+    data = [":hellomod_clk"],
+    deps = [":hellomod_types"],
+)
+
+clk(
+    name = "hellomod_clk",
+    srcs = ["hellomod.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.tests.support.hellomod.helloworld.proc.tachyon",
+        "hellomod.cc",
+        "hellomod.helloworld.HostA.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
+        "hellomod.helloworld.HostA_channel_allocations.csv",
+        "hellomod.helloworld.HostA_channel_spy_config.tachyon",
+        "hellomod.helloworld.HostA_event_logger_config.tachyon",
+        "hellomod.helloworld.HostA_journal_topology.tachyon",
+        "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
+        "hellomod.helloworld.HostA_signal_metadata_config.tachyon",
+        "hellomod.helloworld.HostA_simplelaunch_config.textproto",
+        "hellomod.helloworld.HostA_system_metadata.tachyon",
+        "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
+        "hellomod.helloworld.diagnostics_database_config.tachyon",
+        "hellomod.helloworld.logged_channel_metadata.pbbin",
+        "hellomod.hh",
+        "hellomod.inl",
+        "hellomod_types.cc",
+        "hellomod_types.hh",
+        "hellomod_types.inl",
+        "helloworld_exe.cc",
+        "helloworld_exe.hh",
+        "helloworld_exe.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":hellocog_clk",
+        ":hellomsg_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//clockwork/io:var_packet_clk",
+    ],
+)
+
+cc_library(
+    name = "hellomod_types",
+    srcs = [
+        "hellomod_types.cc",
+        "hellomod_types.inl",
+    ],
+    hdrs = ["hellomod_types.hh"],
     data = [":hellomod_clk"],
     deps = [
         "//clockwork:repr_iface",
@@ -818,37 +1218,6 @@ cc_library(
 )
 
 clk(
-    name = "hellomod_clk",
-    srcs = ["hellomod.clk"],
-    outs = [
-        "clockwork.clockwork.dsl.tests.support.hellomod.helloworld.proc.tachyon",
-        "hellomod.cc",
-        "hellomod.helloworld.HostA.clockwork.clockwork.dsl.tests.support.hellomod.MultiPublisherChannel_config.tachyon",
-        "hellomod.helloworld.HostA_channel_allocations.csv",
-        "hellomod.helloworld.HostA_channel_spy_config.tachyon",
-        "hellomod.helloworld.HostA_event_logger_config.tachyon",
-        "hellomod.helloworld.HostA_metrics_channel_metadata_config.tachyon",
-        "hellomod.helloworld.HostA_signal_metadata_config.tachyon",
-        "hellomod.helloworld.HostA_simplelaunch_config.textproto",
-        "hellomod.helloworld.HostA_telemetry_logger_config.tachyon",
-        "hellomod.helloworld.diagnostics_database_config.tachyon",
-        "hellomod.helloworld.logged_channel_metadata.pbbin",
-        "hellomod.hh",
-        "hellomod.inl",
-        "helloworld_exe.cc",
-        "helloworld_exe.hh",
-        "helloworld_exe.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":hellocog_clk",
-        ":hellomsg_clk",
-        "//clockwork/diagnostics:report_clk",
-        "//clockwork/io:var_packet_clk",
-    ],
-)
-
-clk(
     name = "hellomsg_clk",
     srcs = ["hellomsg.clk"],
     outs = [
@@ -858,6 +1227,9 @@ clk(
         "hello_msg_onboard.cc",
         "hello_msg_onboard.hh",
         "hello_msg_onboard.inl",
+        "hello_msg_onboard_types.cc",
+        "hello_msg_onboard_types.hh",
+        "hello_msg_onboard_types.inl",
         "hello_msg_proto.proto",
     ],
     visibility = ["//visibility:public"],
@@ -909,19 +1281,7 @@ cc_library(
     hdrs = ["msg_with_au.hh"],
     data = [":msg_with_au_clk"],
     visibility = ["//visibility:public"],
-    deps = [
-        ":msg_with_au_proto_cc_library",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:optional",
-        "//jewels/container/tap:protobuf_to_tap",
-        "//jewels/container/tap:tap_to_protobuf",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/std:span",
-        "//jewels/units/clk:au_clk_cc",
-        "//jewels/uuid",
-    ],
+    deps = [":msg_with_au_types"],
 )
 
 clk(
@@ -933,6 +1293,9 @@ clk(
         "msg_with_au.inl",
         "msg_with_au_proto.proto",
         "msg_with_au_py.py",
+        "msg_with_au_types.cc",
+        "msg_with_au_types.hh",
+        "msg_with_au_types.inl",
     ],
     visibility = ["//visibility:public"],
     deps = ["//jewels/units/clk:au_clk"],
@@ -987,6 +1350,29 @@ py_library(
     ],
 )
 
+cc_library(
+    name = "msg_with_au_types",
+    srcs = [
+        "msg_with_au_types.cc",
+        "msg_with_au_types.inl",
+    ],
+    hdrs = ["msg_with_au_types.hh"],
+    data = [":msg_with_au_clk"],
+    deps = [
+        ":msg_with_au_proto_cc_library",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:protobuf_to_tap",
+        "//jewels/container/tap:tap_to_protobuf",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/std:span",
+        "//jewels/units/clk:au_clk_cc",
+        "//jewels/uuid",
+    ],
+)
+
 proto_library(
     name = "msg_with_au_types_proto",
     srcs = ["msg_with_au_proto.proto"],
@@ -1003,6 +1389,9 @@ clk(
         "nanobindable_messages_clk_nb.cc",
         "nanobindable_messages_clk_nb.hh",
         "nanobindable_messages_clk_nb.inl",
+        "nanobindable_messages_types.cc",
+        "nanobindable_messages_types.hh",
+        "nanobindable_messages_types.inl",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -1025,6 +1414,9 @@ clk(
         "nanobind_test_msg_dependency2_clk_nb.cc",
         "nanobind_test_msg_dependency2_clk_nb.hh",
         "nanobind_test_msg_dependency2_clk_nb.inl",
+        "nanobind_test_msg_dependency_types.cc",
+        "nanobind_test_msg_dependency_types.hh",
+        "nanobind_test_msg_dependency_types.inl",
     ],
     visibility = ["//visibility:public"],
 )
@@ -1037,13 +1429,7 @@ cc_library(
     ],
     hdrs = ["nanobind_test_msg_dependency.hh"],
     data = [":nanobind_bindings_dep_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-        "@wise_enum",
-    ],
+    deps = [":nanobind_test_msg_dependency_types"],
 )
 
 py_cc_binding(
@@ -1076,6 +1462,23 @@ py_cc_binding(
     ],
 )
 
+cc_library(
+    name = "nanobind_test_msg_dependency_types",
+    srcs = [
+        "nanobind_test_msg_dependency_types.cc",
+        "nanobind_test_msg_dependency_types.inl",
+    ],
+    hdrs = ["nanobind_test_msg_dependency_types.hh"],
+    data = [":nanobind_bindings_dep_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
 clk(
     name = "nanobind_type_casters_clk",
     srcs = ["nanobind_type_casters.clk"],
@@ -1090,19 +1493,7 @@ cc_library(
     ],
     hdrs = ["nanobindable_messages.hh"],
     data = [":nanobind_bindings_clk"],
-    deps = [
-        ":nanobind_test_msg_dependency",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:optional",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/time:sync_time",
-        "//jewels/units/clk:au_clk_cc",
-        "//jewels/uuid",
-        "@wise_enum",
-    ],
+    deps = [":nanobindable_messages_types"],
 )
 
 py_cc_binding(
@@ -1125,6 +1516,29 @@ py_cc_binding(
     ],
 )
 
+cc_library(
+    name = "nanobindable_messages_types",
+    srcs = [
+        "nanobindable_messages_types.cc",
+        "nanobindable_messages_types.inl",
+    ],
+    hdrs = ["nanobindable_messages_types.hh"],
+    data = [":nanobind_bindings_clk"],
+    deps = [
+        ":nanobind_test_msg_dependency",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/time:sync_time",
+        "//jewels/units/clk:au_clk_cc",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
 py_cc_binding(
     name = "nb_function_calls",
     srcs = ["nb_function_calls.cc"],
@@ -1135,6 +1549,187 @@ py_cc_binding(
         "//clockwork:repr_iface",
         "@nanobind",
     ],
+)
+
+clk(
+    name = "parameterized_box_clk",
+    srcs = ["parameterized_box.clk"],
+    outs = [
+        "parameterized_box_clk_cc.cc",
+        "parameterized_box_clk_cc.hh",
+        "parameterized_box_clk_cc.inl",
+        "parameterized_box_clk_cc_cog.cc",
+        "parameterized_box_clk_cc_cog.hh",
+        "parameterized_box_clk_cc_cog.inl",
+        "parameterized_box_clk_cc_dial.cc",
+        "parameterized_box_clk_cc_dial.hh",
+        "parameterized_box_clk_cc_dial.inl",
+        "parameterized_box_clk_cc_types.cc",
+        "parameterized_box_clk_cc_types.hh",
+        "parameterized_box_clk_cc_types.inl",
+        "parameterized_box_clk_exe.cc",
+        "parameterized_box_clk_exe.hh",
+        "parameterized_box_clk_exe.inl",
+    ],
+    deps = [
+        ":parameterized_types_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+        "//clockwork/dsl/cog:ten_nanosecond_clk",
+        "//std:cog_metrics_policy_clk",
+    ],
+)
+
+cc_library(
+    name = "parameterized_box_clk_cc",
+    srcs = [
+        "parameterized_box_clk_cc.cc",
+        "parameterized_box_clk_cc.inl",
+    ],
+    hdrs = ["parameterized_box_clk_cc.hh"],
+    data = [":parameterized_box_clk"],
+    deps = [
+        ":parameterized_box_clk_cc_cog",
+        ":parameterized_box_clk_cc_dial",
+        ":parameterized_box_clk_cc_impl",
+        ":parameterized_box_clk_cc_types",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "parameterized_box_clk_cc_cog",
+    srcs = [
+        "parameterized_box_clk_cc_cog.cc",
+        "parameterized_box_clk_cc_cog.inl",
+    ],
+    hdrs = ["parameterized_box_clk_cc_cog.hh"],
+    data = [":parameterized_box_clk"],
+    deps = [
+        ":cxx_state",
+        ":parameterized_box_clk_cc_dial",
+        ":parameterized_types_clk_cc",
+        "//clockwork/cog:include_common",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "parameterized_box_clk_cc_dial",
+    srcs = [
+        "parameterized_box_clk_cc_dial.cc",
+        "parameterized_box_clk_cc_dial.inl",
+    ],
+    hdrs = ["parameterized_box_clk_cc_dial.hh"],
+    data = [":parameterized_box_clk"],
+    deps = [
+        ":cxx_state",
+        ":parameterized_types_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/dial:include_common",
+    ],
+)
+
+cc_library(
+    name = "parameterized_box_clk_cc_impl",
+    srcs = [
+        "parameterized_box_clk_cc_impl.cc",
+        "parameterized_box_clk_cc_impl.inl",
+    ],
+    hdrs = ["parameterized_box_clk_cc_impl.hh"],
+    deps = [":parameterized_box_clk_cc_dial"],
+)
+
+cc_library(
+    name = "parameterized_box_clk_cc_types",
+    srcs = [
+        "parameterized_box_clk_cc_types.cc",
+        "parameterized_box_clk_cc_types.inl",
+    ],
+    hdrs = ["parameterized_box_clk_cc_types.hh"],
+    data = [":parameterized_box_clk"],
+    deps = [
+        ":cxx_state",
+        ":parameterized_types_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
+        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//clockwork/pinion:incoming_udp",
+        "//jewels/container/tap:var_array",
+        "//jewels/memory:memory_resource",
+        "//jewels/meta:concepts",
+        "//jewels/networking:socket_endpoint",
+        "//jewels/std:expected",
+        "//jewels/utility:enum_flags",
+        "//jewels/uuid",
+        "@wise_enum",
+    ],
+)
+
+cc_binary(
+    name = "parameterized_box_clk_exe",
+    srcs = [
+        "parameterized_box_clk_exe.cc",
+        "parameterized_box_clk_exe.hh",
+        "parameterized_box_clk_exe.inl",
+    ],
+    deps = [
+        ":cxx_state",
+        ":parameterized_box_clk_cc",
+        ":parameterized_types_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//clockwork/scaffolding:online_main",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "parameterized_system_clk",
+    srcs = ["parameterized_system.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.tests.support.parameterized_system.parameterized_system.box.proc.tachyon",
+        "parameterized_system.parameterized_system.TestHost_channel_allocations.csv",
+        "parameterized_system.parameterized_system.TestHost_channel_spy_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_event_logger_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_journal_topology.tachyon",
+        "parameterized_system.parameterized_system.TestHost_metrics_channel_metadata_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_signal_metadata_config.tachyon",
+        "parameterized_system.parameterized_system.TestHost_simplelaunch_config.textproto",
+        "parameterized_system.parameterized_system.TestHost_system_metadata.tachyon",
+        "parameterized_system.parameterized_system.TestHost_telemetry_logger_config.tachyon",
+        "parameterized_system.parameterized_system.diagnostics_database_config.tachyon",
+        "parameterized_system.parameterized_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":parameterized_box_clk",
+        ":parameterized_types_clk",
+    ],
+)
+
+clk(
+    name = "parameterized_types_clk",
+    srcs = ["parameterized_types.clk"],
+    outs = [
+        "parameterized_types_clk_cc.cc",
+        "parameterized_types_clk_cc.hh",
+        "parameterized_types_clk_cc.inl",
+        "parameterized_types_clk_cc_types.cc",
+        "parameterized_types_clk_cc_types.hh",
+        "parameterized_types_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
 )
 
 proto_library(
@@ -1197,15 +1792,27 @@ clk(
         "better_than_inheritance_cpp.cc",
         "better_than_inheritance_cpp.hh",
         "better_than_inheritance_cpp.inl",
+        "better_than_inheritance_cpp_types.cc",
+        "better_than_inheritance_cpp_types.hh",
+        "better_than_inheritance_cpp_types.inl",
         "convert_hello_msg.cc",
         "convert_hello_msg.hh",
         "convert_hello_msg.inl",
+        "convert_hello_msg_types.cc",
+        "convert_hello_msg_types.hh",
+        "convert_hello_msg_types.inl",
         "convert_proto_tester.cc",
         "convert_proto_tester.hh",
         "convert_proto_tester.inl",
+        "convert_proto_tester_types.cc",
+        "convert_proto_tester_types.hh",
+        "convert_proto_tester_types.inl",
         "dependency_tester_cpp.cc",
         "dependency_tester_cpp.hh",
         "dependency_tester_cpp.inl",
+        "dependency_tester_cpp_types.cc",
+        "dependency_tester_cpp_types.hh",
+        "dependency_tester_cpp_types.inl",
         "dependency_tester_proto.proto",
         "proto_tester_onboard.proto",
     ],
@@ -1218,6 +1825,9 @@ clk(
         "py_bindings_v2_clk_cc.cc",
         "py_bindings_v2_clk_cc.hh",
         "py_bindings_v2_clk_cc.inl",
+        "py_bindings_v2_clk_cc_types.cc",
+        "py_bindings_v2_clk_cc_types.hh",
+        "py_bindings_v2_clk_cc_types.inl",
         "py_bindings_v2_clk_py.py",
     ],
     visibility = ["//visibility:public"],
@@ -1231,6 +1841,17 @@ cc_library(
         "py_bindings_v2_clk_cc.inl",
     ],
     hdrs = ["py_bindings_v2_clk_cc.hh"],
+    data = [":py_bindings_v2_clk"],
+    deps = [":py_bindings_v2_clk_cc_types"],
+)
+
+cc_library(
+    name = "py_bindings_v2_clk_cc_types",
+    srcs = [
+        "py_bindings_v2_clk_cc_types.cc",
+        "py_bindings_v2_clk_cc_types.inl",
+    ],
+    hdrs = ["py_bindings_v2_clk_cc_types.hh"],
     data = [":py_bindings_v2_clk"],
     deps = [
         "//clockwork:tags",
@@ -1261,6 +1882,9 @@ clk(
         "py_bindings_v2_ext_clk_cc.cc",
         "py_bindings_v2_ext_clk_cc.hh",
         "py_bindings_v2_ext_clk_cc.inl",
+        "py_bindings_v2_ext_clk_cc_types.cc",
+        "py_bindings_v2_ext_clk_cc_types.hh",
+        "py_bindings_v2_ext_clk_cc_types.inl",
         "py_bindings_v2_ext_clk_py.py",
     ],
     visibility = ["//visibility:public"],
@@ -1275,6 +1899,17 @@ cc_library(
     hdrs = ["py_bindings_v2_ext_clk_cc.hh"],
     data = [":py_bindings_v2_ext_clk"],
     visibility = ["//visibility:public"],
+    deps = [":py_bindings_v2_ext_clk_cc_types"],
+)
+
+cc_library(
+    name = "py_bindings_v2_ext_clk_cc_types",
+    srcs = [
+        "py_bindings_v2_ext_clk_cc_types.cc",
+        "py_bindings_v2_ext_clk_cc_types.inl",
+    ],
+    hdrs = ["py_bindings_v2_ext_clk_cc_types.hh"],
+    data = [":py_bindings_v2_ext_clk"],
     deps = [
         "//clockwork:tags",
         "//jewels/uuid",
@@ -1317,6 +1952,39 @@ cc_library(
     hdrs = ["tapmsg.hh"],
     data = [":tapmsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":tapmsg_types"],
+)
+
+clk(
+    name = "tapmsg_clk",
+    srcs = ["tapmsg.clk"],
+    outs = [
+        "pytapmsg.py",
+        "tapmsg.cc",
+        "tapmsg.hh",
+        "tapmsg.inl",
+        "tapmsg_types.cc",
+        "tapmsg_types.hh",
+        "tapmsg_types.inl",
+        "taptag.cc",
+        "taptag.hh",
+        "taptag.inl",
+        "taptag_types.cc",
+        "taptag_types.hh",
+        "taptag_types.inl",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":taptags_clk"],
+)
+
+cc_library(
+    name = "tapmsg_types",
+    srcs = [
+        "tapmsg_types.cc",
+        "tapmsg_types.inl",
+    ],
+    hdrs = ["tapmsg_types.hh"],
+    data = [":tapmsg_clk"],
     deps = [
         ":extern_type",
         ":taptags_clk_cc",
@@ -1334,22 +2002,6 @@ cc_library(
     ],
 )
 
-clk(
-    name = "tapmsg_clk",
-    srcs = ["tapmsg.clk"],
-    outs = [
-        "pytapmsg.py",
-        "tapmsg.cc",
-        "tapmsg.hh",
-        "tapmsg.inl",
-        "taptag.cc",
-        "taptag.hh",
-        "taptag.inl",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [":taptags_clk"],
-)
-
 cc_library(
     name = "taptag",
     srcs = [
@@ -1359,6 +2011,17 @@ cc_library(
     hdrs = ["taptag.hh"],
     data = [":tapmsg_clk"],
     visibility = ["//visibility:public"],
+    deps = [":taptag_types"],
+)
+
+cc_library(
+    name = "taptag_types",
+    srcs = [
+        "taptag_types.cc",
+        "taptag_types.inl",
+    ],
+    hdrs = ["taptag_types.hh"],
+    data = [":tapmsg_clk"],
 )
 
 clk(
@@ -1368,7 +2031,26 @@ clk(
         "taptags_clk_cc.cc",
         "taptags_clk_cc.hh",
         "taptags_clk_cc.inl",
+        "taptags_clk_cc_types.cc",
+        "taptags_clk_cc_types.hh",
+        "taptags_clk_cc_types.inl",
     ],
+    generate = ["cpp"],
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "tensor_msg_clk",
+    srcs = ["tensor_msg.clk"],
+    outs = [
+        "tensor_msg_clk_cc.cc",
+        "tensor_msg_clk_cc.hh",
+        "tensor_msg_clk_cc.inl",
+        "tensor_msg_clk_cc_types.cc",
+        "tensor_msg_clk_cc_types.hh",
+        "tensor_msg_clk_cc_types.inl",
+    ],
+    cpp_deps = [":extern_type"],
     generate = ["cpp"],
     visibility = ["//visibility:public"],
 )
@@ -1386,6 +2068,7 @@ clk(
 clk(
     name = "test_signals_clk",
     srcs = ["test_signals.clk"],
+    generate = ["none"],
 )
 
 clk(
@@ -1397,9 +2080,11 @@ clk(
         "test_snapshot_policy.test_snapshot_system.TestCpu_channel_allocations.csv",
         "test_snapshot_policy.test_snapshot_system.TestCpu_channel_spy_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_event_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_journal_topology.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_metrics_channel_metadata_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_signal_metadata_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_simplelaunch_config.textproto",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_system_metadata.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_telemetry_logger_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.diagnostics_database_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.logged_channel_metadata.pbbin",
@@ -1424,8 +2109,10 @@ merge_simplelaunch_config(
         "test_snapshot_policy.test_snapshot_system.TestCpu_channel_allocations.csv",
         "test_snapshot_policy.test_snapshot_system.TestCpu_channel_spy_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_event_logger_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_journal_topology.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_metrics_channel_metadata_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_signal_metadata_config.tachyon",
+        "test_snapshot_policy.test_snapshot_system.TestCpu_system_metadata.tachyon",
         "test_snapshot_policy.test_snapshot_system.TestCpu_telemetry_logger_config.tachyon",
         "test_snapshot_policy.test_snapshot_system.diagnostics_database_config.tachyon",
         ":helloworld_exe",

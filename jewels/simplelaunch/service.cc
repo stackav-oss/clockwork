@@ -1,12 +1,29 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/simplelaunch/service.hh"
 
+#include "clockwork/common/platform_diagnostics_config_clk_cc.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/diagnostics/report_definitions.hh"
+#include "clockwork/diagnostics/reporter.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
+#include "clockwork/pinion/slot.hh"
+#include "clockwork/scaffolding/channels.hh"
+#include "jewels/container/compare.hh"
+#include "jewels/container/tap/var_array.hh"
+#include "jewels/container/tap/var_string.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/simplelaunch/child_process.hh"
 #include "jewels/simplelaunch/config.hh"
-#include "jewels/simplelaunch/service_definition.hh"
+#include "jewels/simplelaunch/simplelaunch_status_clk_cc.hh"
+#include "jewels/simplelaunch/v1/service.pb.h"
+#include "jewels/time/sync_time.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <absl/status/status.h>
 #include <boost/asio/any_io_executor.hpp>
@@ -17,16 +34,21 @@
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http/error.hpp>
 #include <boost/beast/http/field.hpp>
+#include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/impl/message_generator.hpp>
+#include <boost/beast/http/message.hpp>
 #include <boost/beast/http/message_generator.hpp>
 #include <boost/beast/http/read.hpp>
 #include <boost/beast/http/status.hpp>
+#include <boost/beast/http/string_body.hpp>
 #include <boost/beast/http/verb.hpp>
 #include <boost/system/system_category.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <google/protobuf/json/json.h>
 #include <google/protobuf/repeated_ptr_field.h>
 #include <google/protobuf/util/json_util.h>
+#include <wise_enum.h>
 
 #include <cerrno>
 #include <csignal>
@@ -37,11 +59,12 @@
 #include <memory>
 #include <memory_resource>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string_view>
 #include <sys/wait.h>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -165,11 +188,13 @@ void get_logs(const ChildProcessInfo& process, boost::beast::http::response<boos
 
 TaskManagerImpl::TaskManagerImpl(
   Config config,
+  std::shared_ptr<clockwork::Tappy<SimplelaunchRunnerConfig>> runner_config_ptr,
   filesystem::Path logging_directory,
   memory::MemoryResource memory_resource,
   memory::ObjectPtr<boost::asio::io_context> io_ctx_ptr,
-  std::pmr::unordered_map<std::pmr::string, bool> pre_launch_task_results) noexcept
+  std::pmr::map<std::pmr::string, bool> pre_launch_task_results) noexcept
   : config_(std::move(config)),
+    runner_config_ptr_(std::move(runner_config_ptr)),
     logging_directory_(std::move(logging_directory)),
     memory_resource_{std::move(memory_resource)},
     io_ctx_ptr_{io_ctx_ptr},
@@ -179,13 +204,177 @@ TaskManagerImpl::TaskManagerImpl(
     quit_signals_{*io_ctx_ptr_, SIGINT, SIGQUIT, SIGTERM},
     tcp_acceptor_{boost::asio::make_strand(*io_ctx_ptr_)}
 {
-  child_processes_.reserve(static_cast<size_t>(config_.app_size()));
+}
+
+[[nodiscard]] bool
+TaskManagerImpl::initialize(clockwork::pinion::AbstractChannelFactory& channel_factory, clockwork::EPollManager& epoll)
+{
+  if (runner_config_ptr_)
+  {
+    const auto& diagnostics_config = runner_config_ptr_->get_diagnostics_config();
+    if (!diagnostics_config.get_reporter_id().is_nil())
+    {
+      if (
+        diagnostics_config.get_group_id() != wise_enum::to_string(clockwork::diagnostics::SignalGroupId::simplelaunch))
+      {
+        jewels::log_cerr_error("Unsupported diagnostics signal group ID: {}", diagnostics_config.get_group_id());
+        return false;
+      }
+      const auto& diagnostics_publish_endpoint = diagnostics_config.get_publish_endpoint();
+      const auto& buffer_layout = diagnostics_publish_endpoint.get_buffer_layout();
+      const auto layout = clockwork::pinion::BufferLayout{
+        .num_slots = buffer_layout.get_num_slots(),
+        .message_size = buffer_layout.get_message_size(),
+        .is_published_once = buffer_layout.get_is_published_once(),
+      };
+      const auto uuid_str = diagnostics_publish_endpoint.get_publisher_id().to_string(memory_resource_);
+      auto open_result = channel_factory.open_publisher(
+        uuid_str,
+        diagnostics_publish_endpoint.get_channel_name(),
+        layout,
+        diagnostics_publish_endpoint.get_num_subscribers());
+      if (!open_result)
+      {
+        jewels::log_cerr_error(
+          "failed to open publisher for channel {}: {}",
+          diagnostics_publish_endpoint.get_channel_name(),
+          open_result.error());
+        return false;
+      }
+      diagnostics_publisher_ = std::move(open_result).value();
+      clockwork::scaffolding::bind_channel_to_epoll(
+        static_pointer_cast<clockwork::pinion::AbstractChannel>(diagnostics_publisher_), epoll);
+      diagnostics_manager_ =
+        std::make_unique<clockwork::diagnostics::ClockworkManager<clockwork::diagnostics::SignalGroupId::simplelaunch>>(
+          diagnostics_config.get_instance_id(), diagnostics_config.get_reporter_id());
+      diagnostics_manager_->publisher().set_handle(diagnostics_publisher_->extract_publisher().value());
+    }
+    const auto status_publish_endpoint = runner_config_ptr_->get_status_publish_endpoint();
+    if (!status_publish_endpoint.get_publisher_id().is_nil())
+    {
+      const auto& buffer_layout = status_publish_endpoint.get_buffer_layout();
+      const auto layout = clockwork::pinion::BufferLayout{
+        .num_slots = buffer_layout.get_num_slots(),
+        .message_size = buffer_layout.get_message_size(),
+        .is_published_once = buffer_layout.get_is_published_once(),
+      };
+      const auto uuid_str = status_publish_endpoint.get_publisher_id().to_string(memory_resource_);
+      auto open_result = channel_factory.open_publisher(
+        uuid_str, status_publish_endpoint.get_channel_name(), layout, status_publish_endpoint.get_num_subscribers());
+      if (!open_result)
+      {
+        jewels::log_cerr_error(
+          "failed to open publisher for channel {}: {}",
+          status_publish_endpoint.get_channel_name(),
+          open_result.error());
+        return false;
+      }
+      status_publisher_ = std::move(open_result).value();
+      clockwork::scaffolding::bind_channel_to_epoll(
+        static_pointer_cast<clockwork::pinion::AbstractChannel>(status_publisher_), epoll);
+      maybe_status_publisher_handle_.emplace(std::move(status_publisher_->extract_publisher()).value());
+    }
+  }
+  return true;
+}
+
+void TaskManagerImpl::publish_status_message()
+{
+  if (!maybe_status_publisher_handle_)
+  {
+    return;
+  }
+  auto reservation = maybe_status_publisher_handle_->reserve();
+  if (!reservation)
+  {
+    jewels::log_cerr_error("Failed to reserve bridge status message slot: {}", reservation.error());
+    return;
+  }
+  auto slot = reservation->slots().front();
+  auto& status_msg = *clockwork::pinion::detail::marshal_as<clockwork::Tappy<SimplelaunchRunnerStatus>>(
+    std::span<std::byte, sizeof(clockwork::Tappy<SimplelaunchRunnerStatus>)>{slot.message()});
+  status_msg.clear();
+  status_msg.get_underlying_host_name().set_truncate(runner_config_ptr_->get_host_name());
+  for (const auto& [task_name, task_succeeded] : pre_launch_task_results_)
+  {
+    if (status_msg.get_underlying_pre_launch_info().full())
+    {
+      jewels::log_cerr_error(
+        "Insufficient capacity in the status message to send {} pre launch task results",
+        pre_launch_task_results_.size());
+      break;
+    }
+    auto& pre_launch_info = status_msg.get_underlying_pre_launch_info().emplace_back();
+    pre_launch_info.get_underlying_name().set_truncate(task_name);
+    pre_launch_info.set_succeeded(task_succeeded);
+  }
+  const std::scoped_lock guard{child_processes_mutex_};
+  for (const auto& process : std::ranges::views::values(child_processes_))
+  {
+    if (status_msg.get_underlying_process_info().full())
+    {
+      jewels::log_cerr_error(
+        "Insufficient capacity in the status message to send {} process info results", child_processes_.size());
+      break;
+    }
+    const auto& info = process.get_process_info();
+    auto& process_info = status_msg.get_underlying_process_info().emplace_back();
+    process_info.get_underlying_name().set_truncate(info.name());
+    process_info.set_pid(info.pid());
+    process_info.set_core_dumped(info.core_dumped());
+    process_info.set_state(static_cast<ProcessState>(info.state()));
+  }
+  if (const auto commit_result = reservation->commit(time::SyncClock::now()); !commit_result)
+  {
+    jewels::log_cerr_error("Failed to commit status message: {}", commit_result.error());
+  }
+}
+
+void TaskManagerImpl::publish_diagnostics()
+{
+  if (!diagnostics_manager_)
+  {
+    return;
+  }
+  const std::scoped_lock guard{child_processes_mutex_};
+  const auto pre_launch_failures = std::accumulate(
+    pre_launch_task_results_.begin(),
+    pre_launch_task_results_.end(),
+    uint64_t{0U},
+    [](uint64_t lhs, const auto& rhs) { return lhs + (rhs.second ? 0U : 1U); });
+  uint64_t process_not_running = 0U;
+  uint64_t process_exited = 0U;
+  uint64_t process_crashed = 0U;
+  for (const auto& process : std::ranges::views::values(child_processes_))
+  {
+    const auto& info = process.get_process_info();
+    switch (static_cast<ProcessState>(info.state()))
+    {
+    case ProcessState::unspecified:
+    case ProcessState::not_running:
+      ++process_not_running;
+      break;
+    case ProcessState::running:
+      break;
+    case ProcessState::exited:
+      ++process_exited;
+      break;
+    case ProcessState::crashed:
+      ++process_crashed;
+      break;
+    }
+  }
+  auto report = diagnostics_manager_->create_report(time::SyncClock::now());
+  report.set<clockwork::diagnostics::SignalId::pre_launch_failure>(pre_launch_failures);
+  report.set<clockwork::diagnostics::SignalId::process_not_running>(process_not_running);
+  report.set<clockwork::diagnostics::SignalId::process_exited>(process_exited);
+  report.set<clockwork::diagnostics::SignalId::process_crashed>(process_crashed);
 }
 
 void TaskManagerImpl::get_process_list(
   bool binary_encoding, boost::beast::http::response<boost::beast::http::string_body>& response)
 {
-  GetProcessListResponse process_list;
+  ::jewels::simplelaunch::v1::GetProcessListResponse process_list;
   const std::scoped_lock guard{child_processes_mutex_};
   for (const auto& process : std::ranges::views::values(child_processes_))
   {
@@ -193,7 +382,7 @@ void TaskManagerImpl::get_process_list(
   }
   for (const auto& [task_name, task_succeeded] : pre_launch_task_results_)
   {
-    PreLaunchInfo pre_launch_info;
+    ::jewels::simplelaunch::v1::PreLaunchInfo pre_launch_info;
     pre_launch_info.set_name(task_name);
     pre_launch_info.set_succeeded(task_succeeded);
     *process_list.mutable_pre_launch_info()->Add() = std::move(pre_launch_info);
@@ -221,7 +410,7 @@ void TaskManagerImpl::get_process_list(
 void TaskManagerImpl::process_action(
   const std::string& request_body, boost::beast::http::response<boost::beast::http::string_body>& response)
 {
-  SimpleLaunchCommand command{};
+  ::jewels::simplelaunch::v1::SimpleLaunchCommand command{};
   if (!command.ParseFromString(request_body))
   {
     response.result(boost::beast::http::status::bad_request);
@@ -376,22 +565,26 @@ size_t TaskManagerImpl::send_signal_to_all(int signal_number, std::string_view s
   {
     process_waitpid(pid, status);
   }
-  uint32_t non_exited = 0U;
   uint32_t exited = 0U;
-  for (auto& child_process : std::ranges::views::values(this->child_processes_))
+  std::pmr::vector<std::pmr::string> still_running{memory_resource_};
+  for (auto& [name, child_process] : this->child_processes_)
   {
     if (!child_process.has_exited())
     {
       child_process.send_signal(signal_number);
-      non_exited++;
+      still_running.emplace_back(name);
     }
     else
     {
       exited++;
     }
   }
-  log_cerr_info("Sent SIG{} to {} children, ignoring {} already exited", signal_name, non_exited, exited);
-  return non_exited;
+  if (still_running.size() > 0U)
+  {
+    log_cerr_info("Processes still running: {}", fmt::join(still_running, ", "));
+  }
+  log_cerr_info("Sent SIG{} to {} children, ignoring {} already exited", signal_name, still_running.size(), exited);
+  return still_running.size();
 }
 
 void TaskManagerImpl::quit_callback(const boost::system::error_code& error, int /* signal_number */)

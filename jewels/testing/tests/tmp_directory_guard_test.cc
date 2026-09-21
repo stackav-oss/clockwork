@@ -35,7 +35,7 @@ TEST_CASE("TmpDirectoryGuard creates and deletes a temporary directory")
   // Create a temporary directory and check that it exists
   auto guard = std::make_optional(TmpDirectoryGuard(memres));
   REQUIRE(guard);
-  const auto& dir_path = guard->get_path();
+  const auto dir_path = guard->get_path();
   auto check_result = fsys.is_directory(dir_path.string_view());
   REQUIRE(check_result);
   REQUIRE(*check_result);

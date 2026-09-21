@@ -21,7 +21,9 @@ cog LidarDeviceCog
 
   outputs
   {
-    raw_lidar: Tappy<lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>>;
+    raw_lidar: Tappy<
+      lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>,
+    >;
   }
 
   execution
@@ -41,7 +43,9 @@ cog LidarDriverCog
 
   inputs
   {
-    raw_lidar: Tappy<lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>>
+    raw_lidar: Tappy<
+      lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>,
+    >
     {
       max_msgs: 20;
     }

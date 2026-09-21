@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/metadata_chunk_writer.hh"
@@ -117,6 +117,10 @@ MetadataChunkWriter::write_chunk(const ChunkCompressor& chunk_compressor, ChunkW
         .schema_definition_offset = log_string(metadata.schema_definition, chunk),
         .schema_definition_size = static_cast<uint32_t>(metadata.schema_definition.size()),
         .channel_type = metadata.channel_type,
+        .flags =
+          MetadataChunkChannelEntryFlags{
+            .is_amended = metadata.is_amended ? uint8_t{1} : uint8_t{0},
+          },
       });
   }
   chunk.reserve((channel_entries.size() * metadata_chunk_channel_entry_size) + metadata_chunk_trailer_size);

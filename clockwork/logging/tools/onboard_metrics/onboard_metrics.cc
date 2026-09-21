@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/decompress_option.hh"
@@ -117,7 +117,6 @@ std::string human_readable_value(uint64_t value, std::string_view units_suffix)
     jewels::log_cerr_error("{}", exc.what());
     return jewels::unexpected(LogError::failed_to_open_log_file);
   }
-  __builtin_unreachable();
 }
 
 /// Dump onboard metrics for a log

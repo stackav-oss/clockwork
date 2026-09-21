@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -37,6 +37,7 @@
 #include <chrono>
 #include <cstddef>
 #include <fcntl.h>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -446,10 +447,12 @@ TEST_CASE("Log to memory")
   REQUIRE(filesys.write(open_result.value(), close_result.value()));
   REQUIRE(open_result->close());
 
+  const auto buffered_reader = tests::make_buffered_reader<BufferedReader<TestReaderPolicy>>();
+
   SECTION("Get file log interval")
   {
     auto interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (test_dir.get_path() / "memory.olog").string(), TimeFilterOption::log_time);
+      memory_resource, (test_dir.get_path() / "memory.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time1);
     REQUIRE(interval_result->get_end_timestamp() == log_time8);
@@ -458,7 +461,7 @@ TEST_CASE("Log to memory")
   SECTION("Read all messages")
   {
     Reader<BufferedReader<TestReaderPolicy>> reader{
-      memory_resource, test_dir.get_path().string(), MetadataMapOption::disable};
+      memory_resource, test_dir.get_path().string(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open({}, TimeFilterOption::log_time, decompress_option));
 
     auto read_result = reader.read_next();
@@ -656,10 +659,10 @@ TEST_CASE("Log to memory")
   SECTION("Read with log interval, first message is regular")
   {
     constexpr LogInterval log_interval{log_time3, log_time5};
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, test_dir.get_path().string());
+    const auto list_result = buffered_reader->list_log_files(test_dir.get_path().string());
     REQUIRE(list_result);
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, list_result.value(), MetadataMapOption::disable};
+    Reader<BufferedReader<TestReaderPolicy>> reader{
+      memory_resource, list_result.value(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open(log_interval, TimeFilterOption::log_time, decompress_option));
 
     auto read_result = reader.read_next();
@@ -752,10 +755,10 @@ TEST_CASE("Log to memory")
   SECTION("Read with log interval, first message is persistent")
   {
     constexpr LogInterval log_interval{log_time5, log_time7};
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, test_dir.get_path().string());
+    const auto list_result = buffered_reader->list_log_files(test_dir.get_path().string());
     REQUIRE(list_result);
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, list_result.value(), MetadataMapOption::disable};
+    Reader<BufferedReader<TestReaderPolicy>> reader{
+      memory_resource, list_result.value(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open(log_interval, TimeFilterOption::log_time, decompress_option));
 
     auto read_result = reader.read_next();

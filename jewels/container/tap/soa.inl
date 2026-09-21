@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 // IWYU pragma: private, include "jewels/container/tap/soa.hh"
 
@@ -12,20 +12,21 @@
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 namespace jewels::tap
 {
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline auto SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::operator[](size_t index) noexcept
+constexpr auto SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::operator[](size_t index) noexcept
   -> ElementRef
 {
   return ElementRef(&derived(), index);
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline auto SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::operator[](size_t index) const noexcept
+constexpr auto SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::operator[](size_t index) const noexcept
   -> ElementConstRef
 {
   return ElementConstRef(&derived(), index);
@@ -78,7 +79,7 @@ SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::at(size_t index
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline size_t SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::size() const noexcept
+constexpr size_t SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::size() const noexcept
 {
   if constexpr (is_variable)
   {
@@ -97,7 +98,7 @@ constexpr size_t SoaInterface<Derived, ElementType, fixed_capacity, is_variable>
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline bool SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::empty() const noexcept
+constexpr bool SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::empty() const noexcept
 {
   return size() == 0;
 }
@@ -123,7 +124,9 @@ inline void SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::res
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
 inline jewels::BinaryOutcome
-SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_resize(size_t new_size) noexcept
+SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_resize(size_t new_size) noexcept(
+  noexcept(std::declval<Derived&>().construct_range(size_t{}, size_t{})) &&
+  noexcept(std::declval<Derived&>().wipe_range(size_t{}, size_t{})))
   requires(is_variable)
 {
   if (new_size > capacity())
@@ -143,10 +146,12 @@ SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_resize(size
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline void SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::clear()
+inline void SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::clear() noexcept(
+  noexcept(std::declval<Derived&>().wipe_range(size_t{}, size_t{})))
   requires(is_variable)
 {
-  resize(0);
+  // std::ignore is safe here because resizing to 0 cannot fail.
+  std::ignore = try_resize(0);
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
@@ -212,7 +217,8 @@ SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::emplace_back(co
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
 inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_emplace_back(
-  jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out) noexcept
+  jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out) noexcept(noexcept(std::declval<Derived&>()
+                                                                                          .construct_element(size_t{})))
   requires(is_variable)
 {
   if (size() >= capacity())
@@ -232,7 +238,10 @@ inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
 inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_emplace_back(
   const clockwork::TapInit<ElementType>& element,
-  jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out) noexcept
+  jewels::OptionalOut<jewels::FactoryResult<ElementRef>>
+    element_out) noexcept(noexcept(std::declval<Derived&>()
+                                     .construct_element(
+                                       size_t{}, std::declval<const clockwork::TapInit<ElementType>&>())))
   requires(is_variable)
 {
   if (size() >= capacity())
@@ -251,7 +260,10 @@ inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, 
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
 inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_emplace_back(
-  const ElementType& element, jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out) noexcept
+  const ElementType& element,
+  jewels::OptionalOut<jewels::FactoryResult<ElementRef>>
+    element_out) noexcept(noexcept(std::declval<Derived&>()
+                                     .construct_element(size_t{}, std::declval<const ElementType&>())))
   requires(is_variable)
 {
   if (size() >= capacity())
@@ -270,7 +282,10 @@ inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, 
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
 inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::try_emplace_back(
-  const ElementRef& element, jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out) noexcept
+  const ElementRef& element,
+  jewels::OptionalOut<jewels::FactoryResult<ElementRef>>
+    element_out) noexcept(noexcept(std::declval<Derived&>()
+                                     .construct_element(size_t{}, std::declval<const ElementRef&>())))
   requires(is_variable)
 {
   if (size() >= capacity())
@@ -288,42 +303,42 @@ inline jewels::BinaryOutcome SoaInterface<Derived, ElementType, fixed_capacity, 
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::begin() noexcept
 {
   return iterator{&derived(), 0};
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::end() noexcept
 {
   return iterator{&derived(), size()};
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::begin() const noexcept
 {
   return const_iterator{&derived(), 0};
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::end() const noexcept
 {
   return const_iterator{&derived(), size()};
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::cbegin() const noexcept
 {
   return const_iterator{&derived(), 0};
 }
 
 template <class Derived, class ElementType, size_t fixed_capacity, bool is_variable>
-inline typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
+constexpr typename SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::const_iterator
 SoaInterface<Derived, ElementType, fixed_capacity, is_variable>::cend() const noexcept
 {
   return const_iterator{&derived(), size()};

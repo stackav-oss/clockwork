@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Tachyon Type Field Constraint (size/alignment) Registry."""
@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import math
+import operator
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import reduce
 from typing import Final, TypeAlias
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import clkbuiltins, clkenum, primitive, schema, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, primitive, schema, tensor_builtins, typesys
 from typing_extensions import override
 
 
@@ -155,7 +157,9 @@ class TachyonRegistryKey(ContextKey[TachyonRegistry]):
         register_generic_type(None, clkbuiltins.UUID, _uuid_factory, _registry=registry)
 
         # Register array types with their factories
+        register_generic_type(None, clkbuiltins.BITSET, _bitset_factory, _registry=registry)
         register_generic_type(None, clkbuiltins.FIXED_ARRAY, _fixed_array_factory, _registry=registry)
+        register_generic_type(None, tensor_builtins.TENSOR, _tensor_factory, _registry=registry)
         register_generic_type(None, clkbuiltins.OPTIONAL, _optional_factory, _registry=registry)
         register_generic_type(None, clkbuiltins.VAR_ARRAY, _var_array_factory, _registry=registry)
         register_generic_type(None, clkbuiltins.VAR_STRING, _var_string_factory, _registry=registry)
@@ -464,20 +468,23 @@ def _enum_factory(
 
 
 def _array_factory(
-    compiler_context: CompilerContext | None, element_type: typesys.Value, size: typesys.Value
+    compiler_context: CompilerContext | None, element_type: typesys.Value, size: typesys.Value | int
 ) -> FieldConstraint | None:
     """Helper function to determine constraints for array-like types."""
     if not isinstance(element_type, typesys.TypeVal):
         msg = f"Bad value type for type parameter: {element_type}"
         raise RuntimeError(msg)  # noqa: TRY004
-    if not isinstance(size, primitive.DecimalValue):
+    if isinstance(size, int):
+        size_int = size
+    elif isinstance(size, primitive.DecimalValue):
+        size_int = primitive.unsigned_decimal_to_int(size)
+    else:
         msg = f"Bad value type for size parameter: {size}"
         raise RuntimeError(msg)  # noqa: TRY004
     element_constraint = constraint_for_type(compiler_context, element_type)
     if element_constraint is None:
         return None
     stride = element_constraint.array_stride()
-    size_int = primitive.unsigned_decimal_to_int(size)
     return FieldConstraint(size=size_int * stride, alignment=element_constraint.alignment)
 
 
@@ -490,6 +497,38 @@ def _fixed_array_factory(
         raise RuntimeError(msg)
     element_type = typ.arguments["type"]
     size = typ.arguments["size"]
+    return _array_factory(compiler_context, element_type, size)
+
+
+def _bitset_factory(compiler_context: CompilerContext | None, typ: typesys.Instantiation) -> FieldConstraint | None:  # noqa: ARG001 Unused parameter passed from generic context
+    """Constraint factory for Bitset."""
+    if typ.instantiates is not clkbuiltins.BITSET:
+        msg = f"Expected Bitset but got {typ.instantiates}"
+        raise RuntimeError(msg)
+    size = typ.arguments["size"]
+    if not isinstance(size, primitive.DecimalValue):
+        msg = f"Bad value type for Bitset size parameter: {size}"
+        raise TypeError(msg)
+    bit_size = primitive.unsigned_decimal_to_int(size)
+    if bit_size <= 0:
+        msg = "Bitset size must be greater than zero"
+        raise ValueError(msg)
+    return FieldConstraint(size=bit_size // 8 + (bit_size % 8 != 0), alignment=1)
+
+
+def _tensor_factory(compiler_context: CompilerContext | None, typ: typesys.Instantiation) -> FieldConstraint | None:
+    """Constraint factory for Tensor."""
+    if typ.instantiates is not tensor_builtins.TENSOR:
+        msg = f"Expected Tensor but got {typ.instantiates}"
+        raise RuntimeError(msg)
+    element_type = typ.arguments["type"]
+    assert isinstance(typ.arguments["dimensions"], typesys.Values)
+    dimensions: list[int] = []
+    for dim in typ.arguments["dimensions"].elements:
+        # ensured by the type system
+        assert isinstance(dim, primitive.DecimalValue)
+        dimensions.append(primitive.unsigned_decimal_to_int(dim))
+    size = reduce(operator.mul, dimensions)
     return _array_factory(compiler_context, element_type, size)
 
 

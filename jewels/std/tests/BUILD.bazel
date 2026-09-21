@@ -1,9 +1,18 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
 
 package(default_testonly = True)
+
+cc_test(
+    name = "atomic_test",
+    srcs = ["atomic_test.cc"],
+    deps = [
+        "//jewels/std:atomic",
+        "@catch2//:catch2_main",
+    ],
+)
 
 cc_test(
     name = "expected_test",

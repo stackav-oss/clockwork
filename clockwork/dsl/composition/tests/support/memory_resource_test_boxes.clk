@@ -1,0 +1,50 @@
+use clockwork::dsl::tests::support::clk_hellocog;
+
+// Cog to test failure to connect memory resources to more than 1 endpoint.
+cog TestCog
+{
+  resources
+  {
+    memory: persistent;
+  }
+  states
+  {
+    state: clk_hellocog::CxxState
+    {
+      mutable: true;
+    }
+  }
+  execution
+  {
+    condition timeout: time_since_last_exec(100ms);
+    execute when: timeout;
+  }
+}
+
+box CogBox
+{
+  new cog: TestCog;
+  new cog_memory: HeapMemory(max_size=1024);
+
+  connect cog_memory to cog.memory;
+  new extern_state: State(representation=clk_hellocog::CxxState, memory_resource=cog_memory);
+  connect extern_state to cog.state;
+}
+
+cpp_executable memory_resource_test_boxes_clk_exe
+{
+  casing
+  {
+    box CogBox;
+  }
+}
+
+cpu_domain Cpu0;
+
+box SystemBox
+{
+  new box: CogBox;
+  new proc: Process(executable=memory_resource_test_boxes_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=Cpu0) to proc;
+}

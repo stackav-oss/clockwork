@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Serialization and deserialization abstractions for clockwork types."""
@@ -59,6 +59,7 @@ class PrimitiveSerDes(ValueSerDes[ValueType], Generic[ValueType]):
     def deserialize(self, buf: MutableBytes) -> ValueType:
         """Deserialize the value from bytes."""
         (value,) = struct.unpack(self._format_spec, buf)
+        # pyrefly: ignore[no-any-return-explicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return value
 
     @override

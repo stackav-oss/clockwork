@@ -1,8 +1,31 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
 load("//tools/rules:python.bzl", "py_cc_binding")
+
+cc_library(
+    name = "error_code_stringmakers",
+    srcs = ["error_code_stringmakers.inl"],
+    hdrs = ["error_code_stringmakers.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:error_code",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
+    name = "expected_stringmakers",
+    testonly = True,
+    srcs = ["expected_stringmakers.inl"],
+    hdrs = ["expected_stringmakers.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/std:expected",
+        "@catch2//:catch2_main",
+    ],
+)
 
 cc_library(
     name = "filesystem_wrapper",
@@ -45,8 +68,18 @@ py_cc_binding(
 )
 
 cc_library(
+    name = "path_stringmakers",
+    srcs = ["path_stringmakers.inl"],
+    hdrs = ["path_stringmakers.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/filesystem:path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
     name = "tmp_directory_guard",
-    testonly = True,
     srcs = ["tmp_directory_guard.cc"],
     hdrs = ["tmp_directory_guard.hh"],
     visibility = ["//visibility:public"],
@@ -64,6 +97,14 @@ cc_library(
     testonly = True,
     hdrs = ["wise_enum_proto_sync.hh"],
     visibility = ["//visibility:public"],
+    deps = ["@catch2//:catch2_main"],
+)
+
+cc_library(
+    name = "wise_enum_stringmakers",
+    srcs = ["wise_enum_stringmakers.inl"],
+    hdrs = ["wise_enum_stringmakers.hh"],
+    visibility = ["//visibility:public"],
     deps = [
         "@catch2//:catch2_main",
         "@wise_enum",
@@ -75,8 +116,5 @@ cc_library(
     testonly = True,
     hdrs = ["wise_enum_sync.hh"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@catch2//:catch2_main",
-        "@wise_enum",
-    ],
+    deps = ["@catch2//:catch2_main"],
 )

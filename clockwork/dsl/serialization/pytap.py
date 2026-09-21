@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Helper functions to produce python bindings from schemas."""
@@ -188,12 +188,48 @@ def render_vararray_field_property(
     )
 
 
+def render_bitset_field_property(field: model.SchemaField, field_type: model.BuiltInType, chunks: PythonChunks) -> None:
+    """Render property methods for a fixed-size bitset field."""
+    if len(field_type.arguments) != 1 or not isinstance(field_type.arguments[0], str):
+        msg = f"Invalid Bitset metadata arguments: {field_type.arguments}"
+        raise ValueError(msg)
+    try:
+        bit_size = int(field_type.arguments[0])
+    except ValueError as exc:
+        msg = f"Invalid Bitset metadata arguments: {field_type.arguments}"
+        raise ValueError(msg) from exc
+    byte_size = bit_size // 8 + (bit_size % 8 != 0)
+    if bit_size <= 0 or field_type.size != byte_size or field_type.alignment != 1:
+        msg = f"Invalid Bitset metadata for size {bit_size}"
+        raise ValueError(msg)
+    maximum_value = (1 << bit_size) - 1
+    byte_start = field.offset
+    byte_end = byte_start + field_type.size
+    chunks.impl.append(
+        remove_outer_newlines(
+            f"""
+    @property
+    def {field.name}(self) -> int:
+        return int.from_bytes(memoryview(self._buffer)[{byte_start}:{byte_end}], byteorder="little") & {maximum_value}
+    @{field.name}.setter
+    def {field.name}(self, value: int) -> None:
+        if value < 0 or value > {maximum_value}:
+            msg = "Bitset<{bit_size}> value must be in [0, {maximum_value}]"
+            raise ValueError(msg)
+        self._buffer[{byte_start}:{byte_end}] = value.to_bytes({field_type.size}, byteorder="little", signed=False)
+"""
+        )
+    )
+
+
 def render_builtin_field_property(
     field: model.SchemaField, field_type: model.BuiltInType, types: Sequence[model.ClkType], chunks: PythonChunks
 ) -> None:
     """Render property methods for a builtin type."""
     if is_primitive_field(field_type):
         return render_primitive_field_property(field, field_type, chunks)
+    if field_type.fqn == ".Bitset":
+        return render_bitset_field_property(field, field_type, chunks)
     if field_type.fqn == ".VarArray":
         return render_vararray_field_property(field, field_type, types, chunks)
 
@@ -317,6 +353,8 @@ def bazel_deps_for_interfaces(
         for field in clk_type.fields:
             field_type = metadata.types[field.type_id]
             if is_primitive_field(field_type):
+                continue
+            if field_type.fqn == ".Bitset":
                 continue
             if field_type.fqn == ".VarArray":
                 continue

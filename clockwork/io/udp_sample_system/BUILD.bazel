@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -19,6 +19,9 @@ clk(
         "demo_udp_boxes_clk_cc.cc",
         "demo_udp_boxes_clk_cc.hh",
         "demo_udp_boxes_clk_cc.inl",
+        "demo_udp_boxes_clk_cc_types.cc",
+        "demo_udp_boxes_clk_cc_types.hh",
+        "demo_udp_boxes_clk_cc_types.inl",
         "demo_udp_boxes_clk_exe.cc",
         "demo_udp_boxes_clk_exe.hh",
         "demo_udp_boxes_clk_exe.inl",
@@ -49,9 +52,11 @@ clk(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_allocations.csv",
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_journal_topology.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_signal_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_simplelaunch_config.textproto",
+        "demo_udp_system.demo_udp_system.DemoCpu_system_metadata.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
         "demo_udp_system.demo_udp_system.diagnostics_database_config.tachyon",
         "demo_udp_system.demo_udp_system.logged_channel_metadata.pbbin",
@@ -70,8 +75,10 @@ merge_simplelaunch_config(
         "demo_udp_system.demo_udp_system.DemoCpu_channel_allocations.csv",
         "demo_udp_system.demo_udp_system.DemoCpu_channel_spy_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_event_logger_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_journal_topology.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_metrics_channel_metadata_config.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_signal_metadata_config.tachyon",
+        "demo_udp_system.demo_udp_system.DemoCpu_system_metadata.tachyon",
         "demo_udp_system.demo_udp_system.DemoCpu_telemetry_logger_config.tachyon",
         "demo_udp_system.demo_udp_system.diagnostics_database_config.tachyon",
         ":demo_udp_boxes_clk_exe",
@@ -86,6 +93,9 @@ clk(
         "just_a_uint32_clk_cc.cc",
         "just_a_uint32_clk_cc.hh",
         "just_a_uint32_clk_cc.inl",
+        "just_a_uint32_clk_cc_types.cc",
+        "just_a_uint32_clk_cc_types.hh",
+        "just_a_uint32_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )
@@ -97,9 +107,15 @@ clk(
         "ping_pong_clk_cc.cc",
         "ping_pong_clk_cc.hh",
         "ping_pong_clk_cc.inl",
+        "ping_pong_clk_cc_cog.cc",
+        "ping_pong_clk_cc_cog.hh",
+        "ping_pong_clk_cc_cog.inl",
         "ping_pong_clk_cc_dial.cc",
         "ping_pong_clk_cc_dial.hh",
         "ping_pong_clk_cc_dial.inl",
+        "ping_pong_clk_cc_types.cc",
+        "ping_pong_clk_cc_types.hh",
+        "ping_pong_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":just_a_uint32_clk_cc",
@@ -121,10 +137,11 @@ cc_library(
     deps = [
         ":just_a_uint32_clk_cc",
         ":ping_pong_clk_cc_dial",
-        "//clockwork/dial:msg_input",
+        "//clockwork/dial:include_common",
         "//clockwork/io:var_packet_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
         "//jewels/container/tap:var_array",
         "//jewels/memory:bits",
         "@fmt",

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Facilities for generating C++ Signal API structs for Dial code generation.
@@ -60,6 +60,11 @@ _AGGREGATOR_CLASS_MAP: dict[signal_ir.AggregationType, str] = {
     signal_ir.AggregationType.COUNT: "CountAggregator",
     signal_ir.AggregationType.MEAN: "MeanAggregator",
 }
+
+
+def _sorted_agg_types(agg_types: set[signal_ir.AggregationType]) -> list[signal_ir.AggregationType]:
+    """Sort a set of aggregation types alphabetically by value for deterministic ordering."""
+    return sorted(agg_types, key=lambda a: a.value)
 
 
 @dataclass
@@ -184,6 +189,7 @@ def make_signal_api_struct(
     name: str,
     signals_struct: SignalsStruct,
     policy_class_name: str | None = None,
+    policy_template_params: str | None = None,
 ) -> CppStruct:
     """Make the CppStruct type to represent the SignalApi for the dial.
 
@@ -208,6 +214,7 @@ def make_signal_api_struct(
         name: The name of the SignalApi struct.
         signals_struct: The SignalsStruct containing all signal entries.
         policy_class_name: The name of the Policy class to declare as a friend, or None.
+        policy_template_params: Policy template parameters or None.
 
     Returns:
         A CppStruct representing the SignalApi.
@@ -216,12 +223,17 @@ def make_signal_api_struct(
     struct = CppStruct(
         name=struct_name,
         doc="Signal API for setting and retrieving signal values.",
+        no_lints=["clang-analyzer-optin.performance.Padding"],
     )
 
     # Add friend declaration for the Policy so it can access private infra methods
     if policy_class_name:
         friend_chunk = CppChunk()
-        friend_chunk.append(f"friend struct {policy_class_name};")
+        if policy_template_params:
+            friend_chunk.append(f"template <{policy_template_params}>")
+            friend_chunk.append(f"friend struct {policy_class_name}Base;")
+        else:
+            friend_chunk.append(f"friend struct {policy_class_name};")
         struct.leading_header_chunk = friend_chunk
 
     batched_groups = collect_batched_report_groups(signals_struct)
@@ -777,6 +789,22 @@ def _make_populate_method_for_batched_group(
         else:
             pre_aggs = [signal_ir.AggregationType.VALUE]
 
+        if signal.presence_bit_index is not None:
+            representative_agg = pre_aggs[0]
+            representative_field = _get_aggregator_field_name(signal.identifier, representative_agg)
+            body.context.add_include(Header(JEWELS_REPO, "jewels/callsig/outcome.hh"))
+            body.context.add_include(SystemHeader("exception"))
+            body.append(f"    if ({representative_field}.at(i).has_value()) {{")
+            body.append(
+                f"        if (jewels::fails(elem.get_mutable_signal_presence().try_set({signal.presence_bit_index}))) {{"
+            )
+            # It's an invariant that presence_bit_index is within the number of
+            # bits in the signal_presence bitmask, so this std::terminate is
+            # unreachable.
+            body.append("            std::terminate();")
+            body.append("        }")
+            body.append("    }")
+
         for pre_agg in pre_aggs:
             agg_field = _get_aggregator_field_name(signal.identifier, pre_agg)
             field_name = f"{signal.identifier}_{pre_agg.value}"
@@ -838,8 +866,29 @@ def _make_populate_method_for_post_agg_group(
     for signal_key in rg_info.signal_keys:
         signal = signals_struct.signals[signal_key]
 
-        for pre_agg in signal.pre_aggregation:
-            for post_agg in signal.post_aggregation:
+        if signal.presence_bit_index is not None:
+            representative_pre_agg = _sorted_agg_types(signal.pre_aggregation)[0]
+            representative_post_agg = _sorted_agg_types(signal.post_aggregation)[0]
+            representative_field = _get_post_aggregator_field_name(
+                signal.identifier,
+                representative_pre_agg,
+                representative_post_agg,
+            )
+            body.context.add_include(Header(JEWELS_REPO, "jewels/callsig/outcome.hh"))
+            body.context.add_include(SystemHeader("exception"))
+            body.append(f"if ({representative_field}.has_value()) {{")
+            body.append(
+                f"    if (jewels::fails(msg.get_mutable_signal_presence().try_set({signal.presence_bit_index}))) {{"
+            )
+            # It's an invariant that presence_bit_index is within the number of
+            # bits in the signal_presence bitmask, so this std::terminate is
+            # unreachable.
+            body.append("        std::terminate();")
+            body.append("    }")
+            body.append("}")
+
+        for pre_agg in _sorted_agg_types(signal.pre_aggregation):
+            for post_agg in _sorted_agg_types(signal.post_aggregation):
                 post_agg_field = _get_post_aggregator_field_name(signal.identifier, pre_agg, post_agg)
                 field_name = f"{signal.identifier}_{pre_agg.value}_{post_agg.value}"
 
@@ -924,7 +973,11 @@ def _make_post_agg_reset_method_for_group(
         signal = signals_struct.signals[signal_key]
 
         # Get effective pre-aggregation types
-        pre_aggs = list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+        pre_aggs = (
+            _sorted_agg_types(signal.pre_aggregation)
+            if signal.has_pre_aggregation()
+            else [signal_ir.AggregationType.VALUE]
+        )
 
         for pre_agg in pre_aggs:
             # Reset pre-aggregator
@@ -933,7 +986,7 @@ def _make_post_agg_reset_method_for_group(
 
             # Reset post-aggregators if signal has post-aggregation
             if signal.post_aggregation:
-                for post_agg in signal.post_aggregation:
+                for post_agg in _sorted_agg_types(signal.post_aggregation):
                     post_agg_field = _get_post_aggregator_field_name(signal.identifier, pre_agg, post_agg)
                     body.append(f"{post_agg_field}.reset();")
 
@@ -983,13 +1036,17 @@ def _make_post_agg_end_of_execution_method_for_group(
         if not signal.post_aggregation:
             continue
 
-        pre_aggs = list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+        pre_aggs = (
+            _sorted_agg_types(signal.pre_aggregation)
+            if signal.has_pre_aggregation()
+            else [signal_ir.AggregationType.VALUE]
+        )
 
         for pre_agg in pre_aggs:
             pre_agg_field = _get_aggregator_field_name(signal.identifier, pre_agg)
             preserves_meta = _preserves_metadata(pre_agg)
 
-            for post_agg in signal.post_aggregation:
+            for post_agg in _sorted_agg_types(signal.post_aggregation):
                 post_agg_field = _get_post_aggregator_field_name(signal.identifier, pre_agg, post_agg)
                 post_preserves_meta = _preserves_metadata(post_agg)
 
@@ -1005,7 +1062,11 @@ def _make_post_agg_end_of_execution_method_for_group(
     # Reset all pre-aggregators after accumulating
     for signal_key in rg_info.signal_keys:
         signal = signals_struct.signals[signal_key]
-        pre_aggs = list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+        pre_aggs = (
+            _sorted_agg_types(signal.pre_aggregation)
+            if signal.has_pre_aggregation()
+            else [signal_ir.AggregationType.VALUE]
+        )
 
         for pre_agg in pre_aggs:
             pre_agg_field = _get_aggregator_field_name(signal.identifier, pre_agg)
@@ -1070,8 +1131,6 @@ def _make_should_publish_method_for_post_agg_group(rg_info: PostAggregatedReport
     body.append("}")
     body.append("")
 
-    # Get current observation count (execution count)
-    body.append(f"const auto observations = execution_count_{rg_info.name}_;")
     # Only compute elapsed time when duration-based checks are needed
     has_duration_check = rg_info.max_duration_ns is not None or rg_info.min_duration_ns is not None
     if has_duration_check:
@@ -1089,6 +1148,7 @@ def _make_should_publish_method_for_post_agg_group(rg_info: PostAggregatedReport
 
     # Check if max_observations is reached
     if rg_info.max_observations is not None:
+        body.append(f"const auto observations = execution_count_{rg_info.name}_;")
         body.append(f"if (observations >= {rg_info.max_observations}) {{")
         # If min_duration is specified, must also be met
         if rg_info.min_duration_ns is not None:
@@ -1135,13 +1195,15 @@ def _add_post_aggregator_fields(
                 continue
 
             pre_aggs = (
-                list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+                _sorted_agg_types(signal.pre_aggregation)
+                if signal.has_pre_aggregation()
+                else [signal_ir.AggregationType.VALUE]
             )
 
             for pre_agg in pre_aggs:
                 pre_agg_metadata_type = signal.metadata_type if _preserves_metadata(pre_agg) else None
 
-                for post_agg in signal.post_aggregation:
+                for post_agg in _sorted_agg_types(signal.post_aggregation):
                     agg_type = _get_aggregator_type(post_agg, signal.signal_type, pre_agg_metadata_type)
                     field_name = _get_post_aggregator_field_name(signal.identifier, pre_agg, post_agg)
                     struct.private.append(
@@ -1232,7 +1294,11 @@ def _make_accumulate_method(signal: SignalEntry, rg_name: str) -> CppMethod:
     body = CppChunk()
     batch_index = f"current_batch_index_{rg_name}_"
 
-    pre_aggs = _expand_mean_for_batched(signal.pre_aggregation) if signal.is_batched else list(signal.pre_aggregation)
+    pre_aggs = (
+        _expand_mean_for_batched(signal.pre_aggregation)
+        if signal.is_batched
+        else _sorted_agg_types(signal.pre_aggregation)
+    )
 
     any_uses_metadata = signal.metadata_type is not None and any(_preserves_metadata(pre_agg) for pre_agg in pre_aggs)
 
@@ -1330,7 +1396,9 @@ def _make_getter_methods(signal: SignalEntry, rg_name: str) -> list[CppMethod]:
 
     if signal.has_pre_aggregation():
         pre_aggs = (
-            _expand_mean_for_batched(signal.pre_aggregation) if signal.is_batched else list(signal.pre_aggregation)
+            _expand_mean_for_batched(signal.pre_aggregation)
+            if signal.is_batched
+            else _sorted_agg_types(signal.pre_aggregation)
         )
     else:
         pre_aggs = [signal_ir.AggregationType.VALUE]
@@ -1530,7 +1598,7 @@ def _expand_mean_for_batched(
         A list of aggregation types with MEAN replaced by SUM and COUNT.
     """
     result: list[signal_ir.AggregationType] = []
-    for agg in pre_agg_types:
+    for agg in _sorted_agg_types(pre_agg_types):
         if agg == signal_ir.AggregationType.MEAN:
             result.append(signal_ir.AggregationType.SUM)
             result.append(signal_ir.AggregationType.COUNT)
@@ -1574,7 +1642,9 @@ def _add_post_agg_pre_aggregator_fields(
             signal = signals_struct.signals[signal_key]
 
             pre_aggs = (
-                list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+                _sorted_agg_types(signal.pre_aggregation)
+                if signal.has_pre_aggregation()
+                else [signal_ir.AggregationType.VALUE]
             )
 
             for pre_agg in pre_aggs:
@@ -1619,7 +1689,7 @@ def _make_post_agg_accumulate_method(signal: SignalEntry) -> CppMethod:
 
     body = CppChunk()
 
-    pre_aggs = list(signal.pre_aggregation)
+    pre_aggs = _sorted_agg_types(signal.pre_aggregation)
 
     any_uses_metadata = signal.metadata_type is not None and any(_preserves_metadata(pre_agg) for pre_agg in pre_aggs)
 
@@ -1708,14 +1778,16 @@ def _make_post_agg_getter_methods(signal: SignalEntry) -> list[CppMethod]:
     if not signal.post_aggregation:
         return methods
 
-    pre_aggs = list(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+    pre_aggs = (
+        _sorted_agg_types(signal.pre_aggregation) if signal.has_pre_aggregation() else [signal_ir.AggregationType.VALUE]
+    )
 
     total_combinations = len(pre_aggs) * len(signal.post_aggregation)
     include_suffix = total_combinations > 1
 
     for pre_agg in pre_aggs:
         pre_agg_preserves_metadata = _preserves_metadata(pre_agg)
-        for post_agg in signal.post_aggregation:
+        for post_agg in _sorted_agg_types(signal.post_aggregation):
             method = _make_single_post_agg_getter_method(
                 signal=signal,
                 pre_agg=pre_agg,

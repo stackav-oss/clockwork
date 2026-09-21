@@ -1,0 +1,24 @@
+#![generate(cpp)]
+#![cpp(namespace=jewels::simplelaunch)]
+
+use[] clockwork::common::constants;
+use clockwork::common::process_description;
+use clockwork::common::platform_diagnostics_config;
+
+// Describes the configuration used to integrate the simplelaunch runner with clockwork
+schema SimplelaunchRunnerConfig
+{
+  fields
+  {
+    // Host name
+    #1 host_name: VarString<max_size=31>;
+
+    // Diagnostics producer config
+    #2 diagnostics_config: platform_diagnostics_config::PlatformDiagnosticsConfig;
+
+    // Simplelaunch status publisher endpoint
+    #3 status_publish_endpoint: process_description::PublishEndpoint<
+      max_channel_name_len=constants::MAX_CHANNEL_NAME_SIZE,
+    >;
+  }
+}

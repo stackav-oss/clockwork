@@ -9,21 +9,12 @@ enum RateStatus
   values
   {
     // Unspecified, value not set
-    #0 unspecified default
-    {
-      underlying_value: 0;
-    }
+    #0 unspecified default { underlying_value: 0; }
 
     // Good message rate
-    #1 good
-    {
-      underlying_value: 1;
-    }
+    #1 good { underlying_value: 1; }
 
     // Low message rate
-    #2 low
-    {
-      underlying_value: 2;
-    }
+    #2 low { underlying_value: 2; }
   }
 }

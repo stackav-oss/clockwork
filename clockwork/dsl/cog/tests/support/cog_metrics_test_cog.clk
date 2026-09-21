@@ -1,0 +1,82 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::testing::cogs)]
+
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+use clockwork::dsl::tests::support::clk_hellomsg;
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupLogType};
+
+// Minimal test cog for validating cog metrics signal population codegen.
+// Has two inputs, one output, two execution conditions, and a user-defined report group.
+cog CogMetricsTestCog
+{
+  signalsprocessing_stats
+  {
+    // Count of invocations observed within this report group window
+    iteration_count: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+    }
+  }
+
+  inputs
+  {
+    // First sensor input
+    sensor_a: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+      max_msgs: 3;
+    }
+
+    // Second sensor input
+    sensor_b: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+    }
+  }
+
+  outputs
+  {
+    // Processed result output
+    result: Tappy<clk_hellomsg::HelloMsg>
+    {
+      connect_optional: true;
+      max_msgs_per_exec: 2;
+    }
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    condition new_msg: any_message(sensor_a);
+
+    execute when: periodic or new_msg;
+  }
+
+  metrics_options
+  {
+    enabled: false;
+  }
+}
+// Enable event metrics reporting and sequence-number metadata for the test cog.
+policy CogEventMetricsPolicy for CogMetricsTestCog
+{
+  enabled = true;
+  emit_sequence_numbers = true;
+}
+
+// User-defined batched report group for tracking per-execution processing statistics.
+policy ReportGroupPolicy for CogMetricsTestCog.processing_stats
+{
+  reporting_strategy = ReportingStrategy::batched;
+  log_type = ReportGroupLogType::event;
+  max_observations = 5;
+}
+
+// Enable telemetry metrics reporting for the test cog.
+policy CogTelemetryMetricsPolicy for CogMetricsTestCog
+{
+  enabled = true;
+}

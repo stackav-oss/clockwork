@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """IR nodes for report groups and related components."""
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, TypeVar
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.cog import report_group_policy as rg_policy
 from clockwork.dsl.ir import (
     clkbuiltins,
@@ -29,11 +29,13 @@ from clockwork.dsl.ir import (
 )
 from clockwork.dsl.ir import signal as signal_module
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span
+from clockwork.dsl.ir.uuid_reg import lookup_uuid
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from fltk.fegen.pyrt.terminalsrc import Span
+    from clockwork.dsl.compiler_context import CompilerContext
+    from fltk.fegen.pyrt.span_protocol import SpanProtocol
 
 
 class ReportingStrategy(enum.Enum):
@@ -48,10 +50,31 @@ class ReportGroupLogType(enum.Enum):
 
     NONE = "none"
     EVENT = "event"
-    TELEMETRY = "telemetry"
+    NON_REDUNDANT_TELEMETRY = "non_redundant_telemetry"
+
+
+class SignalValiditySource(enum.Enum):
+    """How a report-group signal's emitted values indicate their presence."""
+
+    COUNT_FIELD = "count_field"
+    PRESENCE_BIT = "presence_bit"
+
+
+@dataclass(frozen=True)
+class ReportGroupSignalValidity:
+    """The generated representation used to determine one signal's presence."""
+
+    source: SignalValiditySource
+    """Whether presence comes from a serialized count field or a bitset bit."""
+
+    index: int
+    """The count field number or the dense signal-presence bit index."""
 
 
 EnumT = TypeVar("EnumT", ReportingStrategy, ReportGroupLogType)
+
+
+_SIGNAL_PRESENCE_FIELD_NAME = "signal_presence"
 
 
 @dataclass
@@ -63,6 +86,7 @@ class ReportGroupEntry(node.CstNode[cst.ReportGroupEntry], node.DocableEntity, n
     instance_name: expr.Expr | str | None = None
     post_aggregation: set[signal_module.AggregationType] = field(default_factory=set)
     post_aggregation_text: str | None = None
+    metadata_override: typesys.TypeVal | None = None
 
     @classmethod
     def from_cst(
@@ -205,12 +229,31 @@ class ReportGroupEntry(node.CstNode[cst.ReportGroupEntry], node.DocableEntity, n
         elif self.instance_name is None and group_instance_name is not None:
             self.instance_name = group_instance_name
 
+        # For signal references (non-cog-private), validate post-aggregation against the resolved
+        # signal type. Cog-private signals validate their own post-aggregation in Signal.resolve().
+        if not self.cog_private and self.post_aggregation:
+            resolved = self.resolved_signal()
+            signal_module.validate_aggregations_for_type(
+                signal_type=resolved.signal_type,
+                aggregations=self.post_aggregation,
+                error_fn=self.append_error_line,
+            )
+
     def resolved_signal(self) -> signal_module.ResolvedSignal:
         """Get the resolved signal, raising an error if not yet resolved."""
         if not isinstance(self.signal, signal_module.Signal):
             msg = f"ReportGroupEntry signal '{self.name}' is not yet resolved."
             raise TypeError(msg)
         return self.signal.get_resolved()
+
+    def effective_metadata(self) -> typesys.TypeVal | None:
+        """Get the effective metadata type for this entry.
+
+        Returns the metadata_override if set, otherwise falls back to the signal's metadata.
+        """
+        if self.metadata_override is not None:
+            return self.metadata_override
+        return self.resolved_signal().metadata
 
     def resolved_instance_name(self) -> str | None:
         """Get the resolved instance name, raising an error if not yet resolved."""
@@ -248,13 +291,13 @@ class ReportGroupEntry(node.CstNode[cst.ReportGroupEntry], node.DocableEntity, n
         return self.post_aggregation_text or ""
 
 
-def _get_report_group_entry_identifier_span(entry_cst: cst.ReportGroupEntry) -> Span:
+def _get_report_group_entry_identifier_span(entry_cst: cst.ReportGroupEntry) -> SpanProtocol:
     """Get the identifier span from a report group entry for error reporting."""
     if signal_cst := entry_cst.maybe_cog_scope_signal():
         return signal_cst.child_identifier().child_value()
     if signal_ref_cst := entry_cst.maybe_signal_reference():
         # Get the first identifier (local_name in both simple and explicit forms)
-        return next(signal_ref_cst.children_identifier()).child_value()
+        return next(iter(signal_ref_cst.children_identifier())).child_value()
     return entry_cst.span
 
 
@@ -267,10 +310,14 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
     generated_schemas: list[schema.Schema] = field(default_factory=list)
     generated_interfaces: list[interface.InterfaceInstantiation] = field(default_factory=list)
     generated_representations: list[representation.ReprInstantiation] = field(default_factory=list)
+    generated_metadata_schemas: list[schema.Schema] = field(default_factory=list)
     instance_name: expr.Expr | str | None = None
     generated_outer_schema: schema.InstantiatedSchema | None = None
     parent_cog_name: str | None = None
     log_type: cog_components.MetricsLogType = cog_components.MetricsLogType.none
+    qualify_entry_instance_names: bool = False
+    signal_validity: dict[str, ReportGroupSignalValidity] = field(default_factory=dict)
+    """Per-entry validity plan for fields in the generated report-group schema."""
 
     @classmethod
     def from_cst(
@@ -303,6 +350,18 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         entries = {}
         for entry_cst in cst_node.children_report_group_entry():
             entry = ReportGroupEntry.from_cst(entry_cst, module, parent_scope)
+            if entry.name == _SIGNAL_PRESENCE_FIELD_NAME:
+                identifier_span = _get_report_group_entry_identifier_span(entry_cst)
+                msg = format_line_with_error(
+                    identifier_span,
+                    module.terminals,
+                    module.module_id,
+                )
+                msg = (
+                    f"Signal entry name '{_SIGNAL_PRESENCE_FIELD_NAME}' is reserved for generated report-group "
+                    f"presence tracking{msg}"
+                )
+                raise ValueError(msg)
             if entry.name in entries:
                 identifier_span = _get_report_group_entry_identifier_span(entry_cst)
                 msg = format_line_with_error(
@@ -314,9 +373,12 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
                 raise ValueError(msg)
             entries[entry.name] = entry
 
+        # fmt: off
         result = cls(
             doc=None,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=parent_scope,
             module=module,
             cst_node=cst_node,
@@ -324,6 +386,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
             entries=entries,
             instance_name=instance_name,
         )
+        # fmt: on
 
         parent_scope.define(name, result, module.terminals)
         return result
@@ -379,6 +442,8 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         Raises:
             ValueError: If no ReportGroupPolicy is found.
         """
+        if self.report_group_config is not None:
+            return  # Already configured (e.g., infrastructure report groups built by code generation)
         report_group_policy_class = rg_policy.get_report_group_policy(self.module.context)
         report_group_policy = policy.lookup_policy(self.module, report_group_policy_class, self)
         if report_group_policy is None:
@@ -393,8 +458,8 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         """Set the log_type field based on the configured log type."""
         if self.report_group_config is None:
             return
-        if self.report_group_config.log_type == ReportGroupLogType.TELEMETRY:
-            self.log_type = cog_components.MetricsLogType.telemetry
+        if self.report_group_config.log_type == ReportGroupLogType.NON_REDUNDANT_TELEMETRY:
+            self.log_type = cog_components.MetricsLogType.non_redundant_telemetry
         elif self.report_group_config.log_type == ReportGroupLogType.EVENT:
             self.log_type = cog_components.MetricsLogType.event
         else:
@@ -430,6 +495,33 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         repr_inst, iface_inst = _get_repr_and_interface_from_schema(self.module, schema_instantiation)
         self.generated_representations.append(repr_inst)
         self.generated_interfaces.append(iface_inst)
+
+        self._collect_metadata_schemas()
+
+    def _collect_metadata_schemas(self) -> None:
+        """Collect bespoke metadata schemas referenced by entries.
+
+        Entries may carry a programmatically-generated schema as their metadata
+        override (e.g. per-input sequence-number schemas).  Such schemas have no
+        standalone ``generate(cpp)`` target and are used as complete value types
+        by the generated signal API, so their full definition (struct + Tachyon
+        representation) must be emitted into the cog's ``_types`` translation
+        unit, ahead of the dial that consumes them.  They are collected here so
+        the cpp target can route them accordingly.
+        """
+        seen: set[str] = set()
+        for entry in self.entries.values():
+            meta = entry.metadata_override
+            if not isinstance(meta, schema.InstantiatedSchema):
+                continue
+            source = meta.schema.source
+            if source is None or not source.programmatically_generated:
+                continue
+            key = source.value_key()
+            if key in seen:
+                continue
+            seen.add(key)
+            self.generated_metadata_schemas.append(source)
 
     def _validate_batched_no_post_aggregation(self) -> None:
         """Validate that batched report groups don't have post-aggregation.
@@ -497,8 +589,20 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         instantiated_entries: dict[str, ReportGroupEntryInstance] = {}
         for entry_name, entry in self.entries.items():
             resolved_signal = entry.resolved_signal()
-            instance_name = entry.resolved_instance_name() if entry.resolved_instance_name() else cog_instance_fqn
-            # invariant from above ternary operator
+            entry_instance_name = entry.resolved_instance_name()
+            if self.qualify_entry_instance_names:
+                # Cog metrics report groups prepend the group name to guarantee
+                # global uniqueness when the same signal appears in both the
+                # event and telemetry groups.
+                if entry_instance_name:
+                    instance_name = f"{self.name}/{cog_instance_fqn}/{entry_instance_name}"
+                else:
+                    instance_name = f"{self.name}/{cog_instance_fqn}"
+            elif entry_instance_name:
+                instance_name = entry_instance_name
+            else:
+                instance_name = cog_instance_fqn
+            # invariant from above branches
             assert instance_name
 
             entry_instance = ReportGroupEntryInstance(
@@ -523,6 +627,27 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
             )
             raise ValueError(msg)
         return self.generated_outer_schema
+
+    def get_signal_validity(self, entry_name: str) -> ReportGroupSignalValidity:
+        """Get the generated validity plan for a report-group entry.
+
+        Args:
+            entry_name: The report-group entry alias.
+
+        Returns:
+            The source and index that identify the entry's presence representation.
+
+        Raises:
+            ValueError: If schema generation has not completed or the entry is unknown.
+        """
+        if self.generated_outer_schema is None:
+            msg = f"Report group '{self.name}' has no generated schema. Ensure resolve() has been called."
+            raise ValueError(msg)
+        try:
+            return self.signal_validity[entry_name]
+        except KeyError as error:
+            msg = f"Report group '{self.name}' has no entry named '{entry_name}'"
+            raise ValueError(msg) from error
 
     def get_interface_info(self) -> schema_reg.InterfaceInfo:
         """Get the interface info for the generated report group schema.
@@ -558,6 +683,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         """
         field_num_counter = 0
         fields: list[schema.FieldDef] = []
+        count_fields: dict[str, list[schema.FieldDef]] = {entry_name: [] for entry_name in self.entries}
 
         # Add common fields
         fields.append(
@@ -590,8 +716,8 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
 
             signal_doc = resolved_signal.doc.value if resolved_signal.doc else None
 
-            for pre_agg in pre_agg_types:
-                for post_agg in post_agg_types:
+            for pre_agg in sorted(pre_agg_types, key=lambda a: a.value):
+                for post_agg in sorted(post_agg_types, key=lambda a: a.value):
                     field_type = self._get_field_type_for_aggregation(resolved_signal.signal_type, pre_agg, post_agg)
 
                     field_name = f"{entry_name}_{pre_agg.value}_{post_agg.value}"
@@ -600,33 +726,34 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
                     if signal_doc:
                         field_doc = f"{field_doc}: {signal_doc}"
 
-                    fields.append(
-                        schema.make_field(
-                            self.module,
-                            field_num_counter,
-                            field_name,
-                            field_type,
-                            doc=field_doc,
-                        )
+                    generated_field = schema.make_field(
+                        self.module,
+                        field_num_counter,
+                        field_name,
+                        field_type,
+                        doc=field_doc,
                     )
+                    fields.append(generated_field)
+                    if signal_module.AggregationType.COUNT in (pre_agg, post_agg):
+                        count_fields[entry_name].append(generated_field)
                     field_num_counter += 1
 
-                    if (
-                        resolved_signal.metadata
-                        and self._preserves_metadata(pre_agg)
-                        and self._preserves_metadata(post_agg)
-                    ):
+                    entry_metadata = entry.effective_metadata()
+                    if entry_metadata and self._preserves_metadata(pre_agg) and self._preserves_metadata(post_agg):
                         metadata_field_name = f"{entry_name}_{pre_agg.value}_{post_agg.value}_metadata"
                         fields.append(
                             schema.make_field(
                                 self.module,
                                 field_num_counter,
                                 metadata_field_name,
-                                resolved_signal.metadata,
+                                entry_metadata,
                                 doc=f"Metadata for {field_name}",
                             )
                         )
                         field_num_counter += 1
+
+        self.signal_validity = self._make_signal_validity_plan(count_fields)
+        self._append_signal_presence_field(fields, field_num_counter)
 
         schema_name = f"{parent_cog_name}_{self.name}"
         return schema.make_schema_class(
@@ -646,7 +773,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         represents a single cog execution's signal values.
 
         Two schemas are generated:
-        - An inner SoA-enabled schema ({ReportGroupName}_Signal) containing signal fields
+        - An inner SoA-enabled schema ({CogName}_{ReportGroupName}_Signal) containing signal fields
         - An outer schema ({CogName}_{ReportGroupName}) wrapping the VarSoa container
 
         Args:
@@ -660,7 +787,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
 
         batch_size = self.report_group_config.max_observations
 
-        inner_schema = self._generate_batched_inner_schema()
+        inner_schema = self._generate_batched_inner_schema(parent_cog_name)
 
         var_soa_type = typesys.Instantiation(
             type_info=clkbuiltins.TYPE_TYPE,
@@ -698,7 +825,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         )
         return outer_schema, [inner_schema]
 
-    def _generate_batched_inner_schema(self) -> schema.InstantiatedSchema:
+    def _generate_batched_inner_schema(self, parent_cog_name: str) -> schema.InstantiatedSchema:
         """Generate the inner SoA-enabled schema for batched report groups.
 
         The schema contains fields for each signal with its pre-aggregation type.
@@ -708,42 +835,54 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
         For batched report groups, MEAN pre-aggregation is expanded to SUM and COUNT,
         since mean can be computed from sum/count in post-processing.
 
+        The schema name is qualified with the parent cog name to ensure uniqueness
+        when multiple cogs in the same module define report groups with the same name.
+
+        Args:
+            parent_cog_name: The name of the parent cog, used to qualify the schema name.
+
         Returns:
             An instantiated SoA-enabled schema containing signal fields.
         """
         field_num_counter = 0
         fields: list[schema.FieldDef] = []
+        count_fields: dict[str, list[schema.FieldDef]] = {entry_name: [] for entry_name in self.entries}
 
         for entry_name, entry in self.entries.items():
             resolved_signal = entry.resolved_signal()
             pre_agg_types = self._expand_mean_to_sum_count(resolved_signal.pre_aggregation)
 
-            for pre_agg in pre_agg_types:
+            for pre_agg in sorted(pre_agg_types, key=lambda a: a.value):
                 field_name = f"{entry_name}_{pre_agg.value}"
 
-                fields.append(
-                    schema.make_field(
-                        self.module,
-                        field_num_counter,
-                        field_name,
-                        resolved_signal.signal_type,
-                    )
+                generated_field = schema.make_field(
+                    self.module,
+                    field_num_counter,
+                    field_name,
+                    resolved_signal.signal_type,
                 )
+                fields.append(generated_field)
+                if pre_agg is signal_module.AggregationType.COUNT:
+                    count_fields[entry_name].append(generated_field)
                 field_num_counter += 1
 
-                if resolved_signal.metadata and self._preserves_metadata(pre_agg):
+                entry_metadata = entry.effective_metadata()
+                if entry_metadata and self._preserves_metadata(pre_agg):
                     metadata_field_name = f"{entry_name}_{pre_agg.value}_metadata"
                     fields.append(
                         schema.make_field(
                             self.module,
                             field_num_counter,
                             metadata_field_name,
-                            resolved_signal.metadata,
+                            entry_metadata,
                         )
                     )
                     field_num_counter += 1
 
-        inner_schema_name = f"{self.name}_Signal"
+        self.signal_validity = self._make_signal_validity_plan(count_fields)
+        self._append_signal_presence_field(fields, field_num_counter)
+
+        inner_schema_name = f"{parent_cog_name}_{self.name}_Signal"
         return schema.make_schema_class(
             name=inner_schema_name,
             module=self.module,
@@ -751,6 +890,53 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
             options=schema.make_schema_options(self.module, soa_enabled=True, provide_constructor=True),
             doc=f"SoA element schema for batched report group {self.name}",
             uuid=uuid.uuid3(clkbuiltins.CLOCKWORK_NAMESPACE_UUID, inner_schema_name),
+        )
+
+    def _make_signal_validity_plan(
+        self, count_fields: dict[str, list[schema.FieldDef]]
+    ) -> dict[str, ReportGroupSignalValidity]:
+        """Select one deterministic presence representation for every entry.
+
+        Count-derived presence reuses the lowest-numbered eligible serialized
+        field. Entries without such a field receive dense bit indexes in report
+        group declaration order.
+        """
+        plan: dict[str, ReportGroupSignalValidity] = {}
+        next_presence_bit = 0
+        for entry_name in self.entries:
+            if eligible_count_fields := count_fields[entry_name]:
+                plan[entry_name] = ReportGroupSignalValidity(
+                    source=SignalValiditySource.COUNT_FIELD,
+                    index=min(field.num for field in eligible_count_fields),
+                )
+            else:
+                plan[entry_name] = ReportGroupSignalValidity(
+                    source=SignalValiditySource.PRESENCE_BIT,
+                    index=next_presence_bit,
+                )
+                next_presence_bit += 1
+        return plan
+
+    def _append_signal_presence_field(self, fields: list[schema.FieldDef], field_num: int) -> None:
+        """Append the compact presence bitset when the validity plan needs one."""
+        bit_count = sum(
+            validity.source is SignalValiditySource.PRESENCE_BIT for validity in self.signal_validity.values()
+        )
+        if bit_count == 0:
+            return
+        signal_presence_type = typesys.Instantiation(
+            type_info=clkbuiltins.TYPE_TYPE,
+            instantiates=clkbuiltins.BITSET,
+            arguments={"size": primitive.DecimalValue(clkbuiltins.UINT64, Decimal(bit_count))},
+        )
+        fields.append(
+            schema.make_field(
+                self.module,
+                field_num,
+                _SIGNAL_PRESENCE_FIELD_NAME,
+                signal_presence_type,
+                doc="Presence of signals without a count-derived validity source",
+            )
         )
 
     def _get_field_type_for_aggregation(
@@ -773,7 +959,7 @@ class ReportGroupDef(node.CstNode[cst.ReportGroup], node.DocableEntity, typesys.
             The appropriate field type for the aggregation combination.
         """
         # Mean aggregation always results in Float32
-        if pre_agg in {signal_module.AggregationType.MEAN} or post_agg in {signal_module.AggregationType.MEAN}:
+        if signal_module.AggregationType.MEAN in (pre_agg, post_agg):
             return clkbuiltins.FLOAT32
         return signal_type
 
@@ -859,7 +1045,7 @@ class ReportGroupConfig:
             "log_type",
             "log type",
             {
-                "telemetry": ReportGroupLogType.TELEMETRY,
+                "non_redundant_telemetry": ReportGroupLogType.NON_REDUNDANT_TELEMETRY,
                 "event": ReportGroupLogType.EVENT,
                 "none": ReportGroupLogType.NONE,
             },
@@ -867,10 +1053,10 @@ class ReportGroupConfig:
         )
 
         try:
-            max_observations = _extract_int_value(policy_schema_instance.data, "max_observations")
-            min_observations = _extract_int_value(policy_schema_instance.data, "min_observations")
-            min_duration = _extract_duration_value(policy_schema_instance.data, "min_duration")
-            max_duration = _extract_duration_value(policy_schema_instance.data, "max_duration")
+            max_observations = extract_int_value(policy_schema_instance.data, "max_observations")
+            min_observations = extract_int_value(policy_schema_instance.data, "min_observations")
+            min_duration = extract_duration_value(policy_schema_instance.data, "min_duration")
+            max_duration = extract_duration_value(policy_schema_instance.data, "max_duration")
         except Exception as e:
             msg = report_group_def.append_error_line(f"Error extracting value: {e}")
             raise ValueError(msg) from e
@@ -894,7 +1080,8 @@ class ReportGroupConfig:
         )
 
 
-def _extract_int_value(schema_data: dict[str, typesys.Value], key: str) -> int | None:
+def extract_int_value(schema_data: dict[str, typesys.Value], key: str) -> int | None:
+    """Extract an integer value from schema data, handling nullopt and type checking."""
     value = schema_data.get(key)
     if not value or isinstance(value, clkbuiltins.Nullopt):
         return None
@@ -904,7 +1091,8 @@ def _extract_int_value(schema_data: dict[str, typesys.Value], key: str) -> int |
     return primitive.unsigned_decimal_to_int(value)
 
 
-def _extract_duration_value(schema_data: dict[str, typesys.Value], key: str) -> primitive.UnitValue | None:
+def extract_duration_value(schema_data: dict[str, typesys.Value], key: str) -> primitive.UnitValue | None:
+    """Extract a duration value from schema data, handling nullopt and type checking."""
     value = schema_data.get(key)
     if not value or isinstance(value, clkbuiltins.Nullopt):
         return None
@@ -963,9 +1151,9 @@ class ReportGroupInstance:
     entries: dict[str, ReportGroupEntryInstance]
     cog_instance_fqn: str
 
-    def channel_name(self) -> str:
+    def channel_name(self, compiler_context: CompilerContext) -> str:
         """Get the channel name for this report group instance."""
-        return report_group_instance_channel_name(self.group_def, self.cog_instance_fqn)
+        return report_group_instance_channel_name(self.group_def, self.cog_instance_fqn, compiler_context)
 
 
 def report_group_instance_channel_uuid(report_group: ReportGroupDef, cog_instance_fqn: str) -> uuid.UUID:
@@ -973,10 +1161,12 @@ def report_group_instance_channel_uuid(report_group: ReportGroupDef, cog_instanc
     return uuid.uuid3(clkbuiltins.CLOCKWORK_NAMESPACE_UUID, f"{cog_instance_fqn}/{report_group.name}")
 
 
-def report_group_instance_channel_name(report_group: ReportGroupDef, cog_instance_fqn: str) -> str:
+def report_group_instance_channel_name(
+    report_group: ReportGroupDef, cog_instance_fqn: str, compiler_context: CompilerContext
+) -> str:
     """Generate the channel name for a report group instance."""
-    channel_uuid = report_group_instance_channel_uuid(report_group, cog_instance_fqn)
-    return f"/_clockwork/report-groups/{report_group.parent_cog_name}/{report_group.name}/{channel_uuid}"
+    cog_instance_uuid = lookup_uuid(compiler_context, cog_instance_fqn)
+    return f"/_clockwork/report-groups/{report_group.parent_cog_name}/{report_group.name}/{cog_instance_uuid}"
 
 
 @dataclass

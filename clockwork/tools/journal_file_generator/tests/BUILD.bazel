@@ -1,0 +1,213 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "alignment_test",
+    srcs = [
+        "alignment_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:alignment",
+        "//clockwork/tools/journal_file_generator:execution_extractor",
+        "//clockwork/tools/journal_file_generator:log_index",
+        "//clockwork/tools/journal_file_generator:scope",
+    ],
+)
+
+py_test(
+    name = "channel_summary_test",
+    srcs = [
+        "channel_summary_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:channel_summary",
+        "//clockwork/tools/journal_file_generator:log_index",
+        "//clockwork/tools/journal_file_generator:scope",
+    ],
+)
+
+py_test(
+    name = "execution_extractor_test",
+    srcs = [
+        "execution_extractor_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:cog_channel",
+        "//clockwork/tools/journal_file_generator:execution_extractor",
+        "//clockwork/tools/journal_file_generator:scope",
+        "//clockwork/tools/signal_extractor",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "instance_discovery_test",
+    srcs = [
+        "instance_discovery_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_system_clk",
+        "//clockwork/tests/support:signal_test_box_clk",
+        "//clockwork/tests/support:signal_test_system_clk",
+        "//clockwork/tests/support:snapshot_test_system_clk",
+        "//clockwork/tests/support:test_system_description_2.clk",
+        "//clockwork/tests/support:test_system_multi_node_clk",
+        "//clockwork/tests/support:test_system_multi_route_clk",
+        "//clockwork/tools/journal_file_generator",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/tools/journal_file_generator:instance_discovery",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "journal_file_generator_test",
+    srcs = [
+        "journal_file_generator_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/tools/journal_file_generator"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/journal:journal_topology_py_library",
+        "//clockwork/tools/journal_file_generator:alignment",
+        "//clockwork/tools/journal_file_generator:channel_summary",
+        "//clockwork/tools/journal_file_generator:cog_channel",
+        "//clockwork/tools/journal_file_generator:execution_extractor",
+        "//clockwork/tools/journal_file_generator:generator",
+        "//clockwork/tools/journal_file_generator:log_index",
+        "//clockwork/tools/journal_file_generator:message_index",
+        "//clockwork/tools/journal_file_generator:readiness",
+        "//clockwork/tools/journal_file_generator:request",
+        "//clockwork/tools/journal_file_generator:scope",
+        "//clockwork/tools/journal_file_generator:snapshot_selector",
+        "//clockwork/tools/journal_file_generator:topology_file",
+        "//clockwork/tools/journal_file_generator:writer",
+        "@clockwork_pip//protobuf",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "journal_metadata_test",
+    srcs = [
+        "journal_metadata_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:cog_channel",
+        "//clockwork/tools/journal_file_generator:journal_metadata",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "log_index_test",
+    srcs = [
+        "log_index_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "//clockwork/tools/journal_file_generator:log_index",
+    ],
+)
+
+py_test(
+    name = "message_index_test",
+    srcs = [
+        "message_index_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:message_index",
+    ],
+)
+
+py_test(
+    name = "scope_test",
+    srcs = [
+        "scope_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_file_generator:cog_channel",
+        "//clockwork/tools/journal_file_generator:log_index",
+        "//clockwork/tools/journal_file_generator:scope",
+        "//clockwork/tools/topology",
+    ],
+)
+
+py_test(
+    name = "snapshot_selector_test",
+    srcs = [
+        "snapshot_selector_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/tools/journal_file_generator:request",
+        "//clockwork/tools/journal_file_generator:scope",
+        "//clockwork/tools/journal_file_generator:snapshot_selector",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "topology_file_test",
+    srcs = [
+        "topology_file_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_topology_py_library",
+        "//clockwork/tools/journal_file_generator:topology_file",
+        "@clockwork_pip//protobuf",
+        "@clockwork_pip//pytest",
+    ],
+)

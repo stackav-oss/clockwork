@@ -41,10 +41,10 @@ enum TestCogConditionsMask
   values
   {
     // No conditions active
-    #0 no_conditions_active default {underlying_value: 0;}
+    #0 no_conditions_active default { underlying_value: 0; }
 
     // Test condition active
-    #1 test_condition {underlying_value: 1;}
+    #1 test_condition { underlying_value: 1; }
   }
 }
 // Event metrics schema for TestCog

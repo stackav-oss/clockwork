@@ -2,59 +2,60 @@ use clockwork::test_tools::tests::support::addition_tester_cog::{AdditionTesterC
 use clockwork::test_tools::tests::support::addition_cogs::{AdditionCog};
 use clockwork::test_tools::tests::support::messages::{AdditionMessage, SumMessage};
 use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+
 // Channel for publishing the addition message
 channel AdditionChannelIn
 {
-    message_type: Tachyon<AdditionMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<AdditionMessage>;
+  max_num_messages: 10;
 }
 
 // Channel for the sum messages
 channel SumChannelOut
 {
-    message_type: Tachyon<SumMessage>;
-    max_num_messages: 10;
+  message_type: Tachyon<SumMessage>;
+  max_num_messages: 10;
 }
 
 // Our log reader policy
 policy LogReaderPolicy for AdditionChannelIn
 {
-    source_name = 'AdditionChannelIn';
+  source_name = 'AdditionChannelIn';
 }
 
 // Our log writer policy
 policy ChannelLoggingPolicy for SumChannelOut
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 box AdditionSystemSyntheticBox
 {
-    new addition_cog: AdditionCog;
-    connect AdditionChannelIn to addition_cog.addition_message;
+  new addition_cog: AdditionCog;
+  connect AdditionChannelIn to addition_cog.addition_message;
 
-    connect addition_cog.sum_message to SumChannelOut;
+  connect addition_cog.sum_message to SumChannelOut;
 }
 
 cpu_domain TestCpu;
 
 box AdditionSystemSynthetic
 {
-    new box: AdditionSystemSyntheticBox;
-    new proc: Process(executable=addition_system_synthetic_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+  new box: AdditionSystemSyntheticBox;
+  new proc: Process(executable=addition_system_synthetic_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
 }
 
 cpp_executable addition_system_synthetic_exe
 {
-    casing
-    {
-        box AdditionSystemSyntheticBox;
-    }
+  casing
+  {
+    box AdditionSystemSyntheticBox;
+  }
 }
 
 system_target addition_system_synthetic
 {
-    box: AdditionSystemSynthetic;
+  box: AdditionSystemSynthetic;
 }

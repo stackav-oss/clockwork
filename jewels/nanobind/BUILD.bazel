@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -16,7 +16,6 @@ cc_library(
         "//jewels/std:span",
         "@fmt",
         "@nanobind",
-        "@python_3_10//:python_headers",
         "@wise_enum",
     ],
 )
@@ -51,7 +50,6 @@ py_cc_binding(
     imports = ["../.."],
     visibility = ["//visibility:public"],
     deps = [
-        "//jewels/meta:overloaded",
         "//jewels/time:conversions",
         "//jewels/time:sync_time",
         "@fmt",

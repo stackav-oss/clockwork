@@ -1,10 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
-#include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
@@ -14,11 +13,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory_resource>
 #include <span>
 #include <string_view>
-#include <vector>
 
 namespace clockwork_logging::offboard
 {
@@ -38,28 +37,11 @@ struct LoggedChannelMetadata
   SchemaEncoding schema_encoding{SchemaEncoding::undefined};
   /// Schema definition string, should be empty if schema encoding is undefined
   std::string_view schema_definition{};
+  /// Set to true when the channel is amended
+  bool is_amended{};
 
   /// Comparison operator
-  /// @param[in] lhs Left hand operand
-  /// @param[in] rhs Right hand operand
-  /// @return True iff lhs == rhs
-  [[nodiscard]] friend bool operator==(const LoggedChannelMetadata& lhs, const LoggedChannelMetadata& rhs) noexcept
-  {
-    return std::tie(
-             lhs.channel_name,
-             lhs.message_encoding,
-             lhs.channel_type,
-             lhs.schema_name,
-             lhs.schema_encoding,
-             lhs.schema_definition) ==
-           std::tie(
-             rhs.channel_name,
-             rhs.message_encoding,
-             rhs.channel_type,
-             rhs.schema_name,
-             rhs.schema_encoding,
-             rhs.schema_definition);
-  }
+  [[nodiscard]] bool operator<=>(const LoggedChannelMetadata&) const = default;
 };
 
 /// Structure used contain a logged message

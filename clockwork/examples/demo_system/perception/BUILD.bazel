@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -39,9 +39,15 @@ clk(
         "perception_clk_cc.cc",
         "perception_clk_cc.hh",
         "perception_clk_cc.inl",
+        "perception_clk_cc_cog.cc",
+        "perception_clk_cc_cog.hh",
+        "perception_clk_cc_cog.inl",
         "perception_clk_cc_dial.cc",
         "perception_clk_cc_dial.hh",
         "perception_clk_cc_dial.inl",
+        "perception_clk_cc_types.cc",
+        "perception_clk_cc_types.hh",
+        "perception_clk_cc_types.inl",
         "perception_clk_exe.cc",
         "perception_clk_exe.hh",
         "perception_clk_exe.inl",
@@ -85,14 +91,16 @@ cc_library(
         "//clockwork/dial:approx_aligner",
         "//clockwork/dial:approx_aligner_config_clk_cc",
         "//clockwork/dial:approx_aligner_policies",
+        "//clockwork/dial:msg_input",
         "//clockwork/examples/demo_system/camera:video_message_clk_cc",
         "//clockwork/examples/demo_system/lidar:lidar_message_clk_cc",
         "//clockwork/examples/demo_system/localization:pose_message_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
-        "@boost//:iterator",
+        "//jewels/uuid",
     ],
 )
 
@@ -103,6 +111,9 @@ clk(
         "perception_message_clk_cc.cc",
         "perception_message_clk_cc.hh",
         "perception_message_clk_cc.inl",
+        "perception_message_clk_cc_types.cc",
+        "perception_message_clk_cc_types.hh",
+        "perception_message_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

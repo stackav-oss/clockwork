@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -14,6 +14,9 @@ clk(
         "bind_array_msg_clk_cc.cc",
         "bind_array_msg_clk_cc.hh",
         "bind_array_msg_clk_cc.inl",
+        "bind_array_msg_clk_cc_types.cc",
+        "bind_array_msg_clk_cc_types.hh",
+        "bind_array_msg_clk_cc_types.inl",
         "bind_array_msg_clk_nb.cc",
         "bind_array_msg_clk_nb.hh",
         "bind_array_msg_clk_nb.inl",
@@ -30,6 +33,17 @@ cc_library(
     hdrs = ["bind_array_msg_clk_cc.hh"],
     data = [":bind_array_msg_clk"],
     visibility = ["//jewels/nanobind/tests:__subpackages__"],
+    deps = [":bind_array_msg_clk_cc_types"],
+)
+
+cc_library(
+    name = "bind_array_msg_clk_cc_types",
+    srcs = [
+        "bind_array_msg_clk_cc_types.cc",
+        "bind_array_msg_clk_cc_types.inl",
+    ],
+    hdrs = ["bind_array_msg_clk_cc_types.hh"],
+    data = [":bind_array_msg_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",
@@ -63,6 +77,9 @@ clk(
         "foo_clk_cc.cc",
         "foo_clk_cc.hh",
         "foo_clk_cc.inl",
+        "foo_clk_cc_types.cc",
+        "foo_clk_cc_types.hh",
+        "foo_clk_cc_types.inl",
         "foo_clk_nb.cc",
         "foo_clk_nb.hh",
         "foo_clk_nb.inl",
@@ -80,6 +97,17 @@ cc_library(
     hdrs = ["foo_clk_cc.hh"],
     data = [":foo_clk"],
     visibility = ["//visibility:public"],
+    deps = [":foo_clk_cc_types"],
+)
+
+cc_library(
+    name = "foo_clk_cc_types",
+    srcs = [
+        "foo_clk_cc_types.cc",
+        "foo_clk_cc_types.inl",
+    ],
+    hdrs = ["foo_clk_cc_types.hh"],
+    data = [":foo_clk"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork:tags",

@@ -1,0 +1,7 @@
+use clockwork::dsl::composition::tests::support::aligned_consumer_boxes;
+use clockwork::dsl::composition::tests::support::aligned_consumer_channel_policies;
+
+system_target aligned_consumer_system
+{
+  box: aligned_consumer_boxes::AlignedConsumerSystem;
+}

@@ -6,65 +6,77 @@ use clockwork::dsl::cog::ten_nanosecond::{TenNanoseconds};
 // Template schema for MinMaxMean
 schema MinMaxMean
 {
-    uuid: f66bc9c4-b0c0-40aa-9da1-b18f1aaea12f;
-    parameters
-    {
-        // Type of the stored values
-        #0 data_type: Type;
-    }
+  uuid: f66bc9c4-b0c0-40aa-9da1-b18f1aaea12f;
+  parameters
+  {
+    // Type of the stored values
+    #0 data_type: Type;
+  }
 
-    fields
-    {
-        // Minimum value
-        #1 min: data_type;
-        // Maximum value
-        #2 max: data_type;
-        // Mean value
-        #3 mean: data_type;
-    }
+  fields
+  {
+    // Minimum value
+    #1 min: data_type;
+    // Maximum value
+    #2 max: data_type;
+    // Mean value
+    #3 mean: data_type;
+  }
 }
 
 // Input channel telemetry metrics schema
 schema InputChannelTelemetryMetrics
 {
-    uuid: 9dc6e36c-e2cf-4e4f-835e-a9f546d11369;
-    fields
-    {
-        // Count of messages that were not processed
-        #1 unseen_messages: MinMaxMean<UInt16>;
+  uuid: 9dc6e36c-e2cf-4e4f-835e-a9f546d11369;
+  fields
+  {
+    // Count of messages that were not processed
+    #1 unseen_messages: MinMaxMean<UInt16>;
 
-        // Message staleness in units of 10 nanoseconds
-        #2 staleness: MinMaxMean<TenNanoseconds>;
+    // Message staleness in units of 10 nanoseconds
+    #2 staleness: MinMaxMean<TenNanoseconds>;
 
-        // Count of messages that were dropped
-        #3 dropped_messages: MinMaxMean<UInt16>;
-    }
+    // Count of messages that were dropped
+    #3 dropped_messages: MinMaxMean<UInt16>;
+  }
 }
 
 // Telemetry metrics schema for cog execution performance tracking
 schema CogTelemetryMetrics
 {
-    uuid: 84379acb-9b7b-4fb5-823e-e899d839a636;
-    fields
-    {
-        // Execution duration metrics (in units of 10ns)
-        #1 exec_duration: MinMaxMean<TenNanoseconds>;
+  uuid: 84379acb-9b7b-4fb5-823e-e899d839a636;
+  fields
+  {
+    // Execution duration metrics (in units of 10ns)
+    #1 exec_duration: MinMaxMean<TenNanoseconds>;
 
-        // Latency from first ready state to execution (in units of 10ns)
-        #2 ready_to_exec_latency: MinMaxMean<TenNanoseconds>;
+    // Latency from first ready state to execution (in units of 10ns)
+    #2 ready_to_exec_latency: MinMaxMean<TenNanoseconds>;
 
-        // Latency from first execution attempt to actual execution (in units of 10ns)
-        #3 attempt_to_exec_latency: MinMaxMean<TenNanoseconds>;
+    // Latency from first execution attempt to actual execution (in units of 10ns)
+    #3 attempt_to_exec_latency: MinMaxMean<TenNanoseconds>;
 
-        // Number of re-queues before execution (count)
-        #4 requeue_count: MinMaxMean<UInt16>;
+    // Number of re-queues before execution (count)
+    #4 requeue_count: MinMaxMean<UInt16>;
 
-        // Total execution count
-        #5 execution_count: UInt16;
+    // Total execution count
+    #5 execution_count: UInt16;
 
-        // Period between executions (in units of 10ns)
-        #6 exec_period: MinMaxMean<TenNanoseconds>;
-    }
+    // Period between executions (in units of 10ns)
+    #6 exec_period: MinMaxMean<TenNanoseconds>;
+
+    // Generated cog execution body wall-time metrics (in units of 10ns)
+    #7 execute_cog_wall_duration: MinMaxMean<TenNanoseconds>;
+
+    // Generated cog execution body thread CPU metrics (in units of 10ns)
+    #8 execute_cog_thread_cpu_duration: MinMaxMean<TenNanoseconds>;
+
+    // Generated cog execution body thread user CPU metrics (in units of 10ns)
+    #9 execute_cog_thread_user_duration: MinMaxMean<TenNanoseconds>;
+
+    // Generated cog execution body thread system CPU metrics (in units of 10ns)
+    #10 execute_cog_thread_system_duration: MinMaxMean<TenNanoseconds>;
+  }
 }
 
 instantiate MinMaxMean16: MinMaxMean<UInt16>;

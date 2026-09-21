@@ -1,3 +1,18 @@
+pre_launch {
+  name: "pre1"
+  executable: "/bin/sh"
+  args: "-c"
+  args: "echo abc > /tmp/pre1.out"
+}
+
+pre_launch {
+  name: "pre2"
+  executable: "/bin/sh"
+  args: "-c"
+  args: "echo def > /tmp/pre2.out"
+  as_root: true
+}
+
 app {
   name: "tail"
   executable: "/usr/bin/tail"

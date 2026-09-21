@@ -1,0 +1,76 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp_exe)]
+
+use clockwork::tests::support::cog_metrics_default_cog::{CogMetricsDefaultCog};
+use clockwork::tests::support::cog_metrics_custom_cog::{CogMetricsCustomCog};
+use clockwork::tests::support::cog_metrics_driver_cog::{CogMetricsDriverCog};
+use clockwork::tests::support::cog_metrics_test_messages::{CogMetricsTestTrigger, CogMetricsTestAck};
+
+// Channel for trigger messages from driver to the default cog (input A)
+channel TriggerChannelA
+{
+  message_type: Tachyon<CogMetricsTestTrigger>;
+  max_num_messages: 10;
+}
+
+// Channel for trigger messages from driver to the default cog (input B)
+channel TriggerChannelB
+{
+  message_type: Tachyon<CogMetricsTestTrigger>;
+  max_num_messages: 10;
+}
+
+// Channel for trigger messages from driver to the custom cog
+channel TriggerChannelC
+{
+  message_type: Tachyon<CogMetricsTestTrigger>;
+  max_num_messages: 10;
+}
+
+// Channel for ack messages from the default cog to the driver
+channel AckDefaultChannel
+{
+  message_type: Tachyon<CogMetricsTestAck>;
+  max_num_messages: 10;
+}
+
+// Channel for ack messages from the custom cog to the driver
+channel AckCustomChannel
+{
+  message_type: Tachyon<CogMetricsTestAck>;
+  max_num_messages: 10;
+}
+
+box CogMetricsTestBox
+{
+  new default_cog: CogMetricsDefaultCog;
+  new custom_cog: CogMetricsCustomCog;
+  new driver_cog: CogMetricsDriverCog;
+
+  connect driver_cog.trigger_a to TriggerChannelA;
+  connect TriggerChannelA to default_cog.trigger_a;
+
+  connect driver_cog.trigger_b to TriggerChannelB;
+  connect TriggerChannelB to default_cog.trigger_b;
+
+  connect driver_cog.trigger_c to TriggerChannelC;
+  connect TriggerChannelC to custom_cog.trigger;
+
+  connect default_cog.ack to AckDefaultChannel;
+  connect AckDefaultChannel to driver_cog.ack_default;
+
+  connect custom_cog.ack to AckCustomChannel;
+  connect AckCustomChannel to driver_cog.ack_custom;
+}
+
+cpu_domain CogMetricsTestCpu;
+
+box CogMetricsTestSystem
+{
+  new box: CogMetricsTestBox;
+  new proc: Process(executable=cog_metrics_test_box_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=CogMetricsTestCpu) to proc;
+}

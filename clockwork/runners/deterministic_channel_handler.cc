@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/runners/deterministic_channel_handler.hh"
@@ -53,7 +53,7 @@ jewels::expected<void, jewels::MonoError> DeterministicChannelHandler::initializ
       }
       observers_.emplace_back(
         memory_resource_,
-        channel->second->buffer(),
+        channel->second,
         jewels::memory::make_non_null_from_ref(*this),
         channel_config.get_channel_name(),
         channel_config.get_channel_type());

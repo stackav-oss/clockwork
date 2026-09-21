@@ -1,0 +1,75 @@
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+#![cpp(namespace=clockwork::aligner_csr_test)]
+
+use clockwork::dsl::aligner::gen::tests::support::aligner_test_msgs::{TestSensorMsg};
+use std::aligners::state;
+
+// Aligner for CSR integration testing.
+//
+// Exercises three search types plus optional and batch input support:
+//   Level 0 (outermost): pose_lo  - FIRST_IN_RANGE (forward scan), batch boundary
+//   Level 1:             pose_hi  - LAST_IN_RANGE (reverse scan), batch boundary
+//   Level 2:             lidar    - LAST_IN_RANGE (reverse scan), reuse
+//   Level 3:             camera   - NEAREST (bidirectional scan from lidar.obs_time)
+//   Level 4:             tick     - ANY_MATCH (forward scan)
+//   Level 5 (innermost): radar    - ANY_MATCH (forward scan), optional
+aligner TestAligner
+{
+  inputs
+  {
+    // Tick input: arrives last, controls when alignment fires.
+    // No objective references tick, so it gets ANY_MATCH (forward scan).
+    tick: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      arbitrary_selection: true;
+    }
+
+    // Camera input: NEAREST search (minimize distance from lidar).
+    camera: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+    }
+
+    // Lidar input: LAST_IN_RANGE search (maximize observation_time).
+    // Reuse enabled: uses get_view() instead of get_cursor_view().
+    lidar: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      reuse: true;
+    }
+
+    // Radar input: optional with timeout - ANY_MATCH (forward scan).
+    radar: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      optional: true;
+      timeout: 200ms;
+      arbitrary_selection: true;
+    }
+
+    // Pose input: batch of 2-4 contiguous messages per alignment.
+    // Generates two join levels: FIRST_IN_RANGE for the batch start,
+    // LAST_IN_RANGE for the batch end.
+    pose: Tappy<TestSensorMsg>
+    {
+      max_msgs: 20;
+      batch_size: [2, 4];
+      arbitrary_selection: true;
+    }
+  }
+
+  assume(is_strictly_increasing(tick.observation_time));
+  assume(is_non_decreasing(camera.observation_time));
+  assume(is_strictly_increasing(lidar.observation_time));
+  assume(is_strictly_increasing(radar.observation_time));
+  assume(is_strictly_increasing(pose.observation_time));
+
+  require(|tick.observation_time - camera.observation_time| <= 100ms);
+  require(|tick.observation_time - lidar.observation_time| <= 200ms);
+  require(|tick.observation_time - radar.observation_time| <= 150ms);
+  require(|tick.observation_time - min(pose.observation_time)| <= 300ms);
+
+  minimize(|camera.observation_time - lidar.observation_time|);
+  maximize(lidar.observation_time);
+}

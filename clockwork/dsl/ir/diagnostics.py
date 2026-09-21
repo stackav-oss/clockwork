@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Diagnostics entity."""
@@ -8,11 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.cpp import types
 from clockwork.dsl.cpp.context import Header, MaybeHeader
 from clockwork.dsl.ir import (
     clkbuiltins,
+    cog_parameters,
     expr,
     node,
     primitive,
@@ -24,7 +25,7 @@ from clockwork.dsl.ir.message_type import MessageTypeMixin, resolve_schema_inter
 from clockwork.dsl.ir.module_id import CLK_REPO
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from clockwork.dsl.ir.cog_components import InputDef, OutputDef
 
@@ -48,8 +49,8 @@ class DiagnosticsDef(
 ):
     """A definition of the Cog's diagnostics."""
 
-    group_id: str | expr.Expr
-    instance_id: str | expr.Expr | None
+    group_id: str | expr.Expr | cog_parameters.CogParameterRef
+    instance_id: str | expr.Expr | None | cog_parameters.CogParameterRef
 
     @classmethod
     def from_cst(
@@ -62,7 +63,7 @@ class DiagnosticsDef(
         if module.terminals is None:
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
-        if isinstance(cst_node, cst.DiagnosticsDef):
+        if cst_node.kind == cst.DiagnosticsDef.kind:
             name = get_span(cst_node.child_name().child_value(), terminals=module.terminals)
         else:
             name = "diagnostics"
@@ -70,17 +71,21 @@ class DiagnosticsDef(
             msg = 'Could not find DiagnosticsReport type, did you "use @clockwork::clockwork::diagnostics::report::Report as DiagnosticsReport"?'
             raise TypeError(msg)
         message_type = expr.Expr.from_str("Tap<Tachyon<DiagnosticsReport>>", module)
+        # fmt: off
         result = cls(
             module=module,
             cst_node=cst_node,
             doc=None,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=parent_scope,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=name,
             type_info=clkbuiltins.COG_CONFIG_TYPE,
             message_type=message_type,
             group_id="",
             instance_id=None,
         )
+        # fmt: on
         parent_scope.define(name, result, module.terminals)
         seen_params: set[str] = set()
         for param_cst in cst_node.children_diagnostics_param():
@@ -121,20 +126,32 @@ class DiagnosticsDef(
             self.message_type = resolve_schema_interface(self.module.context, self.message_type)
         if isinstance(self.group_id, expr.Expr):
             result = self.group_id.evaluate()
-            if not isinstance(result, primitive.StringLiteral):
-                msg = self.group_id.append_error_line(
-                    f"Expected a string for parameter 'group_id', but got {type(result)}",
-                )
-                raise TypeError(msg)
-            self.group_id = result.value
+            if isinstance(result, cog_parameters.CogParameterRef):
+                if result.parameter_def.get_typeval() is not clkbuiltins.STRING:
+                    msg = result.parameter_def.append_error_line("Expected string for parameter `group_id`")
+                    raise ValueError(msg)
+                self.group_id = result
+            else:
+                if not isinstance(result, primitive.StringLiteral):
+                    msg = self.group_id.append_error_line(
+                        f"Expected a string for parameter 'group_id', but got {type(result)}",
+                    )
+                    raise TypeError(msg)
+                self.group_id = result.value
         if isinstance(self.instance_id, expr.Expr):
             result = self.instance_id.evaluate()
-            if not isinstance(result, primitive.StringLiteral):
-                msg = self.instance_id.append_error_line(
-                    f"Expected a string for parameter 'instance_id', but got {type(result)}",
-                )
-                raise TypeError(msg)
-            self.instance_id = result.value
+            if isinstance(result, cog_parameters.CogParameterRef):
+                if result.parameter_def.get_typeval() is not clkbuiltins.STRING:
+                    msg = result.parameter_def.append_error_line("Expected string for parameter `instance_id`")
+                    raise ValueError(msg)
+                self.instance_id = result
+            else:
+                if not isinstance(result, primitive.StringLiteral):
+                    msg = self.instance_id.append_error_line(
+                        f"Expected a string for parameter 'instance_id', but got {type(result)}",
+                    )
+                    raise TypeError(msg)
+                self.instance_id = result.value
 
 
 @dataclass
@@ -144,6 +161,7 @@ class InfraDiagnosticsDef(typesys.NamedAttribute):
     inputs: Iterable[InputDef]
     outputs: Iterable[OutputDef]
     signals: list[DiagnosticsSignalDef] | None
+    extra_input_names: list[str]
 
     @classmethod
     def make(
@@ -154,14 +172,19 @@ class InfraDiagnosticsDef(typesys.NamedAttribute):
         outputs: Iterable[OutputDef],
     ) -> InfraDiagnosticsDef:
         """Make infra diagnostics."""
+        # fmt: off
         result = cls(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=COG_INFRA_DIAGS_GROUP_NAME,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=parent_scope,
             type_info=clkbuiltins.COG_CONFIG_TYPE,
             inputs=list(inputs),
             outputs=list(outputs),
             signals=None,
+            extra_input_names=[],
         )
+        # fmt: on
         uuid_reg.register_entity_with_stable_key(module.context, result)
         return result
 
@@ -170,8 +193,6 @@ class InfraDiagnosticsDef(typesys.NamedAttribute):
         for i in (i for j in (self.inputs, self.outputs) for i in j):
             i.resolve()
         self.signals = []
-
-
 @dataclass
 class DiagnosticsInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys.NamedAttribute):
     """An instantiation of a diagnostics source."""
@@ -195,8 +216,11 @@ class DiagnosticsInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys
     ) -> DiagnosticsInstance:
         """Factory function for DiagnosticsInstance."""
         inner_scope = scope.make_child_scope(name)
+        # fmt: off
         return cls(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=name,
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=scope,
             inner_scope=inner_scope,
             type_info=clkbuiltins.DIAGNOSTICS_INSTANCE_TYPE,
@@ -205,6 +229,7 @@ class DiagnosticsInstance(node.CstNode[cst.NewStmt], node.DocableEntity, typesys
             cst_node=cst_node,
             diagnostics=diagnostics,
         )
+        # fmt: on
 
 
 REPORT_DEFS_HEADER: Final = Header(CLK_REPO, "clockwork/diagnostics/report_definitions.hh")

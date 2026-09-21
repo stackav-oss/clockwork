@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/serialization/cpp/tachyon_upgrader.hh"
@@ -6,6 +6,7 @@
 #include "clockwork/serialization/cpp/clk_type.hh"
 #include "clockwork/serialization/cpp/tachyon_model.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <fmt/format.h>
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <memory_resource>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -34,8 +36,8 @@ public:
   /// @param[in] dest_model Destination tachyon model
   TachyonCppUpgrader(
     jewels::memory::ObjectPtr<const ClkTypeUpgrader> upgrader,
-    std::unique_ptr<TachyonModel> src_model,
-    std::unique_ptr<TachyonModel> dest_model);
+    std::shared_ptr<TachyonModel> src_model,
+    std::shared_ptr<TachyonModel> dest_model);
 
   ~TachyonCppUpgrader() noexcept override = default;
 
@@ -58,10 +60,10 @@ private:
   jewels::memory::ObjectPtr<const ClkTypeUpgrader> upgrader_;
 
   /// Source tachyon model
-  std::unique_ptr<TachyonModel> src_model_;
+  std::shared_ptr<TachyonModel> src_model_;
 
   /// Destination tachyon model
-  std::unique_ptr<TachyonModel> dest_model_;
+  std::shared_ptr<TachyonModel> dest_model_;
 
   /// Source schema size
   size_t src_size_;
@@ -78,8 +80,8 @@ private:
 
 TachyonCppUpgrader::TachyonCppUpgrader(
   jewels::memory::ObjectPtr<const ClkTypeUpgrader> upgrader,
-  std::unique_ptr<TachyonModel> src_model,
-  std::unique_ptr<TachyonModel> dest_model)
+  std::shared_ptr<TachyonModel> src_model,
+  std::shared_ptr<TachyonModel> dest_model)
   : upgrader_(upgrader),
     src_model_(std::move(src_model)),
     dest_model_(std::move(dest_model)),
@@ -199,6 +201,7 @@ void TachyonMemcpyUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
   std::span<const std::byte> current_metadata,
   std::span<const std::byte> incoming_metadata)
 {
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   const std::string current_metadata_str{
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Converting serialized metadata from bytes to string
     reinterpret_cast<const char*>(current_metadata.data()),
@@ -214,7 +217,7 @@ void TachyonMemcpyUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
       fmt::format(
         "Cannot make C++ upgrader for {}, current schema has python_required set to true", current_class_name));
   }
-  auto current_model = TachyonModel::from_proto(std::move(current_proto));
+  auto current_model = TachyonModel::from_proto(memory_resource, std::move(current_proto));
   const std::string incoming_metadata_str{
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast) Converting serialized metadata from bytes to string
     reinterpret_cast<const char*>(incoming_metadata.data()),
@@ -224,7 +227,7 @@ void TachyonMemcpyUpgrader::upgrade(std::span<const std::byte> src_span, std::sp
   {
     throw std::runtime_error("Failed to parse source metadata");
   }
-  auto incoming_model = TachyonModel::from_proto(std::move(incoming_proto));
+  auto incoming_model = TachyonModel::from_proto(memory_resource, std::move(incoming_proto));
   if (current_model->is_wire_compatible(*incoming_model))
   {
     return make_tachyon_memcpy_upgrader(

@@ -645,6 +645,7 @@ box MyDiagnosticsExampleBox
 For more detail on the concepts introduced in this tutorial, read:
 
 - [Clockwork schema language reference manual](../reference/schemas.md)
+- [Clockwork channels](../reference/channels.md)
 - [Clockwork system composition](../concepts/composition.md)
 - [Clockwork execution conditions](../reference/exec_conditions.md)
 

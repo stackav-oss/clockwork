@@ -1,22 +1,24 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/alignment_type_clk_cc.hh"
 #include "clockwork/dial/approx_aligner.hh"
 #include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/dial/approx_aligner_policies.hh"
+#include "clockwork/dial/msg_input.hh"
 #include "clockwork/examples/approx_aligner/approx_aligner_cog_clk_cc_dial.hh"
 #include "clockwork/examples/approx_aligner/approx_aligner_msgs_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "jewels/container/circular_buffer.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
+#include "jewels/uuid/uuid.hh"
 
 #include <optional>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 
 namespace clockwork
 {
@@ -29,10 +31,10 @@ struct AlignerPolicy : ApproxAlignerPolicies<InputPolicies...>
   static constexpr auto objective = ApproxAlignerPolicies<InputPolicies...>::exact_alignment_objective;
 };
 
-using IntInput = TovNanosecondsApproxAlignerInput<
-  std::decay_t<std::result_of_t<decltype (&ApproxAlignerCogDialInputs::get_in_int)(ApproxAlignerCogDialInputs)>>>;
-using FloatInput = TovNanosecondsApproxAlignerInput<
-  std::decay_t<std::result_of_t<decltype (&ApproxAlignerCogDialInputs::get_in_float)(ApproxAlignerCogDialInputs)>>>;
+using IntInput =
+  TovNanosecondsApproxAlignerInput<std::decay_t<decltype(std::declval<ApproxAlignerCogDialInputs>().get_in_int())>>;
+using FloatInput =
+  TovNanosecondsApproxAlignerInput<std::decay_t<decltype(std::declval<ApproxAlignerCogDialInputs>().get_in_float())>>;
 using Aligner = ApproxAligner<AlignerPolicy, IntInput, FloatInput>;
 
 void execute_cog(ApproxAlignerCogDial& dial)
@@ -81,6 +83,8 @@ void execute_cog(ApproxAlignerCogDial& dial)
     case AlignmentType::none:
       [[fallthrough]];
     case AlignmentType::partial:
+      [[fallthrough]];
+    case AlignmentType::incomplete:
       break;
     }
     break;

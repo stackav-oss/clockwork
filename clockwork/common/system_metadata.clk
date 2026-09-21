@@ -1,0 +1,14 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork::common)]
+
+MAX_SYSTEM_TARGET_NAME_SIZE: UInt64 = 128;
+
+// Contains metadata about the clockwork system
+schema SystemMetadata
+{
+  fields
+  {
+    // System target name
+    #1 system_target_name: VarString<MAX_SYSTEM_TARGET_NAME_SIZE>;
+  }
+}

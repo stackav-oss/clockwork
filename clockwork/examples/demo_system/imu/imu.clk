@@ -8,9 +8,13 @@ use clockwork::examples::demo_system::imu::imu_message;
 // Cog to simulate the IMU device sending raw IMU packets over UDP
 cog ImuDeviceCog
 {
+  parameters
+  {
+    msg_type: Type;
+  }
   outputs
   {
-    raw_imu: Tappy<imu_message::ImuMessage>;
+    raw_imu: Tappy<msg_type>;
   }
 
   execution
@@ -20,12 +24,18 @@ cog ImuDeviceCog
   }
 }
 
+instantiate ImuDeviceCog<msg_type=imu_message::ImuMessage>;
+
 // Cog to simulate a driver that converts raw IMU packets into IMU messages
 cog ImuDriverCog
 {
+  parameters
+  {
+    msg_type: Type;
+  }
   inputs
   {
-    raw_imu: Tappy<imu_message::ImuMessage>;
+    raw_imu: Tappy<msg_type>;
   }
 
   outputs
@@ -40,14 +50,16 @@ cog ImuDriverCog
   }
 }
 
+instantiate ImuDriverCog<msg_type=imu_message::ImuMessage>;
+
 box ImuBox
 {
-  new device_cog: ImuDeviceCog;
-  new driver_cog: ImuDriverCog;
+  new device_cog: ImuDeviceCog<msg_type=imu_message::ImuMessage>;
+  new driver_cog: ImuDriverCog<msg_type=imu_message::ImuMessage>;
 
   connect device_cog.raw_imu to imu_channels::RawImuChannel;
   connect imu_channels::RawImuChannel to driver_cog.raw_imu;
-  connect driver_cog.imu to imu_channels::ImuChannel;
+  connect driver_cog.imu to imu_channels::ImuChannel<name="/imu", type=imu_message::ImuMessage>;
 }
 
 box ImuExe

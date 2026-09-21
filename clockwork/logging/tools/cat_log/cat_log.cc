@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/decompress_option.hh"
@@ -67,7 +67,6 @@ namespace clockwork_logging::offboard
     jewels::log_cerr_error("{}", exc.what());
     return jewels::unexpected(LogError::failed_to_open_log_file);
   }
-  __builtin_unreachable();
 }
 
 /// Dump the contents of the log

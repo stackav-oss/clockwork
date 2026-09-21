@@ -1,7 +1,7 @@
+// Copyright 2025-2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
 // IWYU pragma: private, include "jewels/networking/socket_address.hh"
 #pragma once
-// Copyright 2025 Stack AV Co.
-// SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/networking/socket_address.hh"
 
@@ -15,7 +15,7 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <string>
-#include <sys/un.h>
+#include <sys/socket.h>
 
 namespace jewels::networking
 {

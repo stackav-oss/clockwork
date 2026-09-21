@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Hardware description IR nodes."""
@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.compiler_context import CompilerContext, ContextKey
 from clockwork.dsl.ir import (
     clkbuiltins,
@@ -441,24 +441,24 @@ class PcieLinkKey(ContextKey[PcieLinkContext]):
         return PcieLinkContext(links={})
 
 
-_PCIE_LINK_KEY: Final = PcieLinkKey("PciLinkKey")
+PCIE_LINK_KEY: Final = PcieLinkKey("PciLinkKey")
 
 
 def register_pcie_link(link: PcieLink, module: node.Module) -> None:
     """Register a PCI-Express link."""
-    context = module.context[_PCIE_LINK_KEY]
+    context = module.context[PCIE_LINK_KEY]
     context.register_link(link.get_resolved())
 
 
 def lookup_pcie_link(domain_a: CpuDomain, domain_b: CpuDomain, module: node.Module) -> ResolvedPcieLink | None:
     """Lookup a PCI-Express link between two CPU domains."""
-    context = module.context[_PCIE_LINK_KEY]
+    context = module.context[PCIE_LINK_KEY]
     return context.lookup_link(domain_a, domain_b)
 
 
 def get_pcie_neighbors(domain: CpuDomain, module: node.Module) -> dict[str, ResolvedPcieLink]:
     """Get all of the PCI-Express links involving a CPU domain."""
-    context = module.context[_PCIE_LINK_KEY]
+    context = module.context[PCIE_LINK_KEY]
     links = {}
     for (domain_a, domain_b), link in context.links.items():
         if domain.name == domain_a:

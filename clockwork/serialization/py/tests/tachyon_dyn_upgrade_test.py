@@ -1,9 +1,10 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
 """Unit tests for schema upgrade functionality."""
 
+import uuid
 from typing import Any, cast
 
 import pytest
@@ -2139,3 +2140,165 @@ def test_child_parameter_change() -> None:
     # Deserialize and verify
     instance_v2_copy = serdes_v2.py_class.deserialize_tachyon(memoryview(buffer))
     assert instance_v2_copy.container.integers == [1, 2, 3, 4, 5]
+
+
+def test_uuid_to_varstring_upgrade() -> None:
+    """Test upgrading a schema field from UUID to VarString<max_size=37>."""
+    schema_v1_source = """
+    // Schema version 1 with a UUID field
+    schema IdSchema
+    {
+      uuid: 1a2b3c4d-0000-0000-0000-000000000001;
+      fields
+      {
+        // Unique identifier
+        #1 id_field: Uuid<Int8>;
+      }
+    }
+
+    cpp_target test
+    {
+        options { namespace test; }
+        schema IdSchema;
+        representation Tachyon<IdSchema>;
+        interface Tappy<IdSchema>;
+    }
+    """
+
+    schema_v2_source = """
+    // Schema version 2 with UUID field upgraded to VarString
+    schema IdSchema
+    {
+      uuid: 1a2b3c4d-0000-0000-0000-000000000001;
+      fields
+      {
+        // Unique identifier as string
+        #2 id_field: VarString<max_size=37>;
+      }
+      history
+      {
+        version: 2;
+        legacy_became: [1->2];
+      }
+    }
+
+    cpp_target test
+    {
+        options { namespace test; }
+        schema IdSchema;
+        representation Tachyon<IdSchema>;
+        interface Tappy<IdSchema>;
+    }
+    """
+
+    # Compile schemas
+    module_v1 = compiler.compile_source_text(
+        schema_v1_source, ModuleID(CLK_REPO, "uuid_varstring_upgrade_test"), importer=fs_importer()
+    )
+    module_v2 = compiler.compile_source_text(
+        schema_v2_source, ModuleID(CLK_REPO, "uuid_varstring_upgrade_test"), importer=fs_importer()
+    )
+
+    # Get schema objects
+    schema_ir_v1 = module_v1.inner_scope.lookup("IdSchema")
+    schema_ir_v2 = module_v2.inner_scope.lookup("IdSchema")
+    assert isinstance(schema_ir_v1, schema.Schema)
+    assert isinstance(schema_ir_v2, schema.Schema)
+
+    # Create instantiated schemas
+    schema_v1 = schema.InstantiatedSchema.from_typespec(schema_ir_v1)
+    schema_v2 = schema.InstantiatedSchema.from_typespec(schema_ir_v2)
+
+    # Create SerDes for both schemas
+    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
+    serdes_v2: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v2.context, schema_v2)
+
+    # Create a v1 instance with a known UUID
+    IdSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
+    test_uuid = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+    instance_v1 = IdSchemaV1(id_field=test_uuid)
+
+    # Upgrade to v2
+    instance_v2 = cast("Any", tachyon_dyn.upgrade_schema(module_v2.context, schema_v2, instance_v1))
+
+    # The UUID should have been converted to its canonical string representation
+    assert instance_v2.id_field == str(test_uuid)
+
+    # Verify round-trip through serialization
+    buffer = bytearray(serdes_v2.py_class.get_tachyon_constraint().size)
+    instance_v2.serialize_tachyon(memoryview(buffer))
+    instance_v2_copy = serdes_v2.py_class.deserialize_tachyon(memoryview(buffer))
+    assert instance_v2_copy.id_field == str(test_uuid)
+
+
+def test_uuid_to_varstring_too_small_raises() -> None:
+    """Test that upgrading a UUID field to a VarString with max_size <= 36 raises an error."""
+    schema_v1_source = """
+    // Schema for VarString max_size validation
+    schema SmallIdSchema
+    {
+      uuid: 1a2b3c4d-0000-0000-0000-000000000002;
+      fields
+      {
+        // Unique identifier
+        #1 id_field: Uuid<Int8>;
+      }
+    }
+
+    cpp_target test
+    {
+        options { namespace test; }
+        schema SmallIdSchema;
+        representation Tachyon<SmallIdSchema>;
+        interface Tappy<SmallIdSchema>;
+    }
+    """
+
+    schema_v2_source = """
+    // Schema for VarString max_size validation v2
+    schema SmallIdSchema
+    {
+      uuid: 1a2b3c4d-0000-0000-0000-000000000002;
+      fields
+      {
+        // max_size=10 is too small to hold a 36-character UUID string
+        #2 id_field: VarString<max_size=10>;
+      }
+      history
+      {
+        version: 2;
+        legacy_became: [1->2];
+      }
+    }
+
+    cpp_target test
+    {
+        options { namespace test; }
+        schema SmallIdSchema;
+        representation Tachyon<SmallIdSchema>;
+        interface Tappy<SmallIdSchema>;
+    }
+    """
+
+    module_v1 = compiler.compile_source_text(
+        schema_v1_source, ModuleID(CLK_REPO, "uuid_too_small_test"), importer=fs_importer()
+    )
+    module_v2 = compiler.compile_source_text(
+        schema_v2_source, ModuleID(CLK_REPO, "uuid_too_small_test"), importer=fs_importer()
+    )
+
+    schema_ir_v1 = module_v1.inner_scope.lookup("SmallIdSchema")
+    schema_ir_v2 = module_v2.inner_scope.lookup("SmallIdSchema")
+    assert isinstance(schema_ir_v1, schema.Schema)
+    assert isinstance(schema_ir_v2, schema.Schema)
+
+    schema_v1 = schema.InstantiatedSchema.from_typespec(schema_ir_v1)
+    schema_v2 = schema.InstantiatedSchema.from_typespec(schema_ir_v2)
+
+    serdes_v1: tachyon_dyn.SchemaSerDes[Any] = tachyon_dyn.SchemaSerDes.make(module_v1.context, schema_v1)
+    SmallIdSchemaV1 = serdes_v1.py_class  # noqa: N806 it's a type and should be camel case
+    test_uuid = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+    instance_v1 = SmallIdSchemaV1(id_field=test_uuid)
+
+    with pytest.raises(ValueError, match="max_size must be greater than 36"):
+        tachyon_dyn.upgrade_schema(module_v2.context, schema_v2, instance_v1)

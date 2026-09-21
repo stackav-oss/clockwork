@@ -2,18 +2,18 @@
 
 use clockwork::examples::demo_system::imu::imu_message;
 
-// Raw IMU packet channel
-channel RawImuChannel
+// Generic IMU channel (parameterized channel example)
+channel ImuChannel
 {
-  name: "/raw_imu";
-  message_type: Tachyon<imu_message::ImuMessage>;
+  parameters
+  {
+    name: String;
+    type: Type;
+  }
+
+  name: fmt!("{name}");
+  message_type: Tachyon<type>;
   max_num_messages: 10;
 }
 
-// IMU channel
-channel ImuChannel
-{
-  name: "/imu";
-  message_type: Tachyon<imu_message::ImuMessage>;
-  max_num_messages: 10;
-}
+RawImuChannel = ImuChannel<name="/raw_imu", type=imu_message::ImuMessage>;

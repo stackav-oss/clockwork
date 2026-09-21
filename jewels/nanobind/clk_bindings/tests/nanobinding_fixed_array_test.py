@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -69,9 +69,9 @@ def test_getitem() -> None:
     arr = FixedArray_Int32_10(expected)
     for k in range(-10, 10):
         assert arr[k] == expected[k]
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         arr[10]
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         arr[-11]
 
 

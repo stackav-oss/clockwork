@@ -1,52 +1,67 @@
 // Message from a source socket
 schema SourceMessage
 {
-    uuid: 316c6b1f-1df7-4818-bd04-d325130164b6;
-    fields
-    {
-        // An int
-        #0 an_int: UInt64;
-    }
+  uuid: 316c6b1f-1df7-4818-bd04-d325130164b6;
+  fields
+  {
+    // An int
+    #0 an_int: UInt64;
+  }
 }
 
 // Message from a sink socket
 schema SinkMessage
 {
-    uuid: b5fd0cfc-0d60-437b-9207-a6bb19ba3b77;
-    fields
-    {
-        // An int
-        #0 an_int: UInt64;
-    }
+  uuid: b5fd0cfc-0d60-437b-9207-a6bb19ba3b77;
+  fields
+  {
+    // An int
+    #0 an_int: UInt64;
+  }
 }
 
 // Message another across nodes
 schema MultiNodeMessage
 {
-    uuid: b4abd0b3-def8-46e9-912d-530eb867c062;
-    fields
-    {
-        // An int
-        #0 an_int: UInt64;
-    }
+  uuid: b4abd0b3-def8-46e9-912d-530eb867c062;
+  fields
+  {
+    // An int
+    #0 an_int: UInt64;
+  }
+}
+
+// State object for source cog
+schema SourceState
+{
+  uuid: 44ea29c3-fb33-4f1d-b942-b856879b303a;
+  fields
+  {
+    // An int
+    #0 an_int: UInt64;
+  }
 }
 
 cpp_target test_messages_multi_node
 {
-    options
-    {
-        namespace clockwork::test;
-    }
-    schema SourceMessage;
-    schema SinkMessage;
-    schema MultiNodeMessage;
+  options
+  {
+    namespace clockwork::test;
+  }
+  schema SourceMessage;
+  schema SinkMessage;
+  schema MultiNodeMessage;
+  schema SourceState;
 
-    representation Tachyon<SourceMessage>;
-    interface Tappy<SourceMessage>;
+  representation Tachyon<SourceMessage>;
+  interface Tappy<SourceMessage>;
 
-    representation Tachyon<SinkMessage>;
-    interface Tappy<SinkMessage>;
+  representation Tachyon<SinkMessage>;
+  interface Tappy<SinkMessage>;
 
-    representation Tachyon<MultiNodeMessage>;
-    interface Tappy<MultiNodeMessage>;
+  representation Tachyon<MultiNodeMessage>;
+  interface Tappy<MultiNodeMessage>;
+
+  representation Tachyon<SourceState>;
+  interface Tappy<SourceState>;
 }

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -14,11 +14,11 @@
 #include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
 #include "clockwork/logging/writers/rate_status_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/channel_observer.hh"
 #include "clockwork/pinion/channel_observer_client.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/epoll_manager.hh"
 #include "jewels/math/constants.hh"
@@ -126,6 +126,9 @@ private:
 
     /// Channel message rate counters
     MessageRateCounter message_rate_counter;
+
+    /// Number of pending subscriptions
+    std::atomic<size_t> num_pending_subscriptions{0U};
   };
 
   /// Logged channel subscription configuration
@@ -266,6 +269,11 @@ public:
   /// @return Current write backlog or LogError on failure
   [[nodiscard]] LogExpected<std::chrono::nanoseconds> get_write_backlog(jewels::time::SteadyTime current_steady_time);
 
+  /// Get the number of pending subscriptions
+  /// @note This method *MAY* be called by the thread that reports the writer state
+  /// @return Number of pending subscriptions
+  [[nodiscard]] size_t get_num_pending_subscriptions() const;
+
   /// Get the message counts by channel
   /// @note This method *MAY* be called by the thread that reports the writer state
   /// @return Message counts by channel
@@ -297,6 +305,12 @@ public:
   /// Get the name of a channel with a low message rate
   /// @return Channel name or empty string of no channels have low message rates
   [[nodiscard]] std::string_view get_low_rate_channel_name() const;
+
+  /// Get the compressor for a logged channel
+  /// @param[in] channel_name Channel name
+  /// @return Compressor pointer to use for the channel
+  [[nodiscard]] jewels::memory::NonNullSharedPtr<LiteCompressorInterface>
+  get_channel_compressor(std::string_view channel_name) const;
 
 protected:
   /// Write a clockwork message to the log from a pinion buffer
@@ -409,7 +423,7 @@ private:
   std::pmr::vector<std::shared_ptr<clockwork::pinion::ChannelObserver>> channel_observer_ptrs_;
 
   /// Shared memory subscribers for the logged channels
-  std::pmr::vector<std::shared_ptr<clockwork::pinion::ShmSubscriber>> shm_subscriber_ptrs_;
+  std::pmr::vector<std::shared_ptr<clockwork::pinion::AbstractSubscriber>> subscriber_ptrs_;
 
   /// List of indexes to the config for the pending subscriptions
   std::pmr::list<size_t> pending_subscriptions_;
@@ -427,7 +441,7 @@ private:
   clockwork::EPollManager epoll_;
 
   /// Shared memory directory open result
-  std::shared_ptr<clockwork::pinion::ShmChannelFactory> shm_channel_factory_ptr_;
+  std::shared_ptr<clockwork::pinion::AbstractChannelFactory> channel_factory_ptr_;
 
   /// Last time that we called the writers periodic callback when logging a message
   jewels::time::SteadyTime last_writer_periodic_callback_time_{std::chrono::seconds{0}};

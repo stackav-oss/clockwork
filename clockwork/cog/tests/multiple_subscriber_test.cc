@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_conditions.hh"
@@ -14,14 +14,17 @@
 #include "clockwork/cog/tests/support/fake_cog.hh"
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/cond_time_since_last_exec.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/runners/epoll_manager.hh"
@@ -29,7 +32,6 @@
 #include "clockwork/runners/online_runner.hh"
 #include "clockwork/runners/thread_pool.hh"
 #include "clockwork/runners/timerfd_timer.hh"
-#include "jewels/container/circular_buffer.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -43,6 +45,7 @@
 #include <gsl/util>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <memory_resource>
@@ -102,7 +105,6 @@ struct PublisherCogPolicy : testing::FakeCogPolicy<0, 1>
     static constexpr int64_t threshold_ns = 1'000'000; // 1 ms
     static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("c2d10425-8974-4a22-89f0-52507aedf53e").value();
-    static constexpr std::string_view name = "TimerPolicy";
   };
   using TimersType = CogTimers<TimerPolicy>;
 
@@ -113,6 +115,7 @@ struct PublisherCogPolicy : testing::FakeCogPolicy<0, 1>
       jewels::Uuid<common::EndpointClassId>::from_string("64386888-7392-45a0-a45f-28696f3d3c22").value();
     static constexpr std::string_view name = "PublisherPolicy";
     static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
   using PublishersType = CogPublishers<OutputPolicy>;
 
@@ -131,13 +134,12 @@ struct PublisherCogPolicy : testing::FakeCogPolicy<0, 1>
     const typename ConfigsType::ConfigsTuple& /*configs*/,
     const typename StatesType::StatesTuple& states,
     typename InputsType::InputDialTuple /*inputs*/,
-    typename PublishersType::PublishablesTuple publishables,
+    typename PublishersType::PublishablesTuple& publishables,
     typename TimersType::ConditionsTuple& /*timer_conditions*/,
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
     typename DiagnosticsType::ReporterType& /*diagnostics*/,
     SignalApiType& /*signals*/)
   {
-    // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return PublisherCogDial{
       .start_time = params.start_time,
       .state = jewels::memory::make_non_null_from_ref(*std::get<0>(states)),
@@ -212,6 +214,8 @@ struct SubscriberCogPolicy : testing::FakeCogPolicy<1, 0>
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
   };
 
   using InputsType = CogInputs<InputPolicy>;
@@ -230,14 +234,13 @@ struct SubscriberCogPolicy : testing::FakeCogPolicy<1, 0>
     const typename MemoryResourcesType::MemoryResourcesTuple& /*resources*/,
     const typename ConfigsType::ConfigsTuple& /*configs*/,
     const typename StatesType::StatesTuple& states,
-    typename InputsType::InputDialTuple inputs,
-    typename PublishersType::PublishablesTuple /*publishables*/,
+    typename InputsType::InputDialTuple& inputs,
+    typename PublishersType::PublishablesTuple& /*publishables*/,
     typename TimersType::ConditionsTuple& /*timer_conditions*/,
     typename ConditionsType::ConditionsTuple& /*input_conditions*/,
     typename DiagnosticsType::ReporterType& /*diagnostics*/,
     SignalApiType& /*signals*/)
   {
-    // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape) TODO(OI-3675)
     return SubscriberCogDial{
       .start_time = params.start_time,
       .state = jewels::memory::make_non_null_from_ref(*std::get<0>(states)),
@@ -270,7 +273,7 @@ TEST_CASE("multiple subscribers", "[simple_cog]")
   auto subscriber0_state = std::make_shared<CogStateDataImpl<SubscriberState>>(resource);
   auto subscriber1_state = std::make_shared<CogStateDataImpl<SubscriberState>>(resource);
 
-  InMemoryChannel<SequenceMsg, 1000, false> channel(resource);
+  auto channel = std::make_shared<InMemoryChannel<SequenceMsg, 1000, false>>(resource);
 
   auto publisher_cog = std::make_unique<SimpleCog<PublisherCogPolicy>>(
     resource, jewels::Uuid<common::CogInstanceId>{}, jewels::memory::make_non_null_from_ref(queue));
@@ -288,15 +291,13 @@ TEST_CASE("multiple subscribers", "[simple_cog]")
   REQUIRE(subscriber0_cog->set_handle(SubscriberCogPolicy::StatePolicy::endpoint_id, subscriber0_state, false));
   REQUIRE(subscriber1_cog->set_handle(SubscriberCogPolicy::StatePolicy::endpoint_id, subscriber1_state, false));
 
-  auto publisher = channel.make_publisher(2);
+  auto publisher = channel->make_publisher(2);
 
-  auto subscriber0_observer =
-    subscriber0_cog->set_handle(SubscriberCogPolicy::InputPolicy::endpoint_id, channel.make_subscriber());
+  auto subscriber0_observer = subscriber0_cog->set_handle(SubscriberCogPolicy::InputPolicy::endpoint_id, channel);
   REQUIRE(subscriber0_observer);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(**subscriber0_observer)));
 
-  auto subscriber1_observer =
-    subscriber1_cog->set_handle(SubscriberCogPolicy::InputPolicy::endpoint_id, channel.make_subscriber());
+  auto subscriber1_observer = subscriber1_cog->set_handle(SubscriberCogPolicy::InputPolicy::endpoint_id, channel);
   REQUIRE(subscriber1_observer);
   REQUIRE(publisher.add_observer(jewels::memory::make_non_null_from_ref(**subscriber1_observer)));
 

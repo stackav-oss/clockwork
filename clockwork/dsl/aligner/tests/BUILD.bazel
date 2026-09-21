@@ -1,0 +1,218 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "direction_analysis_test",
+    srcs = [
+        "direction_analysis_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:direction_analysis",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:join_plan",
+        "//clockwork/dsl/aligner:stn",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "extract_specs_test",
+    srcs = [
+        "extract_specs_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "join_plan_test",
+    srcs = [
+        "join_plan_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:join_plan",
+        "//clockwork/dsl/aligner:objective_analysis",
+        "//clockwork/dsl/aligner:stn",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "objective_analysis_test",
+    srcs = [
+        "objective_analysis_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:objective_analysis",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "partition_plan_test",
+    srcs = [
+        "partition_plan_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:partition_types",
+        "//clockwork/dsl/aligner:pipeline",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/aligner/gen:codegen_plan",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "pipeline_test",
+    srcs = [
+        "pipeline_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:objective_analysis",
+        "//clockwork/dsl/aligner:pipeline",
+        "//clockwork/dsl/aligner:presence",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "stn_test",
+    srcs = [
+        "stn_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:extract_specs",
+        "//clockwork/dsl/aligner:stn",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:units",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "type_check_test",
+    srcs = [
+        "type_check_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//std:traits.clk",
+        "//std/aligners:builtins.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/aligner:type_check",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:aligner_builtins",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:dfl_types",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)

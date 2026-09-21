@@ -1,12 +1,15 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/filesystem.hh"
 
+#include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/scope_guard/scope_guard.hh"
 #include "jewels/std/expected.hh"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <chrono>
@@ -15,14 +18,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fcntl.h>
+#include <iterator>
 #include <list>
 #include <memory_resource>
 #include <ranges>
 #include <string>
+#include <sys/file.h>
 #include <sys/sendfile.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
+#include <system_error>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -108,6 +115,120 @@ stat_file(std::string_view path, jewels::memory::MemoryResource memory_resource,
   return std::pmr::string{template_path.string_view(), memory_resource};
 }
 
+/// Compute the number of bytes to transfer in a single syscall.
+/// @param[in] remaining Number of bytes remaining to transfer
+/// @param[in] block_size Maximum transfer size requested by the caller
+/// @return Number of bytes to transfer, clamped to [1, min(block_size, SSIZE_MAX, remaining)]
+[[nodiscard]] size_t clamp_chunk_size(off_t remaining, size_t block_size)
+{
+  // This should always be true, but this is enforcing that to be true.
+  const auto positive_remaining = static_cast<size_t>(std::max(remaining, off_t{1}));
+  return std::min({positive_remaining, block_size, static_cast<size_t>(SSIZE_MAX)});
+}
+
+/// Copy the file from source to destination using copy_file_range() at the given offsets.
+/// @param[in] source Source file descriptor
+/// @param[in] destination Destination file descriptor
+/// @param[in] file_size Total size of the source file in bytes
+/// @param[in,out] offset_source Offset in the source file
+/// @param[in,out] offset_destination Offset in the destination file
+/// @param[in] block_size Maximum number of bytes to transfer per call
+/// @return ErrorCode on failure. Note that EXDEV and EOPNOTSUPP are not treated as errors, but rather indications that
+/// copy_file_range() is not supported, and the caller should fall back to another method.
+[[nodiscard]] jewels::expected<void, ErrorCode> copy_with_file_range(
+  const FileDescriptor& source,
+  const FileDescriptor& destination,
+  off_t file_size,
+  off_t& offset_source,
+  off_t& offset_destination,
+  size_t block_size)
+{
+  while (offset_source < file_size)
+  {
+    const auto remaining = file_size - offset_source;
+    const auto next_block_size = clamp_chunk_size(remaining, block_size);
+    const auto written =
+      ::copy_file_range(*source, &offset_source, *destination, &offset_destination, next_block_size, 0);
+    if (written == -1)
+    {
+      const auto error = jewels::filesystem::make_error_code(errno);
+      // These cases aren't part of the normal Linux API, but EAGAIN has been reported as a return, and EINTR is part of
+      // the BSD interface. Neither of these are fatal errors, and do not indicate a lack of support for
+      // copy_file_range, so we will just return success with 0 progress.
+      if (error == std::errc::interrupted || error == std::errc::resource_unavailable_try_again)
+      {
+        continue;
+      }
+      return jewels::unexpected(error);
+    }
+    // 0 indicates copying is done, even if we haven't reached the expected file size. This can happen if the file is
+    // modified while copying
+    if (written == 0)
+    {
+      break;
+    }
+  }
+  return {};
+}
+
+/// Copy bytes from source to destination using sendfile(), starting from the beginning of the source file.
+/// @param[in] source Source file descriptor
+/// @param[in] destination Destination file descriptor
+/// @param[in] file_size Total size of the source file in bytes
+/// @param[in] block_size Maximum number of bytes to transfer per call
+/// @return Error condition on failure
+[[nodiscard]] jewels::expected<void, ErrorCode>
+copy_with_sendfile(const FileDescriptor& source, const FileDescriptor& destination, off_t file_size, size_t block_size)
+{
+  off_t offset_source{0};
+  while (offset_source < file_size)
+  {
+    const auto remaining = file_size - offset_source;
+    const auto next_block_size = clamp_chunk_size(remaining, block_size);
+    const auto written = ::sendfile(*destination, *source, &offset_source, next_block_size);
+    if (written == -1)
+    {
+      const auto error = make_error_code(errno);
+      if (error != std::errc::interrupted && error != std::errc::resource_unavailable_try_again)
+      {
+        return jewels::unexpected(error);
+      }
+      continue;
+    }
+  }
+  return {};
+}
+
+/// Copy bytes from source to destination using copy_file_range(), starting at the given offsets.
+/// @param[in] source Source file descriptor
+/// @param[in] destination Destination file descriptor
+/// @param[in] file_size Total size of the source file in bytes
+/// @param[in] block_size Maximum number of bytes to transfer per call
+/// @return Error condition on failure
+[[nodiscard]] jewels::expected<void, ErrorCode>
+copy_with_fallback(const FileDescriptor& source, const FileDescriptor& destination, off_t file_size, size_t block_size)
+{
+  if (file_size == 0)
+  {
+    return {};
+  }
+
+  off_t offset_src{0};
+  off_t offset_dst{0};
+  // The first attempt will either make progress, or fail because it isn't supported. If it fails, we fall back to
+  // sendfile
+  auto copy_result = copy_with_file_range(source, destination, file_size, offset_src, offset_dst, block_size);
+
+  // If we get an error that isn't indicative of copy_file_range being unsupported, return the error.
+  if (
+    !copy_result && copy_result.error() != std::errc::cross_device_link &&
+    copy_result.error() != std::errc::operation_not_supported)
+  {
+    return jewels::unexpected(copy_result.error());
+  }
+  return copy_with_sendfile(source, destination, file_size, block_size);
+}
+
 } // namespace
 
 Filesystem::DirectoryToRead::DirectoryToRead(
@@ -164,7 +285,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
   return static_cast<size_t>(stat_result->st_size);
 }
 
-[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::touch(std::string_view path) const
+[[nodiscard]] jewels::expected<void, ErrorCode> Filesystem::touch(std::string_view path, uint32_t perms) const
 {
   const filesystem::Path file_path{path, memory_resource_};
   if (is_directory(file_path.parent_path()) != true)
@@ -175,7 +296,7 @@ Filesystem::open(std::string_view file_path, int32_t mode_flags, uint32_t perms)
       return expected_create_dir;
     }
   }
-  auto expected_fd = open(file_path, O_WRONLY | O_CREAT);
+  auto expected_fd = open(file_path, O_WRONLY | O_CREAT, perms);
   if (!expected_fd)
   {
     return jewels::unexpected(expected_fd.error());
@@ -382,39 +503,53 @@ Filesystem::set_position(const FileDescriptor& file_desc, size_t offset) const
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-Filesystem::copy_file(std::string_view source_path, std::string_view destination_path) const
+Filesystem::copy_file(std::string_view source_path, std::string_view destination_path, size_t block_size) const
 {
   const std::pmr::string source_path_str{source_path, memory_resource_};
   const std::pmr::string destination_path_str{destination_path, memory_resource_};
-  const auto possible_open_result = open(source_path_str, O_RDONLY);
-  if (!possible_open_result)
+  const auto maybe_source = open(source_path_str, O_RDONLY);
+  if (!maybe_source)
   {
-    return jewels::unexpected(possible_open_result.error());
+    return jewels::unexpected(maybe_source.error());
   }
-  const auto& open_result = *possible_open_result;
-  struct stat statbuf{};
-  if (fstat(*open_result, &statbuf) == -1)
+  const auto& source = *maybe_source;
+  // Lock the file to flag that it shouldn't be modified while reading
+  ::flock(*source, LOCK_SH);
+  // Ensure the lock is always unlocked
+  [[maybe_unused]] const ScopeGuard unlock_source{[&source] { ::flock(*source, LOCK_UN); }};
+
+  const auto maybe_stat = stat_file(source, verbosity_);
+  if (!maybe_stat)
   {
-    return jewels::unexpected(make_error_code(errno));
+    return jewels::unexpected(maybe_stat.error());
   }
+
+  constexpr mode_t permission_bits = S_IRWXU | S_IRWXG | S_IRWXO;
+  const mode_t source_permissions = maybe_stat->st_mode & permission_bits;
+  // Match source permissions, but also ensure we can write to it, otherwise this operation is a bit pointless
+  const mode_t destination_permissions = source_permissions | S_IWUSR;
+
   // Create new or truncate existing at destination
-  auto possible_create_result = open(destination_path_str, O_WRONLY | O_CREAT | O_TRUNC);
-  if (!possible_create_result)
+  auto maybe_destination = open(destination_path_str, O_WRONLY | O_CREAT | O_TRUNC, destination_permissions);
+  if (!maybe_destination)
   {
-    return jewels::unexpected(possible_create_result.error());
+    return jewels::unexpected(maybe_destination.error());
   }
-  auto& create_result = *possible_create_result;
-  off_t copied = 0;
-  while (copied < statbuf.st_size)
+  auto& destination = *maybe_destination;
+  // Lock the file to indicate it is being written to and shouldn't be modified.
+  ::flock(*destination, LOCK_EX);
+  [[maybe_unused]] const ScopeGuard unlock_destination{[&destination] { ::flock(*destination, LOCK_UN); }};
+
+  if (block_size == 0 || block_size > static_cast<size_t>(SSIZE_MAX))
   {
-    const ssize_t written = ::sendfile(*create_result, *open_result, &copied, SSIZE_MAX);
-    copied += written;
-    if (written == -1)
-    {
-      auto error = make_error_code(errno);
-      return jewels::unexpected(error);
-    }
+    block_size = static_cast<size_t>(std::min(SSIZE_MAX, maybe_stat->st_size));
   }
+
+  if (const auto copy_result = copy_with_fallback(source, destination, maybe_stat->st_size, block_size); !copy_result)
+  {
+    return jewels::unexpected(copy_result.error());
+  }
+
   return {};
 }
 
@@ -533,6 +668,23 @@ Filesystem::create_symlink(std::string_view target_path, std::string_view link_p
     if (verbosity_ != ErrorVerbosity::off)
     {
       jewels::log_cerr_error("Failed to create symbolic link '{}': {}", link_path, error.message());
+    }
+    return jewels::unexpected(error);
+  }
+  return {};
+}
+
+[[nodiscard]] jewels::expected<void, ErrorCode>
+Filesystem::create_hardlink(std::string_view target_path, std::string_view link_path) const
+{
+  const std::pmr::string target_path_str{target_path, memory_resource_};
+  const std::pmr::string link_path_str{link_path, memory_resource_};
+  if (const auto ret = ::link(target_path_str.c_str(), link_path_str.c_str()); ret < 0)
+  {
+    const auto error = make_error_code(errno);
+    if (verbosity_ != ErrorVerbosity::off)
+    {
+      jewels::log_cerr_error("Failed to create hard link '{}': {}", link_path, error.message());
     }
     return jewels::unexpected(error);
   }
@@ -743,5 +895,75 @@ jewels::expected<size_t, ErrorCode> Filesystem::remove_all(std::string_view path
   }
 
   return count;
+}
+
+[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> Filesystem::search_path(std::string_view binary_name) const
+{
+  // Validate that binary_name is a simple filename (no path separators)
+  if (binary_name.find('/') != std::string_view::npos)
+  {
+    if (verbosity_ != ErrorVerbosity::off)
+    {
+      jewels::log_cerr_error("binary_name must be a simple filename, not a path: '{}'", binary_name);
+    }
+    return jewels::unexpected(make_error_code(ENOENT));
+  }
+
+  // Get PATH environment variable
+  const char* path_env = std::getenv("PATH"); // NOLINT(concurrency-mt-unsafe) Thread-unsafety documented in api
+  if (path_env == nullptr || std::strlen(path_env) == 0U)
+  {
+    if (verbosity_ != ErrorVerbosity::off)
+    {
+      jewels::log_cerr_error("PATH environment variable is not set or empty");
+    }
+    return jewels::unexpected(make_error_code(ENOENT));
+  }
+
+  for (const auto& entry : std::string_view{path_env} | std::views::split(':'))
+  {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic) Address-of-dereference needed: split_view's
+    // inner iterator satisfies only forward_iterator, so string_view's contiguous_iterator constructor is unavailable
+    const std::string_view entry_sv{&*entry.begin(), static_cast<size_t>(std::ranges::distance(entry))};
+    if (entry_sv.empty())
+    {
+      continue;
+    }
+
+    const filesystem::Path candidate_path = filesystem::Path{entry_sv, memory_resource_} / binary_name;
+
+    const auto stat_result = stat_file(candidate_path.string_view(), memory_resource_, verbosity_);
+    if (!stat_result)
+    {
+      if (stat_result.error() != make_error_code(ENOENT))
+      {
+        return jewels::unexpected(stat_result.error());
+      }
+      // ENOENT is expected when the binary is not in this directory; other errors are already logged by stat_file
+      continue;
+    }
+
+    constexpr auto executable_bits = S_IXUSR | S_IXGRP | S_IXOTH;
+    if ((stat_result->st_mode & static_cast<uint32_t>(executable_bits)) != 0U)
+    {
+      return filesystem::Path{candidate_path.string_view(), memory_resource_};
+    }
+  }
+
+  if (verbosity_ != ErrorVerbosity::off)
+  {
+    jewels::log_cerr_error("Binary '{}' not found in PATH", binary_name);
+  }
+  return jewels::unexpected(make_error_code(ENOENT));
+}
+
+[[nodiscard]] jewels::expected<void, ErrorCode> remove(const jewels::filesystem::Path& path)
+{
+  if (const auto result = ::remove(path.c_str()); result != 0U)
+  {
+    const auto err_code = make_error_code(errno);
+    return jewels::unexpected(err_code);
+  }
+  return {};
 }
 } // namespace jewels::filesystem

@@ -1,9 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_common.hh"
+#include "clockwork/pinion/detail/tcp_socket.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
@@ -19,6 +21,7 @@
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/networking/sock_opt.hh"
 #include "jewels/networking/socket_address.hh"
 #include "jewels/std/span.hh"
@@ -39,7 +42,6 @@
 #include <memory_resource>
 #include <netinet/in.h>
 #include <ranges>
-#include <ratio>
 #include <span>
 #include <string_view>
 #include <sys/socket.h>
@@ -62,23 +64,23 @@ TEST_CASE("TcpBridgeClient | Receive")
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots, false> channel(memres);
-  auto subscriber = channel.make_subscriber();
+  auto channel = std::make_shared<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto [listen_socket, listen_addr] = support::make_listen_socket();
 
-  Tappy<TcpBridgeClientConfig> config{};
-  config.get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
-  config.get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
-  config.get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
-  config.get_underlying_server_address().set_truncate(support::local_socket_host);
-  config.set_server_port(::ntohs(listen_addr.port()));
+  auto config = std::make_unique<Tappy<TcpBridgeClientConfig>>();
+  config->get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
+  config->get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
+  config->get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
+  config->get_underlying_server_address().set_truncate(support::local_socket_host);
+  config->set_server_port(::ntohs(listen_addr.port()));
 
   const auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   // Create the bridge.
-  const auto bridge_client = TcpBridgeClient::make(
-    memres, config, channel.make_publisher(max_observer), channel.make_subscriber(), diagnostics_state);
+  const auto bridge_client =
+    TcpBridgeClient::make(memres, *config, channel->make_publisher(max_observer), channel, diagnostics_state);
   REQUIRE(bridge_client);
+  config.reset();
 
   const auto accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
@@ -101,8 +103,8 @@ TEST_CASE("TcpBridgeClient | Receive")
         std::as_bytes(jewels::as_single_item_span(expected[i])));
       CHECK(support::recv_acknowledgement(accepted, expected_seqnos[i]));
     }
-    CHECK(testing::dump<Msg>(subscriber) == expected);
-    auto messages = subscriber.available();
+    CHECK(testing::dump<Msg>(channel) == expected);
+    auto messages = channel->available();
     for (size_t i = 0; i < messages.size(); ++i)
     {
       CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps[i]);
@@ -135,24 +137,24 @@ TEST_CASE("TcpBridgeClient | Receive")
       // First, send over just the header.
       support::send_header(
         accepted, expected_seqnos[i], msg_span.size(), expected_publish_stamps[i], expected_commit_stamps[i]);
-      CHECK(subscriber.available().size() == i);
+      CHECK(channel->available().size() == i);
 
       // Pretend the message got delivered in two chunks for some reason.
       REQUIRE(static_cast<size_t>(::send(accepted, msg_span.first(chunk_size).data(), chunk_size, 0)) == chunk_size);
-      CHECK(subscriber.available().size() == i);
+      CHECK(channel->available().size() == i);
       REQUIRE(chunk_size == 2U);
       REQUIRE(
         static_cast<size_t>(::send(accepted, msg_span.subspan(chunk_size).data(), msg_span.size() - chunk_size, 0)) ==
         msg_span.size() - chunk_size);
-      CHECK(subscriber.available().size() == i);
+      CHECK(channel->available().size() == i);
 
       // Send the tail.
       REQUIRE(::send(accepted, &tail, sizeof(tail), 0) == sizeof(tail));
       CHECK(support::recv_acknowledgement(accepted, expected_seqnos[i]));
-      CHECK(subscriber.available().size() == i + 1);
+      CHECK(channel->available().size() == i + 1);
     }
-    CHECK(testing::dump<Msg>(subscriber) == expected);
-    auto messages = subscriber.available();
+    CHECK(testing::dump<Msg>(channel) == expected);
+    auto messages = channel->available();
     for (size_t i = 0; i < messages.size(); ++i)
     {
       CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps[i]);
@@ -170,7 +172,7 @@ TEST_CASE("TcpBridgeClient | Receive")
       accepted, 0, 0L, 0L, std::as_bytes(jewels::as_single_item_span(msg)), support::CorruptionType::corrupt_counts);
     // The client should have dropped the message but still sent an acknowledgement
     CHECK(support::recv_acknowledgement(accepted, 0U));
-    CHECK(subscriber.available().empty());
+    CHECK(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     CHECK(
       support::compare_diagnostics_counters(
@@ -184,7 +186,7 @@ TEST_CASE("TcpBridgeClient | Receive")
       accepted, 0, 0L, 0L, std::as_bytes(jewels::as_single_item_span(msg)), support::CorruptionType::corrupt_data);
     // The client should have dropped the message but still sent an acknowledgement
     CHECK(support::recv_acknowledgement(accepted, 0U));
-    CHECK(subscriber.available().empty());
+    CHECK(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     CHECK(
       support::compare_diagnostics_counters(
@@ -204,7 +206,7 @@ TEST_CASE("TcpBridgeClient | Receive")
       support::CorruptionType::corrupt_header_checksum);
     // The client should have detected the bad checksum and closed the connection
     CHECK(support::socket_is_closed(accepted));
-    REQUIRE(subscriber.available().empty());
+    REQUIRE(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     diagnostics_counters.max_bridge_latency = {};
     diagnostics_counters.max_latency_channel_name = {};
@@ -221,7 +223,7 @@ TEST_CASE("TcpBridgeClient | Receive")
     // The client should have detected the message size mismatch, discarded any
     // pending writes to the channel, and closed the socket.
     CHECK(support::socket_is_closed(accepted));
-    CHECK(subscriber.available().empty());
+    CHECK(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     CHECK(
       support::compare_diagnostics_counters(
@@ -240,7 +242,7 @@ TEST_CASE("TcpBridgeClient | Receive")
       support::CorruptionType::corrupt_payload_type);
     // The client should have detected the bad payload type and closed the connection
     CHECK(support::socket_is_closed(accepted));
-    CHECK(subscriber.available().empty());
+    CHECK(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     CHECK(
       support::compare_diagnostics_counters(
@@ -259,7 +261,7 @@ TEST_CASE("TcpBridgeClient | Receive")
       support::CorruptionType::corrupt_magic_number);
     // The client should have detected the bad magic number and closed the connection
     CHECK(support::socket_is_closed(accepted));
-    CHECK(subscriber.available().empty());
+    CHECK(channel->available().empty());
     auto diagnostics_counters = diagnostics_state->get_and_reset_counters();
     CHECK(
       support::compare_diagnostics_counters(
@@ -279,23 +281,23 @@ TEST_CASE("TcpBridgeClient | Reconnect")
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots, false> channel(memres);
-  auto subscriber = channel.make_subscriber();
+  auto channel = std::make_shared<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto [listen_socket, listen_addr] = support::make_listen_socket();
 
-  Tappy<TcpBridgeClientConfig> config{};
-  config.get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
-  config.get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
-  config.get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
-  config.get_underlying_server_address().set_truncate(support::local_socket_host);
-  config.set_server_port(::ntohs(listen_addr.port()));
+  auto config = std::make_unique<Tappy<TcpBridgeClientConfig>>();
+  config->get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
+  config->get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
+  config->get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
+  config->get_underlying_server_address().set_truncate(support::local_socket_host);
+  config->set_server_port(::ntohs(listen_addr.port()));
 
   auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   // Create the bridge.
   auto bridge_client =
-    TcpBridgeClient::make(memres, config, channel.make_publisher(max_observer), subscriber, diagnostics_state);
+    TcpBridgeClient::make(memres, *config, channel->make_publisher(max_observer), channel, diagnostics_state);
   REQUIRE(bridge_client);
+  config.reset();
 
   auto accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
@@ -316,8 +318,8 @@ TEST_CASE("TcpBridgeClient | Reconnect")
       std::as_bytes(jewels::as_single_item_span(expected1[i])));
     CHECK(support::recv_acknowledgement(accepted, expected_seqnos1[i]));
   }
-  CHECK(testing::dump<Msg>(subscriber) == expected1);
-  auto messages = subscriber.available();
+  CHECK(testing::dump<Msg>(channel) == expected1);
+  auto messages = channel->available();
   for (size_t i = 0; i < messages.size(); ++i)
   {
     CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps1[i]);
@@ -328,23 +330,24 @@ TEST_CASE("TcpBridgeClient | Reconnect")
   listen_socket.reset();
   ::close(accepted);
 
-  const auto close_deadline = jewels::time::SyncClock::now() + support::default_recv_timeout;
-  while (bridge_client->socket_fd() != -1 && jewels::time::SyncClock::now() < close_deadline)
-  {
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
-  }
-  REQUIRE(bridge_client->socket_fd() == -1);
-
   listen_socket = support::make_listen_socket(listen_addr);
 
   const auto open_deadline = jewels::time::SyncClock::now() + support::default_recv_timeout;
-  while (bridge_client->socket_fd() == -1 && jewels::time::SyncClock::now() < open_deadline)
+  while (jewels::time::SyncClock::now() < open_deadline)
   {
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
+    accepted = support::accept_connection(*listen_socket);
+    if (accepted >= 0)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
-  REQUIRE(bridge_client->socket_fd() != -1);
+  while (jewels::time::SyncClock::now() < open_deadline && !bridge_client->is_connected())
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  REQUIRE(bridge_client->is_connected());
 
-  accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
   REQUIRE(set_nonblocking(accepted, true));
   REQUIRE(jewels::networking::set_sock_opt<jewels::networking::SockOption::tcp_nodelay>(accepted, 1));
@@ -364,8 +367,8 @@ TEST_CASE("TcpBridgeClient | Reconnect")
       std::as_bytes(jewels::as_single_item_span(expected2[i])));
     CHECK(support::recv_acknowledgement(accepted, expected_seqnos2[i]));
   }
-  CHECK(testing::dump<Msg>(subscriber) == expected2);
-  messages = subscriber.available();
+  CHECK(testing::dump<Msg>(channel) == expected2);
+  messages = channel->available();
   for (size_t i = 0; i < messages.size(); ++i)
   {
     CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps2[i]);
@@ -391,23 +394,23 @@ TEST_CASE("TcpBridgeClient | Reconnect after no keep-alives")
   constexpr size_t max_observer = 1;
 
   const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
-  InMemoryChannel<Msg, num_slots, false> channel(memres);
-  auto subscriber = channel.make_subscriber();
+  auto channel = std::make_shared<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto [listen_socket, listen_addr] = support::make_listen_socket();
 
-  Tappy<TcpBridgeClientConfig> config{};
-  config.get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
-  config.get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
-  config.get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
-  config.get_underlying_server_address().set_truncate(support::local_socket_host);
-  config.set_server_port(::ntohs(listen_addr.port()));
+  auto config = std::make_unique<Tappy<TcpBridgeClientConfig>>();
+  config->get_mutable_publisher_endpoint().set_publisher_id(jewels::Uuid<common::EndpointInstanceId>::random_uuid());
+  config->get_mutable_publisher_endpoint().get_underlying_channel_name().set_truncate("test_channel");
+  config->get_mutable_publisher_endpoint().set_is_bulk_data(is_bulk_data);
+  config->get_underlying_server_address().set_truncate(support::local_socket_host);
+  config->set_server_port(::ntohs(listen_addr.port()));
 
   auto diagnostics_state = std::make_shared<TcpBridgeDiagnosticsState>();
 
   // Create the bridge.
   auto bridge_client =
-    TcpBridgeClient::make(memres, config, channel.make_publisher(max_observer), subscriber, diagnostics_state);
+    TcpBridgeClient::make(memres, *config, channel->make_publisher(max_observer), channel, diagnostics_state);
   REQUIRE(bridge_client);
+  config.reset();
 
   auto accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
@@ -428,8 +431,8 @@ TEST_CASE("TcpBridgeClient | Reconnect after no keep-alives")
       std::as_bytes(jewels::as_single_item_span(expected1[i])));
     CHECK(support::recv_acknowledgement(accepted, expected_seqnos1[i]));
   }
-  CHECK(testing::dump<Msg>(subscriber) == expected1);
-  auto messages = subscriber.available();
+  CHECK(testing::dump<Msg>(channel) == expected1);
+  auto messages = channel->available();
   for (size_t i = 0; i < messages.size(); ++i)
   {
     CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps1[i]);
@@ -437,19 +440,25 @@ TEST_CASE("TcpBridgeClient | Reconnect after no keep-alives")
     CHECK(messages[static_cast<int64_t>(i)].header()->source_commit_timestamp == expected_commit_stamps1[i]);
   }
 
-  CHECK(support::socket_is_closed(accepted, tcp_bridge_reconnect_interval + std::chrono::seconds(1)));
-  REQUIRE(bridge_client->socket_fd() == -1);
-
+  CHECK(support::socket_is_closed(accepted, tcp_bridge_reconnect_interval + std::chrono::seconds(2)));
   ::close(accepted);
 
   const auto open_deadline = jewels::time::SyncClock::now() + support::default_recv_timeout;
-  while (bridge_client->socket_fd() == -1 && jewels::time::SyncClock::now() < open_deadline)
+  while (jewels::time::SyncClock::now() < open_deadline)
   {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    accepted = support::accept_connection(*listen_socket);
+    if (accepted >= 0)
+    {
+      break;
+    }
   }
-  REQUIRE(bridge_client->socket_fd() != -1);
+  while (!bridge_client->is_connected() && jewels::time::SyncClock::now() < open_deadline)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  REQUIRE(bridge_client->is_connected());
 
-  accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
   REQUIRE(set_nonblocking(accepted, true));
   REQUIRE(jewels::networking::set_sock_opt<jewels::networking::SockOption::tcp_nodelay>(accepted, 1));
@@ -468,8 +477,8 @@ TEST_CASE("TcpBridgeClient | Reconnect after no keep-alives")
       std::as_bytes(jewels::as_single_item_span(expected2[i])));
     CHECK(support::recv_acknowledgement(accepted, expected_seqnos2[i]));
   }
-  CHECK(testing::dump<Msg>(subscriber) == expected2);
-  messages = subscriber.available();
+  CHECK(testing::dump<Msg>(channel) == expected2);
+  messages = channel->available();
   for (size_t i = 0; i < messages.size(); ++i)
   {
     CHECK(messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps2[i]);

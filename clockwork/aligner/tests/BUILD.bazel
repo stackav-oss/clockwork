@@ -1,0 +1,17 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "timer_control_test",
+    srcs = ["timer_control_test.cc"],
+    deps = [
+        "//clockwork/aligner:timer_control",
+        "//jewels/callsig:outcome",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)

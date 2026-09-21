@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Definition of custom Clockwork compilation rule."""
@@ -9,6 +9,7 @@
 
 load("@bazel_lib//lib:diff_test.bzl", "diff_test")
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_file")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
 load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
 load("@build_stack_rules_proto//rules/go:proto_go_library.bzl", "proto_go_library")
@@ -22,6 +23,7 @@ ClkInfo = provider("Collects Clockwork source files", fields = ["src", "srcs", "
 _GENERATED_CODE_CLK_DEPS = [
     "@clockwork//clockwork/dsl/cog:common_cog_event_metrics_clk",
     "@clockwork//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+    "@clockwork//clockwork/dsl/cog:cog_execution_metrics_signals_clk",
 ]
 
 _MINIMAL_GENERATED_CODE_CC_DEPS = [
@@ -29,10 +31,12 @@ _MINIMAL_GENERATED_CODE_CC_DEPS = [
     "@clockwork//clockwork:tags",
     "@clockwork//jewels/container:at",
     "@clockwork//jewels/container:compare",
+    "@clockwork//jewels/container/tap:bitset",
     "@clockwork//jewels/container/tap:optional",
     "@clockwork//jewels/container/tap:protobuf_to_tap",
     "@clockwork//jewels/container/tap:soa",
     "@clockwork//jewels/container/tap:tap_to_protobuf",
+    "@clockwork//jewels/container/tap:tensor",
     "@clockwork//jewels/container/tap:var_array",
     "@clockwork//jewels/container/tap:var_string",
     "@clockwork//jewels/log_cerr:log_cerr",
@@ -44,6 +48,7 @@ _MINIMAL_GENERATED_CODE_CC_DEPS = [
     "@clockwork//jewels/std:span",
     "@clockwork//jewels/time:sync_time",
     "@clockwork//jewels/utility:enum_flags",
+    "@clockwork//jewels/utility:string_param",
     "@clockwork//jewels/uuid:uuid",
     "@wise_enum",
 ]
@@ -71,7 +76,7 @@ _GENERATED_CODE_CC_DEPS = [
     "@clockwork//clockwork/dial:cond_time_since_last_exec",
     "@clockwork//clockwork/dial:include_common",
     "@clockwork//clockwork/dial:msg_input",
-    "@clockwork//clockwork/pinion:publisher_handle",
+    "@clockwork//clockwork/pinion:abstract_channel",
     "@clockwork//clockwork/pinion:bidirectional_udp",
     "@clockwork//clockwork/pinion:incoming_udp",
     "@clockwork//clockwork/pinion:outgoing_udp",
@@ -89,8 +94,8 @@ _GENERATED_CODE_PY_DEPS = [
 ]
 
 _GENERATED_TEST_CODE_CC_DEPS = [
-    "@clockwork//clockwork/cog/tests/support:unit_test_cog",
-    "@clockwork//clockwork/common/tests/support:dummy_cog_queue",
+    "@clockwork//clockwork/cog/wrappers:unit_test_cog",
+    "@clockwork//clockwork/cog/wrappers:dummy_cog_queue",
 ]
 
 _GENERATED_CODE_NANOBIND_CC_DEPS = [
@@ -128,6 +133,35 @@ _GENERATED_CODE_PY_COG_IMPL_DEPS = [
     "@clockwork//clockwork/python:python_object",
 ]
 
+def _selected_clkc(ctx):
+    return (ctx.executable._clkc, ctx.attr._clkc)
+
+def _clkc_env(clkc_target, use_rust_parser):
+    env = dict(clkc_target[RunEnvironmentInfo].environment)
+    if use_rust_parser:
+        env["CLOCKWORK_PARSER_BACKEND"] = "rust"
+    else:
+        env["CLOCKWORK_PARSER_BACKEND"] = "python"
+    return env
+
+def _clk_deps_with_builtins(deps, minimize_builtin_deps):
+    clk_deps = [] + deps
+    if not minimize_builtin_deps:
+        # Normalize labels for dedup: handle both @clockwork//... and //... forms
+        existing = {}
+        for d in deps:
+            norm = d
+            if norm.startswith("@clockwork//"):
+                norm = norm[len("@clockwork"):]
+            existing[norm] = True
+        for d in _GENERATED_CODE_CLK_DEPS:
+            norm = d
+            if norm.startswith("@clockwork//"):
+                norm = norm[len("@clockwork"):]
+            if norm not in existing:
+                clk_deps.append(d)
+    return clk_deps
+
 def _clk_impl(ctx):
     if len(ctx.files.srcs) != 1:
         error = "Must provide exactly one .clk file for srcs {}".format([s.path for s in ctx.files.srcs])
@@ -135,42 +169,46 @@ def _clk_impl(ctx):
     src = ctx.files.srcs[0]
     srcs = depset([src], transitive = [dep[ClkInfo].srcs for dep in ctx.attr.deps if ClkInfo in dep])
 
-    input_dep_cache = depset([], transitive = [dep[ClkInfo].cache for dep in ctx.attr.deps if ClkInfo in dep])
-    cache_files = []
+    use_rust_parser = ctx.attr._use_rust_parser[BuildSettingInfo].value
+    marker_files = []
     if ctx.attr.compile:
-        pkl_file = ctx.actions.declare_file(src.basename + "_pkl")
-        cache_files.append(pkl_file)
+        if not ctx.outputs.outs:
+            marker_files.append(ctx.actions.declare_file(src.basename + "_compile_marker"))
 
         args = ctx.actions.args()
         args.add("compile-module")
         args.add("--input")
         args.add(src.path)
         args.add("--root")
-        args.add(pkl_file.root.path)
+        compile_outputs = ctx.outputs.outs + marker_files
+        args.add(compile_outputs[0].root.path)
 
         args.add("--repo")
         args.add(ctx.attr.repo)
 
         if ctx.attr.write_json_files:
             args.add("--write-json-files")
+        if marker_files:
+            args.add("--marker-output")
+            args.add(marker_files[0].path)
+
+        clkc_executable, clkc_target = _selected_clkc(ctx)
 
         ctx.actions.run(
-            inputs = depset(transitive = [srcs, ctx.attr._clkc[DefaultInfo].default_runfiles.files, input_dep_cache]),
-            outputs = ctx.outputs.outs + [pkl_file],
+            inputs = depset(transitive = [srcs, clkc_target[DefaultInfo].default_runfiles.files]),
+            outputs = compile_outputs,
             arguments = [args],
             progress_message = "Compiling Clockwork module %s" % ctx.files.srcs[0].short_path,
             mnemonic = "CompileClockworkModule",
-            executable = ctx.executable._clkc,
-            env = ctx.attr._clkc[RunEnvironmentInfo].environment,
+            executable = clkc_executable,
+            env = _clkc_env(clkc_target, use_rust_parser),
         )
 
-    new_cache = depset(cache_files, transitive = [input_dep_cache])
-
-    files = depset(direct = ctx.outputs.outs + [src] + cache_files, transitive = [srcs, ctx.attr._clkc[DefaultInfo].files])
-    runfiles = ctx.runfiles(files = ctx.outputs.outs + [src] + cache_files).merge_all([dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps])
+    files = depset(direct = ctx.outputs.outs + [src] + marker_files, transitive = [srcs, ctx.attr._clkc[DefaultInfo].files])
+    runfiles = ctx.runfiles(files = ctx.outputs.outs + [src] + marker_files).merge_all([dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps])
     return [
         DefaultInfo(files = files, runfiles = runfiles),
-        ClkInfo(src = src, srcs = srcs, cache = new_cache),
+        ClkInfo(src = src, srcs = srcs, cache = depset()),
         OutputGroupInfo(clk_files = srcs),
     ]
 
@@ -188,6 +226,71 @@ _clk = rule(
             default = Label("//clockwork/dsl:clkc"),
             executable = True,
         ),
+        "_use_rust_parser": attr.label(default = Label("//clockwork/dsl:use_rust_parser")),
+    },
+)
+
+def _clk_compile_benchmark_impl(ctx):
+    if len(ctx.files.srcs) != 1:
+        error = "Must provide exactly one .clk file for srcs {}".format([s.path for s in ctx.files.srcs])
+        fail(error)
+    src = ctx.files.srcs[0]
+    srcs = depset([src], transitive = [dep[ClkInfo].srcs for dep in ctx.attr.deps if ClkInfo in dep])
+
+    use_rust_parser = ctx.attr._use_rust_parser[BuildSettingInfo].value
+
+    output_dir = ctx.actions.declare_directory(ctx.label.name + "_outputs")
+    timing_output = ctx.actions.declare_file(ctx.label.name + ".json")
+
+    args = ctx.actions.args()
+    args.add("benchmark-compile-module")
+    args.add("--input")
+    args.add(src.path)
+    args.add("--root")
+    args.add(output_dir.path)
+    args.add("--repo")
+    args.add(ctx.attr.repo)
+    args.add("--timing-output")
+    args.add(timing_output.path)
+    args.add("--nonce")
+    args.add(ctx.attr._benchmark_nonce[BuildSettingInfo].value)
+
+    if ctx.attr._profile_benchmark[BuildSettingInfo].value:
+        args.add("--profile-output")
+        args.add(output_dir.path + "/clkc.cprofile")
+
+    if ctx.attr.write_json_files:
+        args.add("--write-json-files")
+
+    clkc_executable, clkc_target = _selected_clkc(ctx)
+
+    ctx.actions.run(
+        inputs = depset(transitive = [srcs, clkc_target[DefaultInfo].default_runfiles.files]),
+        outputs = [output_dir, timing_output],
+        arguments = [args],
+        progress_message = "Benchmarking Clockwork module compile %s" % ctx.files.srcs[0].short_path,
+        mnemonic = "BenchmarkCompileClockworkModule",
+        executable = clkc_executable,
+        env = _clkc_env(clkc_target, use_rust_parser),
+    )
+
+    return [DefaultInfo(files = depset([timing_output, output_dir]))]
+
+_clk_compile_benchmark = rule(
+    implementation = _clk_compile_benchmark_impl,
+    attrs = {
+        "deps": attr.label_list(),
+        "repo": attr.string(mandatory = True),
+        "srcs": attr.label_list(allow_files = [".clk"]),
+        "write_json_files": attr.bool(default = False),
+        "_benchmark_nonce": attr.label(default = Label("//clockwork/dsl:clk_compile_benchmark_nonce")),
+        "_clkc": attr.label(
+            cfg = "exec",
+            default = Label("//clockwork/dsl:clkc"),
+            executable = True,
+        ),
+        "_profile_benchmark": attr.label(default = Label("//clockwork/dsl:profile_clk_compile_benchmark")),
+        "_use_rust_parser": attr.label(default = Label("//clockwork/dsl:use_rust_parser")),
     },
 )
 
@@ -235,6 +338,7 @@ def _update_clk_targets(name, srcs, testonly):
             tags = ["clk-deps"],
             #TODO(OI-3066) Resolve write_source_file issue across multiple repos.
             diff_test = True,
+            diff_test_failure_message = "The BUILD file {} is out of date.".format(native.package_name() + "/BUILD.bazel"),
         )
     else:
         # write_source_file can't write to external repos, so we just add a diff_test to ensure the file is up to date.
@@ -243,7 +347,7 @@ def _update_clk_targets(name, srcs, testonly):
             file1 = generated_build_file,
             file2 = "BUILD.bazel",
             tags = ["clk-deps"],
-            failure_message = "The external BUILD file {} is out of date. Please run clk-deps in the {} repo to fix automatically.".format(native.package_name() + "/BUILD.bazel", native.repo_name()),
+            failure_message = "The external BUILD file {} is out of date.".format(native.package_name() + "/BUILD.bazel"),
             diff_args = ["--unified"],
         )
 
@@ -253,6 +357,35 @@ def _update_clk_targets(name, srcs, testonly):
             name = name + ".build",
             tags = ["clk-deps"],
         )
+
+def clk_compile_benchmark(
+        name,
+        srcs,
+        deps = [],
+        minimize_builtin_deps = False,
+        write_json_files = False,
+        testonly = None,
+        **kwargs):
+    """Benchmark a single Clockwork compile action into a tree artifact.
+
+    Args:
+        name: The name of the benchmark target.
+        srcs: A list containing a single .clk file.
+        deps: A list of dependencies for the .clk file.
+        minimize_builtin_deps: A flag to minimize the dependencies pulled into the benchmark action.
+        write_json_files: Whether to write JSON versions of the config or not.
+        testonly: Whether this is a test-only target.
+        **kwargs: Additional arguments passed through to the underlying benchmark rule.
+    """
+    _clk_compile_benchmark(
+        name = name,
+        srcs = srcs,
+        repo = native.module_name(),
+        deps = _clk_deps_with_builtins(deps, minimize_builtin_deps),
+        write_json_files = write_json_files,
+        testonly = testonly,
+        **kwargs
+    )
 
 def clk(
         name,
@@ -265,6 +398,9 @@ def clk(
         minimize_builtin_deps = False,
         cpp_deps = [],
         cpp_exe_deps = [],
+        cpp_combo_test_aligner_deps = [],
+        nanobind_cpp_deps = [],
+        nanobind_copts = [],
         py_deps = [],
         proto_deps = [],
         go_import_path = None,
@@ -286,6 +422,9 @@ def clk(
                        are needed by the generated code.
         cpp_deps: A list of dependencies for the generated cpp targets (cpp, cpp_cog, py_cog, cpp_exe, py_exe, nanobind)
         cpp_exe_deps: A list of dependencies for the generated cpp_exe targets.
+        cpp_combo_test_aligner_deps: A list of aligner test wrapper targets needed by the combo test wrapper.
+        nanobind_cpp_deps: A list of C++ dependencies for the generated nanobind target.
+        nanobind_copts: A list of C++ compiler options for the generated nanobind target.
         py_deps: A list of dependencies for the generated py targets (py, py_cog, py_exe, nanobind).
         proto_deps: A list of protobuf dependencies for the generated targets.
         go_import_path: Import path string for the proto go library.
@@ -294,9 +433,7 @@ def clk(
         **kwargs: Additional arguments passed through to the underlying clk rule.
     """
 
-    clk_deps = [] + deps
-    if generate != None and not minimize_builtin_deps:
-        clk_deps.extend(_GENERATED_CODE_CLK_DEPS)
+    clk_deps = _clk_deps_with_builtins(deps, minimize_builtin_deps)
 
     _clk(
         name = name,
@@ -328,15 +465,39 @@ def clk(
         proto_go_deps.append(proto_dep + "_go_library")
 
     if "cpp" in generate:
+        # Whether this module declares any cog or aligner. The umbrella
+        # ``_cc`` library is alwayslink for these so the registration
+        # statics in ``_cc.cc`` are pulled into the consumer's link.
+        cog_kind_present = (
+            "cpp_cog" in generate or
+            "py_cog" in generate or
+            "cpp_aligner" in generate
+        )
+
+        # Schemas / enums / tags / interfaces / converters / etc. Always
+        # emitted for any cpp-generating module.
+        cc_library(
+            name = name + "_cc_types",
+            srcs = [
+                name + "_cc_types.cc",
+                name + "_cc_types.inl",
+            ],
+            hdrs = [name + "_cc_types.hh"],
+            data = data + [":" + name],
+            deps = cpp_deps + proto_cpp_deps + generated_code_cc_deps,
+            testonly = testonly,
+            **kwargs
+        )
+
         cpp_cog_opts = dict(kwargs)
-        if "cpp_cog" in generate or "py_cog" in generate:
-            cpp_cog_deps = [
-                ":" + name + "_cc_impl",
+        cog_kind_deps = []
+        if cog_kind_present:
+            cog_kind_deps = [
+                ":" + name + "_cc_cog",
                 ":" + name + "_cc_dial",
+                ":" + name + "_cc_impl",
             ]
             cpp_cog_opts["alwayslink"] = True
-        else:
-            cpp_cog_deps = []
 
         cc_library(
             name = name + "_cc",
@@ -346,7 +507,7 @@ def clk(
             ],
             hdrs = [name + "_cc.hh"],
             data = data + [":" + name],
-            deps = cpp_deps + cpp_cog_deps + proto_cpp_deps + generated_code_cc_deps,
+            deps = [":" + name + "_cc_types"] + cog_kind_deps + cpp_deps + proto_cpp_deps + generated_code_cc_deps,
             testonly = testonly,
             **cpp_cog_opts
         )
@@ -362,6 +523,7 @@ def clk(
         )
 
     if "nanobind" in generate:
+        # Keep nanobind-only type caster deps and force-includes out of the generated C++ library.
         py_cc_binding(
             name = name + "_nb",
             srcs = [
@@ -370,8 +532,9 @@ def clk(
                 name + "_nb.inl",
             ],
             data = data + [":" + name],
-            deps = [":" + name + "_cc"] + cpp_deps + proto_cpp_deps + _GENERATED_CODE_NANOBIND_CC_DEPS,
+            deps = [":" + name + "_cc"] + cpp_deps + proto_cpp_deps + nanobind_cpp_deps + _GENERATED_CODE_NANOBIND_CC_DEPS,
             py_deps = py_deps + proto_py_deps + _GENERATED_CODE_NANOBIND_PY_DEPS,
+            copts = nanobind_copts,
             testonly = testonly,
             **kwargs
         )
@@ -461,7 +624,7 @@ def clk(
             **kwargs
         )
 
-    if "cpp_cog" in generate or "py_cog" in generate:
+    if "cpp_cog" in generate or "py_cog" in generate or "cpp_aligner" in generate:
         cc_library(
             name = name + "_cc_dial",
             srcs = [
@@ -470,12 +633,28 @@ def clk(
             ],
             hdrs = [name + "_cc_dial.hh"],
             data = [":" + name],
-            deps = cpp_deps + proto_cpp_deps + generated_code_cc_deps,
+            deps = [":" + name + "_cc_types"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps,
+            testonly = testonly,
+            **kwargs
+        )
+
+        cc_library(
+            name = name + "_cc_cog",
+            srcs = [
+                name + "_cc_cog.cc",
+                name + "_cc_cog.inl",
+            ],
+            hdrs = [name + "_cc_cog.hh"],
+            data = [":" + name],
+            deps = [":" + name + "_cc_dial", ":" + name + "_cc_types"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps,
             testonly = testonly,
             **kwargs
         )
 
         if "cpp_test_cog" in generate:
+            combo_deps = []
+            if "cpp_combo_test" in generate:
+                combo_deps = cpp_combo_test_aligner_deps
             cc_library(
                 name = name + "_cc_test",
                 srcs = [
@@ -484,10 +663,30 @@ def clk(
                 ],
                 hdrs = [name + "_cc_test.hh"],
                 data = [":" + name],
-                deps = [":" + name + "_cc"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps + _GENERATED_TEST_CODE_CC_DEPS,
+                deps = [":" + name + "_cc"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps + _GENERATED_TEST_CODE_CC_DEPS + combo_deps,
                 testonly = True,
                 **kwargs
             )
+
+    # Generated _cc_impl is emitted by the codegen for py_cog and cpp_aligner;
+    # for plain cpp_cog the user hand-writes _cc_impl.cc and the
+    # corresponding cc_library in their BUILD.bazel.
+    if "py_cog" in generate or "cpp_aligner" in generate:
+        impl_deps = [":" + name + "_cc_dial", ":" + name + "_cc_types"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps
+        if "py_cog" in generate:
+            impl_deps = impl_deps + _GENERATED_CODE_PY_COG_IMPL_DEPS
+        cc_library(
+            name = name + "_cc_impl",
+            srcs = [
+                name + "_cc_impl.cc",
+                name + "_cc_impl.inl",
+            ],
+            hdrs = [name + "_cc_impl.hh"],
+            data = [":" + name],
+            deps = impl_deps,
+            testonly = testonly,
+            **kwargs
+        )
 
     if "cpp_exe" in generate:
         cpp_exe_deps = cpp_deps + proto_cpp_deps + cpp_exe_deps + generated_code_cc_deps
@@ -508,19 +707,6 @@ def clk(
         )
 
     if "py_cog" in generate:
-        cc_library(
-            name = name + "_cc_impl",
-            srcs = [
-                name + "_cc_impl.cc",
-                name + "_cc_impl.inl",
-            ],
-            hdrs = [name + "_cc_impl.hh"],
-            data = [":" + name],
-            deps = [":" + name + "_cc_dial"] + cpp_deps + proto_cpp_deps + generated_code_cc_deps + _GENERATED_CODE_PY_COG_IMPL_DEPS,
-            testonly = testonly,
-            **kwargs
-        )
-
         py_dial_deps = py_deps + proto_py_deps + _GENERATED_CODE_PY_DEPS
         if "py" in generate:
             py_dial_deps.append(":" + name + "_py")

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -13,6 +13,7 @@ package(
 exports_files([
     "clk_python_cog.clk",
     "python_cog.clk",
+    "python_cog_multi_output.clk",
     "test_config.clk",
     "test_input_message.clk",
     "test_state.clk",
@@ -26,12 +27,18 @@ clk(
         "clk_python_cog_clk_cc.cc",
         "clk_python_cog_clk_cc.hh",
         "clk_python_cog_clk_cc.inl",
+        "clk_python_cog_clk_cc_cog.cc",
+        "clk_python_cog_clk_cc_cog.hh",
+        "clk_python_cog_clk_cc_cog.inl",
         "clk_python_cog_clk_cc_dial.cc",
         "clk_python_cog_clk_cc_dial.hh",
         "clk_python_cog_clk_cc_dial.inl",
         "clk_python_cog_clk_cc_impl.cc",
         "clk_python_cog_clk_cc_impl.hh",
         "clk_python_cog_clk_cc_impl.inl",
+        "clk_python_cog_clk_cc_types.cc",
+        "clk_python_cog_clk_cc_types.hh",
+        "clk_python_cog_clk_cc_types.inl",
         "clk_python_cog_clk_py_dial.py",
     ],
     cpp_deps = [
@@ -99,6 +106,23 @@ py_library(
     ],
 )
 
+py_library(
+    name = "py_python_cog_multi_output_dial",
+    srcs = ["py_python_cog_multi_output_dial.py"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        ":test_config_clk_py",
+        ":test_input_message_clk_nb",
+        ":test_input_message_clk_py",
+        ":test_output_message_clk_nb",
+        ":test_output_message_clk_py",
+        ":test_state_clk_nb",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/serialization/py:tachyon_dyn",
+    ],
+)
+
 cc_library(
     name = "python_cog",
     srcs = [
@@ -108,19 +132,11 @@ cc_library(
     hdrs = ["python_cog.hh"],
     data = [":python_cog_clk"],
     deps = [
+        ":python_cog_cog",
         ":python_cog_dial",
         ":python_cog_impl",
-        ":test_input_message_clk_cc",
-        ":test_output_message_clk_cc",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
+        ":python_cog_types",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
     ],
     alwayslink = True,
 )
@@ -133,12 +149,18 @@ clk(
         "python_cog.cc",
         "python_cog.hh",
         "python_cog.inl",
+        "python_cog_cog.cc",
+        "python_cog_cog.hh",
+        "python_cog_cog.inl",
         "python_cog_dial.cc",
         "python_cog_dial.hh",
         "python_cog_dial.inl",
         "python_cog_impl.cc",
         "python_cog_impl.hh",
         "python_cog_impl.inl",
+        "python_cog_types.cc",
+        "python_cog_types.hh",
+        "python_cog_types.inl",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -146,10 +168,25 @@ clk(
         ":test_input_message_clk",
         ":test_output_message_clk",
         ":test_state_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
         "//clockwork/python:python_state_clk",
     ],
+)
+
+cc_library(
+    name = "python_cog_cog",
+    srcs = [
+        "python_cog_cog.cc",
+        "python_cog_cog.inl",
+    ],
+    hdrs = ["python_cog_cog.hh"],
+    data = [":python_cog_clk"],
+    deps = [
+        ":python_cog_dial",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -161,12 +198,14 @@ cc_library(
     hdrs = ["python_cog_dial.hh"],
     data = [":python_cog_clk"],
     deps = [
+        ":python_cog_types",
         ":test_config_clk_cc",
         ":test_input_message_clk_cc",
         ":test_output_message_clk_cc",
         ":test_state_clk_cc",
         "//clockwork/dial:include_common",
         "//clockwork/python:python_state",
+        "//jewels/container/tap:bitset",
     ],
 )
 
@@ -188,6 +227,143 @@ cc_library(
     alwayslink = True,
 )
 
+cc_library(
+    name = "python_cog_multi_output",
+    srcs = [
+        "python_cog_multi_output.cc",
+        "python_cog_multi_output.inl",
+    ],
+    hdrs = ["python_cog_multi_output.hh"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        ":python_cog_multi_output_cog",
+        ":python_cog_multi_output_dial",
+        ":python_cog_multi_output_impl",
+        ":python_cog_multi_output_types",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "python_cog_multi_output_clk",
+    srcs = ["python_cog_multi_output.clk"],
+    outs = [
+        "py_python_cog_multi_output_dial.py",
+        "python_cog_multi_output.cc",
+        "python_cog_multi_output.hh",
+        "python_cog_multi_output.inl",
+        "python_cog_multi_output_cog.cc",
+        "python_cog_multi_output_cog.hh",
+        "python_cog_multi_output_cog.inl",
+        "python_cog_multi_output_dial.cc",
+        "python_cog_multi_output_dial.hh",
+        "python_cog_multi_output_dial.inl",
+        "python_cog_multi_output_impl.cc",
+        "python_cog_multi_output_impl.hh",
+        "python_cog_multi_output_impl.inl",
+        "python_cog_multi_output_types.cc",
+        "python_cog_multi_output_types.hh",
+        "python_cog_multi_output_types.inl",
+    ],
+    deps = [
+        ":test_config_clk",
+        ":test_input_message_clk",
+        ":test_output_message_clk",
+        ":test_state_clk",
+        "//clockwork/python:python_state_clk",
+    ],
+)
+
+cc_library(
+    name = "python_cog_multi_output_cog",
+    srcs = [
+        "python_cog_multi_output_cog.cc",
+        "python_cog_multi_output_cog.inl",
+    ],
+    hdrs = ["python_cog_multi_output_cog.hh"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        ":python_cog_multi_output_dial",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "python_cog_multi_output_dial",
+    srcs = [
+        "python_cog_multi_output_dial.cc",
+        "python_cog_multi_output_dial.inl",
+    ],
+    hdrs = ["python_cog_multi_output_dial.hh"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        ":python_cog_multi_output_types",
+        ":test_config_clk_cc",
+        ":test_input_message_clk_cc",
+        ":test_output_message_clk_cc",
+        ":test_state_clk_cc",
+        "//clockwork/dial:include_common",
+        "//clockwork/python:python_state",
+        "//jewels/container/tap:bitset",
+    ],
+)
+
+cc_library(
+    name = "python_cog_multi_output_impl",
+    srcs = [
+        "python_cog_multi_output_impl.cc",
+        "python_cog_multi_output_impl.inl",
+    ],
+    hdrs = ["python_cog_multi_output_impl.hh"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        ":python_cog_multi_output_dial",
+        "//clockwork/python:gil_lock_guard",
+        "//clockwork/python:python_init",
+        "//clockwork/python:python_object",
+        "//jewels/log_cerr",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "python_cog_multi_output_types",
+    srcs = [
+        "python_cog_multi_output_types.cc",
+        "python_cog_multi_output_types.inl",
+    ],
+    hdrs = ["python_cog_multi_output_types.hh"],
+    data = [":python_cog_multi_output_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "python_cog_types",
+    srcs = [
+        "python_cog_types.cc",
+        "python_cog_types.inl",
+    ],
+    hdrs = ["python_cog_types.hh"],
+    data = [":python_cog_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
 py_library(
     name = "python_object_test_helper",
     srcs = ["python_object_test_helper.py"],
@@ -200,6 +376,9 @@ clk(
         "test_config_clk_cc.cc",
         "test_config_clk_cc.hh",
         "test_config_clk_cc.inl",
+        "test_config_clk_cc_types.cc",
+        "test_config_clk_cc_types.hh",
+        "test_config_clk_cc_types.inl",
         "test_config_clk_nb.cc",
         "test_config_clk_nb.hh",
         "test_config_clk_nb.inl",
@@ -226,6 +405,9 @@ clk(
         "test_input_message_clk_cc.cc",
         "test_input_message_clk_cc.hh",
         "test_input_message_clk_cc.inl",
+        "test_input_message_clk_cc_types.cc",
+        "test_input_message_clk_cc_types.hh",
+        "test_input_message_clk_cc_types.inl",
         "test_input_message_clk_nb.cc",
         "test_input_message_clk_nb.hh",
         "test_input_message_clk_nb.inl",
@@ -246,6 +428,9 @@ clk(
         "test_output_message_clk_cc.cc",
         "test_output_message_clk_cc.hh",
         "test_output_message_clk_cc.inl",
+        "test_output_message_clk_cc_types.cc",
+        "test_output_message_clk_cc_types.hh",
+        "test_output_message_clk_cc_types.inl",
         "test_output_message_clk_nb.cc",
         "test_output_message_clk_nb.hh",
         "test_output_message_clk_nb.inl",
@@ -266,6 +451,9 @@ clk(
         "test_state_clk_cc.cc",
         "test_state_clk_cc.hh",
         "test_state_clk_cc.inl",
+        "test_state_clk_cc_types.cc",
+        "test_state_clk_cc_types.hh",
+        "test_state_clk_cc_types.inl",
         "test_state_clk_nb.cc",
         "test_state_clk_nb.hh",
         "test_state_clk_nb.inl",

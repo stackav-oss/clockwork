@@ -1,11 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/std/expected.hh"

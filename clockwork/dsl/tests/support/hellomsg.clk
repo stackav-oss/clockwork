@@ -28,7 +28,7 @@ representation Tachyon<HelloMsg>
 
   fields
   {
-    #2 data
+    #2data
     {
       align: 16byte;
     }
@@ -36,8 +36,7 @@ representation Tachyon<HelloMsg>
 }
 
 representation Pachyon: Tachyon<HelloMsg>
-{
-}
+{}
 
 // Hello, composition!
 schema BetterThanInheritance
@@ -168,7 +167,7 @@ some_constant: Int32 = 42;
 
 nanobind_target hello_msg_clk_nb
 {
-  constant some_constant;
+  constantsome_constant;
 
   binding HelloEnum;
 

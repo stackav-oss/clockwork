@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -76,6 +76,9 @@ public:
   /// Clear the message counts by channel
   /// @note This method *MAY* be called by the thread that reports the writer state
   void clear_message_counts();
+
+  /// Get the number of pending subscriptions
+  std::size_t get_num_pending_subscriptions() const;
 
 private:
   /// Writer thread main function

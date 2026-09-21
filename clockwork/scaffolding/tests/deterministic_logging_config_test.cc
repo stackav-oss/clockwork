@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/exec_tools.hh"
@@ -11,6 +11,8 @@
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
@@ -35,6 +37,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <unistd.h>
 
 namespace clockwork
@@ -79,11 +82,11 @@ TEST_CASE("Read deterministic logging config from files")
       .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
       .log_writer_config_path = std::string{writer_config_path.c_str()}};
 
-    auto logging_config = get_deterministic_logging_config(params);
-    REQUIRE(logging_config);
+    DeterministicLoggingConfig logging_config;
+    REQUIRE(jewels::ok(get_deterministic_logging_config(jewels::Out{logging_config}, params)));
     REQUIRE(
-      logging_config->channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
-    REQUIRE(logging_config->log_writer_config->get_channels().begin()->get_channel_name() == writer_channel_name);
+      logging_config.channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
+    REQUIRE(logging_config.log_writer_config->get_channels().begin()->get_channel_name() == writer_channel_name);
   }
   SECTION("Publisher specified, not writer")
   {
@@ -91,12 +94,11 @@ TEST_CASE("Read deterministic logging config from files")
       .execution_mode = ExecutionMode::deterministic,
       .channel_publisher_config_path = std::string{publisher_config_path.c_str()}};
 
-    auto logging_config = get_deterministic_logging_config(params);
-
-    REQUIRE(logging_config);
+    DeterministicLoggingConfig logging_config;
+    REQUIRE(jewels::ok(get_deterministic_logging_config(jewels::Out{logging_config}, params)));
     REQUIRE(
-      logging_config->channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
-    REQUIRE(!logging_config->log_writer_config);
+      logging_config.channel_publisher_config->get_channels().begin()->get_channel_name() == publisher_channel_name);
+    REQUIRE(!logging_config.log_writer_config);
   }
 
   SECTION("Writer invalid path")
@@ -106,9 +108,8 @@ TEST_CASE("Read deterministic logging config from files")
       .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
       .log_writer_config_path = "/dsajf"};
 
-    auto logging_config = get_deterministic_logging_config(params);
-
-    REQUIRE(!logging_config);
+    DeterministicLoggingConfig logging_config;
+    REQUIRE(jewels::fails(get_deterministic_logging_config(jewels::Out{logging_config}, params)));
   }
 
   SECTION("Using online runner")
@@ -118,11 +119,10 @@ TEST_CASE("Read deterministic logging config from files")
       .channel_publisher_config_path = std::string{publisher_config_path.c_str()},
       .log_writer_config_path = std::string{writer_config_path.c_str()}};
 
-    auto logging_config = get_deterministic_logging_config(params);
-
-    REQUIRE(logging_config);
-    REQUIRE(!logging_config->channel_publisher_config);
-    REQUIRE(!logging_config->log_writer_config);
+    DeterministicLoggingConfig logging_config;
+    REQUIRE(jewels::ok(get_deterministic_logging_config(jewels::Out{logging_config}, params)));
+    REQUIRE(!logging_config.channel_publisher_config);
+    REQUIRE(!logging_config.log_writer_config);
   }
 }
 

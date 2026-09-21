@@ -1,6 +1,12 @@
 use clockwork::logging::writers::standalone_logger::standalone_logger;
+use jewels::simplelaunch::simplelaunch_channel_policies;
+use jewels::simplelaunch::simplelaunch_channels;
 
 system_target standalone_logger_sys
 {
   box: standalone_logger::StandaloneLoggerSystem;
+  system_options
+  {
+    use_simplelaunch: true;
+  }
 }

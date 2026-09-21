@@ -1,8 +1,11 @@
-// Copyright 2025 Stack AV Co.
+
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/serialization/cpp/clk_type.hh"
 
+#include "clockwork/logging/nolint_helper.hh"
+#include "jewels/aligner/aligner.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <fmt/format.h>
@@ -19,9 +22,135 @@
 namespace clockwork::serialization
 {
 
-ClkType::ClkType(std::string_view fqn, ClkTypeId type_id, size_t type_index)
-  : fqn_(fqn), type_id_(type_id), type_index_(type_index)
+namespace
 {
+
+/// Find the first zero in a span of uint64_t
+/// @param[in] data Span of uint64_t
+/// @param[in] start_index Search start index
+/// @return Index of the first zero or the size of the span if no zero is found
+[[nodiscard]] size_t find_first_zero(std::span<const uint64_t> data, size_t start_index)
+{
+  for (auto i = start_index; i < data.size(); ++i)
+  {
+    if (data[i] == 0U)
+    {
+      return i;
+    }
+  }
+  return data.size();
+}
+
+/// Find the first non-zero in a span of uint64_t
+/// @param[in] data Span of uint64_t
+/// @param[in] start_index Search start index
+/// @return Index of the first non-zero or the size of the span if no zero is found
+[[nodiscard]] size_t find_first_non_zero(std::span<const uint64_t> data, size_t start_index)
+{
+  for (auto i = start_index; i < data.size(); ++i)
+  {
+    if (data[i] != 0U)
+    {
+      return i;
+    }
+  }
+  return data.size();
+}
+
+} // namespace
+
+using jewels::failure;
+using jewels::InOut;
+using jewels::ok;
+using jewels::success;
+
+jewels::BinaryOutcome ClkTypeLiteCompressor::compress(
+  std::span<const std::byte> /*data_span*/,
+  size_t /*offset*/,
+  InOut<std::pmr::vector<ClkZeroChunk>> /*zero_chunks*/) const
+{
+  return success;
+}
+
+void ClkTypeLiteCompressor::compress_opaque_data(
+  std::span<const std::byte> data_span, size_t offset, InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks)
+{
+  auto start_offset = static_cast<size_t>(jewels::Aligner<sizeof(uint64_t)>::ptr_aligned_remainder(data_span.data()));
+  if (start_offset >= data_span.size())
+  {
+    return;
+  }
+  const auto aligned_data = clockwork_logging::nolint_helper::byte_span_to_value_span<uint64_t>(
+    data_span.subspan(start_offset, (data_span.size() - start_offset) / sizeof(uint64_t) * sizeof(uint64_t)));
+  auto aligned_offset = find_first_zero(aligned_data, 0U);
+  while (aligned_offset < aligned_data.size())
+  {
+    const auto end_offset = find_first_non_zero(aligned_data, aligned_offset + 1U);
+    zero_chunks->emplace_back(
+      offset + start_offset + (aligned_offset * sizeof(uint64_t)), (end_offset - aligned_offset) * sizeof(uint64_t));
+    aligned_offset = end_offset + 1U;
+    if (aligned_offset < aligned_data.size())
+    {
+      aligned_offset = find_first_zero(aligned_data, aligned_offset);
+    }
+  }
+}
+
+ClkArrayLiteCompressor::ClkArrayLiteCompressor(
+  size_t max_size, size_t element_size, std::shared_ptr<ClkTypeLiteCompressor> compressor)
+  : max_size_(max_size), element_size_(element_size), compressor_(std::move(compressor))
+{
+}
+
+jewels::BinaryOutcome ClkArrayLiteCompressor::compress(
+  size_t size,
+  std::span<const std::byte> data_span,
+  size_t offset,
+  InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const
+{
+  if (size > max_size_)
+  {
+    return failure;
+  }
+  if (!compressor_)
+  {
+    ClkTypeLiteCompressor::compress_opaque_data(
+      data_span.subspan(0U, size * element_size_), offset, InOut{*zero_chunks});
+  }
+  else
+  {
+    size_t element_offset = 0U;
+    for (size_t i = 0U; i < size; ++i)
+    {
+      if (!ok(compressor_->compress(
+            data_span.subspan(element_offset, element_size_), offset + element_offset, InOut{*zero_chunks})))
+      {
+        return failure;
+      }
+      element_offset += element_size_;
+    }
+  }
+  return success;
+}
+
+ClkType::ClkType(
+  jewels::memory::MemoryResource memory_resource,
+  std::string_view fqn,
+  ClkTypeId type_id,
+  size_t type_index,
+  int32_t metadata_version)
+  : memory_resource_(std::move(memory_resource)),
+    fqn_(fqn, memory_resource_),
+    type_id_(type_id),
+    type_index_(type_index),
+    metadata_version_(metadata_version),
+    upgrader_cache_(memory_resource_)
+{
+}
+
+[[nodiscard]] const jewels::memory::MemoryResource& ClkType::get_memory_resource() const noexcept
+{
+  return memory_resource_;
 }
 
 [[nodiscard]] std::string_view ClkType::get_fqn() const noexcept
@@ -39,7 +168,12 @@ ClkType::ClkType(std::string_view fqn, ClkTypeId type_id, size_t type_index)
   return type_index_;
 }
 
-[[nodiscard]] std::unique_ptr<ClkValueInitializer>
+[[nodiscard]] int32_t ClkType::get_metadata_version() const noexcept
+{
+  return metadata_version_;
+}
+
+[[nodiscard]] std::shared_ptr<ClkValueInitializer>
 ClkType::make_value_initializer(const metadata::InitialValue& /*value*/) const
 {
   throw ClkTypeUpgradeError(fmt::format("Value initializers are not supported for type {} ({})", fqn_, type_id_));
@@ -53,6 +187,24 @@ ClkType::make_value_initializer(const metadata::InitialValue& /*value*/) const
 [[nodiscard]] bool ClkType::use_memcpy_for_array_upgrade(const ClkType& /*src_type*/)
 {
   return false;
+}
+
+[[nodiscard]] jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> ClkType::make_lite_compressor()
+{
+  if (!cached_lite_compressor_)
+  {
+    cached_lite_compressor_ = jewels::memory::make_pmr_shared<ClkTypeLiteCompressor>(memory_resource_);
+  }
+  return jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor>{cached_lite_compressor_};
+}
+
+[[nodiscard]] bool ClkType::is_compressible()
+{
+  if (!cached_is_compressible_.has_value())
+  {
+    cached_is_compressible_ = false;
+  }
+  return cached_is_compressible_.value();
 }
 
 void validate_array_size(size_t array_size, size_t min_array_size, size_t max_array_size)
@@ -119,22 +271,33 @@ void ClkTypeArrayUpgrader::upgrade(
   }
 }
 
-[[nodiscard]] std::unique_ptr<ClkArrayUpgrader>
+[[nodiscard]] std::shared_ptr<ClkArrayUpgrader>
 ClkType::make_array_upgrader(const ClkType& src_type, size_t min_array_size, size_t max_array_size)
 {
   if (use_memcpy_for_array_upgrade(src_type))
   {
-    return std::make_unique<ClkMemcpyArrayUpgrader>(min_array_size, max_array_size, get_size());
+    return jewels::memory::make_pmr_shared<ClkMemcpyArrayUpgrader>(
+      memory_resource_, min_array_size, max_array_size, get_size());
   }
   auto element_upgrader = make_upgrader(src_type);
-  return std::make_unique<ClkTypeArrayUpgrader>(
-    min_array_size, max_array_size, src_type.get_size(), get_size(), element_upgrader);
+  return jewels::memory::make_pmr_shared<ClkTypeArrayUpgrader>(
+    memory_resource_, min_array_size, max_array_size, src_type.get_size(), get_size(), element_upgrader);
 }
 
-[[nodiscard]] std::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>&
+[[nodiscard]] std::pmr::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>&
 ClkType::get_upgrader_cache()
 {
   return upgrader_cache_;
+}
+
+[[nodiscard]] std::shared_ptr<ClkTypeLiteCompressor>& ClkType::get_cached_lite_compressor()
+{
+  return cached_lite_compressor_;
+}
+
+[[nodiscard]] std::optional<bool>& ClkType::get_cached_is_compressible()
+{
+  return cached_is_compressible_;
 }
 
 [[nodiscard]] ClkType& ClkType::get_lowest_underlying_type()
@@ -148,11 +311,13 @@ ClkType::get_upgrader_cache()
 }
 
 ClkTypeFactory::ClkTypeFactory(
-  std::unique_ptr<const metadata::TachyonMetadata> metadata_proto,
-  std::vector<std::unique_ptr<ClkTypeFactoryPlugin>> plugins)
-  : metadata_proto_(std::move(metadata_proto)),
+  jewels::memory::MemoryResource memory_resource,
+  std::shared_ptr<const metadata::TachyonMetadata> metadata_proto,
+  std::pmr::vector<std::shared_ptr<ClkTypeFactoryPlugin>> plugins)
+  : memory_resource_(std::move(memory_resource)),
+    metadata_proto_(std::move(metadata_proto)),
     plugins_(std::move(plugins)),
-    types_(static_cast<size_t>(metadata_proto_->types_size()))
+    types_(static_cast<size_t>(metadata_proto_->types_size()), memory_resource_)
 {
 }
 
@@ -189,16 +354,27 @@ ClkTypeFactory::ClkTypeFactory(
   return *metadata_proto_;
 }
 
-[[nodiscard]] std::vector<std::unique_ptr<ClkType>>& ClkTypeFactory::get_types() noexcept
+[[nodiscard]] int32_t ClkTypeFactory::get_metadata_version() const noexcept
+{
+  return metadata_proto_->version();
+}
+
+[[nodiscard]] std::pmr::vector<std::shared_ptr<ClkType>>& ClkTypeFactory::get_types() noexcept
 {
   return types_;
 }
 
+[[nodiscard]] const jewels::memory::MemoryResource& ClkTypeFactory::get_memory_resource() const noexcept
+{
+  return memory_resource_;
+}
+
 void check_for_unexpected_history_changes(
-  const std::map<int32_t, int32_t>& src_became,
-  const std::set<int32_t>& src_removed,
-  const std::map<int32_t, int32_t>& dst_became,
-  const std::set<int32_t>& dst_removed,
+  const jewels::memory::MemoryResource& memory_resource,
+  const std::pmr::map<int32_t, int32_t>& src_became,
+  const std::pmr::set<int32_t>& src_removed,
+  const std::pmr::map<int32_t, int32_t>& dst_became,
+  const std::pmr::set<int32_t>& dst_removed,
   bool allow_changes,
   std::string_view name)
 {
@@ -222,7 +398,8 @@ void check_for_unexpected_history_changes(
     }
   }
   const auto dst_became_values = std::ranges::views::values(dst_became);
-  std::unordered_set<int32_t> dst_became_targets(dst_became_values.begin(), dst_became_values.end());
+  std::pmr::unordered_set<int32_t> dst_became_targets(memory_resource);
+  dst_became_targets.insert(dst_became_values.begin(), dst_became_values.end());
   for (const auto old_number : src_removed)
   {
     // Special case: allow deleting a removed entry field when that field is the source or target of a legacy_became

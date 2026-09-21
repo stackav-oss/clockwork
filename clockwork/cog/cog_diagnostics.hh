@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,7 +6,6 @@
 #include "clockwork/cog/unit_test_support.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/report_clk_cc.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
@@ -16,6 +15,11 @@
 
 namespace clockwork
 {
+
+namespace pinion
+{
+class PublisherHandle;
+}
 
 namespace detail
 {
@@ -57,6 +61,9 @@ public:
   /// @param[in] now The current time.
   /// @return the reporter
   [[nodiscard]] ReporterType make_report(jewels::time::SyncTime now);
+
+  /// Set the execution health on the report.
+  void set_health(ReporterType& report, diagnostics::ReportHealth health);
 
   /// Set the publisher handle for the diagnostics at the specified index
   ///
@@ -107,6 +114,9 @@ public:
   /// @param[in] now The current time.
   /// @return the reporter
   [[nodiscard]] ReporterType make_report(jewels::time::SyncTime now);
+
+  /// Set the execution health on all reports.
+  void set_health(ReporterType& reports, diagnostics::ReportHealth health);
 
   /// Publish the diagnostics immediately with the provided publish time
   /// @param[in] reports reports to publish

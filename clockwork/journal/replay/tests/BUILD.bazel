@@ -1,0 +1,61 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "execution_queue_test",
+    size = "small",
+    srcs = ["execution_queue_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/journal:journal_cc_library",
+        "//clockwork/journal/replay:execution_queue",
+        "//clockwork/journal/replay:execution_stats_clk_cc",
+        "//clockwork/journal/replay:message_buffer",
+        "//clockwork/journal/replay:replay_metadata",
+        "//clockwork/journal/replay/tests/support:execution_queue_test_messages_clk_cc",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:types",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
+
+cc_test(
+    name = "message_buffer_test",
+    size = "small",
+    srcs = ["message_buffer_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/journal/replay:message_buffer",
+        "//clockwork/journal/replay:replay_metadata",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:types",
+        "//clockwork/logging/tests/support:test_message_clk_cc",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:var_string",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "replay_metadata_test",
+    size = "small",
+    srcs = ["replay_metadata_test.cc"],
+    deps = [
+        "//clockwork/journal:journal_cc_library",
+        "//clockwork/journal/replay:replay_metadata",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)

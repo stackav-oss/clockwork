@@ -1,0 +1,159 @@
+namespace {
+
+using LidarIt = decltype(
+    std::declval<NoObjectiveDialInputs&>()
+        .get_lidar().get_view().begin());
+using CameraIt = decltype(
+    std::declval<NoObjectiveDialInputs&>()
+        .get_camera().get_view().begin());
+
+struct InputViews {
+  decltype(std::declval<NoObjectiveDialInputs&>().get_lidar().get_cursor_view())
+      lidar_view;
+  decltype(std::declval<NoObjectiveDialInputs&>().get_camera().get_cursor_view())
+      camera_view;
+};
+
+static InputViews make_input_views(NoObjectiveDialInputs& inputs)
+{
+  return InputViews{
+      .lidar_view = inputs.get_lidar().get_cursor_view(),
+      .camera_view = inputs.get_camera().get_cursor_view(),
+  };
+}
+
+struct CandidateSuffix1 {
+  LidarIt lidar_it;
+};
+
+struct CandidateSuffix0 {
+  CameraIt camera_it;
+  CandidateSuffix1 suffix1;
+};
+
+struct PresenceState {
+};
+
+struct CandidateAlignment {
+  CandidateSuffix0 suffix0;
+  [[no_unique_address]] PresenceState presence;
+};
+
+static auto& candidate_camera_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.camera_it);
+}
+
+static const auto& candidate_camera_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.camera_it);
+}
+
+static auto& candidate_lidar_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.lidar_it);
+}
+
+static const auto& candidate_lidar_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.lidar_it);
+}
+
+
+// Level 1: lidar (any_match)
+static jewels::BinaryOutcome search_level_1(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  const auto& view = views.lidar_view;
+
+  // Window: observation_time
+  auto win_lo_observation_time = jewels::time::SyncTime::min();
+  auto win_hi_observation_time = jewels::time::SyncTime::max();
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{100'000'000});
+  win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_camera_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{100'000'000});
+
+  auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+      [](const auto& msg, const auto& t) {
+        return msg.get_observation_time() < t;
+      });
+  auto it_end = std::upper_bound(it_start, view.end(), win_hi_observation_time,
+      [](const auto& t, const auto& msg) {
+        return t < msg.get_observation_time();
+      });
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  if (it_start < it_end) {
+    candidate_lidar_it(*candidate) = it_start;
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+// Level 0: camera (any_match)
+static jewels::BinaryOutcome search_level_0(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  const auto& view = views.camera_view;
+
+  auto it_start = view.begin();
+  auto it_end = view.end();
+
+  const auto& cutoff_view_lidar = views.lidar_view;
+
+  for (auto it = it_start; it < it_end; ++it) {
+    // Cutoff: no later lidar element can satisfy constraint
+    if (cutoff_view_lidar.begin() != cutoff_view_lidar.end()
+        && (*it).get_observation_time() - (*std::prev(cutoff_view_lidar.end())).get_observation_time() > ::std::chrono::nanoseconds{100'000'000})
+    {
+      break;
+    }
+    candidate_camera_it(*candidate) = it;
+    if (jewels::ok(search_level_1(jewels::InOut{*candidate}, views))) {
+      return jewels::success;
+    }
+  }
+  return jewels::failure;
+}
+
+static void publish_alignment(
+    NoObjectiveDial& dial,
+    const CandidateAlignment& candidate)
+{
+  auto& pub = dial.get_outputs().get_alignment();
+  auto& inputs = dial.get_inputs();
+  pub.message().set_lidar_seq(
+      inputs.get_lidar().get_sequence_number(candidate_lidar_it(candidate)));
+  pub.message().set_camera_seq(
+      inputs.get_camera().get_sequence_number(candidate_camera_it(candidate)));
+  pub.mark_for_publish();
+}
+
+static void advance_cursors(
+    NoObjectiveDialInputs& inputs,
+    const CandidateAlignment& candidate)
+{
+  inputs.get_lidar().set_cursor(std::next(candidate_lidar_it(candidate)));
+  inputs.get_camera().set_cursor(std::next(candidate_camera_it(candidate)));
+}
+
+}  // anonymous namespace
+
+void execute_cog(NoObjectiveDial& dial)
+{
+  auto& inputs = dial.get_inputs();
+  const auto views = make_input_views(inputs);
+
+  CandidateAlignment candidate;
+  candidate.presence = PresenceState{};
+  if (jewels::fails(search_level_0(
+          jewels::InOut{candidate}, views))) {
+    return;
+  }
+  publish_alignment(dial, candidate);
+  advance_cursors(inputs, candidate);
+}

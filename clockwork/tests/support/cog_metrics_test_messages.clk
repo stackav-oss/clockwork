@@ -1,0 +1,27 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cog_metrics_test)]
+
+// Message for triggering the test cogs
+schema CogMetricsTestTrigger
+{
+  uuid: 198a3ab9-63fc-43c1-9864-400cccd5bcb0;
+  fields
+  {
+    // An incrementing counter to validate signal values
+    #0 counter: UInt32;
+  }
+}
+
+// Acknowledgment message from the test cogs
+schema CogMetricsTestAck
+{
+  uuid: c0b585b3-a0bb-48e7-a3b7-3170526249f0;
+  fields
+  {
+    // Total number of executions so far
+    #0 execution_count: UInt32;
+  }
+}

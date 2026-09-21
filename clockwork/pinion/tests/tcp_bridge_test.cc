@@ -1,16 +1,17 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/platform_diagnostics_config_clk_cc.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/pinion/bridge_status_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_common.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -102,7 +103,8 @@ TEST_CASE("TcpBridge client")
   auto [listen_socket, listen_addr] = support::make_listen_socket();
 
   // Create the bridge.
-  Tappy<TcpBridgeConfig<>> config{};
+  const auto config_ptr = std::make_unique<Tappy<TcpBridgeConfig<>>>();
+  auto& config = *config_ptr;
   config.get_underlying_host_name().set_truncate(test_host_name);
   const auto test_channel_uuid = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   auto& client_config = config.get_underlying_bridge_clients().emplace_back();
@@ -122,18 +124,22 @@ TEST_CASE("TcpBridge client")
   status_config.get_mutable_buffer_layout().set_message_size(sizeof(Tappy<BridgeStatus>));
   status_config.get_mutable_buffer_layout().set_is_published_once(false);
 
-  TcpBridge bridge{memres, *std::move(channel_factory_result), config, jewels::time::SyncTime{std::chrono::seconds(1)}};
-  REQUIRE(ok(bridge.initialize()));
+  TcpBridge bridge{
+    memres,
+    std::make_shared<ShmChannelFactory>(*std::move(channel_factory_result)),
+    config,
+    jewels::time::SyncTime{std::chrono::seconds(1)}};
+  REQUIRE(ok(bridge.initialize(config)));
 
   auto test_subscriber_result = bridge.channel_factory().open_subscriber(
     test_channel_uuid.to_string(), test_channel_name, test_buffer_layout, max_observers);
   REQUIRE(test_subscriber_result);
-  auto test_subscriber = SubscriberHandle(test_subscriber_result.value()->buffer());
+  auto test_subscriber = test_subscriber_result.value();
 
   auto status_subscriber_result = bridge.channel_factory().open_subscriber(
     status_channel_uuid.to_string(), status_channel_name, status_buffer_layout, max_observers);
   REQUIRE(status_subscriber_result);
-  auto status_subscriber = SubscriberHandle(status_subscriber_result.value()->buffer());
+  auto status_subscriber = status_subscriber_result.value();
 
   const auto accepted = support::accept_connection(*listen_socket);
   REQUIRE(accepted >= 0);
@@ -155,7 +161,7 @@ TEST_CASE("TcpBridge client")
     CHECK(support::recv_acknowledgement(accepted, expected_seqnos[i]));
   }
   CHECK(testing::dump<Msg>(test_subscriber) == expected);
-  auto test_messages = test_subscriber.available();
+  auto test_messages = test_subscriber->available();
   for (size_t i = 0; i < test_messages.size(); ++i)
   {
     CHECK(test_messages[static_cast<int64_t>(i)].header()->publish_timestamp == expected_publish_stamps[i]);
@@ -163,8 +169,8 @@ TEST_CASE("TcpBridge client")
     CHECK(test_messages[static_cast<int64_t>(i)].header()->source_commit_timestamp == expected_commit_stamps[i]);
   }
 
-  REQUIRE(ok(bridge.run_once(jewels::time::SyncTime{std::chrono::seconds(3)})));
-  const auto status_messages = status_subscriber.available();
+  REQUIRE(ok(bridge.run_once(jewels::time::SyncTime{std::chrono::seconds(13)})));
+  const auto status_messages = status_subscriber->available();
   REQUIRE(status_messages.size() == 1U);
   const auto& status_msg = *detail::marshal_as<const Tappy<BridgeStatus>>(
     std::span<const std::byte, sizeof(Tappy<BridgeStatus>)>{status_messages[0U].message()});
@@ -221,7 +227,8 @@ TEST_CASE("TcpBridgeServer")
   auto [bound_socket, bound_addr] = support::make_bound_socket();
 
   // Create the bridge.
-  Tappy<TcpBridgeConfig<>> config{};
+  const auto config_ptr = std::make_unique<Tappy<TcpBridgeConfig<>>>();
+  auto& config = *config_ptr;
   config.get_underlying_host_name().set_truncate(test_host_name);
   const auto test_channel_uuid = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   auto& server_config = config.get_underlying_bridge_servers().emplace_back();
@@ -240,15 +247,18 @@ TEST_CASE("TcpBridgeServer")
   status_config.get_mutable_buffer_layout().set_num_slots(num_slots);
   status_config.get_mutable_buffer_layout().set_message_size(sizeof(Tappy<BridgeStatus>));
   status_config.get_mutable_buffer_layout().set_is_published_once(false);
-  TcpBridge bridge{memres, *std::move(channel_factory_result), config, jewels::time::SyncTime{std::chrono::seconds(1)}};
-  REQUIRE(ok(bridge.initialize()));
-  CHECK(bridge.get_num_pending_servers() == 1U);
-  CHECK(bridge.get_num_servers() == 0U);
+  TcpBridge bridge{
+    memres,
+    std::make_shared<ShmChannelFactory>(*std::move(channel_factory_result)),
+    config,
+    jewels::time::SyncTime{std::chrono::seconds(1)}};
+  REQUIRE(ok(bridge.initialize(config)));
+  CHECK(bridge.get_num_servers() == 1U);
 
   auto status_subscriber_result = bridge.channel_factory().open_subscriber(
     status_channel_uuid.to_string(), status_channel_name, status_buffer_layout, max_observers);
   REQUIRE(status_subscriber_result);
-  auto status_subscriber = SubscriberHandle(status_subscriber_result.value()->buffer());
+  auto status_subscriber = status_subscriber_result.value();
 
   auto test_publisher_result = bridge.channel_factory().open_publisher(
     test_channel_uuid.to_string(), test_channel_name, test_buffer_layout, max_observers);
@@ -256,8 +266,6 @@ TEST_CASE("TcpBridgeServer")
 
   // Run the server to check for connections
   REQUIRE(ok(bridge.run_once(jewels::time::SyncTime{std::chrono::seconds(1)})));
-  CHECK(bridge.get_num_pending_servers() == 0U);
-  CHECK(bridge.get_num_servers() == 1U);
 
   const auto ephemeral_addr = jewels::networking::SocketAddress::create(std::string{support::local_socket_host}, 0);
   auto tcp_client = TcpSocket::create_connect(bound_addr, *ephemeral_addr);
@@ -272,16 +280,15 @@ TEST_CASE("TcpBridgeServer")
   // Receive a null header to verify that the server is connected
   CHECK(support::recv_null_header(tcp_client->descriptor(), 0U));
 
-  REQUIRE(ok(bridge.run_once(jewels::time::SyncTime{std::chrono::seconds(3)})));
-  const auto status_messages = status_subscriber.available();
+  REQUIRE(ok(bridge.run_once(jewels::time::SyncTime{std::chrono::seconds(13)})));
+  const auto status_messages = status_subscriber->available();
   REQUIRE(status_messages.size() == 1U);
   const auto& status_msg = *detail::marshal_as<const Tappy<BridgeStatus>>(
     std::span<const std::byte, sizeof(Tappy<BridgeStatus>)>{status_messages[0U].message()});
   CHECK(status_msg.get_host_name() == test_host_name);
-  CHECK(status_msg.get_server_counters().size() == 3U);
-  CHECK(status_msg.get_server_counters()[0U].get_channel_name() == test_channel_name);
-  CHECK(status_msg.get_server_counters()[1U].get_channel_name() == "SERVER TOTAL");
-  CHECK(status_msg.get_server_counters()[2U].get_channel_name() == "SERVER BULK DATA TOTAL");
+  CHECK(status_msg.get_server_counters().size() == 2U);
+  CHECK(status_msg.get_server_counters()[0U].get_channel_name() == "SERVER TOTAL");
+  CHECK(status_msg.get_server_counters()[1U].get_channel_name() == "SERVER BULK DATA TOTAL");
   CHECK(status_msg.get_client_counters().size() == 2U);
   CHECK(status_msg.get_client_counters()[0U].get_channel_name() == "CLIENT TOTAL");
   CHECK(status_msg.get_client_counters()[1U].get_channel_name() == "CLIENT BULK DATA TOTAL");

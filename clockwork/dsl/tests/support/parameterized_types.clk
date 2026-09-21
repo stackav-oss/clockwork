@@ -1,0 +1,22 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::testing)]
+
+// Docs.
+schema TestSchema
+{
+  uuid: eae6fc33-f63a-47f3-a123-ea5fed6efcb6;
+  parameters
+  {
+    // Docs.
+    #0 param: Type;
+  }
+
+  fields
+  {
+    // Docs.
+    #1 field: param;
+  }
+}
+
+instantiate TestSchemaUInt8: TestSchema<UInt8>;
+instantiate TestSchemaBool: TestSchema<Bool>;

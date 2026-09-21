@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to metrics channel metadata configurations.
@@ -52,6 +52,6 @@ MetricsChannelMetadataConfig: Final[type[metrics_channel_metadata_config_proto.M
         max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_num_channels=2046,
         max_schema_name_size=511,
-        max_schema_definition_size=30000,
+        max_schema_definition_size=constants.MAX_SCHEMA_DEFINITION_SIZE,
     )[0]
 )

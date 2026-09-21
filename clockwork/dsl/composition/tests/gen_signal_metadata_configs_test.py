@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -27,16 +27,16 @@ def test_gen_signal_metadata_config(fs_importer: FilesystemImporter) -> None:  #
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     compiler._register_box_instance_uuids(module.context, box_ir)
-    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False, False)
     physical_system = system.make_physical_system(logical_system)
 
     config = gen_signal_metadata_configs.generate_signal_metadata_config(physical_system)
 
     # Test signal_instance_names
-    # 2 module signals (both multi-instance) + 2 cog signals (both multi-instance) across 2 cog instances
-    # Each multi-instance signal used in both cog instances gets 2 instance names
+    # Each cog instance contributes one unique instance name (its FQN).
+    # All signals within a cog share the same instance name.
     assert config.signal_instance_names is not None
-    assert len(config.signal_instance_names) == 6  # module_signal: 2, cog_signal: 2, cog_private_signal: 2
+    assert len(config.signal_instance_names) == 2  # One per cog instance: test_cog1, test_cog2
 
     # Test signals - should have exactly 4 signals total
     # Includes: module_signal, multi_instance_signal (module-level), cog_signal, cog_private_signal (cog-scope)
@@ -58,7 +58,7 @@ def test_gen_signal_metadata_config(fs_importer: FilesystemImporter) -> None:  #
     # Should have exactly 1 cog class (SignalTestCog)
     assert len(config.cogs) == 1
     for cog_metadata in config.cogs:
-        assert cog_metadata.cog_class_id
+        assert cog_metadata.cog_path
         # Should have exactly 1 report group (test_report_group)
         assert len(cog_metadata.report_groups) == 1
 
@@ -78,29 +78,35 @@ def test_gen_signal_metadata_config(fs_importer: FilesystemImporter) -> None:  #
                     assert len(sig.post_aggregation_types) == 2
                     post_agg_set = {agg_type.value for agg_type in sig.post_aggregation_types}  # pyright: ignore[reportAttributeAccessIssue]
                     assert post_agg_set == {3, 4}  # Sum=3, Count=4
+                    assert sig.validity_source.value == 1  # count_field
+                    assert sig.validity_index == 6
                 elif "cog_private_signal" in signal_name:
                     # cog_private_signal should have post_aggregation: ["min", "max"]
                     assert len(sig.post_aggregation_types) == 2
                     post_agg_set = {agg_type.value for agg_type in sig.post_aggregation_types}  # pyright: ignore[reportAttributeAccessIssue]
                     assert post_agg_set == {1, 2}  # Min=1, Max=2
+                    assert sig.validity_source.value == 2  # presence_bit
+                    assert sig.validity_index == 1
                 elif "module_signal" in signal_name:
                     # module_signal should have post_aggregation: ["min", "max"]
                     assert len(sig.post_aggregation_types) == 2
                     post_agg_set = {agg_type.value for agg_type in sig.post_aggregation_types}  # pyright: ignore[reportAttributeAccessIssue]
                     assert post_agg_set == {1, 2}  # Min=1, Max=2
+                    assert sig.validity_source.value == 2  # presence_bit
+                    assert sig.validity_index == 0
 
     # Test cog_instances - verify indexes and relationships
     # Should have exactly 2 instances of SignalTestCog (test_cog1, test_cog2)
     assert len(config.cog_instances) == 2
-    cog_class_ids = {cog.cog_class_id for cog in config.cogs}
+    cog_paths = {cog.cog_path for cog in config.cogs}
 
     for cog_instance_metadata in config.cog_instances:
-        # Verify cog_class_id references a known cog class
-        assert cog_instance_metadata.cog_class_id in cog_class_ids
-        assert cog_instance_metadata.cog_instance_id
+        # Verify cog_path references a known cog class
+        assert cog_instance_metadata.cog_path in cog_paths
+        assert cog_instance_metadata.cog_instance_path
 
         # Find the corresponding cog class
-        cog_class = next(c for c in config.cogs if c.cog_class_id == cog_instance_metadata.cog_class_id)
+        cog_class = next(c for c in config.cogs if c.cog_path == cog_instance_metadata.cog_path)
 
         # Verify report_group_instances - should have 1 report group instance
         assert len(cog_instance_metadata.report_group_instances) == 1
@@ -128,18 +134,18 @@ def test_gen_signal_metadata_config(fs_importer: FilesystemImporter) -> None:  #
 
     for channel_metadata in config.report_group_channels:
         assert channel_metadata.channel_name
-        assert channel_metadata.cog_class_id in cog_class_ids
+        assert channel_metadata.cog_path in cog_paths
 
         # Find matching cog_instance
         matching_instance = next(
-            (ci for ci in config.cog_instances if ci.cog_instance_id == channel_metadata.cog_instance_id),
+            (ci for ci in config.cog_instances if ci.cog_instance_path == channel_metadata.cog_instance_path),
             None,
         )
         assert matching_instance is not None
-        assert matching_instance.cog_class_id == channel_metadata.cog_class_id
+        assert matching_instance.cog_path == channel_metadata.cog_path
 
         # Verify report_group_index is valid
-        cog_class = next(c for c in config.cogs if c.cog_class_id == channel_metadata.cog_class_id)
+        cog_class = next(c for c in config.cogs if c.cog_path == channel_metadata.cog_path)
         assert 0 <= channel_metadata.report_group_index < len(cog_class.report_groups)
 
         # Verify channel_name matches the one in cog_instance
@@ -154,6 +160,10 @@ def test_gen_signal_metadata_config(fs_importer: FilesystemImporter) -> None:  #
         assert matching_rg_instance is not None
         assert matching_rg_instance.channel_name == channel_metadata.channel_name
 
+        # SignalTestCog is init-only with no cog metrics policies,
+        # so all channels should not be cog metrics channels
+        assert channel_metadata.is_cog_metrics_channel is False
+
 
 def test_signal_instance_names_ordering(fs_importer: FilesystemImporter) -> None:
     module = compiler.compile_source_file(
@@ -164,14 +174,14 @@ def test_signal_instance_names_ordering(fs_importer: FilesystemImporter) -> None
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     compiler._register_box_instance_uuids(module.context, box_ir)
-    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False, False)
     physical_system = system.make_physical_system(logical_system)
 
     config = gen_signal_metadata_configs.generate_signal_metadata_config(physical_system)
 
     instance_names = config.signal_instance_names
-    # Verify that we have exactly 6 signal instance names
-    assert len(instance_names) == 6
+    # Each cog instance contributes one unique instance name (its FQN)
+    assert len(instance_names) == 2
 
     for signal_metadata in config.signals:
         for idx in signal_metadata.signal_instance_indexes:
@@ -187,7 +197,7 @@ def test_aggregation_types(fs_importer: FilesystemImporter) -> None:
     assert isinstance(box_template_ir, box.BoxTemplate)
     box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
     compiler._register_box_instance_uuids(module.context, box_ir)
-    logical_system = system.make_system([box_ir.get_resolved()], module, False)
+    logical_system = system.make_system([box_ir.get_resolved()], module, False, False)
     physical_system = system.make_physical_system(logical_system)
 
     config = gen_signal_metadata_configs.generate_signal_metadata_config(physical_system)

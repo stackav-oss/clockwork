@@ -1,12 +1,15 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/timer.hh"
 
+#include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/runners/deterministic_timer.hh"
 #include "clockwork/runners/timerfd_timer.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "clockwork/scaffolding/cog.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -47,6 +50,43 @@ namespace clockwork::scaffolding
     timers[desc.get_timer_id()] = std::make_shared<DeterministicTimer>();
   }
   return timers;
+}
+
+namespace
+{
+template <typename TimerType>
+jewels::expected<PublisherThrottleTimerVector, jewels::MonoError>
+setup_publisher_throttle_timers_impl(const CogMap& cogs, jewels::memory::MemoryResource memres_sys)
+{
+  PublisherThrottleTimerVector timers(memres_sys);
+  for (const auto& [_, cog] : cogs)
+  {
+    if (!cog->has_rate_limited_publishers())
+    {
+      continue;
+    }
+    auto timer = std::make_shared<TimerType>();
+    if (jewels::fails(cog->set_publisher_throttle_timer(timer)))
+    {
+      jewels::log_cerr_error("Failed to install publisher-throttle timer for cog '{}'.", cog->get_name());
+      return jewels::unexpected(jewels::MonoError{});
+    }
+    timers.emplace_back(std::move(timer));
+  }
+  return timers;
+}
+} // namespace
+
+jewels::expected<PublisherThrottleTimerVector, jewels::MonoError>
+setup_publisher_throttle_timers(const CogMap& cogs, jewels::memory::MemoryResource memres_sys)
+{
+  return setup_publisher_throttle_timers_impl<TimerfdTimer>(cogs, memres_sys);
+}
+
+jewels::expected<PublisherThrottleTimerVector, jewels::MonoError>
+setup_deterministic_publisher_throttle_timers(const CogMap& cogs, jewels::memory::MemoryResource memres_sys)
+{
+  return setup_publisher_throttle_timers_impl<DeterministicTimer>(cogs, memres_sys);
 }
 
 [[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::MonoError> connect_timers(
@@ -90,6 +130,17 @@ void bind_timers_to_epoll(const TimerMap& timers, AbstractEPollManager& epoll)
     if (!epoll.add(timer->descriptor(), EPOLLIN, timer))
     {
       throw std::runtime_error("internal error: could not add event to epoll");
+    }
+  }
+}
+
+void bind_timers_to_epoll(const PublisherThrottleTimerVector& timers, AbstractEPollManager& epoll)
+{
+  for (const auto& timer : timers)
+  {
+    if (!epoll.add(timer->descriptor(), EPOLLIN, timer))
+    {
+      throw std::runtime_error("internal error: could not add publisher-throttle timer event to epoll");
     }
   }
 }

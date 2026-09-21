@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -27,8 +27,10 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -73,6 +75,7 @@ TEST_CASE("LogReader iterator")
           std::string{
             clockwork::LoggingTraits<MsgType>::schema_definition.data(),
             clockwork::LoggingTraits<MsgType>::schema_definition.size()},
+        .is_amended = false,
       },
     });
     auto actual = reader.get_metadata();
@@ -104,6 +107,25 @@ TEST_CASE("LogReader iterator")
     }
 
     REQUIRE(msgs == actual);
+  }
+
+  SECTION("sequence number filter")
+  {
+    auto reader = LogReader(
+      std::make_unique<TestLogReader>(
+        "test_log", std::optional<LogInterval>{}, std::optional<RelativeInterval>{}, msgs));
+    REQUIRE(reader.open(
+      {},
+      [](const std::string_view topic, const uint32_t sequence_number)
+      { return topic == "topic" && sequence_number == 3U; }));
+
+    auto actual = std::vector<uint32_t>{};
+    for (const auto& logged_msg : reader)
+    {
+      actual.push_back(logged_msg.sequence_number);
+    }
+
+    REQUIRE(actual == std::vector<uint32_t>{3U});
   }
 }
 

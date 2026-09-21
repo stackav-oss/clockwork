@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -7,10 +7,12 @@
 from pathlib import Path
 from typing import Final
 
+import pytest
 from clockwork.dsl.cog import cppcog
 from clockwork.dsl.cog.pycog import Input, InputsStruct
+from clockwork.dsl.cog.tests.support import test_helpers
 from clockwork.dsl.cpp import context
-from clockwork.dsl.ir import cog, compiler, importer
+from clockwork.dsl.ir import cog, compiler, importer, statement
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
 
@@ -23,10 +25,11 @@ def test_hellocog_render() -> None:
 #include "clockwork/cog/include_common.hh"
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/diagnostics/reporter.hh"
-#include "clockwork/dsl/tests/support/hello_msg_onboard.hh"
-#include "clockwork/dsl/tests/support/hellocog.hh"{diags_include}
+#include "clockwork/dsl/tests/support/hello_msg_onboard.hh"{diags_include}
 #include "clockwork/dsl/tests/support/hellocog_dial.hh"
+#include "clockwork/serializable.hh"
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -36,6 +39,8 @@ def test_hellocog_render() -> None:
 #include <utility> // IWYU pragma: keep
 namespace clockwork {{ template <class> struct Tachyon; }} // IWYU pragma: keep
 namespace clockwork {{ template <class> struct Tap; }} // IWYU pragma: keep
+namespace clockwork::testing::cogs {{ struct HelloCogEventMetricsBatch; }} // IWYU pragma: keep
+namespace clockwork::testing::cogs {{ struct HelloCogTelemetryMetrics; }} // IWYU pragma: keep
 struct HelloCogPolicy
 {{
     static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.HelloCogPolicy";
@@ -43,6 +48,7 @@ struct HelloCogPolicy
     static constexpr size_t event_metrics_batch_size = 10;
     using CogDial = HelloCogDial;
     static constexpr auto has_signals = false;
+    static constexpr auto has_cog_metrics_report_groups = false;
     using SignalApiType = HelloCogDialSignalApi;
     static constexpr auto cog_id = ::jewels::Uuid<::clockwork::common::CogClassId>::from_string("ba6ead69-1442-50c4-a0f0-b5b95b69eb28").value();
     /// MemoryResources ///
@@ -65,6 +71,7 @@ struct HelloCogPolicy
     struct RoHelloPolicy
     {{
         using StateType = Tap<Tachyon<::clockwork::demo::HelloMsg>>;
+        using SerializedType = StateType;
         struct Factory;
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("3f5258ab-0013-5b9a-8923-7f6301cef4af").value();
         static constexpr bool read_only = true;
@@ -73,6 +80,7 @@ struct HelloCogPolicy
     struct RwHelloPolicy
     {{
         using StateType = Tap<Tachyon<::clockwork::demo::HelloMsg>>;
+        using SerializedType = StateType;
         struct Factory;
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("edbbd66d-5405-5b03-8bf2-dc69961e8ba0").value();
         static constexpr bool read_only = false;
@@ -81,6 +89,7 @@ struct HelloCogPolicy
     struct ExternHelloPolicy
     {{
         using StateType = ::clockwork::testing::CxxState;
+        using SerializedType = Tappy<::clockwork::demo::HelloMsg>;
         struct Factory;
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("d03c7844-88d1-57b2-8ff9-9d57502917f1").value();
         static constexpr bool read_only = true;
@@ -108,6 +117,38 @@ struct HelloCogPolicy
         static constexpr std::optional<size_t> skip_threshold = std::nullopt;
         static constexpr auto copy_inputs = false;
         static constexpr auto manual_cursor = false;
+        static constexpr auto expose_seqno = false;
+        static constexpr auto use_device_ptr = false;
+    }};
+    struct MultiConnectHello_0Policy
+    {{
+        using MsgType = ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>;
+        static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("531fe36a-00ae-5d06-8c81-e19061cba41f").value();
+        static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.MultiConnectHello_0Policy";
+        static constexpr auto max_view_size = 1U;
+        static constexpr auto min_msgs = 0U;
+        static constexpr auto min_new_msgs = 0U;
+        static constexpr std::optional<::ssize_t> safety_margin = std::nullopt;
+        static constexpr std::optional<size_t> skip_threshold = std::nullopt;
+        static constexpr auto copy_inputs = false;
+        static constexpr auto manual_cursor = false;
+        static constexpr auto expose_seqno = false;
+        static constexpr auto use_device_ptr = false;
+    }};
+    struct MultiConnectHello_1Policy
+    {{
+        using MsgType = ::clockwork::Tap<::clockwork::Tachyon<::clockwork::demo::HelloMsg>>;
+        static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("a147059f-9096-5e08-ad0b-280b656f6ab7").value();
+        static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.MultiConnectHello_1Policy";
+        static constexpr auto max_view_size = 1U;
+        static constexpr auto min_msgs = 0U;
+        static constexpr auto min_new_msgs = 0U;
+        static constexpr std::optional<::ssize_t> safety_margin = std::nullopt;
+        static constexpr std::optional<size_t> skip_threshold = std::nullopt;
+        static constexpr auto copy_inputs = false;
+        static constexpr auto manual_cursor = false;
+        static constexpr auto expose_seqno = false;
+        static constexpr auto use_device_ptr = false;
     }};
     struct HistoryOfHellosPolicy
     {{
@@ -121,8 +162,10 @@ struct HelloCogPolicy
         static constexpr std::optional<size_t> skip_threshold = std::nullopt;
         static constexpr auto copy_inputs = false;
         static constexpr auto manual_cursor = true;
+        static constexpr auto expose_seqno = false;
+        static constexpr auto use_device_ptr = false;
     }};
-    using InputsType = ::clockwork::CogInputs<LatestHelloPolicy, HistoryOfHellosPolicy>;
+    using InputsType = ::clockwork::CogInputs<LatestHelloPolicy, MultiConnectHello_0Policy, MultiConnectHello_1Policy, HistoryOfHellosPolicy>;
     /// InputConditions ///
     struct AnyMsgPolicy
     {{
@@ -140,7 +183,23 @@ struct HelloCogPolicy
         static constexpr auto bounds_max = 2U;
         static constexpr auto condition_type = ::clockwork::InputConditionType::new_message;
     }};
-    using ConditionsType = ::clockwork::CogConditions<AnyMsgPolicy, NewMsgPolicy>;
+    struct NewMultiConnectHello_0Policy
+    {{
+        static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("531fe36a-00ae-5d06-8c81-e19061cba41f").value();
+        static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.NewMultiConnectHello_0Policy";
+        static constexpr auto bounds_min = 1U;
+        static constexpr auto bounds_max = ::std::numeric_limits<uint32_t>::max();
+        static constexpr auto condition_type = ::clockwork::InputConditionType::new_message;
+    }};
+    struct NewMultiConnectHello_1Policy
+    {{
+        static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("a147059f-9096-5e08-ad0b-280b656f6ab7").value();
+        static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.NewMultiConnectHello_1Policy";
+        static constexpr auto bounds_min = 1U;
+        static constexpr auto bounds_max = ::std::numeric_limits<uint32_t>::max();
+        static constexpr auto condition_type = ::clockwork::InputConditionType::new_message;
+    }};
+    using ConditionsType = ::clockwork::CogConditions<AnyMsgPolicy, NewMsgPolicy, NewMultiConnectHello_0Policy, NewMultiConnectHello_1Policy>;
     /// Publishers ///
     struct OutWorldPolicy
     {{
@@ -148,6 +207,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("2d43f6e9-7d99-5c3d-a94b-5a177f24e59b").value();
         static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.OutWorldPolicy";
         static constexpr bool has_diagnostics = true;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     struct OutGoodbyePolicy
@@ -156,6 +216,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("476ad931-244b-5a06-9642-759fa3fee676").value();
         static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.OutGoodbyePolicy";
         static constexpr bool has_diagnostics = true;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     struct OutMulti1Policy
@@ -164,6 +225,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("78a9e421-2dc1-59f1-876c-0757c32d6231").value();
         static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.OutMulti1Policy";
         static constexpr bool has_diagnostics = true;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     struct OutMulti2Policy
@@ -172,6 +234,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("f223f264-3ef4-51b1-8cd2-6dbb3f7ce56b").value();
         static constexpr ::std::string_view name = "@{CLK_REPO}::clockwork::dsl::tests::support::hellocog.HelloCog.OutMulti2Policy";
         static constexpr bool has_diagnostics = true;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     struct CogTelemetryMetricsPolicy
@@ -180,6 +243,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("53badc19-4431-5db2-b66b-5d2d50a58a38").value();
         static constexpr ::std::string_view name = "@clockwork::clockwork::dsl::tests::support::hellocog.HelloCog.CogTelemetryMetricsPolicy";
         static constexpr bool has_diagnostics = false;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     struct CogEventMetricsPolicy
@@ -188,6 +252,7 @@ struct HelloCogPolicy
         static constexpr auto endpoint_id = ::jewels::Uuid<::clockwork::common::EndpointClassId>::from_string("f0bf10a4-7bd0-5d92-83a6-f753b3415f33").value();
         static constexpr ::std::string_view name = "@clockwork::clockwork::dsl::tests::support::hellocog.HelloCog.CogEventMetricsPolicy";
         static constexpr bool has_diagnostics = false;
+        static constexpr size_t max_msgs_per_exec = 1U;
         static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{{}};
     }};
     using PublishersType = ::clockwork::CogPublishers<OutWorldPolicy, OutGoodbyePolicy, OutMulti1Policy, OutMulti2Policy, CogTelemetryMetricsPolicy, CogEventMetricsPolicy>;
@@ -223,7 +288,7 @@ struct HelloCogPolicy
     }};
     using InfraDiagnosticsType = ::clockwork::CogInfraDiagnostics<CogInfraDiagnosticsPolicy>;
     static bool is_ready(CogStatistics& /*statistics*/, typename TimersType::ConditionsTuple& timers, typename ConditionsType::ConditionsTuple& conditions);
-    [[nodiscard]] static HelloCogDial make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& resources, typename ConfigsType::ConfigsTuple& configs, typename StatesType::StatesTuple& states, typename InputsType::InputDialTuple& inputs, typename PublishersType::PublishablesTuple publishables, typename TimersType::ConditionsTuple& timer_conditions, typename ConditionsType::ConditionsTuple& message_conditions, typename DiagnosticsType::ReporterType& diagnostics, SignalApiType& signals);
+    [[nodiscard]] static HelloCogDial make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& resources, typename ConfigsType::ConfigsTuple& configs, typename StatesType::StatesTuple& states, typename InputsType::InputDialTuple& inputs, typename PublishersType::PublishablesTuple& publishables, typename TimersType::ConditionsTuple& timer_conditions, typename ConditionsType::ConditionsTuple& message_conditions, typename DiagnosticsType::ReporterType& diagnostics, SignalApiType& signals);
     static void execute(CogDial& dial);
     static void populate_input_event_metrics(const typename InputsType::SubscribersTuple& inputs, ::clockwork::Tap<::clockwork::Tachyon<HelloCogEventMetricsBatch>>& event_metrics_tachyon);
     static void populate_output_event_metrics(const std::pmr::vector<::clockwork::EventMetrics>& event_metrics, ::clockwork::Tap<::clockwork::Tachyon<HelloCogEventMetricsBatch>>& event_metrics_tachyon);
@@ -248,38 +313,51 @@ struct HelloCogFactory : ::clockwork::CogFactory
     static constexpr auto type_id = ::jewels::Uuid<::clockwork::common::CogClassId>::from_string("ba6ead69-1442-50c4-a0f0-b5b95b69eb28").value();
     [[nodiscard]] const ::clockwork::CogFactory::IdType &id() const override;
     [[nodiscard]] ::clockwork::CogFactory::Ptr make(::jewels::memory::MemoryResource resource, const ::jewels::Uuid<::clockwork::common::CogInstanceId>& instance_id, ::jewels::memory::ObjectPtr<::clockwork::AbstractCogQueue> queue) const override;
+    static HelloCogFactory instance;
 }};
 struct HelloCogPolicy::RoHelloPolicy::Factory : ::clockwork::CogStateFactory
 {{
     static constexpr auto type_id = ::jewels::Uuid<::clockwork::RepresentationTag>::from_string("bfca902e-3ed9-5764-83b2-773d406cb418").value();
     [[nodiscard]] const ::clockwork::CogStateFactory::IdType &id() const override;
     [[nodiscard]] ::clockwork::CogStateFactory::Ptr make(::jewels::memory::MemoryResource memres_sys, ::clockwork::pinion::PublisherHandle publisher) const override;
+    static HelloCogPolicy::RoHelloPolicy::Factory instance;
 }};
 struct HelloCogPolicy::RwHelloPolicy::Factory : ::clockwork::CogStateFactory
 {{
     static constexpr auto type_id = ::jewels::Uuid<::clockwork::RepresentationTag>::from_string("bfca902e-3ed9-5764-83b2-773d406cb418").value();
     [[nodiscard]] const ::clockwork::CogStateFactory::IdType &id() const override;
     [[nodiscard]] ::clockwork::CogStateFactory::Ptr make(::jewels::memory::MemoryResource memres_sys, ::clockwork::pinion::PublisherHandle publisher) const override;
+    static HelloCogPolicy::RwHelloPolicy::Factory instance;
 }};
 struct HelloCogPolicy::ExternHelloPolicy::Factory : ::clockwork::CogStateFactory
 {{
     static constexpr auto type_id = ::jewels::Uuid<::clockwork::RepresentationTag>::from_string("83c85e31-5b74-5262-b320-11e4fa27bcfd").value();
     [[nodiscard]] const ::clockwork::CogStateFactory::IdType &id() const override;
     [[nodiscard]] ::clockwork::CogStateFactory::Ptr make(::jewels::memory::MemoryResource memres_sys, ::jewels::memory::MemoryResource memres_state) const override;
+    [[nodiscard]] ::clockwork::CogStateFactory::StateRestoreOutcome make(::jewels::Out<::clockwork::CogStateFactory::Ptr> state_out, ::jewels::memory::MemoryResource memres_sys, ::jewels::memory::MemoryResource memres_state, ::jewels::Uuid<::clockwork::RepresentationTag> snapshot_representation_id, ::std::span<const ::std::byte> snapshot_data) const override;
+    static HelloCogPolicy::ExternHelloPolicy::Factory instance;
 }};
 """
 
     target_source_str: Final = """
 #include "clockwork/cog/include_common.hh"
 #include "clockwork/dsl/tests/support/hellocog_dial.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/serializable.hh"
 #include "hello_cog.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/memory/aligned_storage.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
+#include <cstring>
+#include <span>
 #include <tuple>
 #include <utility>
 auto HelloCogPolicy::is_ready(CogStatistics& /*statistics*/, typename TimersType::ConditionsTuple& timers, typename ConditionsType::ConditionsTuple& conditions) -> bool
 {
-    return ((static_cast<bool>(::std::get<0>(timers)) && static_cast<bool>(::std::get<1>(conditions))) || static_cast<bool>(::std::get<0>(conditions)));
+    return ((static_cast<bool>(::std::get<0>(timers)) && (static_cast<bool>(::std::get<1>(conditions)) || (static_cast<bool>(::std::get<2>(conditions)) || static_cast<bool>(::std::get<3>(conditions))))) || static_cast<bool>(::std::get<0>(conditions)));
 }
-auto HelloCogPolicy::make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& resources, typename ConfigsType::ConfigsTuple& configs, typename StatesType::StatesTuple& states, typename InputsType::InputDialTuple& inputs, typename PublishersType::PublishablesTuple publishables, typename TimersType::ConditionsTuple& timer_conditions, typename ConditionsType::ConditionsTuple& message_conditions, typename DiagnosticsType::ReporterType& diagnostics, SignalApiType& signals) -> HelloCogDial
+auto HelloCogPolicy::make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& resources, typename ConfigsType::ConfigsTuple& configs, typename StatesType::StatesTuple& states, typename InputsType::InputDialTuple& inputs, typename PublishersType::PublishablesTuple& publishables, typename TimersType::ConditionsTuple& timer_conditions, typename ConditionsType::ConditionsTuple& message_conditions, typename DiagnosticsType::ReporterType& diagnostics, SignalApiType& signals) -> HelloCogDial
 {
     return HelloCogDial(
         params.start_time,
@@ -297,11 +375,15 @@ auto HelloCogPolicy::make_dial(const CogExecuteParams& params, typename MemoryRe
         HelloCogDialConditions(
             ::jewels::memory::make_non_null_from_ref(::std::get<0>(message_conditions)),
             ::jewels::memory::make_non_null_from_ref(::std::get<1>(message_conditions)),
+            ::jewels::memory::make_non_null_from_ref(::std::get<2>(message_conditions)),
+            ::jewels::memory::make_non_null_from_ref(::std::get<3>(message_conditions)),
             ::jewels::memory::make_non_null_from_ref(::std::get<0>(timer_conditions))
         ),
         HelloCogDialInputs(
             ::jewels::memory::make_non_null_from_ref(::std::get<0>(inputs)),
-            ::jewels::memory::make_non_null_from_ref(::std::get<1>(inputs))
+            ::jewels::memory::make_non_null_from_ref(::std::get<1>(inputs)),
+            ::jewels::memory::make_non_null_from_ref(::std::get<2>(inputs)),
+            ::jewels::memory::make_non_null_from_ref(::std::get<3>(inputs))
         ),
         HelloCogDialOutputs(
             ::jewels::memory::make_non_null_from_ref(::std::get<0>(publishables)),
@@ -330,7 +412,27 @@ auto HelloCogPolicy::populate_input_event_metrics(const typename InputsType::Sub
         set_input_channel_event_metrics(latest_hello_event_metrics.at(i), event_metrics_tachyon.get_mutable_event_metrics()[i].get_mutable_latest_hello());
     }
     std::get<0>(inputs)->reset_metrics();
-    auto& history_of_hellos_event_metrics = std::get<1>(inputs)->get_aggregated_input_metrics().event_metrics;
+    auto& multi_connect_hello__0_event_metrics = std::get<1>(inputs)->get_aggregated_input_metrics().event_metrics;
+    if (event_metrics_tachyon.get_underlying_event_metrics().size() < multi_connect_hello__0_event_metrics.size())
+    {
+        event_metrics_tachyon.get_underlying_event_metrics().resize(multi_connect_hello__0_event_metrics.size());
+    }
+    for (size_t i = 0; i < multi_connect_hello__0_event_metrics.size(); ++i)
+    {
+        set_input_channel_event_metrics(multi_connect_hello__0_event_metrics.at(i), event_metrics_tachyon.get_mutable_event_metrics()[i].get_mutable_multi_connect_hello__0());
+    }
+    std::get<1>(inputs)->reset_metrics();
+    auto& multi_connect_hello__1_event_metrics = std::get<2>(inputs)->get_aggregated_input_metrics().event_metrics;
+    if (event_metrics_tachyon.get_underlying_event_metrics().size() < multi_connect_hello__1_event_metrics.size())
+    {
+        event_metrics_tachyon.get_underlying_event_metrics().resize(multi_connect_hello__1_event_metrics.size());
+    }
+    for (size_t i = 0; i < multi_connect_hello__1_event_metrics.size(); ++i)
+    {
+        set_input_channel_event_metrics(multi_connect_hello__1_event_metrics.at(i), event_metrics_tachyon.get_mutable_event_metrics()[i].get_mutable_multi_connect_hello__1());
+    }
+    std::get<2>(inputs)->reset_metrics();
+    auto& history_of_hellos_event_metrics = std::get<3>(inputs)->get_aggregated_input_metrics().event_metrics;
     if (event_metrics_tachyon.get_underlying_event_metrics().size() < history_of_hellos_event_metrics.size())
     {
         event_metrics_tachyon.get_underlying_event_metrics().resize(history_of_hellos_event_metrics.size());
@@ -339,7 +441,7 @@ auto HelloCogPolicy::populate_input_event_metrics(const typename InputsType::Sub
     {
         set_input_channel_event_metrics(history_of_hellos_event_metrics.at(i), event_metrics_tachyon.get_mutable_event_metrics()[i].get_mutable_history_of_hellos());
     }
-    std::get<1>(inputs)->reset_metrics();
+    std::get<3>(inputs)->reset_metrics();
 }
 auto HelloCogPolicy::populate_output_event_metrics(const std::pmr::vector<::clockwork::EventMetrics>& event_metrics, ::clockwork::Tap<::clockwork::Tachyon<HelloCogEventMetricsBatch>>& event_metrics_tachyon) -> void
 {
@@ -399,6 +501,8 @@ auto HelloCogPolicy::populate_condition_trigger_vals(const std::pmr::vector<uint
     uint16_t periodic_count = 0;
     uint16_t any_msg_count = 0;
     uint16_t new_msg_count = 0;
+    uint16_t new_multi_connect_hello__0_count = 0;
+    uint16_t new_multi_connect_hello__1_count = 0;
     for (const auto& condition_mask : event_metrics_vec)
     {
         auto trigger_flags = static_cast<HelloCogConditionsMask>(condition_mask);
@@ -414,15 +518,27 @@ auto HelloCogPolicy::populate_condition_trigger_vals(const std::pmr::vector<uint
         {
             ++new_msg_count;
         }
+        if ((trigger_flags & HelloCogConditionsMask::new_multi_connect_hello__0) != HelloCogConditionsMask::no_conditions_active)
+        {
+            ++new_multi_connect_hello__0_count;
+        }
+        if ((trigger_flags & HelloCogConditionsMask::new_multi_connect_hello__1) != HelloCogConditionsMask::no_conditions_active)
+        {
+            ++new_multi_connect_hello__1_count;
+        }
     }
     telemetry_metrics_tachyon.set_periodic_trigger_vals(periodic_count);
     telemetry_metrics_tachyon.set_any_msg_trigger_vals(any_msg_count);
     telemetry_metrics_tachyon.set_new_msg_trigger_vals(new_msg_count);
+    telemetry_metrics_tachyon.set_new_multi_connect_hello__0_trigger_vals(new_multi_connect_hello__0_count);
+    telemetry_metrics_tachyon.set_new_multi_connect_hello__1_trigger_vals(new_multi_connect_hello__1_count);
 }
 auto HelloCogPolicy::populate_input_telemetry_metrics(const typename InputsType::SubscribersTuple& inputs, ::clockwork::Tap<::clockwork::Tachyon<HelloCogTelemetryMetrics>>& telemetry_metrics_tachyon) -> void
 {
     set_input_channel_telemetry_metrics(std::get<0>(inputs)->get_aggregated_input_metrics().telemetry_metrics, telemetry_metrics_tachyon.get_mutable_latest_hello());
-    set_input_channel_telemetry_metrics(std::get<1>(inputs)->get_aggregated_input_metrics().telemetry_metrics, telemetry_metrics_tachyon.get_mutable_history_of_hellos());
+    set_input_channel_telemetry_metrics(std::get<1>(inputs)->get_aggregated_input_metrics().telemetry_metrics, telemetry_metrics_tachyon.get_mutable_multi_connect_hello__0());
+    set_input_channel_telemetry_metrics(std::get<2>(inputs)->get_aggregated_input_metrics().telemetry_metrics, telemetry_metrics_tachyon.get_mutable_multi_connect_hello__1());
+    set_input_channel_telemetry_metrics(std::get<3>(inputs)->get_aggregated_input_metrics().telemetry_metrics, telemetry_metrics_tachyon.get_mutable_history_of_hellos());
 }
 auto HelloCogPolicy::populate_output_telemetry_metrics(const ::clockwork::TelemetryMetrics& telemetry_metrics, ::clockwork::Tap<::clockwork::Tachyon<HelloCogTelemetryMetrics>>& telemetry_metrics_tachyon) -> void
 {
@@ -461,6 +577,16 @@ auto HelloCogPolicy::get_conditions_mask(const typename TimersType::ConditionsTu
     {
         condition_mask = condition_mask | static_cast<uint8_t>(HelloCogConditionsMask::new_msg);
     }
+    auto& new_multi_connect_hello__0_handle = std::get<2>(input_conditions);
+    if (new_multi_connect_hello__0_handle.is_active())
+    {
+        condition_mask = condition_mask | static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__0);
+    }
+    auto& new_multi_connect_hello__1_handle = std::get<3>(input_conditions);
+    if (new_multi_connect_hello__1_handle.is_active())
+    {
+        condition_mask = condition_mask | static_cast<uint8_t>(HelloCogConditionsMask::new_multi_connect_hello__1);
+    }
     return condition_mask;
 }
 auto HelloCogPolicy::populate_telemetry_triggers(const ::clockwork::TelemetryMetrics& telemetry_metrics, ::clockwork::Tap<::clockwork::Tachyon<HelloCogTelemetryMetrics>>& telemetry_metrics_tachyon) -> void
@@ -468,6 +594,8 @@ auto HelloCogPolicy::populate_telemetry_triggers(const ::clockwork::TelemetryMet
     uint16_t periodic_count = 0;
     uint16_t any_msg_count = 0;
     uint16_t new_msg_count = 0;
+    uint16_t new_multi_connect_hello__0_count = 0;
+    uint16_t new_multi_connect_hello__1_count = 0;
     for (const auto& condition_mask : telemetry_metrics.conditions_mask_vector)
     {
         auto trigger_flags = static_cast<HelloCogConditionsMask>(condition_mask);
@@ -483,10 +611,20 @@ auto HelloCogPolicy::populate_telemetry_triggers(const ::clockwork::TelemetryMet
         {
             ++new_msg_count;
         }
+        if ((trigger_flags & HelloCogConditionsMask::new_multi_connect_hello__0) != HelloCogConditionsMask::no_conditions_active)
+        {
+            ++new_multi_connect_hello__0_count;
+        }
+        if ((trigger_flags & HelloCogConditionsMask::new_multi_connect_hello__1) != HelloCogConditionsMask::no_conditions_active)
+        {
+            ++new_multi_connect_hello__1_count;
+        }
     }
     telemetry_metrics_tachyon.set_periodic_trigger_vals(periodic_count);
     telemetry_metrics_tachyon.set_any_msg_trigger_vals(any_msg_count);
     telemetry_metrics_tachyon.set_new_msg_trigger_vals(new_msg_count);
+    telemetry_metrics_tachyon.set_new_multi_connect_hello__0_trigger_vals(new_multi_connect_hello__0_count);
+    telemetry_metrics_tachyon.set_new_multi_connect_hello__1_trigger_vals(new_multi_connect_hello__1_count);
 }
 auto HelloCogPolicy::populate_telemetry_metrics(const ::clockwork::TelemetryMetrics& telemetry_metrics, const typename InputsType::SubscribersTuple& inputs, typename PublishersType::PublishablesTuple& publishables) -> void
 {
@@ -533,7 +671,7 @@ const ::clockwork::CogFactory::IdType &HelloCogFactory::id() const
 {
     return ::jewels::memory::make_pmr_shared<::clockwork::SimpleCog<HelloCogPolicy>>(resource, resource, instance_id, queue);
 }
-static HelloCogFactory hello_cog_factory_inst;
+HelloCogFactory HelloCogFactory::instance;
 const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::RoHelloPolicy::Factory::id() const
 {
     return type_id;
@@ -542,7 +680,7 @@ const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::RoHelloPolicy::Facto
 {
     return ::jewels::memory::make_pmr_shared<::clockwork::CogStateDataImpl<Tap<Tachyon<::clockwork::demo::HelloMsg>>>>(memres_sys, std::move(publisher));
 }
-static HelloCogPolicy::RoHelloPolicy::Factory hello_cog_policy__ro_hello_policy___factory_inst;
+HelloCogPolicy::RoHelloPolicy::Factory HelloCogPolicy::RoHelloPolicy::Factory::instance;
 const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::RwHelloPolicy::Factory::id() const
 {
     return type_id;
@@ -551,7 +689,7 @@ const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::RwHelloPolicy::Facto
 {
     return ::jewels::memory::make_pmr_shared<::clockwork::CogStateDataImpl<Tap<Tachyon<::clockwork::demo::HelloMsg>>>>(memres_sys, std::move(publisher));
 }
-static HelloCogPolicy::RwHelloPolicy::Factory hello_cog_policy__rw_hello_policy___factory_inst;
+HelloCogPolicy::RwHelloPolicy::Factory HelloCogPolicy::RwHelloPolicy::Factory::instance;
 const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::ExternHelloPolicy::Factory::id() const
 {
     return type_id;
@@ -560,7 +698,35 @@ const ::clockwork::CogStateFactory::IdType &HelloCogPolicy::ExternHelloPolicy::F
 {
     return ::jewels::memory::make_pmr_shared<::clockwork::CogStateDataImpl<::clockwork::testing::CxxState>>(memres_sys, std::move(memres_state));
 }
-static HelloCogPolicy::ExternHelloPolicy::Factory hello_cog_policy__extern_hello_policy___factory_inst;
+::clockwork::CogStateFactory::StateRestoreOutcome HelloCogPolicy::ExternHelloPolicy::Factory::make(::jewels::Out<::clockwork::CogStateFactory::Ptr> state_out, ::jewels::memory::MemoryResource memres_sys, ::jewels::memory::MemoryResource memres_state, ::jewels::Uuid<::clockwork::RepresentationTag> snapshot_representation_id, ::std::span<const ::std::byte> snapshot_data) const
+{
+    if (snapshot_representation_id != ::jewels::Uuid<::clockwork::RepresentationTag>::from_string("bfca902e-3ed9-5764-83b2-773d406cb418").value())
+    {
+        return ::clockwork::CogStateFactory::StateRestoreResult::invalid_class_uuid;
+    }
+    if (snapshot_data.size() != sizeof(Tappy<::clockwork::demo::HelloMsg>))
+    {
+        return ::clockwork::CogStateFactory::StateRestoreResult::buffer_error;
+    }
+    ::jewels::memory::AlignedStorage<Tappy<::clockwork::demo::HelloMsg>> snapshot_storage{};
+    ::std::memcpy(snapshot_storage.bytes, snapshot_data.data(), snapshot_data.size());
+    const auto snapshot = ::clockwork::start_lifetime_as<Tappy<::clockwork::demo::HelloMsg>>(
+      ::std::span<std::byte, sizeof(Tappy<::clockwork::demo::HelloMsg>)>{snapshot_storage.bytes});
+    auto state = ::jewels::memory::make_pmr_shared<::clockwork::CogStateDataImpl<::clockwork::testing::CxxState>>(
+      memres_sys, std::move(memres_state));
+    if (!state)
+    {
+        return ::clockwork::CogStateFactory::StateRestoreResult::init_failure;
+    }
+    if (::jewels::fails(::clockwork::Serializable<::clockwork::testing::CxxState>::deserialize(
+          ::jewels::Out{state->state}, *snapshot)))
+    {
+        return ::clockwork::CogStateFactory::StateRestoreResult::init_failure;
+    }
+    *state_out = std::move(state);
+    return ::clockwork::CogStateFactory::StateRestoreResult::success;
+}
+HelloCogPolicy::ExternHelloPolicy::Factory HelloCogPolicy::ExternHelloPolicy::Factory::instance;
 """
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/hellocog.clk")),
@@ -602,6 +768,7 @@ struct GoodbyeCogPolicy
     static constexpr size_t event_metrics_batch_size = 10;
     using CogDial = GoodbyeCogDial;
     static constexpr auto has_signals = false;
+    static constexpr auto has_cog_metrics_report_groups = false;
     using SignalApiType = GoodbyeCogDialSignalApi;
     static constexpr auto cog_id = ::jewels::Uuid<::clockwork::common::CogClassId>::from_string("357596a4-e400-5585-8c5d-26c7bcb6b5f7").value();
     /// MemoryResources ///
@@ -639,7 +806,7 @@ struct GoodbyeCogPolicy
     }};
     using InfraDiagnosticsType = ::clockwork::CogInfraDiagnostics<CogInfraDiagnosticsPolicy>;
     static bool is_ready(CogStatistics& statistics, typename TimersType::ConditionsTuple& /*timers*/, typename ConditionsType::ConditionsTuple& /*conditions*/);
-    [[nodiscard]] static GoodbyeCogDial make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& /*resources*/, typename ConfigsType::ConfigsTuple& /*configs*/, typename StatesType::StatesTuple& /*states*/, typename InputsType::InputDialTuple& /*inputs*/, typename PublishersType::PublishablesTuple /*publishables*/, typename TimersType::ConditionsTuple& /*timer_conditions*/, typename ConditionsType::ConditionsTuple& /*message_conditions*/, typename DiagnosticsType::ReporterType& /*diagnostics*/, SignalApiType& signals);
+    [[nodiscard]] static GoodbyeCogDial make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& /*resources*/, typename ConfigsType::ConfigsTuple& /*configs*/, typename StatesType::StatesTuple& /*states*/, typename InputsType::InputDialTuple& /*inputs*/, typename PublishersType::PublishablesTuple& /*publishables*/, typename TimersType::ConditionsTuple& /*timer_conditions*/, typename ConditionsType::ConditionsTuple& /*message_conditions*/, typename DiagnosticsType::ReporterType& /*diagnostics*/, SignalApiType& signals);
     static void execute(CogDial& dial);
     /// Publish report group data from the signals API.
     [[nodiscard]] static ::jewels::BinaryOutcome publish_report_groups(SignalApiType& signals, typename PublishersType::PublishablesTuple& publishables);
@@ -654,6 +821,7 @@ struct GoodbyeCogFactory : ::clockwork::CogFactory
     static constexpr auto type_id = ::jewels::Uuid<::clockwork::common::CogClassId>::from_string("357596a4-e400-5585-8c5d-26c7bcb6b5f7").value();
     [[nodiscard]] const ::clockwork::CogFactory::IdType &id() const override;
     [[nodiscard]] ::clockwork::CogFactory::Ptr make(::jewels::memory::MemoryResource resource, const ::jewels::Uuid<::clockwork::common::CogInstanceId>& instance_id, ::jewels::memory::ObjectPtr<::clockwork::AbstractCogQueue> queue) const override;
+    static GoodbyeCogFactory instance;
 }};
 """
 
@@ -667,7 +835,7 @@ auto GoodbyeCogPolicy::is_ready(CogStatistics& statistics, typename TimersType::
 {
     return (statistics.num_executions_ == 0);
 }
-auto GoodbyeCogPolicy::make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& /*resources*/, typename ConfigsType::ConfigsTuple& /*configs*/, typename StatesType::StatesTuple& /*states*/, typename InputsType::InputDialTuple& /*inputs*/, typename PublishersType::PublishablesTuple /*publishables*/, typename TimersType::ConditionsTuple& /*timer_conditions*/, typename ConditionsType::ConditionsTuple& /*message_conditions*/, typename DiagnosticsType::ReporterType& /*diagnostics*/, SignalApiType& signals) -> GoodbyeCogDial
+auto GoodbyeCogPolicy::make_dial(const CogExecuteParams& params, typename MemoryResourcesType::MemoryResourcesTuple& /*resources*/, typename ConfigsType::ConfigsTuple& /*configs*/, typename StatesType::StatesTuple& /*states*/, typename InputsType::InputDialTuple& /*inputs*/, typename PublishersType::PublishablesTuple& /*publishables*/, typename TimersType::ConditionsTuple& /*timer_conditions*/, typename ConditionsType::ConditionsTuple& /*message_conditions*/, typename DiagnosticsType::ReporterType& /*diagnostics*/, SignalApiType& signals) -> GoodbyeCogDial
 {
     return GoodbyeCogDial(
         params.start_time,
@@ -718,7 +886,7 @@ const ::clockwork::CogFactory::IdType &GoodbyeCogFactory::id() const
 {
     return ::jewels::memory::make_pmr_shared<::clockwork::SimpleCog<GoodbyeCogPolicy>>(resource, resource, instance_id, queue);
 }
-static GoodbyeCogFactory goodbye_cog_factory_inst;
+GoodbyeCogFactory GoodbyeCogFactory::instance;
 """
     module = compiler.compile_source_file(
         ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/goodbyecog.clk")),
@@ -861,6 +1029,7 @@ cpp_target hellocog
             cog_ir.module.context,
             cog_ir.inputs,
             cog_ir.execution_spec,
+            cog_ir.expanded_aligned_input_defs,
         )
 
         # run assertions on the inputs struct
@@ -920,5 +1089,299 @@ def test_report_group_cog_render() -> None:
         line for line in generated_code.splitlines() if "using MetricsPublishersType =" in line
     )
     assert "MyGroupPolicy" not in metrics_publishers_line
-    assert "CogTelemetryMetricsPolicy" in metrics_publishers_line
-    assert "CogEventMetricsPolicy" in metrics_publishers_line
+    # Init cog without explicit metrics_options: no legacy metrics publishers are generated.
+    assert "CogPublishers<>" in metrics_publishers_line
+
+
+def test_cog_metrics_event_render() -> None:
+    """Test that a cog with CogEventMetricsPolicy generates the expected signal population code."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/cog/tests/support/cog_metrics_test_cog.clk")),
+        importer=fs_importer,
+    )
+    cog_ir = module.inner_scope.lookup("CogMetricsTestCog")
+    assert isinstance(cog_ir, cog.Cog)
+    cog_ir.resolve()
+
+    dial_header = context.Header(CLK_REPO, "cog_metrics_test_cog_dial.hh")
+    cpp_cog = cppcog.Cog.make(
+        cog_ir=cog_ir,
+        class_name="CogMetricsTestCog",
+        dial_name="CogMetricsTestCogDial",
+        header_name="cog_metrics_test_cog.hh",
+        cpp_namespace="clockwork::testing::cogs",
+        dial_header=dial_header,
+    )
+    cpp_mod = cpp_cog.render()
+    generated_code = cpp_mod.header_chunk.render_str(render_includes=True)
+    generated_impl = cpp_mod.implementation_chunk.render_str(render_includes=True)
+
+    # has_cog_metrics_report_groups should be true
+    assert "static constexpr auto has_cog_metrics_report_groups = true;" in generated_code
+
+    # populate_cog_metrics_signals declaration must be present in the header
+    assert "populate_cog_metrics_signals" in generated_code
+
+    # Global signal setters must be present in the implementation
+    assert "set_cog_dial_start_time(" in generated_impl
+    assert "set_cog_exec_start_time(" in generated_impl
+    assert "set_cog_exec_duration(" in generated_impl
+    assert "set_execute_cog_wall_duration(" in generated_impl
+    assert "set_execute_cog_thread_cpu_duration(" in generated_impl
+    assert "set_execute_cog_thread_user_duration(" in generated_impl
+    assert "set_execute_cog_thread_system_duration(" in generated_impl
+    assert "if (event_metrics.execute_cog_wall_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_cpu_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_user_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_system_duration)" in generated_impl
+    assert "set_cog_ready_to_exec_latency(" in generated_impl
+    assert "set_cog_attempt_to_exec_latency(" in generated_impl
+    assert "set_cog_requeue_count(" in generated_impl
+
+    # Per-input signal setters must be present for both inputs in the implementation
+    assert "set_sensor_a_unseen_messages(" in generated_impl
+    assert "set_sensor_a_staleness(" in generated_impl
+    assert "set_sensor_a_dropped_messages(" in generated_impl
+    assert "set_sensor_b_unseen_messages(" in generated_impl
+    assert "set_sensor_b_staleness(" in generated_impl
+    assert "set_sensor_b_dropped_messages(" in generated_impl
+
+    # Per-output signal setter must be present in the implementation
+    assert "set_result_num_messages(" in generated_impl
+
+    # Per-condition signal setters must be present in the implementation
+    assert "set_periodic_active(" in generated_impl
+    assert "set_new_msg_active(" in generated_impl
+
+    # end_of_execution for the infra group must be called inside populate_cog_metrics_signals
+    assert "end_of_execution_cog_event_metrics_group(" in generated_impl
+
+    # end_of_execution_signals must NOT include the infra group
+    # (It should have no loops calling end_of_execution_cog_event_metrics in the aggregate method)
+    lines = generated_impl.splitlines()
+    in_end_of_execution_signals = False
+    end_of_execution_signals_body: list[str] = []
+    for line in lines:
+        if "end_of_execution_signals" in line and "auto" in line and "CogMetricsTestCogPolicy" in line:
+            in_end_of_execution_signals = True
+        if in_end_of_execution_signals:
+            end_of_execution_signals_body.append(line)
+            if line.strip() == "}":
+                break
+    end_of_execution_signals_text = "\n".join(end_of_execution_signals_body)
+    assert "cog_event_metrics_group" not in end_of_execution_signals_text, (
+        "end_of_execution_signals must not include the infra cog_event_metrics_group group"
+    )
+
+
+def test_cog_metrics_telemetry_render() -> None:
+    """Test that a cog with CogTelemetryMetricsPolicy generates the expected signal population code."""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/cog/tests/support/cog_metrics_test_cog.clk")),
+        importer=fs_importer,
+    )
+    cog_ir = module.inner_scope.lookup("CogMetricsTestCog")
+    assert isinstance(cog_ir, cog.Cog)
+    cog_ir.resolve()
+
+    dial_header = context.Header(CLK_REPO, "cog_metrics_test_cog_dial.hh")
+    cpp_cog = cppcog.Cog.make(
+        cog_ir=cog_ir,
+        class_name="CogMetricsTestCog",
+        dial_name="CogMetricsTestCogDial",
+        header_name="cog_metrics_test_cog.hh",
+        cpp_namespace="clockwork::testing::cogs",
+        dial_header=dial_header,
+    )
+    cpp_mod = cpp_cog.render()
+    generated_impl = cpp_mod.implementation_chunk.render_str(render_includes=True)
+
+    # Telemetry global signal setters (prefixed with agg_) must be present
+    assert "set_agg_cog_exec_duration(" in generated_impl
+    assert "set_agg_execute_cog_wall_duration(" in generated_impl
+    assert "set_agg_execute_cog_thread_cpu_duration(" in generated_impl
+    assert "set_agg_execute_cog_thread_user_duration(" in generated_impl
+    assert "set_agg_execute_cog_thread_system_duration(" in generated_impl
+    assert "if (event_metrics.execute_cog_wall_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_cpu_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_user_duration)" in generated_impl
+    assert "if (event_metrics.execute_cog_thread_system_duration)" in generated_impl
+    assert "set_agg_cog_ready_to_exec_latency(" in generated_impl
+    assert "set_agg_cog_attempt_to_exec_latency(" in generated_impl
+    assert "set_agg_cog_requeue_count(" in generated_impl
+
+    # Telemetry-only signal must be set from the execution_period parameter
+    assert "set_cog_exec_period(execution_period)" in generated_impl
+
+    # Per-input telemetry signal setters must be present for both inputs
+    assert "set_agg_sensor_a_unseen_messages(" in generated_impl
+    assert "set_agg_sensor_a_staleness(" in generated_impl
+    assert "set_agg_sensor_a_dropped_messages(" in generated_impl
+    assert "set_agg_sensor_b_unseen_messages(" in generated_impl
+    assert "set_agg_sensor_b_staleness(" in generated_impl
+    assert "set_agg_sensor_b_dropped_messages(" in generated_impl
+
+    # Per-output telemetry signal setter must be present
+    assert "set_agg_result_num_messages(" in generated_impl
+
+    # Per-condition count signal setters must be present
+    assert "set_periodic_active_count(" in generated_impl
+    assert "set_new_msg_active_count(" in generated_impl
+
+    # end_of_execution for the telemetry infra group must be called inside populate_cog_metrics_signals
+    assert "end_of_execution_cog_telemetry_metrics_group(" in generated_impl
+
+    # end_of_execution_signals must NOT include the telemetry infra group
+    lines = generated_impl.splitlines()
+    in_end_of_execution_signals = False
+    end_of_execution_signals_body: list[str] = []
+    for line in lines:
+        if "end_of_execution_signals" in line and "auto" in line and "CogMetricsTestCogPolicy" in line:
+            in_end_of_execution_signals = True
+        if in_end_of_execution_signals:
+            end_of_execution_signals_body.append(line)
+            if line.strip() == "}":
+                break
+    end_of_execution_signals_text = "\n".join(end_of_execution_signals_body)
+    assert "cog_telemetry_metrics_group" not in end_of_execution_signals_text, (
+        "end_of_execution_signals must not include the infra cog_telemetry_metrics group"
+    )
+
+
+@pytest.fixture(scope="module")
+def fs_importer() -> importer.FilesystemImporter:
+    """Create a filesystem importer for compiling .clk files."""
+    return importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+
+@pytest.fixture(scope="module")
+def param_test_cog_ir(fs_importer: importer.FilesystemImporter) -> cog.Cog:
+    """clk_parameterized_box.clk and return the ParamtestCog IR."""
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/clk_parameterized_box.clk")),
+        importer=fs_importer,
+    )
+    cog_ir = module.inner_scope.lookup("ParamTestCog")
+    assert isinstance(cog_ir, cog.Cog)
+    return cog_ir
+
+
+def test_param_cog_header(param_test_cog_ir: cog.Cog) -> None:
+    """Golden file test: cog header with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    cpp_cog = cppcog.Cog(
+        cog_ir=param_test_cog_ir,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = cpp_cog.render()
+    actual = cpp_mod.header_chunk.render_str(render_includes=True).strip()
+
+    test_helpers.write_expected("expected_param_cog_header", actual)
+    assert actual == test_helpers.load_expected("expected_param_cog_header")
+
+
+def test_param_cog_source(param_test_cog_ir: cog.Cog) -> None:
+    """Golden file test: cog source with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    cpp_cog = cppcog.Cog(
+        cog_ir=param_test_cog_ir,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = cpp_cog.render()
+    actual = cpp_mod.implementation_chunk.render_str(render_includes=True).strip()
+
+    test_helpers.write_expected("expected_param_cog_source", actual)
+    assert actual == test_helpers.load_expected("expected_param_cog_source")
+
+
+def test_param_cog_inline(param_test_cog_ir: cog.Cog) -> None:
+    """Golden file test: cog inline with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    cpp_cog = cppcog.Cog(
+        cog_ir=param_test_cog_ir,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = cpp_cog.render()
+    actual = cpp_mod.inline_chunk.render_str(render_includes=True).strip()
+
+    assert actual == ""
+
+
+@pytest.fixture(scope="module")
+def param_test_instantiated_cog(fs_importer: importer.FilesystemImporter) -> cog.InstantiatedCog:
+    """clk_parameterized_box.clk and return the ParamtestCog IR."""
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/tests/support/clk_parameterized_box.clk")),
+        importer=fs_importer,
+    )
+    instantiate_stmt = module.inner_scope.lookup("ParamTestCog1")
+    assert isinstance(instantiate_stmt, statement.InstantiateStmt)
+    assert isinstance(instantiate_stmt.instantiated, cog.InstantiatedCog)
+    return instantiate_stmt.instantiated
+
+
+def test_param_inst_cog_header(param_test_instantiated_cog: cog.InstantiatedCog) -> None:
+    """Golden file test: instantiated cog header with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    instantiated_cog = cppcog.InstantiatedCog(
+        instantiation=param_test_instantiated_cog,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = instantiated_cog.render()
+    actual = cpp_mod.header_chunk.render_str(render_includes=True).strip()
+
+    test_helpers.write_expected("expected_param_inst_cog_header", actual)
+    assert actual == test_helpers.load_expected("expected_param_inst_cog_header")
+
+
+def test_param_inst_cog_source(param_test_instantiated_cog: cog.InstantiatedCog) -> None:
+    """Golden file test: instantiated cog source with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    instantiated_cog = cppcog.InstantiatedCog(
+        instantiation=param_test_instantiated_cog,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = instantiated_cog.render()
+    actual = cpp_mod.implementation_chunk.render_str(render_includes=True).strip()
+
+    test_helpers.write_expected("expected_param_inst_cog_source", actual)
+    assert actual == test_helpers.load_expected("expected_param_inst_cog_source")
+
+
+def test_param_inst_cog_inline(param_test_instantiated_cog: cog.InstantiatedCog) -> None:
+    """Golden file test: instantiated cog inline with parameterized cog."""
+    dial_header = context.Header(CLK_REPO, "clockwork/dsl/tests/support/clk_parameterized_box_clk_cc_dial.hh")
+    instantiated_cog = cppcog.InstantiatedCog(
+        instantiation=param_test_instantiated_cog,
+        class_name="ParamTestCog",
+        dial_name="ParamTestCogDial",
+        header_name="clk_parameterized_box_clk_cc.hh",
+        cpp_namespace="clockwork::testing",
+        dial_header=dial_header,
+    )
+    cpp_mod = instantiated_cog.render()
+    actual = cpp_mod.inline_chunk.render_str(render_includes=True).strip()
+
+    assert actual == ""

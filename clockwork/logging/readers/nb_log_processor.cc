@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_timestamp.hh"
@@ -6,7 +6,6 @@
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/std/expected.hh"
 
-#include <Python.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>         // IWYU pragma: keep
 #include <nanobind/stl/function.h>    // IWYU pragma: keep
@@ -18,7 +17,6 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <vector>
 
 NB_MODULE(nb_log_processor, mod)
 {

@@ -1,8 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/common/exec_tools.hh"
+#include "clockwork/common/simplelaunch_runner_config_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
@@ -12,8 +16,10 @@
 #include "jewels/std/expected.hh"
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <string>
-#include <unordered_map>
+#include <vector>
 
 namespace jewels::simplelaunch
 {
@@ -63,20 +69,39 @@ bool check_for_running_apps(
   jewels::memory::MemoryResource memory_resource,
   jewels::filesystem::Filesystem& filesystem);
 
+/// Prepare the commandline for a config.
+/// @param config the configuraiton.
+/// @param memory_resource A memory resource for allocations.
+/// @param filesystem A filesystem to use for running tasks.
+/// @param tmp_dir_path The directory to copy executables to when running as root.
+/// @param[out] command_args Storage for the command line.
+/// @return failure if sudo was requested and either a) sudo wasn't found or b) copying to @a tmp_dir_path failed.
+/// @pre command_args is empty
+/// @post command_args has at least one item
+BinaryOutcome make_argv(
+  const ::jewels::simplelaunch::v1::AppConfig& config,
+  jewels::memory::MemoryResource memory_resource,
+  jewels::filesystem::Filesystem& filesystem,
+  const jewels::filesystem::Path& tmp_dir_path,
+  std::vector<std::string>& command_args);
+
 /// Run any pre-launch tasks in the provided config.
 /// @param config the configuraiton to check.
 /// @param memory_resource A memory resource for allocations.
+/// @param filesystem A filesystem to use for running tasks.
 /// @param[out] task_results A map to write per-task results to.
-/// @return true if all pre-launch tasks ran successfully.
 void run_pre_launch_tasks(
   const ::jewels::simplelaunch::v1::Config& config,
   jewels::memory::MemoryResource memory_resource,
-  std::pmr::unordered_map<std::pmr::string, bool>& task_results);
+  jewels::filesystem::Filesystem& filesystem,
+  std::pmr::map<std::pmr::string, bool>& task_results);
 
 /// Load configuration and start child processes.
 /// @param memory_resource A memory resource for allocations.
 /// @param config The configuration to launch with.
+/// @param runner_config_ptr The clockwork simplelaunch runner configuration to launch with.
 /// @param pre_launch_results The results of the pre-launch tasks.
+/// @param pinion_args Pinion arguments for contruction the clockwork channel factory
 /// @param logging_directory Path to the directory to write logs to.
 /// @param listen_host The hostname to use for the command server
 /// @param listen_port The TCP port to use for the command server
@@ -84,7 +109,9 @@ void run_pre_launch_tasks(
 int launch(
   jewels::memory::MemoryResource memory_resource,
   const ::jewels::simplelaunch::v1::Config& config,
-  const std::pmr::unordered_map<std::pmr::string, bool>& pre_launch_results,
+  std::shared_ptr<clockwork::Tappy<SimplelaunchRunnerConfig>> runner_config_ptr,
+  const clockwork::PinionArgs& pinion_args,
+  const std::pmr::map<std::pmr::string, bool>& pre_launch_results,
   const jewels::filesystem::Path& logging_directory,
   const std::string& listen_host,
   uint16_t listen_port);

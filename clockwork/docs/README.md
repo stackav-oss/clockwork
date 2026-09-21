@@ -20,10 +20,13 @@ Dig into the Clockwork schema language starting with these pages:
 - [Schemas, representations, and interfaces concept guide](concepts/schema_repr_iface.md): introduction to the concepts of schemas, representations, and interfaces.
 - [Struct-of-Arrays containers](reference/soa.md): reference for `FixedSoa` and `VarSoa` container types which provide SoA data layout.
 - [Attributes and code generation](reference/attributes.md): reference for the attributes that tell the compiler what code to generate.
+- [Parameterized channels, cogs and boxes](reference/parameterized.md): reference for using parameters to define channels, cogs and boxes.
 
 For system composition and Cog execution:
 
 - [System composition guide](concepts/composition.md): explains how to compose Cogs, state, and config into systems, including [init Cogs and state initialization](concepts/composition.md#init-cogs-and-state-initialization).
+- [Multi-connect inputs](concepts/multi_connect_inputs.md): explains how arrays of channels can be connected to a cog input..
+- [Multi-message outputs](concepts/multi_message_outputs.md): explains how Cogs can publish a bounded number of messages from one output endpoint in a single execution.
 - [Execution conditions reference](reference/exec_conditions.md): details execution conditions including the `init` condition for init Cogs.
 
 For runtime expressions and computations:

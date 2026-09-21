@@ -1,14 +1,20 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/cog/factory.hh"
+#include "clockwork/cog/interface.hh"
+#include "clockwork/common/constants_clk_cc.hh"
+#include "clockwork/common/exec_tools.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/channel_config_clk_cc.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -24,24 +30,31 @@
 #include "clockwork/scaffolding/tests/support/test_msgs_clk_cc.hh"
 #include "clockwork/scaffolding/tests/support/test_msgs_clk_proto.pb.h"
 #include "clockwork/scaffolding/tests/support/test_msgs_clk_proto_conv.hh"
+#include "clockwork/tags.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/optional.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/filesystem/path.hh"
+#include "jewels/memory/aligned_storage.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
+#include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
+#include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 #include <xxh3.h>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -51,7 +64,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -70,9 +82,95 @@ uint64_t fibonacci(uint64_t nth)
   return seq_n0;
 }
 
+struct SnapshotStateFactory final : CogStateFactory
+{
+  static constexpr auto type_id =
+    jewels::Uuid<RepresentationTag>::from_string("7e4c9cb5-f0d2-4a8d-9c8c-6db5f8e44c5e").value();
+  static constexpr auto snapshot_id =
+    jewels::Uuid<RepresentationTag>::from_string("ae6c6e66-cb89-4cb5-a73b-6b3e2e5f4dd0").value();
+
+  [[nodiscard]] const IdType& id() const override
+  {
+    return type_id;
+  }
+
+  [[nodiscard]] StateRestoreOutcome make(
+    jewels::Out<Ptr> state_out,
+    jewels::memory::MemoryResource /*memres_sys*/,
+    jewels::memory::MemoryResource /*memres_state*/,
+    jewels::Uuid<RepresentationTag> snapshot_representation_id,
+    std::span<const std::byte> snapshot_data) const override
+  {
+    if (snapshot_representation_id != snapshot_id)
+    {
+      return StateRestoreResult::invalid_class_uuid;
+    }
+    if (snapshot_data.size() != sizeof(uint64_t))
+    {
+      return StateRestoreResult::buffer_error;
+    }
+    if (snapshot_data.front() == std::byte{0xff})
+    {
+      return StateRestoreResult::init_failure;
+    }
+    *state_out = std::make_shared<CogStateData>();
+    return StateRestoreResult::success;
+  }
+};
+
+TEST_CASE("Casing restores external state from a snapshot")
+{
+  SnapshotStateFactory factory;
+  const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
+  const auto state_id = jewels::Uuid<common::StateInstanceId>::random_uuid();
+  const auto unknown_state_id = jewels::Uuid<RepresentationTag>::random_uuid();
+  const std::array<std::byte, sizeof(uint64_t)> valid_data{};
+  std::array<std::byte, sizeof(uint64_t)> init_failure_data{};
+  init_failure_data.front() = std::byte{0xff};
+
+  auto restore = [state_id, memres](const auto repr_id, const auto snapshot_id, const auto data)
+  {
+    CasingImpl<std::tuple<>, std::tuple<>, std::tuple<>> casing(memres);
+    return casing.try_instantiate_state_from_snapshot(state_id, repr_id, snapshot_id, memres, data);
+  };
+
+  SECTION("success")
+  {
+    CHECK(
+      restore(SnapshotStateFactory::type_id, SnapshotStateFactory::snapshot_id, valid_data).get() ==
+      AbstractCasing::OutcomeEnum::success);
+  }
+  SECTION("unknown state representation")
+  {
+    CHECK(
+      restore(unknown_state_id, SnapshotStateFactory::snapshot_id, valid_data).get() ==
+      AbstractCasing::OutcomeEnum::invalid_class_uuid);
+  }
+  SECTION("mismatched snapshot representation")
+  {
+    CHECK(
+      restore(SnapshotStateFactory::type_id, unknown_state_id, valid_data).get() ==
+      AbstractCasing::OutcomeEnum::invalid_class_uuid);
+  }
+  SECTION("invalid snapshot size")
+  {
+    CHECK(
+      restore(SnapshotStateFactory::type_id, SnapshotStateFactory::snapshot_id, std::span<const std::byte>{}).get() ==
+      AbstractCasing::OutcomeEnum::buffer_error);
+  }
+  SECTION("state conversion failure")
+  {
+    CHECK(
+      restore(SnapshotStateFactory::type_id, SnapshotStateFactory::snapshot_id, init_failure_data).get() ==
+      AbstractCasing::OutcomeEnum::init_failure);
+  }
+}
+
 template <typename Tag>
-std::shared_ptr<pinion::ShmSubscriber> make_snoop(
-  pinion::ShmChannelFactory& factory, jewels::Uuid<Tag> chan_id, const Tappy<common::PinionBufferLayout>& buffer_desc)
+std::shared_ptr<pinion::AbstractSubscriber> make_snoop(
+  pinion::AbstractChannelFactory& factory,
+  jewels::Uuid<Tag> chan_id,
+  const Tappy<common::PinionBufferLayout>& buffer_desc)
 {
   const pinion::BufferLayout layout{
     .num_slots = buffer_desc.get_num_slots(),
@@ -330,15 +428,16 @@ TEST_CASE("autocasing")
   const auto state1_snapshot_id = cog1_ep_state1;
 
   desc.get_mutable_pubsub_graph().get_underlying_publish_endpoints().emplace_back(
-    TapInit<Tachyon<common::PublishEndpoint<300U>>>{
+    TapInit<Tachyon<common::PublishEndpoint<common::MAX_CHANNEL_NAME_SIZE>>>{
       .process_id = proc1_id,
       .publisher_id = state1_snapshot_id,
       .buffer_layout =
         TapInit<Tachyon<common::PinionBufferLayout>>{
           .num_slots = 10, .message_size = sizeof(TestCog1Policy::StateAPolicy::StateType), .is_published_once = false},
       .num_subscribers = 1,
-      .channel_name = jewels::tap::VarString<300U>{"cog1_ep_state1"},
+      .channel_name = jewels::tap::VarString<common::MAX_CHANNEL_NAME_SIZE>{"cog1_ep_state1"},
       .is_bulk_data = false,
+      .channel_type = pinion::ChannelType::unspecified,
     });
 
   using namespace std::chrono_literals;
@@ -353,15 +452,16 @@ TEST_CASE("autocasing")
   const auto config1_snapshot_id = cog1_ep_config1;
 
   const auto& config1_snapshot_desc = desc.get_mutable_pubsub_graph().get_underlying_publish_endpoints().emplace_back(
-    TapInit<Tachyon<common::PublishEndpoint<300U>>>{
+    TapInit<Tachyon<common::PublishEndpoint<common::MAX_CHANNEL_NAME_SIZE>>>{
       .process_id = proc1_id,
       .publisher_id = config1_snapshot_id,
       .buffer_layout =
         TapInit<Tachyon<common::PinionBufferLayout>>{
           .num_slots = 10, .message_size = sizeof(TestCog1Policy::CfgAPolicy::ConfigType), .is_published_once = false},
       .num_subscribers = 1,
-      .channel_name = jewels::tap::VarString<300U>{"cog1_ep_config1"},
+      .channel_name = jewels::tap::VarString<common::MAX_CHANNEL_NAME_SIZE>{"cog1_ep_config1"},
       .is_bulk_data = false,
+      .channel_type = pinion::ChannelType::unspecified,
     });
 
   desc.get_underlying_snapshot_configs().emplace_back(
@@ -387,10 +487,10 @@ TEST_CASE("autocasing")
     std::tuple<>>(memres);
   auto channel_factory = tmpchan.make_factory();
 
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_chan2;
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_state1;
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_state1_snapshot;
-  std::shared_ptr<clockwork::pinion::ShmSubscriber> snoop_config1_snapshot;
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_chan2;
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_state1;
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_state1_snapshot;
+  std::shared_ptr<clockwork::pinion::AbstractSubscriber> snoop_config1_snapshot;
   testing::RunStopper exec(
     [&chan2_desc,
      &chan2_id,
@@ -399,7 +499,6 @@ TEST_CASE("autocasing")
      &config1_snapshot_desc,
      &config1_snapshot_id,
      &configured_id,
-     &exec,
      &snoop_chan2,
      &snoop_config1_snapshot,
      &snoop_state1_snapshot,
@@ -408,7 +507,7 @@ TEST_CASE("autocasing")
      &state1_id,
      &state1_snapshot_id
 
-  ]()
+  ](auto& exec)
     {
       if (!snoop_chan2)
       {
@@ -434,7 +533,7 @@ TEST_CASE("autocasing")
       {
         return;
       }
-      if (const auto msg = testing::last<TestCog2Policy::OutAPolicy::MsgType>(snoop_chan2->make_subscriber()); msg)
+      if (const auto msg = testing::last<TestCog2Policy::OutAPolicy::MsgType>(snoop_chan2); msg)
       {
         CHECK(msg->get_echo_config() == configured_id);
         CHECK(msg->get_group_id() == config_group_id);
@@ -443,18 +542,16 @@ TEST_CASE("autocasing")
         {
           // Snooping on the state is VERY snoopy since it technically hasn't been published yet, but should still
           // exist in the first slot.
-          const auto state_it = snoop_state1->make_subscriber().available().begin();
+          const auto state_it = snoop_state1->available().begin();
           const auto& state = pinion::MessageCast<const TestCog1Policy::StateAPolicy::StateType>{}(*state_it);
           CHECK(state.get_cycle() > 10);
 
-          auto snapshot_msg =
-            testing::last<TestCog1Policy::StateAPolicy::StateType>(snoop_state1_snapshot->make_subscriber());
+          auto snapshot_msg = testing::last<TestCog1Policy::StateAPolicy::StateType>(snoop_state1_snapshot);
           REQUIRE(snapshot_msg);
           CHECK(snapshot_msg->get_cycle() > 0);
           CHECK((snapshot_msg->get_cycle() == state.get_cycle() || snapshot_msg->get_cycle() == state.get_cycle() - 1));
 
-          auto config_snapshot_msg =
-            testing::last<TestCog1Policy::CfgAPolicy::ConfigType>(snoop_config1_snapshot->make_subscriber());
+          auto config_snapshot_msg = testing::last<TestCog1Policy::CfgAPolicy::ConfigType>(snoop_config1_snapshot);
           REQUIRE(config_snapshot_msg);
           CHECK(config_snapshot_msg->get_id() == configured_id);
 
@@ -525,7 +622,7 @@ TEST_CASE("Test IO connections")
       .is_published_once = false,
     };
 
-    auto channel = std::make_unique<InMemoryChannel<int, layout.num_slots, false>>(memres);
+    auto channel = std::make_shared<InMemoryChannel<int, layout.num_slots, false>>(memres);
 
     const auto instance_id =
       jewels::Uuid<common::IoConnectionInstanceId>::from_string("aaaaaaaa-aaaa-aaaa-4312-000000000000");
@@ -566,7 +663,7 @@ TEST_CASE("Test IO connections")
       .is_published_once = false,
     };
 
-    auto channel = std::make_unique<InMemoryChannel<int, layout.num_slots, false>>(memres);
+    auto channel = std::make_shared<InMemoryChannel<int, layout.num_slots, false>>(memres);
 
     const auto instance_id =
       jewels::Uuid<common::IoConnectionInstanceId>::from_string("aaaaaaaa-aaaa-aaaa-4312-000000000000");
@@ -584,16 +681,16 @@ TEST_CASE("Test IO connections")
     endpoint_description.set_endpoint_class_id(*endpoint_class_id);
     endpoint_description.set_endpoint_instance_id(*endpoint_instance_id);
 
-    REQUIRE_FALSE(casing.try_connect_subscriber(*endpoint_instance_id, channel->make_subscriber()));
+    REQUIRE_FALSE(casing.try_connect_subscriber(*endpoint_instance_id, channel));
     REQUIRE(casing.try_instantiate_io_connection(
       testing::TestIoConnection::uuid, *instance_id, jewels::as_single_item_span(endpoint_description), std::nullopt));
     REQUIRE_FALSE(testing::TestIoConnection::subscriber_set);
-    REQUIRE(casing.try_connect_subscriber(*endpoint_instance_id, channel->make_subscriber()));
+    REQUIRE(casing.try_connect_subscriber(*endpoint_instance_id, channel));
     REQUIRE(testing::TestIoConnection::subscriber_set);
 
     // Cannot connect to the same IO connection twice.
     REQUIRE(
-      casing.try_connect_subscriber(*endpoint_instance_id, channel->make_subscriber()) ==
+      casing.try_connect_subscriber(*endpoint_instance_id, channel) ==
       jewels::unexpected{AbstractCasing::Error::connect_subscriber_failure});
   }
 
@@ -605,7 +702,7 @@ TEST_CASE("Test IO connections")
       .is_published_once = false,
     };
 
-    auto channel = std::make_unique<InMemoryChannel<int, layout.num_slots, false>>(memres);
+    auto channel = std::make_shared<InMemoryChannel<int, layout.num_slots, false>>(memres);
 
     const auto instance_id =
       jewels::Uuid<common::IoConnectionInstanceId>::from_string("aaaaaaaa-aaaa-aaaa-4312-000000000000");
@@ -644,6 +741,50 @@ TEST_CASE("Test IO connections")
       casing.try_connect_publisher(*diags_endpoint_id, channel->make_publisher(0UL)) ==
       jewels::unexpected{AbstractCasing::Error::connect_publisher_failure});
   }
+}
+
+// Regression test: before the fix, setup_states was called before setup_configs.
+// When setup_configs failed (e.g. missing file), the states vector went out of
+// scope on early return, freeing the SHM publisher. The CasingImpl destructor
+// then accessed the now-freed publisher via the non-owning ObjectPtr stored in
+// CogStateDataImpl, causing a use-after-free (SIGSEGV).
+TEST_CASE("scaffolding_run deterministic returns EXIT_FAILURE on missing config with real casing")
+{
+  const pinion::support::TmpShmNamespace tmpchan;
+  const auto state1_id = jewels::Uuid<common::StateInstanceId>::random_uuid();
+  const auto config1_id = jewels::Uuid<common::ConfigInstanceId>::random_uuid();
+  Tappy<common::ProcessDescription<>> desc;
+
+  // State backed by shared memory: produces a real SHM publisher stored as a
+  // non-owning ObjectPtr inside CogStateDataImpl. Under the old (buggy) code
+  // ordering, that pointer would dangle once setup_configs fails and returns.
+  auto& state1_desc = desc.get_mutable_state_graph().get_underlying_state_instances().emplace_back();
+  state1_desc.set_representation_id(Tachyon<testing::State>::_clockwork_uuid);
+  state1_desc.set_state_instance_id(state1_id);
+  state1_desc.get_underlying_instance_path_name().set_truncate("state1");
+  state1_desc.set_maybe_buffer_layout(
+    {{.num_slots = 4, .message_size = sizeof(Tappy<testing::State>), .is_published_once = false}});
+
+  // Config data source pointing to a nonexistent file so setup_configs fails.
+  auto& data_source = desc.get_underlying_data_sources().emplace_back();
+  data_source.set_representation_id(Tachyon<testing::Config>::_clockwork_uuid);
+  data_source.set_data_source_type(common::DataSourceType::file);
+  data_source.get_underlying_source_path_or_name().set_truncate("/nonexistent/path/config.dat");
+
+  auto& config1_desc = desc.get_mutable_config_graph().get_underlying_config_instances().emplace_back();
+  config1_desc.get_mutable_config_instance_id() = config1_id;
+  config1_desc.get_underlying_instance_path_name().set_truncate("config1");
+  config1_desc.set_init_data_source(0);
+
+  const jewels::memory::MemoryResource memres{std::pmr::new_delete_resource()};
+  auto casing = CasingImpl<std::tuple<>, std::tuple<>, std::tuple<>>(memres);
+  auto channel_factory = tmpchan.make_factory();
+
+  const ExecutionParams params{
+    .start_time = jewels::time::SyncTime(std::chrono::nanoseconds(1'000'000'000)),
+    .end_time = jewels::time::SyncTime(std::chrono::nanoseconds(21'000'000'000))};
+  testing::RunStopper exec([](auto& /*stopper*/) {});
+  CHECK(run_deterministic(desc, casing, channel_factory, exec.get_condition(), params) == EXIT_FAILURE);
 }
 
 } // namespace

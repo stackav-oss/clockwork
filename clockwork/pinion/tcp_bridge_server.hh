@@ -1,16 +1,19 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/logging/lite_compressor.hh"
+#include "clockwork/logging/lite_compressor_interface.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
-#include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/slot_ref.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
 #include "clockwork/pinion/tcp_bridge_config_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -19,7 +22,7 @@
 #include <wise_enum.h>
 
 #include <atomic>
-#include <condition_variable>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -40,13 +43,31 @@ namespace clockwork::pinion
 /// TCP client.
 ///
 // NOLINTNEXTLINE(fuchsia-multiple-inheritance) Required to implement these interfaces.
-struct TcpBridgeServer : public AbstractEPollCallback, public Observer
+struct TcpBridgeServer : public AbstractEPollCallback
 {
 public:
+  /// TCP bridge server send timeout interval
+  static constexpr auto bridge_server_send_timeout = std::chrono::seconds(1);
+
+  /// TCP bridge server recv ack timeout interval
+  static constexpr auto bridge_server_recv_ack_timeout = std::chrono::seconds(2);
+
+  /// TCP bridge server recv ack timeout interval
+  static constexpr auto bridge_server_bulk_recv_ack_timeout = std::chrono::seconds(4);
+
+  /// TCP bridge server recv ack timeout interval used in unit tests to give TSAN time to keep up
+  static constexpr auto bridge_server_unit_test_recv_ack_timeout = std::chrono::seconds(20);
+
+  /// Time to wait for a notify when waiting for an acknowledgement
+  static constexpr auto bridge_server_fast_notify_timeout = std::chrono::milliseconds(20);
+
+  /// Time to wait for a notify when sending keepalives
+  static constexpr auto bridge_server_notify_timeout = std::chrono::milliseconds(1500);
+
   WISE_ENUM_CLASS_MEMBER(
     (Mode, uint8_t),
-    production,  // Production mode
-    overrun_test // Overrun test mode, ignore notifies from the channel observer
+    production, // Production mode
+    unit_test   // Unit test, increase client ack timeout
   )
 
   /// TcpBridgeServer constructor parameters
@@ -60,8 +81,12 @@ public:
     std::string_view channel_name;
     /// True if the channel holds bulk data
     bool is_bulk_data;
-    /// Pinion channel subscriber
-    SubscriberHandle subscriber;
+    /// Channel UUID string
+    std::pmr::string uuid_str;
+    /// Pinion buffer layout
+    BufferLayout layout;
+    /// Pinion channel factory
+    std::shared_ptr<pinion::AbstractChannelFactory> channel_factory;
     /// Socket used to listen for new connections
     TcpSocket listen_socket;
     /// Port used to listen for new connections
@@ -72,6 +97,8 @@ public:
     std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state;
     /// Bridge server mode
     Mode mode;
+    /// Lite compressor used to compress messages
+    std::shared_ptr<clockwork_logging::LiteCompressorInterface> lite_compressor;
   };
 
   /// Constructor
@@ -89,7 +116,7 @@ public:
   /// Create a TCP brige server
   /// @param[in] memres Memory resource
   /// @param[in] config TCP bridge server configuration
-  /// @param[in] subscriber Pinion subscriber handle
+  /// @param[in] channel_factory Pinion channel factory
   /// @param[in] epoll EPoll manager pointer
   /// @param[in] diagnostics_state TCP bridge diagnostics counter state
   /// @param[in] mode Bridge server mode (production or overrun test)
@@ -97,7 +124,7 @@ public:
   [[nodiscard]] static std::shared_ptr<TcpBridgeServer> make(
     jewels::memory::MemoryResource memres,
     const Tappy<TcpBridgeServerConfig>& config,
-    SubscriberHandle subscriber,
+    std::shared_ptr<pinion::AbstractChannelFactory> channel_factory,
     jewels::memory::ObjectPtr<AbstractEPollManager> epoll,
     std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state,
     Mode mode = Mode::production);
@@ -107,12 +134,6 @@ public:
 
   /// Handle an epoll event.
   void notify(AbstractEPollManager& epoll, int efd, uint32_t events) override;
-
-  /// Handle a notification for a new message on the subscriber handle
-  void notify(const Observer::Event& event) override;
-
-  /// Notify the clients of a new message on the subscriber handle
-  void forced_notify();
 
   /// @return Channel name
   [[nodiscard]] std::string_view channel_name() const;
@@ -149,11 +170,12 @@ private:
       std::string_view channel_name;
       bool is_bulk_data;
       jewels::filesystem::FileDescriptor client_fd;
-      jewels::memory::ObjectPtr<SubscriberHandle> subscriber;
+      std::shared_ptr<pinion::AbstractChannel> subscriber;
       std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state;
       std::shared_ptr<std::mutex> server_counters_mutex;
       std::shared_ptr<TcpBridgeClientServerCounters> server_counters;
       TcpBridgeServer::Mode mode;
+      std::shared_ptr<clockwork_logging::LiteCompressorInterface> lite_compressor;
     };
 
     explicit Client(ClientArgs args);
@@ -174,15 +196,19 @@ private:
     /// Gets the underlying client socket descriptor.
     [[nodiscard]] int client_fd() const;
 
-    /// Notify the worker of an epoll event on the bridge channel
-    void notify();
-
   private:
     /// Worker thread main
     void worker_thread_main();
 
+    /// Receive a notify message from the publisher with a timeout
+    /// @param[in] timeout Maximum time to wait for a message
+    /// @param[out] was_notified Set to true if a notification was received
+    /// @return Failure if the receive failed with an error other than timeout, otherwise success
+    jewels::BinaryOutcome receive_notify(std::chrono::nanoseconds timeout, jewels::Out<bool> was_notified);
+
     /// Send new messages from the subscriber to the client.
-    void send_messages();
+    /// @return True if any messages were sent
+    bool send_messages();
 
     /// Receive any acknowledgement messages from the receiver
     void receive_acknowledgements();
@@ -224,7 +250,7 @@ private:
     jewels::filesystem::FileDescriptor client_fd_;
 
     /// Bridged channel subscriber
-    jewels::memory::ObjectPtr<SubscriberHandle> subscriber_;
+    std::shared_ptr<pinion::AbstractChannel> subscriber_;
 
     /// Null message header for kicking the receiver
     TcpMessageHeader null_header_{};
@@ -242,7 +268,7 @@ private:
     std::shared_ptr<TcpBridgeClientServerCounters> server_counters_;
 
     /// Message compressor
-    clockwork_logging::LiteCompressor lite_compressor_;
+    std::shared_ptr<clockwork_logging::LiteCompressorInterface> lite_compressor_;
 
     /// Send buffer
     std::pmr::vector<std::byte> send_buffer_;
@@ -268,26 +294,26 @@ private:
     /// Last message transmit time
     jewels::time::SteadyTime last_send_time_;
 
+    /// Last time an acknowledgement was received
+    jewels::time::SteadyTime last_ack_recv_time_;
+
     /// Worker is running flag
     std::atomic<bool> worker_is_running_{true};
 
     /// Worker stop requested flag
-    bool worker_stop_requested_{false};
+    std::atomic<bool> worker_stop_requested_{false};
 
     /// Worker thread notify flag
     bool worker_notify_flag_{false};
-
-    /// Worker thread mutex
-    std::mutex worker_mutex_;
-
-    /// Worker thread condition variable
-    std::condition_variable worker_cv_;
 
     /// Worker thread
     std::thread worker_thread_;
 
     /// Bridge server mode
     Mode mode_;
+
+    /// Timeout used to detect when the client has stopped sending acknowledgements
+    std::chrono::nanoseconds recv_ack_timeout_;
   };
 
   /// Memory resource
@@ -302,8 +328,14 @@ private:
   /// Flag indicating whether the channel holds bulk data
   bool is_bulk_data_;
 
-  /// Pinion subscriber
-  SubscriberHandle subscriber_;
+  /// Channel UUID string
+  std::pmr::string uuid_str_;
+
+  /// Pinion buffer layout
+  BufferLayout layout_;
+
+  /// Pinion channel factory
+  std::shared_ptr<pinion::AbstractChannelFactory> channel_factory_;
 
   /// Listen socket
   TcpSocket listen_socket_;
@@ -325,6 +357,9 @@ private:
 
   /// Bridge sever mode
   Mode mode_;
+
+  /// Message compressor
+  std::shared_ptr<clockwork_logging::LiteCompressorInterface> lite_compressor_;
 };
 
 } // namespace clockwork::pinion

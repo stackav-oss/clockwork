@@ -1,5 +1,12 @@
-#!/usr/bin/env python3
-# Copyright 2025 Stack AV Co.
+#!/usr/bin/env -S bash -c 'PYTHONPATH="${PYTHONPATH}:$(dirname $0)/.." uv run --script "$0" "$@"'
+#
+# /// script
+# requires-python = "~=3.12.0"
+# dependencies = [
+# ]
+# ///
+
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Sort BUILD files given on the command line."""

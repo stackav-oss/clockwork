@@ -1,13 +1,13 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
 """Unit tests for DFL static analysis utilities."""
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl import clockwork_parser as parser
 from clockwork.dsl import compiler_context
-from clockwork.dsl.ir import clkbuiltins, dfl, dfl_analysis, node, primitive
+from clockwork.dsl.ir import clkbuiltins, dfl, dfl_analysis, node, parse, primitive
 from clockwork.dsl.ir.module_id import ModuleID
 from fltk.fegen.pyrt import terminalsrc
 
@@ -34,10 +34,9 @@ def _parse_dfl_expr(source: str) -> tuple[cst.DflExpr, terminalsrc.TerminalSourc
     """Parse a DFL expression string."""
     terminals = terminalsrc.TerminalSource(source)
     clk_parser = parser.Parser(terminalsrc=terminals)
-    result = clk_parser.apply__parse_dfl_expr(0)
+    result = parse.parse_rule(clk_parser, "dfl_expr", cst.DflExpr)
     assert result is not None, f"Parse failed: {source}"
     assert result.pos == len(source), f"Parse incomplete: {source}"
-    assert isinstance(result.result, cst.DflExpr)
     return result.result, terminals
 
 
@@ -227,3 +226,82 @@ class TestRefsInExpr:
         expr = _parse_and_convert("1 + 2")
         refs = dfl_analysis.refs_in_expr(expr)
         assert refs == []
+
+
+def test_flatten_blocks() -> None:
+    """Test that flatten_blocks() works as expected."""
+    block_source = """{
+      foo: Tappy<MySchema> {
+            max_msgs: 1;
+      }
+      {
+          bar: Tappy<MySchema> {
+            max_msgs: 2;
+          }
+          baz: Tappy<MySchema>;
+      }
+      {
+          {
+              upstream_override {
+                  {
+                      param: value;
+                  }
+              }
+          }
+      }
+    }
+    """
+    expr = _parse_and_convert(block_source)
+    assert isinstance(expr, dfl.Block)
+    assert len(expr.statements) == 3
+    assert isinstance(expr.statements[0], dfl.Definition)
+    assert isinstance(expr.statements[1], dfl.Block)
+    assert isinstance(expr.statements[2], dfl.Block)
+    flattened = dfl_analysis.flatten_blocks(expr)
+    assert isinstance(flattened, dfl.Block)
+    assert len(flattened.statements) == 4
+
+    # Blocks attached to definitions should remain attached to them.
+    assert isinstance(flattened.statements[0], dfl.Definition)
+    assert flattened.statements[0].name == "foo"
+    assert flattened.statements[0].options is not None
+
+    # Statements within anonymous blocks should be absorbed by the parent.
+    assert isinstance(flattened.statements[1], dfl.Definition)
+    assert flattened.statements[1].name == "bar"
+    assert flattened.statements[1].options is not None
+    assert isinstance(flattened.statements[2], dfl.Definition)
+    assert flattened.statements[2].name == "baz"
+    assert flattened.statements[2].options is None
+
+    # Named blocks should be lifted out of anonymous ones. The statements
+    # they contain should also be flattened, but remain inside.
+    assert isinstance(flattened.statements[3], dfl.Block)
+    assert flattened.statements[3].name == "upstream_override"
+    assert len(flattened.statements[3].statements) == 1
+    assert isinstance(flattened.statements[3].statements[0], dfl.Definition)
+    assert flattened.statements[3].statements[0].name == "param"
+
+
+def test_find_with_pred() -> None:
+    """Tests for the find_with_pred function."""
+    expr = _parse_and_convert("2 * (a + 3)")
+    assert isinstance(expr, dfl.Binary)
+    assert isinstance(expr.right, dfl.Binary)
+
+    # Trivially empty.
+    results = dfl_analysis.find_with_pred(expr, lambda _: False)
+    assert results == []
+
+    # Match everything. Results should come back in depth-first order.
+    results = dfl_analysis.find_with_pred(expr, lambda _: True)
+    assert results == [expr.left, expr.right.left, expr.right.right, expr.right, expr]
+
+    results = dfl_analysis.find_with_pred(expr, lambda e: isinstance(e, dfl.Binary))
+    assert results == [expr.right, expr]
+
+    results = dfl_analysis.find_with_pred(expr, lambda e: isinstance(e, dfl.Value))
+    assert results == [expr.left, expr.right.right]
+
+    results = dfl_analysis.find_with_pred(expr, lambda e: isinstance(e, dfl.Ref))
+    assert results == [expr.right.left]

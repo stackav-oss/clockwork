@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -213,6 +213,26 @@ def test_create_upgrader_broken_removed() -> None:
         )
 
 
+def test_create_upgrader_broken_added() -> None:
+    """Test creating a deserializer when field been added without history."""
+    incoming_metadata = broken_schema_v1_clk_py.BrokenAddedV1.get_tachyon_metadata()
+    assert isinstance(incoming_metadata, tachyon_model.TachyonMetadata)
+    current_metadata = broken_schema_v2_clk_py.BrokenAddedV2.get_tachyon_metadata()
+    assert isinstance(current_metadata, tachyon_model.TachyonMetadata)
+
+    serialized_current_metadata = bytearray(tachyon_metadata.to_protobuf(current_metadata).SerializeToString())
+    serialized_incoming_metadata = bytearray(tachyon_metadata.to_protobuf(incoming_metadata).SerializeToString())
+    with pytest.raises(ValueError, match=r"Unsupported field addition: integer_field3 added"):
+        create_upgrader.create_upgrader(
+            broken_schema_v2_clk_py.BrokenAddedV2.get_tachyon_module_name(),
+            broken_schema_v2_clk_py.BrokenAddedV2.get_tachyon_source_file_name(),
+            broken_schema_v2_clk_py.BrokenAddedV2.get_tachyon_class_name(),
+            memoryview(serialized_current_metadata),
+            memoryview(serialized_incoming_metadata),
+            "BrokenAddedV1",
+        )
+
+
 def test_create_upgrader_broken_strong_type() -> None:
     """Test creating a deserializer when strong type field has been changed without history."""
     incoming_metadata = broken_schema_v1_clk_py.BrokenStrongTypeV1.get_tachyon_metadata()
@@ -290,4 +310,24 @@ def test_create_upgrader_broken_enum_removed() -> None:
             memoryview(serialized_current_metadata),
             memoryview(serialized_incoming_metadata),
             "BrokenEnumRemovedV1",
+        )
+
+
+def test_create_upgrader_broken_enum_added() -> None:
+    """Test creating a deserializer when enum field has been changed without history."""
+    incoming_metadata = broken_schema_v1_clk_py.BrokenEnumAddedV1.get_tachyon_metadata()
+    assert isinstance(incoming_metadata, tachyon_model.TachyonMetadata)
+    current_metadata = broken_schema_v2_clk_py.BrokenEnumAddedV2.get_tachyon_metadata()
+    assert isinstance(current_metadata, tachyon_model.TachyonMetadata)
+
+    serialized_current_metadata = bytearray(tachyon_metadata.to_protobuf(current_metadata).SerializeToString())
+    serialized_incoming_metadata = bytearray(tachyon_metadata.to_protobuf(incoming_metadata).SerializeToString())
+    with pytest.raises(ValueError, match=r"Unsupported value addition: value3 added"):
+        create_upgrader.create_upgrader(
+            broken_schema_v2_clk_py.BrokenEnumAddedV2.get_tachyon_module_name(),
+            broken_schema_v2_clk_py.BrokenEnumAddedV2.get_tachyon_source_file_name(),
+            broken_schema_v2_clk_py.BrokenEnumAddedV2.get_tachyon_class_name(),
+            memoryview(serialized_current_metadata),
+            memoryview(serialized_incoming_metadata),
+            "BrokenEnumAddedV1",
         )

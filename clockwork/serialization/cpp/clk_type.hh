@@ -1,8 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -10,8 +13,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
+#include <memory_resource>
 #include <optional>
 #include <set>
 #include <span>
@@ -86,7 +91,11 @@ WISE_ENUM_CLASS(
   // Enum
   clk_enum,
   // Schema
-  schema)
+  schema,
+  // Tensor
+  tensor,
+  // Bitset
+  bitset)
 
 /// Schema UUID type
 using SchemaUuid = jewels::Uuid<int8_t>;
@@ -261,15 +270,105 @@ private:
   jewels::memory::ObjectPtr<const ClkTypeUpgrader> upgrader_;
 };
 
+/// Message region that compresses to a count of zeros in lite-compression
+struct ClkZeroChunk
+{
+  /// Message offset
+  size_t offset{};
+  /// Zero region size in bytes
+  size_t length{};
+
+  auto operator<=>(const ClkZeroChunk&) const = default;
+};
+
+/// Schema aware lite-compressor interface
+class ClkTypeLiteCompressor
+{
+public:
+  /// Constructor
+  ClkTypeLiteCompressor() noexcept = default;
+
+  virtual ~ClkTypeLiteCompressor() = default;
+
+  ClkTypeLiteCompressor(const ClkTypeLiteCompressor&) = delete;
+  ClkTypeLiteCompressor& operator=(const ClkTypeLiteCompressor&) = delete;
+  ClkTypeLiteCompressor(ClkTypeLiteCompressor&&) = delete;
+  ClkTypeLiteCompressor& operator=(ClkTypeLiteCompressor&&) = delete;
+
+  /// Locate the chunks of zeros that can be replaced with a count in the lite compressed message
+  /// @param[in] data_span Data span containing the instance to compress
+  /// @param[in] offset Instance message offset
+  /// @param[in,out] zero_chunks Storage for the zero chunks
+  /// @return Success of failure
+  virtual jewels::BinaryOutcome compress(
+    std::span<const std::byte> data_span,
+    size_t offset,
+    jewels::InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const;
+
+  /// Compress opaque data by scanning for chunks of zeros
+  /// @param[in] data_span Data span containing the instance to compress
+  /// @param[in] offset Instance message offset
+  /// @param[in,out] zero_chunks Storage for the zero chunks
+  static void compress_opaque_data(
+    std::span<const std::byte> data_span, size_t offset, jewels::InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks);
+};
+
+/// Clockwork array lite-compressor
+class ClkArrayLiteCompressor
+{
+public:
+  /// Constructor
+  /// @param[in] max_size Maximum number of array elements
+  /// @param[in] element_size Element size in bytes
+  /// @param[in] compressor Element compressor
+  ClkArrayLiteCompressor(size_t max_size, size_t element_size, std::shared_ptr<ClkTypeLiteCompressor> compressor);
+
+  ~ClkArrayLiteCompressor() = default;
+
+  ClkArrayLiteCompressor(const ClkArrayLiteCompressor&) = delete;
+  ClkArrayLiteCompressor& operator=(const ClkArrayLiteCompressor&) = delete;
+  ClkArrayLiteCompressor(ClkArrayLiteCompressor&&) = default;
+  ClkArrayLiteCompressor& operator=(ClkArrayLiteCompressor&&) = default;
+
+  /// Locate the chunks of zeros that can be replaced with a count in the lite compressed message
+  /// @param[in] size Number of elements in the array
+  /// @param[in] data_span Data span containing the instance to compress
+  /// @param[in] offset Instance message offset
+  /// @param[in,out] zero_chunks Storage for the zero chunks
+  /// @return Success of failure
+  jewels::BinaryOutcome compress(
+    size_t size,
+    std::span<const std::byte> data_span,
+    size_t offset,
+    jewels::InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const;
+
+private:
+  /// Maximum number of array elements
+  size_t max_size_;
+
+  /// Element size in bytes
+  size_t element_size_;
+
+  /// Array element compressor
+  std::shared_ptr<ClkTypeLiteCompressor> compressor_;
+};
+
 /// Virtual clockwork type representation
 class ClkType
 {
 public:
   /// Constructor
+  /// @param[in] memory_resource Memory resource
   /// @param[in] fqn Fully qualified name
   /// @param[in] type_id Clockwork type ID
   /// @param[in] type_index Clockwork type index
-  ClkType(std::string_view fqn, ClkTypeId type_id, size_t type_index);
+  /// @param[in] metadata_version Schema metadata version
+  ClkType(
+    jewels::memory::MemoryResource memory_resource,
+    std::string_view fqn,
+    ClkTypeId type_id,
+    size_t type_index,
+    int32_t metadata_version);
 
   virtual ~ClkType() = default;
 
@@ -277,6 +376,9 @@ public:
   ClkType& operator=(const ClkType&) = delete;
   ClkType(ClkType&&) = delete;
   ClkType& operator=(ClkType&&) = delete;
+
+  /// @return Memory resource
+  [[nodiscard]] const jewels::memory::MemoryResource& get_memory_resource() const noexcept;
 
   /// @return Fully qualified name
   [[nodiscard]] std::string_view get_fqn() const noexcept;
@@ -287,6 +389,9 @@ public:
   /// @return Type index
   [[nodiscard]] size_t get_type_index() const noexcept;
 
+  /// @return Schema metadata version
+  [[nodiscard]] int32_t get_metadata_version() const noexcept;
+
   /// @return Type size in bytes
   [[nodiscard]] virtual size_t get_size() const noexcept = 0;
 
@@ -296,7 +401,7 @@ public:
   /// Make an initializer function to initialize this type to the specified value
   /// @param[in] value Initial enum value
   /// @return Initializer function
-  [[nodiscard]] virtual std::unique_ptr<ClkValueInitializer>
+  [[nodiscard]] virtual std::shared_ptr<ClkValueInitializer>
   make_value_initializer(const metadata::InitialValue& value) const;
 
   /// Make an initializer function for this type (default implementation returns nullopt)
@@ -323,7 +428,7 @@ public:
   /// @param[in] min_array_size Minimum array size
   /// @param[in] max_array_size Maximum array size
   /// @return Function to upgrade to this type from the source type
-  [[nodiscard]] std::unique_ptr<ClkArrayUpgrader>
+  [[nodiscard]] std::shared_ptr<ClkArrayUpgrader>
   make_array_upgrader(const ClkType& src_type, size_t min_array_size, size_t max_array_size);
 
   /// Legacy check for wire compatability for instances written before the built-in type UUID was added to the version
@@ -347,14 +452,30 @@ public:
   /// @return True if the source type is the same type as this type
   [[nodiscard]] virtual bool is_same_type(const ClkType& src_type) const;
 
+  /// Make a lite-compressor instance to find the zero chunks in this type for lite-compression
+  /// @return ClkLiteCompressor instance for this type
+  [[nodiscard]] virtual jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> make_lite_compressor();
+
+  /// @return True iff this type is compressible
+  [[nodiscard]] virtual bool is_compressible();
+
 protected:
   /// @return The map from source type index to upgrader for this type
-  [[nodiscard]] std::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>&
+  [[nodiscard]] std::pmr::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>>&
   get_upgrader_cache();
 
+  /// @return Reference to the cached lite compressor for this type
+  [[nodiscard]] std::shared_ptr<ClkTypeLiteCompressor>& get_cached_lite_compressor();
+
+  /// @return Reference to the cached flag indicating whether this type is compresssible
+  [[nodiscard]] std::optional<bool>& get_cached_is_compressible();
+
 private:
+  /// Memory resource
+  jewels::memory::MemoryResource memory_resource_;
+
   /// Fully qualified name
-  std::string fqn_;
+  std::pmr::string fqn_;
 
   /// Clockwork type ID
   ClkTypeId type_id_;
@@ -362,8 +483,17 @@ private:
   /// Clockwork type index
   size_t type_index_;
 
+  /// Schema metadata version
+  int32_t metadata_version_;
+
   /// Cache of upgraders for this typee
-  std::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>> upgrader_cache_;
+  std::pmr::unordered_map<size_t, jewels::memory::NonNullSharedPtr<const ClkTypeUpgrader>> upgrader_cache_;
+
+  /// Cached lite-compressor for this typee
+  std::shared_ptr<ClkTypeLiteCompressor> cached_lite_compressor_;
+
+  /// Cached flag indicating whether this type is compressible
+  std::optional<bool> cached_is_compressible_;
 };
 
 /// Forward declaration
@@ -389,7 +519,7 @@ public:
   /// @param[in] maybe_strong_type_fqn Optional fully qualified name of a strong type wrapping this schema
   /// @return Clockwork type instance or nullptr if the schema type was not handled
   /// @throws runtime_error on failire
-  [[nodiscard]] virtual std::unique_ptr<ClkType> make_clk_type(
+  [[nodiscard]] virtual std::shared_ptr<ClkType> make_clk_type(
     jewels::memory::ObjectPtr<ClkTypeFactory> factory,
     const metadata::TypeDesc& type_proto,
     size_t type_index,
@@ -401,11 +531,13 @@ class ClkTypeFactory
 {
 public:
   /// Constructor
+  /// @param[in] memory_resource Memory resource
   /// @param[in] metadata_proto Tachyon metadata protobuf
   /// @param[in] plugins Factory plugins used to create clockwork types
   ClkTypeFactory(
-    std::unique_ptr<const metadata::TachyonMetadata> metadata_proto,
-    std::vector<std::unique_ptr<ClkTypeFactoryPlugin>> plugins);
+    jewels::memory::MemoryResource memory_resource,
+    std::shared_ptr<const metadata::TachyonMetadata> metadata_proto,
+    std::pmr::vector<std::shared_ptr<ClkTypeFactoryPlugin>> plugins);
 
   ClkTypeFactory();
 
@@ -424,21 +556,31 @@ public:
   /// @return Tachyon metadata protobuf
   [[nodiscard]] const metadata::TachyonMetadata& get_metadata_proto() const noexcept;
 
+  /// @return Tachyon metadata version
+  [[nodiscard]] int32_t get_metadata_version() const noexcept;
+
   /// @return Representations for the types in the protobuf schema
-  [[nodiscard]] std::vector<std::unique_ptr<ClkType>>& get_types() noexcept;
+  [[nodiscard]] std::pmr::vector<std::shared_ptr<ClkType>>& get_types() noexcept;
+
+  /// @return Memory resource used for allocations
+  [[nodiscard]] const jewels::memory::MemoryResource& get_memory_resource() const noexcept;
 
 private:
+  /// Memory resource
+  jewels::memory::MemoryResource memory_resource_;
+
   /// Tachyon metadata protobuf
-  std::unique_ptr<const metadata::TachyonMetadata> metadata_proto_;
+  std::shared_ptr<const metadata::TachyonMetadata> metadata_proto_;
 
   /// Factory plugins used to create clockwork types
-  std::vector<std::unique_ptr<ClkTypeFactoryPlugin>> plugins_;
+  std::pmr::vector<std::shared_ptr<ClkTypeFactoryPlugin>> plugins_;
 
   /// Representations for the types in the protobuf schema
-  std::vector<std::unique_ptr<ClkType>> types_;
+  std::pmr::vector<std::shared_ptr<ClkType>> types_;
 };
 
 /// Check for unexpected history changes
+/// @param[in] memory_resource Memory resource
 /// @param[in] src_became Map of field renumbering in source schema
 /// @param[in] src_removed Fields removed from the source schema
 /// @param[in] dst_became Map of field renumbering in destination schema
@@ -447,10 +589,11 @@ private:
 /// @param[in] name Name used in error messages
 /// @throws runtime_error if unexpected changes are found
 void check_for_unexpected_history_changes(
-  const std::map<int32_t, int32_t>& src_became,
-  const std::set<int32_t>& src_removed,
-  const std::map<int32_t, int32_t>& dst_became,
-  const std::set<int32_t>& dst_removed,
+  const jewels::memory::MemoryResource& memory_resource,
+  const std::pmr::map<int32_t, int32_t>& src_became,
+  const std::pmr::set<int32_t>& src_removed,
+  const std::pmr::map<int32_t, int32_t>& dst_became,
+  const std::pmr::set<int32_t>& dst_removed,
   bool allow_changes,
   std::string_view name);
 

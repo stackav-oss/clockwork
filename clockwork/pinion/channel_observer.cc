@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/channel_observer.hh"
@@ -7,18 +7,20 @@
 
 #include <cstddef>
 #include <iterator>
+#include <ranges>
+#include <utility>
 
 namespace clockwork::pinion
 {
 
 ChannelObserver::ChannelObserver(
   ::jewels::memory::MemoryResource memory_resource,
-  ::jewels::memory::ObjectPtr<::clockwork::pinion::Buffer> buffer_ptr,
+  std::shared_ptr<AbstractChannel> subscriber,
   ::jewels::memory::ObjectPtr<ChannelObserverClient> client_ptr,
   std::string_view channel_name,
   ::clockwork_logging::ChannelType channel_type)
   : mem_res_(memory_resource),
-    buffer_ptr_(buffer_ptr),
+    subscriber_(std::move(subscriber)),
     client_ptr_(client_ptr),
     channel_name_(channel_name, memory_resource),
     channel_type_(channel_type)
@@ -27,30 +29,29 @@ ChannelObserver::ChannelObserver(
 
 void ChannelObserver::notify(const ::clockwork::pinion::Observer::Event& event)
 {
-  const auto buffer_end = SlotRef(buffer_ptr_, std::end(*buffer_ptr_));
-  const auto buffer_begin = SlotRef(buffer_ptr_, std::begin(*buffer_ptr_));
+  const auto available = subscriber_->available();
   if (next_iterator_.is_sentinel())
   {
-    if (buffer_begin == buffer_end)
+    if (available.begin() == available.end())
     {
-      next_iterator_ = buffer_begin;
+      next_iterator_ = available.begin();
     }
     else if (channel_type_ == ::clockwork_logging::ChannelType::persistent)
     {
-      next_iterator_ = std::prev(buffer_end);
+      next_iterator_ = std::prev(available.end());
     }
     else
     {
-      next_iterator_ = buffer_end;
+      next_iterator_ = available.end();
     }
   }
-  if (next_iterator_ < buffer_begin)
+  if (next_iterator_ < available.begin())
   {
-    const auto drop_count = static_cast<size_t>(std::distance(next_iterator_, buffer_begin));
+    const auto drop_count = static_cast<size_t>(std::distance(next_iterator_, available.begin()));
     client_ptr_->drop_callback(channel_name_, drop_count);
-    next_iterator_ = buffer_begin;
+    next_iterator_ = available.begin();
   }
-  while (next_iterator_ != buffer_end)
+  while (next_iterator_ != available.end())
   {
     client_ptr_->message_callback(event.current_time, channel_name_, next_iterator_);
     ++next_iterator_;

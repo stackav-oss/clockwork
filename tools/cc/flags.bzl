@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Flags for our cc toolchain."""
@@ -30,6 +30,7 @@ _COMMON_C_WARNING_FLAGS = _COMMON_WARNING_FLAGS + [
 _COMMON_CXX_WARNING_FLAGS = _COMMON_WARNING_FLAGS + [
     # keep-sorted start
     "-Wdelete-non-virtual-dtor",
+    "-Wno-c2y-extensions",  # We have to turn this off for Clang 22 + Catch2: https://github.com/catchorg/Catch2/issues/3076,
     "-Wnon-virtual-dtor",
     # keep-sorted end
 ]

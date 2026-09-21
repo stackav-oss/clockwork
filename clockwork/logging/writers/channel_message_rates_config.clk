@@ -1,16 +1,18 @@
 #![generate(cpp, proto, proto_conv)]
 #![cpp(namespace=clockwork_logging)]
 
+use[] clockwork::common::constants;
+
 // Configuration for a channel message rate
 schema ChannelMessageRateConfig
 {
   fields
   {
     // Channel name
-    #0 channel_name: VarString<max_size=300>;
+    #0 channel_name: VarString<max_size=constants::MAX_CHANNEL_NAME_SIZE>;
 
     // Minimum message rate in hz
-    #1 min_msg_rate_hz : Float64;
+    #1 min_msg_rate_hz: Float64;
   }
 }
 

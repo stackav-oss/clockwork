@@ -61,7 +61,7 @@ Clockwork, though, waits until it sees how `i` is used before deciding on a type
     In fact, the type of integer and floating point literals is ultimately inferred from context as well, instead of being fixed when the compiler encounters the literal.
     The literal `3` in Clockwork could be quite a few different integer types, and the compiler will eventually pick one specific type for it, from context.
 
-In this sense, it has much more in common with modern, safe type inference systems like Rust or Pyright than with C++'s `auto`.
+In this sense, it has much more in common with modern, safe type inference systems like Rust or Pyrefly than with C++'s `auto`.
 
 ## Guidance
 

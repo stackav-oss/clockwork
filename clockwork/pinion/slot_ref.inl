@@ -2,15 +2,17 @@
 #pragma once
 
 #include "clockwork/pinion/slot_ref.hh"
-
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_index.hh" // IWYU pragma: keep
 #include "clockwork/pinion/slot.hh"
+#include "jewels/math/power_of_two.hh" // IWYU pragma: keep
 #include "jewels/memory/pointers.hh"
 #include "jewels/meta/concepts.hh"
 
+#include <cstddef>
 #include <cstdint>
-#include <iosfwd>
 #include <limits>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -55,55 +57,65 @@ std::ptrdiff_t MonostateSlotRefReader::distance(const MonostateSlotRefReader& /*
   return 0;
 }
 
-BufferSlotRefReader::BufferSlotRefReader(
-  jewels::memory::ObjectPtr<const Buffer> buffer_ptr, const BufferIterator& buffer_iterator)
+template <typename BufferType>
+BufferSlotRef<BufferType>::BufferSlotRef(
+  jewels::memory::ObjectPtr<BufferType> buffer_ptr, const BufferIterator& buffer_iterator)
   : buffer_ptr_(buffer_ptr), buffer_iterator_(buffer_iterator)
 {
 }
 
-[[nodiscard]] bool BufferSlotRefReader::is_sentinel() const noexcept
+template <typename BufferType>
+[[nodiscard]] bool BufferSlotRef<BufferType>::is_sentinel() const noexcept
 {
   return is_sentinel_iterator(buffer_iterator_);
 }
 
-[[nodiscard]] bool BufferSlotRefReader::is_valid() const noexcept
+template <typename BufferType>
+[[nodiscard]] bool BufferSlotRef<BufferType>::is_valid() const noexcept
 {
   return buffer_ptr_->still_available(buffer_iterator_);
 }
 
-[[nodiscard]] ConstSlot BufferSlotRefReader::slot() const noexcept
+template <typename BufferType>
+[[nodiscard]] BufferSlotRef<BufferType>::SlotT BufferSlotRef<BufferType>::slot() const noexcept
 {
   return buffer_iterator_.dereference();
 }
 
-[[nodiscard]] ConstSlot BufferSlotRefReader::slot(std::ptrdiff_t offset) const noexcept
+template <typename BufferType>
+[[nodiscard]] BufferSlotRef<BufferType>::SlotT BufferSlotRef<BufferType>::slot(std::ptrdiff_t offset) const noexcept
 {
   auto iter = buffer_iterator_;
   iter.advance(offset);
   return iter.dereference();
 }
 
-inline uint64_t BufferSlotRefReader::index() const noexcept
+template <typename BufferType>
+inline uint64_t BufferSlotRef<BufferType>::index() const noexcept
 {
   return buffer_iterator_.index();
 }
 
-void BufferSlotRefReader::increment() noexcept
+template <typename BufferType>
+void BufferSlotRef<BufferType>::increment() noexcept
 {
   ++buffer_iterator_;
 }
 
-void BufferSlotRefReader::decrement() noexcept
+template <typename BufferType>
+void BufferSlotRef<BufferType>::decrement() noexcept
 {
   buffer_iterator_--;
 }
 
-void BufferSlotRefReader::advance(std::ptrdiff_t offset) noexcept
+template <typename BufferType>
+void BufferSlotRef<BufferType>::advance(std::ptrdiff_t offset) noexcept
 {
   buffer_iterator_.advance(offset);
 }
 
-[[nodiscard]] std::ptrdiff_t BufferSlotRefReader::distance(const BufferSlotRefReader& other) const noexcept
+template <typename BufferType>
+[[nodiscard]] std::ptrdiff_t BufferSlotRef<BufferType>::distance(const BufferSlotRef& other) const noexcept
 {
   return buffer_iterator_.distance_to(other.buffer_iterator_);
 }

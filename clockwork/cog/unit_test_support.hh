@@ -1,25 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "jewels/memory/memory_resource.hh"
-#include "jewels/rate_limiter/token_bucket.hh"
-#include "jewels/std/expected.hh"
-#include "jewels/time/sync_time.hh"
-#include "jewels/uuid/uuid.hh"
-
-#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <sys/types.h>
-#include <tuple>
-#include <utility>
-#include <variant>
 
 namespace clockwork
 {
@@ -47,6 +35,8 @@ struct UnitTestCogOutputViewPolicy
   static constexpr std::optional<size_t> skip_threshold = std::nullopt;
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
 };
 
 /// Unit test cog output view pointer type

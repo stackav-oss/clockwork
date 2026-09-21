@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -164,6 +164,7 @@ def test_topic_metadata() -> None:
     assert metadata1.channel_type == channel_type1
     assert metadata1.schema_encoding == schema_encoding1
     assert metadata1.schema_definition == schema_definition1
+    assert metadata1.is_amended is False
     assert metadata1 == TopicMetadata(
         name1,
         type1,
@@ -225,6 +226,7 @@ def test_topic_metadata() -> None:
         channel_type1,
         schema_encoding1,
         schema_definition2,
+        True,
     )
 
 

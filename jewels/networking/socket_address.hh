@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -13,7 +13,6 @@
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
-#include <sys/un.h>
 
 namespace jewels::networking
 {
@@ -68,7 +67,7 @@ public:
   /// @param[in] interface_index The interface index.
   /// @param[in] protocol Ethernet protocol to use.
   static jewels::expected<RawSocketAddress, filesystem::ErrorCode>
-  create(std::string_view address, int32_t interface_index, int32_t protocol = ETH_P_ALL) noexcept;
+  create(std::string_view address, int32_t interface_index, uint16_t protocol = ETH_P_ALL) noexcept;
 
   /// Get the address as a sockaddr pointer.
   [[nodiscard]] const ::sockaddr* ptr() const noexcept;

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Functions for handling data compatibility and upgrade."""
@@ -46,21 +46,27 @@ def create_deserializer_with_cpp_upgrader(
     Raises:
         ValueError: If the schemas are incompatible or can't be upgraded
     """
+    # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     expected_metadata = expected_class.get_tachyon_metadata()
     assert expected_metadata is not None  # Validated in create_deserializer
 
+    # fmt: off
     upgrader = TachyonCppUpgrader(
+        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         expected_class.get_tachyon_class_name(),
         tachyon_metadata.to_protobuf(expected_metadata).SerializeToString(),
         tachyon_metadata.to_protobuf(incoming_metadata).SerializeToString(),
     )
+    # fmt: on
 
     if not upgrader.upgrade_required:
         return False, expected_class.deserialize_tachyon
 
     def deserialize_and_upgrade(buffer: memoryview) -> Tachyon[T]:
+        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         upgraded_buffer = bytearray(expected_class.get_tachyon_constraint().size)
         upgrader.upgrade(buffer, memoryview(upgraded_buffer))
+        # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         upgraded_instance = expected_class.deserialize_tachyon(memoryview(upgraded_buffer))
         return cast("Tachyon[T]", upgraded_instance)
 
@@ -96,6 +102,7 @@ def create_deserializer(
         TypeError: If expected_class doesn't have required Tachyon methods or the metadata is not for a schema
         ValueError: If the schemas are incompatible or can't be upgraded
     """
+    # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     expected_metadata = expected_class.get_tachyon_metadata()
     if expected_metadata is None:
         msg = f"No metadata available for expected class: {expected_class.__name__}"

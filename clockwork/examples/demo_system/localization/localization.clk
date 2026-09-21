@@ -94,7 +94,7 @@ box LocalizationBox
   new state: State(representation=Tachyon<localization_state::LocalizationState>, init=init_cog.state);
 
   connect state to imu_cog.state;
-  connect imu_channels::ImuChannel to imu_cog.imu;
+  connect imu_channels::ImuChannel<name="/imu", type=imu_message::ImuMessage> to imu_cog.imu;
   connect imu_cog.pose to localization_channels::PoseChannel;
 
   connect state to gps_cog.state;

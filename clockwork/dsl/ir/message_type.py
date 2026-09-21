@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Mixin type for entities with a message type."""
@@ -10,9 +10,12 @@ from textwrap import dedent
 from typing import TYPE_CHECKING
 
 from clockwork.dsl.ir import (
+    clkbuiltins,
+    cog_parameters,
     expr,
     interface,
     representation,
+    schema,
     schema_reg,
     typesys,
 )
@@ -26,7 +29,7 @@ if TYPE_CHECKING:
 class MessageTypeMixin:
     """Mixin class for things that have a message type."""
 
-    message_type: schema_reg.InterfaceInfo | expr.Expr
+    message_type: schema_reg.InterfaceInfo | cog_parameters.CogParameterRef | typesys.Instantiation | expr.Expr
 
     def get_interface(self) -> interface.InterfaceInstantiation:
         """Retrieve the underlying interface.
@@ -77,11 +80,25 @@ class MessageTypeMixin:
             raise RuntimeError(msg)  # noqa: TRY004 (Accessing unresolved entity is a runtime error)
         return interface_inst.representation
 
+    def get_instantiated_schema(self) -> schema.InstantiatedSchema:
+        """Retrieve the instantiated schema for this entity's message type.
+
+        Navigates the chain: interface → representation → schema_ir.
+
+        Raises:
+            RuntimeError if self is not yet resolved.
+        """
+        return self.get_representation_reference().schema_ir
+
 
 def resolve_schema_interface(
-    compiler_context: CompilerContext, message_type: schema_reg.InterfaceInfo | expr.Expr
+    compiler_context: CompilerContext,
+    message_type: schema_reg.InterfaceInfo | cog_parameters.CogParameterRef | typesys.Instantiation | expr.Expr,
 ) -> schema_reg.InterfaceInfo:
     """Private helper function for resolving schema interfaces."""
+    if isinstance(message_type, cog_parameters.CogParameterRef | typesys.Instantiation):
+        msg = f"Cannot resolve parameterized schema interface {message_type}"
+        raise TypeError(msg)
     if isinstance(message_type, schema_reg.InterfaceInfo):
         return message_type
     typespec = message_type.evaluate()
@@ -103,3 +120,47 @@ def resolve_schema_interface(
         )
         raise TypeError(msg)
     return interface
+
+
+def resolve_parameterized_schema_interface(
+    compiler_context: CompilerContext,
+    message_type: schema_reg.InterfaceInfo | cog_parameters.CogParameterRef | typesys.Instantiation | expr.Expr,
+) -> schema_reg.InterfaceInfo | cog_parameters.CogParameterRef | typesys.Instantiation:
+    """Validate that the typespec will be a valid reference after cog parameter substitution."""
+    if not isinstance(message_type, expr.Expr):
+        return message_type
+    typespec = message_type.evaluate()
+    if isinstance(typespec, cog_parameters.CogParameterRef):
+        return typespec
+    if not isinstance(typespec, typesys.Instantiation) or len(typespec.arguments) != 1:
+        msg = message_type.append_error_line(f"Invalid Interface type: {type(message_type)}")
+        raise ValueError(msg)
+    if typespec.instantiates not in (clkbuiltins.TAP, clkbuiltins.TAPPY):
+        msg = message_type.append_error_line(f"Only Tap interface supported so far: {typespec}")
+        raise ValueError(msg)
+    if typespec.instantiates is clkbuiltins.TAPPY:
+        # Some sleight of hand to convert from the TAPPY short-hand notation to Tap<Tachyon<>>;
+        typespec = typesys.Instantiation(
+            type_info=clkbuiltins.TYPE_TYPE,
+            instantiates=clkbuiltins.TAP,
+            arguments={
+                "representation": typesys.Instantiation(
+                    type_info=clkbuiltins.TYPE_TYPE,
+                    instantiates=clkbuiltins.TACHYON,
+                    arguments={"schema": typespec.arguments["schema"]},
+                )
+            },
+        )
+    representation = typespec.arguments["representation"]
+    if not isinstance(representation, typesys.Instantiation):
+        msg = message_type.append_error_line(f"Interface must be instantiated for a schema: {message_type}")
+        raise TypeError(msg)
+    schema_ir = representation.arguments.get("schema")
+    if isinstance(schema_ir, cog_parameters.CogParameterRef):
+        return typespec
+    if not isinstance(schema_ir, typesys.Instantiation):
+        return resolve_schema_interface(compiler_context, message_type)
+    if not isinstance(schema_ir.instantiates, schema.Schema):
+        msg = message_type.append_error_line("Interface must be a schema")
+        raise TypeError(msg)
+    return typespec

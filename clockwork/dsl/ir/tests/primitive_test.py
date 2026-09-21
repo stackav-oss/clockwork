@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -36,6 +36,7 @@ def test_unit_conversion() -> None:
     ms = primitive.UnitValue.make(Decimal(1), unit=units.MILLISECONDS)
     ns = ms.as_unit(units.NANOSECONDS)
     assert ns.value == Decimal(1000000)
+    # pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     test_unit = ExampleUnit(value_type=clkbuiltins.DURATION, scale=0, canonical_unit=cast("units.Unit", None))
     with pytest.raises(TypeError, match="Cannot convert unit second to test"):
         ms.as_unit(test_unit)

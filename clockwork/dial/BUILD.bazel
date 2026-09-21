@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -13,6 +13,9 @@ clk(
         "alignment_type_clk_cc.cc",
         "alignment_type_clk_cc.hh",
         "alignment_type_clk_cc.inl",
+        "alignment_type_clk_cc_types.cc",
+        "alignment_type_clk_cc_types.hh",
+        "alignment_type_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )
@@ -25,6 +28,7 @@ cc_library(
         ":alignment_type_clk_cc",
         ":approx_aligner_config_clk_cc",
         "//clockwork:repr_iface",
+        "//jewels/container/tap:optional",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/time:sync_time",
@@ -38,6 +42,9 @@ clk(
         "approx_aligner_config_clk_cc.cc",
         "approx_aligner_config_clk_cc.hh",
         "approx_aligner_config_clk_cc.inl",
+        "approx_aligner_config_clk_cc_types.cc",
+        "approx_aligner_config_clk_cc_types.hh",
+        "approx_aligner_config_clk_cc_types.inl",
         "approx_aligner_config_clk_proto.proto",
         "approx_aligner_config_clk_proto_conv.cc",
         "approx_aligner_config_clk_proto_conv.hh",
@@ -56,6 +63,13 @@ cc_library(
     srcs = ["approx_aligner_policies.inl"],
     hdrs = ["approx_aligner_policies.hh"],
     deps = [":msg_input"],
+)
+
+cc_library(
+    name = "cond_dynamic_timer",
+    srcs = ["cond_dynamic_timer.inl"],
+    hdrs = ["cond_dynamic_timer.hh"],
+    deps = [":exec_condition"],
 )
 
 cc_library(
@@ -87,14 +101,22 @@ cc_library(
         ":msg_input",
         ":signal_aggregator",
         "//clockwork:repr_iface",
+        "//clockwork:tags",
         "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
         "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
+        "//clockwork/dsl/cog:ten_nanosecond_clk_cc",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/pinion:publishable",
-        "//clockwork/pinion:publisher_handle",
         "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:soa",
+        "//jewels/memory:aligned_storage",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
+        "//jewels/meta:concepts",
         "//jewels/time:sync_time",
+        "//jewels/utility:string_param",
+        "//jewels/uuid",
     ],
 )
 
@@ -102,7 +124,7 @@ cc_library(
     name = "msg_input",
     srcs = ["msg_input.inl"],
     hdrs = ["msg_input.hh"],
-    deps = ["//jewels/container:circular_buffer"],
+    deps = ["//clockwork/pinion:device_ptr"],
 )
 
 cc_library(

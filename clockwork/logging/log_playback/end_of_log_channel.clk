@@ -6,7 +6,7 @@ use clockwork::logging::channel_policy::{LogReaderPolicy};
 // End of log channel. Name must match the one used in LogMessageFetcher.hh
 channel EndOfLogChannel
 {
-    name: "/clockwork_logging/end_of_log";
-    message_type: Tachyon<EndOfLog>;
-    max_num_messages: 5;
+  name: "/clockwork_logging/end_of_log";
+  message_type: Tachyon<EndOfLog>;
+  max_num_messages: 5;
 }

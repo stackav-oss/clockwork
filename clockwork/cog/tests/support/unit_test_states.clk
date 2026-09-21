@@ -12,7 +12,7 @@ schema ClkState
   fields
   {
     // Doc
-    #1 value : Int32;
+    #1 value: Int32;
   }
 }
 
@@ -23,22 +23,22 @@ schema InputCogState
   fields
   {
     // Doc
-    #1 input1_count : UInt32;
+    #1 input1_count: UInt32;
 
     // Doc
-    #2 input1_value : Int32;
+    #2 input1_value: Int32;
 
     // Doc
-    #3 input2_count : UInt32;
+    #3 input2_count: UInt32;
 
     // Doc
-    #4 input2_value : Int32;
+    #4 input2_value: Int32;
 
     // Doc
-    #5 input3_count : UInt32;
+    #5 input3_count: UInt32;
 
     // Doc
-    #6 input3_value : Int32;
+    #6 input3_value: Int32;
   }
 }
 
@@ -49,6 +49,17 @@ schema OutputCogState
   fields
   {
     // Doc
-    #1 output1_sent : Bool;
+    #1 output1_sent: Bool;
+  }
+}
+
+// Doc
+schema SignalsCogState
+{
+  uuid: 16b4a0e2-6713-46ea-93e7-cd9392465e02;
+  fields
+  {
+    // Doc
+    #1 exec_count: UInt32;
   }
 }

@@ -1,6 +1,8 @@
 #![generate(cpp, nanobind)]
 #![cpp(namespace=clockwork::pinion)]
 
+use[] clockwork::common::constants;
+
 // TCP bridge client/server counters
 schema BridgeClientServerCounters
 {
@@ -9,7 +11,7 @@ schema BridgeClientServerCounters
   fields
   {
     // Channel name
-    #16 channel_name: VarString<max_size=300>;
+    #16 channel_name: VarString<max_size=constants::MAX_CHANNEL_NAME_SIZE>;
 
     // Messages rate in hz
     #2 message_rate_hz: Float32;
@@ -46,11 +48,17 @@ schema BridgeClientServerCounters
 
     // Max latency between message publish time and when the bridge was done sending the message
     #15 max_bridge_latency: Duration;
+
+    // Rate of null headers sent to avoid lost tails
+    #17 null_header_rate_hz: Float32;
+
+    // Rate of null headers sent for keep-alives
+    #18 keep_alive_rate_hz: Float32;
   }
   history
   {
-    version: 16;
-    legacy_became: [1->16];
+    version: 18;
+    legacy_became: [1 -> 16];
   }
 }
 
@@ -62,7 +70,7 @@ schema BridgeStatusDiagnosticsCounters
   fields
   {
     // Dropped message count
-    #1  drop_count: UInt64;
+    #1 drop_count: UInt64;
 
     // Failed send count
     #2 failed_sends: UInt64;
@@ -101,13 +109,17 @@ schema BridgeStatusDiagnosticsCounters
     #13 max_bridge_latency: Duration;
 
     // Max latency channel name
-    #14 max_latency_channel_name: VarString<300>;
+    #14 max_latency_channel_name: VarString<constants::MAX_CHANNEL_NAME_SIZE>;
 
     // Max bridge bulk data latency
     #15 max_bridge_bulk_data_latency: Duration;
 
     // Max bulk data latency channel name
-    #16 max_bulk_data_latency_channel_name: VarString<300>;
+    #16 max_bulk_data_latency_channel_name: VarString<constants::MAX_CHANNEL_NAME_SIZE>;
+  }
+  history
+  {
+    version: 17;
   }
 }
 

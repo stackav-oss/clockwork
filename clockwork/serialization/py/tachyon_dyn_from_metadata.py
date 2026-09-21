@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Tachyon Python Serializer Registry."""
@@ -9,14 +9,17 @@ import contextlib
 import dataclasses
 import enum
 import math
+import operator
+import re
 import struct
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeAlias, TypeVar, cast
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import clkbuiltins, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, tensor_builtins, typesys
 from clockwork.dsl.serialization import tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
 from clockwork.serialization.metadata import tachyon_model
@@ -223,7 +226,9 @@ class TachyonDynMetadataRegistryKey(ContextKey[TachyonDynMetadataRegistry]):
         registry.generic_type_registry.update(
             {
                 clkbuiltins.UUID.fqn: _uuid_factory,
+                clkbuiltins.BITSET.fqn: _bitset_factory,
                 clkbuiltins.FIXED_ARRAY.fqn: _fixed_array_factory,
+                tensor_builtins.TENSOR.fqn: _tensor_factory,
                 clkbuiltins.OPTIONAL.fqn: _optional_factory,
                 clkbuiltins.VAR_ARRAY.fqn: _var_array_factory,
                 clkbuiltins.VAR_STRING.fqn: _var_string_factory,
@@ -477,6 +482,51 @@ def _uuid_factory(
     return UUID_SERDES
 
 
+def _bitset_factory(
+    compiler_context: CompilerContext,  # noqa: ARG001 (needed to conform to expected signature)
+    type_id: int,
+    types: Sequence[tachyon_model.ClkType],
+    _: dict[int, SerDes[Any]],
+) -> SerDes[int] | None:
+    """Create a serializer for Bitset metadata."""
+    typ = types[type_id]
+    if typ.fqn != clkbuiltins.BITSET.fqn:
+        msg = f"Expected Bitset but got {typ.fqn}"
+        raise RuntimeError(msg)
+    assert isinstance(typ, tachyon_model.BuiltInType)
+    if len(typ.arguments) != 1 or not isinstance(typ.arguments[0], str):
+        msg = f"Invalid Bitset metadata arguments: {typ.arguments}"
+        raise ValueError(msg)
+    try:
+        bit_size = int(typ.arguments[0])
+    except ValueError as exc:
+        msg = f"Invalid Bitset metadata arguments: {typ.arguments}"
+        raise ValueError(msg) from exc
+    byte_size = bit_size // 8 + (bit_size % 8 != 0)
+    if bit_size <= 0 or typ.size != byte_size or typ.alignment != 1:
+        msg = f"Invalid Bitset metadata for size {bit_size}"
+        raise ValueError(msg)
+    maximum_value = (1 << bit_size) - 1
+    constraint = tachyon_reg.FieldConstraint(size=typ.size, alignment=typ.alignment)
+
+    def _serialize(obj: int, buffer: memoryview) -> None:
+        if obj < 0 or obj > maximum_value:
+            msg = f"Bitset<{bit_size}> value must be in [0, {maximum_value}]"
+            raise ValueError(msg)
+        buffer[:] = obj.to_bytes(constraint.size, byteorder="little", signed=False)
+
+    def _deserialize(buffer: memoryview) -> int:
+        return int.from_bytes(buffer, byteorder="little", signed=False) & maximum_value
+
+    return SerDes(
+        type_=int,
+        fqn=typ.fqn,
+        constraint=constraint,
+        serializer=_serialize,
+        deserializer=_deserialize,
+    )
+
+
 class EnumSerDes:
     """SerDes for an enum type."""
 
@@ -557,6 +607,72 @@ def _strong_type_factory(
         types=types,
         serdeses=serdeses,
     )
+
+
+class TensorSerDes(Generic[T]):
+    """SerDes for a tensor of T type."""
+
+    # Suppressing PLR0913 (too many args) because this can't really be split. Args are kwonly to mitigate confusion.
+    def __init__(  # noqa: PLR0913 (see above)
+        self,
+        *,
+        compiler_context: CompilerContext,
+        shape: list[int],
+        strides: list[int],
+        element_type_id: int,
+        constraint: tachyon_reg.FieldConstraint,
+        types: Sequence[tachyon_model.ClkType],
+        serdeses: dict[int, SerDes[Any]],
+    ) -> None:
+        """Create a SerDes for array types."""
+        self.constraint = constraint
+        self.shape = shape
+        self.strides = strides
+        self.num_elements = reduce(operator.mul, self.shape)
+        element_serdes = _serdes_for_type(
+            compiler_context=compiler_context,
+            type_id=element_type_id,
+            metadata_name=None,
+            types=types,
+            serdeses=serdeses,
+        )
+        self.element_serializer = element_serdes.serializer
+        self.element_deserializer = element_serdes.deserializer
+        element_constraint = element_serdes.constraint
+        self.element_stride = element_constraint.array_stride()
+
+    def serialize(self, obj: tensor_builtins.TensorData[T], buffer: memoryview) -> None:
+        """Serializer for Tensors of T."""
+        if len(obj.data) != self.num_elements:
+            msg = f"Attempt to serialize tensor of length {len(obj.data)}, expected {self.num_elements}"
+            raise ValueError(msg)
+
+        offset = 0
+        for elem in obj.data:
+            next_offset = offset + self.element_stride
+            self.element_serializer(elem, buffer[offset:next_offset])
+            offset = next_offset
+
+    def deserialize(self, buffer: memoryview) -> tensor_builtins.TensorData[T]:
+        """Deserializer for type Tensors of T."""
+        offset = 0
+        data = [cast("T", None)] * self.num_elements
+        for i in range(self.num_elements):
+            next_offset = offset + self.element_stride
+            data[i] = self.element_deserializer(buffer[offset:next_offset])
+            offset = next_offset
+
+        return tensor_builtins.TensorData(data=data, shape=self.shape, strides=self.strides)
+
+    def make_serdes(self) -> SerDes[tensor_builtins.TensorData[T]]:
+        """Construct a SerDes for the registry."""
+        return SerDes(
+            type_=tensor_builtins.TensorData,
+            fqn=tensor_builtins.TENSOR.fqn,
+            constraint=self.constraint,
+            serializer=self.serialize,
+            deserializer=self.deserialize,
+        )
 
 
 class FixedArraySerDes(Generic[T]):
@@ -682,6 +798,45 @@ class VarArraySerDes(Generic[T]):
         return SerDes(
             type_=list, fqn="", constraint=self.constraint, serializer=self.serialize, deserializer=self.deserialize
         )
+
+
+def _tensor_factory(
+    compiler_context: CompilerContext,
+    type_id: int,
+    types: Sequence[tachyon_model.ClkType],
+    serdeses: dict[int, SerDes[Any]],
+) -> SerDes[Any] | None:
+    """SerDes factory for FixedArray."""
+    typ = types[type_id]
+    if typ.fqn != tensor_builtins.TENSOR.fqn:
+        msg = f"Expected Tensor but got {typ.fqn}"
+        raise RuntimeError(msg)
+    assert isinstance(typ, tachyon_model.BuiltInType)
+    element_type_id, shape_spec, layout_spec = typ.arguments
+    assert isinstance(element_type_id, int)
+
+    assert isinstance(shape_spec, str)
+    matches = re.match(r"\[([0-9,]+)\]", shape_spec)
+    # LIST's value_key will always be formated like above
+    assert matches is not None
+    shape = list(map(int, matches.group(1).split(",")))
+
+    assert isinstance(layout_spec, str)
+    layout_id = int(layout_spec.split("::")[-1])
+    strides = tensor_builtins.compute_tensor_strides(
+        shape, clkenum.ValueRef.make(tensor_builtins.TENSOR_LAYOUT_ENUM.values[layout_id])
+    )
+
+    constraint = tachyon_reg.FieldConstraint(size=typ.size, alignment=typ.alignment)
+    return TensorSerDes(
+        compiler_context=compiler_context,
+        shape=shape,
+        strides=strides,
+        element_type_id=element_type_id,
+        constraint=constraint,
+        types=types,
+        serdeses=serdeses,
+    ).make_serdes()
 
 
 def _fixed_array_factory(
@@ -1025,10 +1180,12 @@ class SoaSerDes(Generic[T]):
                 field_array[i] = element_serdes.deserializer(buffer[element_offset : element_offset + element_size])
             field_values[field_name] = field_array
 
+        # pyrefly: ignore[no-any-return-implicit] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return self.py_class(**field_values)
 
     def make_serdes(self) -> SerDes[T]:
         """Create a SerDes for the registry."""
+        # pyrefly: ignore[bad-return] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return SerDes(
             type_=self.py_class,
             fqn="",
@@ -1123,16 +1280,19 @@ class SchemaSerDes(Generic[T]):
         def serialize_tachyon(self: Any, buffer: memoryview) -> None:  # noqa: ANN401 type information is not known ahead of time.
             schema_serdes.serialize(self, buffer)
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def deserialize_tachyon(_: type, buffer: memoryview) -> Any:  # noqa: ANN401 type information is not known ahead of time.
             return schema_serdes.deserialize(buffer)
 
         constraint = tachyon_reg.FieldConstraint(size=schema.size, alignment=schema.alignment)
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_constraint(_: type) -> tachyon_reg.FieldConstraint:
             return constraint
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_metadata_name(_: type) -> str:
             if metadata_name is None:
@@ -1142,6 +1302,7 @@ class SchemaSerDes(Generic[T]):
 
         py_class_metadata = tachyon_model.TachyonMetadata(outer_type_id=type_id, types=types)
 
+        # pyrefly: ignore[invalid-decorator] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         @classmethod
         def get_tachyon_metadata(_: type) -> tachyon_model.TachyonMetadata:
             return py_class_metadata

@@ -12,12 +12,12 @@ cpu_domain HostB;
 
 ethernet Lan1
 {
-    ipv4_address 1.2.3.4: HostA
-    {
-        bridge_ports: 16000 - 18000;
-    }
-    ipv4_address 1.2.3.5: HostB
-    {
-        bridge_ports: 16000 - 18000;
-    }
+  ipv4_address 1.2.3.4: HostA
+  {
+    bridge_ports: 16000 - 18000;
+  }
+  ipv4_address 1.2.3.5: HostB
+  {
+    bridge_ports: 16000 - 18000;
+  }
 }

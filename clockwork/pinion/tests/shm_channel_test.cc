@@ -1,10 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_publisher.hh"
@@ -29,22 +35,27 @@
 #include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_tostring.hpp>
 
 #include <array>
 #include <chrono>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <sys/epoll.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <thread>
 #include <tuple>
 #include <unistd.h>
@@ -59,7 +70,7 @@ struct Tag
 {
 };
 
-class ShmChannelOpenHack : public ShmChannel
+class ShmChannelOpenHack : public ShmChannel // NOLINT(fuchsia-multiple-inheritance) spurious error
 {
 public:
   static auto open_buffer(
@@ -188,6 +199,32 @@ TEST_CASE("ShmChannel main")
       }
     }
 
+    SECTION("non null terminated name")
+    {
+      const std::string backing_name = channel_uuid_str + "_trailing_bytes";
+      const std::string_view file_name{backing_name.data(), channel_uuid_str.size()};
+
+      auto publisher_result = open(file_name, buffer_layout, ShmChannel::Role::publisher);
+      REQUIRE(publisher_result);
+      CHECK(File::open(channel_root->descriptor(), channel_uuid_str));
+      CHECK(!File::open(channel_root->descriptor(), backing_name));
+
+      auto subscriber_result = open(file_name, buffer_layout, ShmChannel::Role::subscriber);
+      REQUIRE(subscriber_result);
+    }
+
+    SECTION("too long name")
+    {
+      const std::string too_long_name(NAME_MAX + 1U, 'a');
+
+      for (const auto role : {ShmChannel::Role::publisher, ShmChannel::Role::subscriber})
+      {
+        auto result = open(too_long_name, buffer_layout, role);
+        REQUIRE(!result);
+        CHECK(result.error() == ShmChannel::Error::fatal);
+      }
+    }
+
     SECTION("error - exists as link")
     {
       CHECK(::symlinkat("/proc/self/fd/0", channel_root->descriptor(), channel_uuid_str.c_str()) == 0);
@@ -215,22 +252,6 @@ TEST_CASE("ShmChannel main")
       REQUIRE(read);
       CHECK(*read == ref.size());
       CHECK(std::string_view(ref.data(), ref.size()) == std::string_view(out.data(), out.size()));
-    }
-
-    SECTION("bespoke pubsub")
-    {
-      auto result = open(channel_uuid_str, buffer_layout, ShmChannel::Role::publisher);
-      REQUIRE(result);
-
-      Buffer& buffer = *std::get<1>(result.value());
-      PublisherHandle publisher{jewels::memory::make_non_null_from_ref(buffer), max_observer, memres};
-      auto subscriber = SubscriberHandle(jewels::memory::make_non_null_from_ref(buffer));
-
-      std::vector<Msg> expected;
-      publish<Msg, num_slots>(publisher, expected, 1);
-      publish<Msg, num_slots>(publisher, expected, 2);
-      CHECK(dump<Msg>(subscriber) == expected);
-      CHECK(expected == std::vector{{1U, 2U}});
     }
   }
 
@@ -266,7 +287,7 @@ TEST_CASE("ShmChannel main")
       max_connections,
       resume_behavior);
     REQUIRE(publisher_result);
-    auto publisher_channel = std::make_shared<ShmPublisher>(*std::move(publisher_result));
+    std::shared_ptr<ShmPublisher> publisher_channel = *std::move(publisher_result);
     REQUIRE(epoll.add(publisher_channel->socket(), EPOLLIN, publisher_channel));
     CHECK(publisher_channel->buffer()->layout().num_slots == buffer_layout.num_slots);
     CHECK(publisher_channel->buffer()->layout().message_size == buffer_layout.message_size);
@@ -279,8 +300,9 @@ TEST_CASE("ShmChannel main")
     // Extract the publisher (after the add_observer to ensure that is kept)
     auto publisher = publisher_channel->extract_publisher();
     CHECK_THROWS_AS(publisher_channel->publisher(), std::bad_optional_access);
-    CHECK(!publisher_channel->add_observer(jewels::memory::make_non_null_from_ref(subscriber1_events)));
     CHECK(!publisher_channel->extract_publisher());
+    // PublisherHandle is now a proxy for the channel, so this will still succeed
+    CHECK(publisher_channel->add_observer(jewels::memory::make_non_null_from_ref(subscriber1_events)));
 
     // Publish messages, enough to fill and overwrite the ring buffer
     std::vector<Msg> expected;
@@ -291,11 +313,8 @@ TEST_CASE("ShmChannel main")
 
     // Check that the local subscriber reads the expected messages
     CHECK(dump<Msg>(subscriber1) == expected);
-    CHECK(subscriber1_events.events.size() == num_slots + num_overwrite);
-    CHECK(subscriber1_events.events.front().head == 0);
-    CHECK(subscriber1_events.events.front().tail == 0);
-    CHECK(subscriber1_events.events.back().head == num_overwrite + num_slots - 1);
-    CHECK(subscriber1_events.events.back().tail == num_overwrite);
+    // There are double the number of events since the observer was added twice
+    CHECK(subscriber1_events.events.size() == 2 * (num_slots + num_overwrite));
 
     // Create IPC subscriber after writing data to sanity check that this will indeed load from the backing file
     {
@@ -366,8 +385,8 @@ TEST_CASE("ShmChannel main")
       max_connections,
       resume_behavior);
     REQUIRE(publisher_channel);
-    CHECK(publisher_channel->buffer()->layout().num_slots == buffer_layout.num_slots);
-    CHECK(publisher_channel->buffer()->layout().message_size == buffer_layout.message_size);
+    CHECK(publisher_channel.value()->buffer()->layout().num_slots == buffer_layout.num_slots);
+    CHECK(publisher_channel.value()->buffer()->layout().message_size == buffer_layout.message_size);
 
     // Create subscriber
     auto subscriber_result = ShmSubscriber::open(
@@ -386,7 +405,7 @@ TEST_CASE("ShmChannel main")
     REQUIRE(epoll.add(subscriber_channel->socket(), EPOLLIN, subscriber_channel));
 
     // If the publisher closes, the subscriber should too.
-    publisher_channel->close_socket();
+    publisher_channel.value()->close_socket();
     epoll.notify(subscriber_channel->socket(), EPOLLIN);
     CHECK(subscriber_channel->socket() == -1);
   }
@@ -406,7 +425,7 @@ TEST_CASE("ShmChannel main")
     REQUIRE(shm_publisher_ptr);
 
     auto& publisher = shm_publisher_ptr->publisher();
-    auto subscriber = shm_subscriber.value()->make_subscriber();
+    auto subscriber = dynamic_cast<ShmSubscriber&>(**shm_subscriber).make_subscriber();
 
     std::vector<Msg> expected;
     publish<Msg, num_slots>(publisher, expected, 1);
@@ -427,9 +446,9 @@ TEST_CASE("ShmChannel main")
     auto ns1_factory = ShmChannelFactory::make(memres, ns1.get_namespace(), ns1.get_full_path());
     REQUIRE(ns1_factory);
     auto ns1_publisher =
-      ns1_factory->open_publisher(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
+      ns1_factory->open_shm_publisher(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     auto ns1_subscriber =
-      ns1_factory->open_subscriber(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
+      ns1_factory->open_shm_subscriber(channel_uuid_str, channel_name, buffer_layout, max_observer).value();
     CHECK(ns1_factory->socket_ns() == std::pmr::string("/clockwork/" + ns1.get_namespace() + "/pinion/pub"));
     CHECK(filesystem.exists(ns1.get_full_path() / "clockwork" / ns1.get_namespace() / "pinion/pub" / channel_uuid_str));
 
@@ -453,8 +472,8 @@ TEST_CASE("ShmChannel main")
     publish<Msg, num_slots>(dynamic_cast<ShmPublisher&>(*ns2_publisher).publisher(), ns2_expected, 100);
     publish<Msg, num_slots>(dynamic_cast<ShmPublisher&>(*ns2_publisher).publisher(), ns2_expected, 101);
 
-    CHECK(dump<Msg>(ns1_subscriber->make_subscriber()) == ns1_expected);
-    CHECK(dump<Msg>(ns2_subscriber->make_subscriber()) == ns2_expected);
+    CHECK(dump<Msg>(dynamic_cast<ShmSubscriber&>(*ns1_subscriber).make_subscriber()) == ns1_expected);
+    CHECK(dump<Msg>(dynamic_cast<ShmSubscriber&>(*ns2_subscriber).make_subscriber()) == ns2_expected);
     REQUIRE(ns1_events.events.size() == 1);
     REQUIRE(ns2_events.events.size() == 2);
   }
@@ -462,21 +481,21 @@ TEST_CASE("ShmChannel main")
 
 TEST_CASE("Factory registry")
 {
-  CHECK(pinion::ShmChannelFactoryContext::get() == nullptr);
+  CHECK(pinion::ChannelFactoryContext::get() == nullptr);
   {
     const auto tmpns1 = pinion::support::TmpShmNamespace();
     auto factory1 = tmpns1.make_factory();
-    const auto context1 = pinion::ShmChannelFactoryContext(factory1);
-    CHECK(pinion::ShmChannelFactoryContext::get() == &factory1);
+    const auto context1 = pinion::ChannelFactoryContext(factory1);
+    CHECK(pinion::ChannelFactoryContext::get() == &factory1);
     {
       const auto tmpns2 = pinion::support::TmpShmNamespace();
       auto factory2 = tmpns2.make_factory();
-      const auto context2 = pinion::ShmChannelFactoryContext(factory2);
-      CHECK(pinion::ShmChannelFactoryContext::get() == &factory2);
+      const auto context2 = pinion::ChannelFactoryContext(factory2);
+      CHECK(pinion::ChannelFactoryContext::get() == &factory2);
     }
-    CHECK(pinion::ShmChannelFactoryContext::get() == &factory1);
+    CHECK(pinion::ChannelFactoryContext::get() == &factory1);
   }
-  CHECK(pinion::ShmChannelFactoryContext::get() == nullptr);
+  CHECK(pinion::ChannelFactoryContext::get() == nullptr);
 }
 
 TEST_CASE("Reconnect when resume is allowed")
@@ -501,12 +520,12 @@ TEST_CASE("Reconnect when resume is allowed")
     ShmChannelFactory::make(memres, socket_ns, shm_dir.get_path().string(), ShmChannel::ResumeBehavior::dirty_resume);
   REQUIRE(factory_result);
 
-  auto publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
+  auto publisher_result = factory_result->open_shm_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   auto publisher = *std::move(publisher_result);
   REQUIRE(epoll.add(publisher->socket(), EPOLLIN, publisher));
 
-  auto subscriber_result = factory_result->open_subscriber(channel_uuid_str, channel_name, layout, 1U);
+  auto subscriber_result = factory_result->open_shm_subscriber(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(subscriber_result);
   const auto subscriber = *std::move(subscriber_result);
   auto subscriber_handle = subscriber->make_subscriber();
@@ -526,10 +545,10 @@ TEST_CASE("Reconnect when resume is allowed")
 
   uint64_t message1 = 1234U;
   {
-    auto slot = publisher->publisher().reserve();
-    REQUIRE(slot);
-    std::memcpy(slot->slot().message().data(), &message1, sizeof(uint64_t));
-    REQUIRE(slot->commit(fake_send_timestamp));
+    auto reservation = publisher->publisher().reserve();
+    REQUIRE(reservation);
+    std::memcpy(reservation->slots().front().message().data(), &message1, sizeof(uint64_t));
+    REQUIRE(reservation->commit(fake_send_timestamp));
   }
   epoll.notify(subscriber->socket(), EPOLLIN);
   REQUIRE(notify_count == 2U);
@@ -551,7 +570,7 @@ TEST_CASE("Reconnect when resume is allowed")
   REQUIRE(subscriber->socket() == -1);
   REQUIRE_FALSE(subscriber->timer_descriptor() == -1);
 
-  publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
+  publisher_result = factory_result->open_shm_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   publisher = *std::move(publisher_result);
   REQUIRE(epoll.add(publisher->socket(), EPOLLIN, publisher));
@@ -570,10 +589,10 @@ TEST_CASE("Reconnect when resume is allowed")
 
   uint64_t message2 = 2345U;
   {
-    auto slot = publisher->publisher().reserve();
-    REQUIRE(slot);
-    std::memcpy(slot->slot().message().data(), &message2, sizeof(uint64_t));
-    REQUIRE(slot->commit(fake_send_timestamp));
+    auto reservation = publisher->publisher().reserve();
+    REQUIRE(reservation);
+    std::memcpy(reservation->slots().front().message().data(), &message2, sizeof(uint64_t));
+    REQUIRE(reservation->commit(fake_send_timestamp));
   }
   epoll.notify(subscriber->socket(), EPOLLIN);
   REQUIRE(notify_count == 5U);
@@ -598,11 +617,548 @@ TEST_CASE("Reconnect fails when resume is disallowed")
 
   auto factory_result =
     ShmChannelFactory::make(memres, socket_ns, shm_dir.get_path().string(), ShmChannel::ResumeBehavior::no_resume);
-  auto publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
+  auto publisher_result = factory_result->open_shm_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result);
   auto publisher = *std::move(publisher_result);
   publisher.reset();
-  publisher_result = factory_result->open_publisher(channel_uuid_str, channel_name, layout, 1U);
+  publisher_result = factory_result->open_shm_publisher(channel_uuid_str, channel_name, layout, 1U);
   REQUIRE(publisher_result.error() == ShmChannel::Error::dirty);
 }
+
+TEST_CASE("Publisher handle") // NOLINT(readability-function-size) This test is a bit long due to multiple sections
+{
+  constexpr auto fake_publish_time{jewels::time::SyncTime{std::chrono::nanoseconds{12345}}};
+  using testing::TestObserver;
+
+  constexpr BufferLayout layout{
+    .num_slots = 2UL,
+    .message_size = 8UL,
+    .is_published_once = false,
+  };
+
+  const support::TmpShmNamespace tmp_namespace;
+  auto channel_factory = tmp_namespace.make_factory();
+
+  auto publisher_result =
+    channel_factory.open_shm_publisher(jewels::Uuid<Tag>::random_uuid().to_string(), "ch1", layout, 2);
+  REQUIRE(publisher_result);
+  auto pub_handle_result = publisher_result.value()->extract_publisher();
+  REQUIRE(pub_handle_result);
+  PublisherHandle pub_handle = *std::move(pub_handle_result);
+  const AbstractChannel& sub_handle = **publisher_result;
+  Buffer& buffer = *publisher_result.value()->buffer();
+
+  SECTION("Check state transitions")
+  {
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+    auto slot_ref = reservation->slots().begin();
+    REQUIRE(slot_ref.state() == ReservationState::discard);
+    slot_ref.mark_for_commit();
+    REQUIRE(slot_ref.state() == ReservationState::commit);
+    slot_ref.mark_for_discard();
+    REQUIRE(slot_ref.state() == ReservationState::discard);
+  }
+
+  SECTION("Move constructor")
+  {
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+    auto slot_ref = reservation->slots().begin();
+    SECTION("Move with discard")
+    {
+      slot_ref.mark_for_discard();
+      auto moved_to{std::move(*reservation)};
+      REQUIRE(slot_ref.state() == ReservationState::discard);
+    }
+    SECTION("Move with commit")
+    {
+      slot_ref.mark_for_commit();
+      auto moved_to{std::move(*reservation)};
+      REQUIRE(slot_ref.state() == ReservationState::commit);
+      REQUIRE(reservation->discard());
+      REQUIRE(moved_to.discard());
+    }
+    SECTION("Moved from")
+    {
+      REQUIRE(reservation->pending());
+      auto moved_to{std::move(*reservation)};
+      REQUIRE(slot_ref.state() == ReservationState::discard);
+      REQUIRE_FALSE(reservation->pending());
+    }
+  }
+
+  SECTION("Destructor")
+  {
+    TestObserver observer;
+    REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+    auto slot_ref = reservation->slots().begin();
+
+    SECTION("Commit is ignored in destructor")
+    {
+      slot_ref.mark_for_commit();
+      REQUIRE_NOTHROW([&] { auto copied{*std::move(reservation)}; }());
+      CHECK(!observer.event);
+    }
+  }
+
+  SECTION("Duplicate reservation")
+  {
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+    REQUIRE(pub_handle.reserve() == jewels::unexpected{ReserveError::existing_reservation});
+  }
+
+  SECTION("Corrupted head")
+  {
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+    REQUIRE(buffer.increment_head(BufferIndex{0UL}, 1UL) == BufferIndex{1UL});
+    REQUIRE(reservation->commit(fake_publish_time) == jewels::unexpected{WriteError::unexpected_reservation});
+    REQUIRE_THROWS_AS(reservation->~PublisherReservation(), std::runtime_error);
+  }
+
+  SECTION("Commit")
+  {
+    SECTION("Mark then process")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      reservation->slots().begin().mark_for_commit();
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->process(fake_publish_time));
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 1UL);
+    }
+    SECTION("Force commit")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->commit(fake_publish_time));
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 1UL);
+    }
+    SECTION("Header")
+    {
+      auto reservation0 = pub_handle.reserve();
+      REQUIRE(reservation0);
+      auto slot_ref0 = reservation0->slots().begin();
+      REQUIRE(slot_ref0->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(slot_ref0->header()->publish_timestamp == PublisherReservation::unset_publish_timestamp);
+      REQUIRE(slot_ref0->header()->source_commit_timestamp == 0L);
+      REQUIRE(slot_ref0->header()->latest_commit_timestamp == 0L);
+      const auto commit_time0 = jewels::time::SyncClock::now();
+      REQUIRE(reservation0->commit(fake_publish_time));
+      REQUIRE(slot_ref0->header()->sequence_number == 0UL);
+      REQUIRE(slot_ref0->header()->publish_timestamp == fake_publish_time.time_since_epoch().count());
+      REQUIRE(slot_ref0->header()->source_commit_timestamp >= commit_time0.time_since_epoch().count());
+      REQUIRE(slot_ref0->header()->latest_commit_timestamp == slot_ref0->header()->source_commit_timestamp);
+
+      auto reservation1 = pub_handle.reserve();
+      REQUIRE(reservation1);
+      auto slot_ref1 = reservation1->slots().begin();
+      REQUIRE(slot_ref1->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(slot_ref1->header()->publish_timestamp == PublisherReservation::unset_publish_timestamp);
+      REQUIRE(slot_ref1->header()->source_commit_timestamp == 0L);
+      REQUIRE(slot_ref1->header()->latest_commit_timestamp == 0L);
+      const auto commit_time1 = jewels::time::SyncClock::now();
+      REQUIRE(reservation1->commit(fake_publish_time + std::chrono::nanoseconds{1}));
+      REQUIRE(slot_ref1->header()->sequence_number == 1UL);
+      REQUIRE(slot_ref1->header()->publish_timestamp == fake_publish_time.time_since_epoch().count() + 1L);
+      REQUIRE(slot_ref1->header()->source_commit_timestamp >= commit_time1.time_since_epoch().count());
+      REQUIRE(slot_ref1->header()->latest_commit_timestamp == slot_ref1->header()->source_commit_timestamp);
+    }
+    SECTION("Header with sequence number and source commit time")
+    {
+      constexpr uint64_t fake_sequence_number1 = 123456U;
+      constexpr auto fake_commit_time1{jewels::time::SyncTime{std::chrono::nanoseconds{23456}}};
+      constexpr uint64_t fake_sequence_number2 = 234567U;
+      constexpr auto fake_commit_time2{jewels::time::SyncTime{std::chrono::nanoseconds{34578}}};
+      auto reservation0 = pub_handle.reserve();
+      REQUIRE(reservation0);
+      auto slot_ref0 = reservation0->slots().begin();
+      REQUIRE(slot_ref0->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(slot_ref0->header()->publish_timestamp == PublisherReservation::unset_publish_timestamp);
+      REQUIRE(slot_ref0->header()->source_commit_timestamp == 0L);
+      REQUIRE(slot_ref0->header()->latest_commit_timestamp == 0L);
+      const auto commit_time0 = jewels::time::SyncClock::now();
+      REQUIRE(reservation0->commit(fake_publish_time, fake_sequence_number1, fake_commit_time1));
+      REQUIRE(slot_ref0->header()->sequence_number == fake_sequence_number1);
+      REQUIRE(slot_ref0->header()->publish_timestamp == fake_publish_time.time_since_epoch().count());
+      REQUIRE(slot_ref0->header()->source_commit_timestamp == fake_commit_time1.time_since_epoch().count());
+      REQUIRE(slot_ref0->header()->latest_commit_timestamp >= commit_time0.time_since_epoch().count());
+
+      auto reservation1 = pub_handle.reserve();
+      REQUIRE(reservation1);
+      auto slot_ref1 = reservation1->slots().begin();
+      REQUIRE(slot_ref1->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(slot_ref1->header()->publish_timestamp == PublisherReservation::unset_publish_timestamp);
+      REQUIRE(slot_ref1->header()->source_commit_timestamp == 0L);
+      REQUIRE(slot_ref1->header()->latest_commit_timestamp == 0L);
+      const auto commit_time1 = jewels::time::SyncClock::now();
+      REQUIRE(reservation1->commit(
+        fake_publish_time + std::chrono::nanoseconds{1}, fake_sequence_number2, fake_commit_time2));
+      REQUIRE(slot_ref1->header()->sequence_number == fake_sequence_number2);
+      REQUIRE(slot_ref1->header()->publish_timestamp == fake_publish_time.time_since_epoch().count() + 1L);
+      REQUIRE(slot_ref1->header()->source_commit_timestamp == fake_commit_time2.time_since_epoch().count());
+      REQUIRE(slot_ref1->header()->latest_commit_timestamp >= commit_time1.time_since_epoch().count());
+    }
+    SECTION("Twice fails")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(reservation->commit(fake_publish_time));
+      REQUIRE_FALSE(reservation->commit(fake_publish_time) == jewels::unexpected{WriteError::unexpected_head});
+    }
+    SECTION("After discard fails")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(reservation->discard());
+      REQUIRE_FALSE(reservation->commit(fake_publish_time) == jewels::unexpected{WriteError::unexpected_head});
+    }
+  }
+
+  SECTION("Discard")
+  {
+    SECTION("Mark then process")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      reservation->slots().begin().mark_for_discard();
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->process(fake_publish_time));
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+    }
+    SECTION("Force discard")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->discard());
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+    }
+    SECTION("Twice fails")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(reservation->discard());
+      REQUIRE_FALSE(reservation->discard() == jewels::unexpected{WriteError::unexpected_head});
+    }
+    SECTION("After commit fails")
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(reservation->commit(fake_publish_time));
+      REQUIRE_FALSE(reservation->discard() == jewels::unexpected{WriteError::unexpected_head});
+    }
+  }
+
+  SECTION("Discard-commit sequencing")
+  {
+    // Reserve and discard.  Has capacity.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(reservation->discard());
+    }
+
+    // Buffer has not changed.
+    REQUIRE(std::ranges::empty(sub_handle.available()));
+    REQUIRE(buffer.tail() == 0UL);
+    REQUIRE(buffer.head() == 0UL);
+
+    // Reserve and commit
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 0UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(reservation->commit(fake_publish_time));
+    }
+
+    // Commit changed the buffer.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+    REQUIRE(buffer.tail() == 0UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 0UL);
+
+    // Reserve and discard.  Has capacity.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 1UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(reservation->discard());
+    }
+
+    // Buffer has not changed.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+    REQUIRE(buffer.tail() == 0UL);
+    REQUIRE(buffer.head() == 1UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 0UL);
+
+    // Reserve and commit.  Now full.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 0UL);
+      REQUIRE(buffer.head() == 1UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(reservation->commit(fake_publish_time));
+    }
+
+    // Commit changed the buffer.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 2UL);
+    REQUIRE(buffer.tail() == 0UL);
+    REQUIRE(buffer.head() == 2UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 0UL);
+    REQUIRE(sub_handle.available().back().header()->sequence_number == 1UL);
+
+    // Reserve and discard. No capacity.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 1UL);
+      REQUIRE(buffer.head() == 2UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+      REQUIRE(sub_handle.available().front().header()->sequence_number == 1UL);
+      REQUIRE(reservation->discard());
+    }
+
+    // Discard changed the buffer.  Oldest element remains hidden.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+    REQUIRE(buffer.tail() == 1UL);
+    REQUIRE(buffer.head() == 2UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 1UL);
+
+    // Reserve and commit. Back to full.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 1UL);
+      REQUIRE(buffer.head() == 2UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+      REQUIRE(sub_handle.available().front().header()->sequence_number == 1UL);
+      REQUIRE(reservation->commit(fake_publish_time));
+    }
+
+    // Commit changed the buffer.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 2UL);
+    REQUIRE(buffer.tail() == 1UL);
+    REQUIRE(buffer.head() == 3UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 1UL);
+    REQUIRE(sub_handle.available().back().header()->sequence_number == 2UL);
+
+    // Reserve and commit. Stays full.
+    {
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE(buffer.tail() == 2UL);
+      REQUIRE(buffer.head() == 3UL);
+      REQUIRE(reservation->slots().begin()->header()->sequence_number == PublisherReservation::sequence_number_discard);
+      REQUIRE(std::ranges::size(sub_handle.available()) == 1UL);
+      REQUIRE(sub_handle.available().front().header()->sequence_number == 2UL);
+      REQUIRE(reservation->commit(fake_publish_time));
+    }
+
+    // Commit changed the buffer.
+    REQUIRE(std::ranges::size(sub_handle.available()) == 2UL);
+    REQUIRE(buffer.tail() == 2UL);
+    REQUIRE(buffer.head() == 4UL);
+    REQUIRE(sub_handle.available().front().header()->sequence_number == 2UL);
+    REQUIRE(sub_handle.available().back().header()->sequence_number == 3UL);
+  }
+
+  SECTION("Observers")
+  {
+    SECTION("Too many observers")
+    {
+      TestObserver observer;
+      REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+      REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+      REQUIRE_FALSE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+    }
+    SECTION("One observer")
+    {
+      TestObserver observer;
+      REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer)));
+      for (int i = 0; i < 3; i++)
+      {
+        observer.reset();
+        auto reservation = pub_handle.reserve();
+        REQUIRE(reservation);
+        REQUIRE_FALSE(observer.event);
+        REQUIRE(reservation->commit(fake_publish_time));
+        REQUIRE(observer.event);
+      }
+    }
+    SECTION("Two observers")
+    {
+      TestObserver observer_a;
+      TestObserver observer_b;
+      REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer_a)));
+      REQUIRE(pub_handle.add_observer(jewels::memory::make_non_null_from_ref(observer_b)));
+      auto reservation = pub_handle.reserve();
+      REQUIRE(reservation);
+      REQUIRE_FALSE(observer_a.event);
+      REQUIRE_FALSE(observer_b.event);
+      REQUIRE(reservation->commit(fake_publish_time));
+      REQUIRE(observer_a.event);
+      REQUIRE(observer_b.event);
+    }
+  }
+
+  SECTION("Publishable")
+  {
+    auto reservation = pub_handle.reserve();
+    REQUIRE(reservation);
+
+    SECTION("Size mismatch")
+    {
+      REQUIRE_FALSE(Publishable<uint32_t>::try_make(reservation->slots().begin()));
+      REQUIRE_FALSE(Publishable<std::pair<uint64_t, uint64_t>>::try_make(reservation->slots().begin()));
+    }
+    SECTION("Valid size")
+    {
+      auto publishable = Publishable<uint64_t>::try_make(reservation->slots().begin());
+      REQUIRE(publishable);
+      REQUIRE(reservation->slots().begin().state() == ReservationState::discard);
+      publishable->message() = 123456789UL;
+      SECTION("Publish")
+      {
+        publishable->mark_for_publish();
+        CHECK(publishable->get_metrics_publish_count() == 1U);
+        CHECK_FALSE(publishable->get_metrics_first_sequence_number());
+        REQUIRE(reservation->slots().begin().state() == ReservationState::commit);
+        REQUIRE(std::ranges::empty(sub_handle.available()));
+        REQUIRE(reservation->process(fake_publish_time));
+        auto message_range = to_message_range<const uint64_t>(sub_handle.available());
+        REQUIRE(message_range);
+        REQUIRE(std::ranges::size(*message_range) == 1UL);
+        REQUIRE(message_range->front() == 123456789UL);
+      }
+      SECTION("Sim only mark for publish")
+      {
+        constexpr jewels::time::SyncTime sim_publish_time{std::chrono::nanoseconds{1234567890}};
+        publishable->sim_only_mark_for_publish_with_fake_timestamp(sim_publish_time);
+        REQUIRE(reservation->slots().begin().state() == ReservationState::commit);
+        REQUIRE(std::ranges::empty(sub_handle.available()));
+        REQUIRE(reservation->process(fake_publish_time));
+        REQUIRE(!std::ranges::empty(sub_handle.available()));
+        auto begin = sub_handle.available().begin();
+        REQUIRE(begin->header()->publish_timestamp == sim_publish_time.time_since_epoch().count());
+      }
+    }
+  }
+
+  SECTION("Multi-message indexed access checks bounds")
+  {
+    constexpr auto batch_size = 2UL;
+    auto batch_reservation = pub_handle.reserve(batch_size);
+    REQUIRE(batch_reservation);
+    auto publishable = Publishable<uint64_t, batch_size>::try_make(batch_reservation->slots());
+    REQUIRE(publishable);
+    REQUIRE_NOTHROW(static_cast<void>(publishable->message(batch_size - 1UL)));
+    REQUIRE_NOTHROW(static_cast<void>(publishable->device_ptr(batch_size - 1UL)));
+    REQUIRE_THROWS_AS(static_cast<void>(publishable->message(batch_size)), std::out_of_range);
+    REQUIRE_THROWS_AS(static_cast<void>(publishable->device_ptr(batch_size)), std::out_of_range);
+  }
+}
+
+TEST_CASE("Processing of multiple publisher reservations")
+{
+  constexpr auto fake_publish_time{jewels::time::SyncTime{std::chrono::nanoseconds{12345}}};
+  constexpr BufferLayout layout{
+    .num_slots = 2UL,
+    .message_size = 8UL,
+    .is_published_once = false,
+  };
+
+  const support::TmpShmNamespace tmp_namespace;
+  auto channel_factory = tmp_namespace.make_factory();
+
+  auto publisher0_result =
+    channel_factory.open_shm_publisher(jewels::Uuid<Tag>::random_uuid().to_string(), "ch0", layout, 2);
+  REQUIRE(publisher0_result);
+  auto pub_handle0_result = publisher0_result.value()->extract_publisher();
+  REQUIRE(pub_handle0_result);
+  PublisherHandle pub_handle0 = *std::move(pub_handle0_result);
+  Buffer& buffer0 = *publisher0_result.value()->buffer();
+
+  auto publisher1_result =
+    channel_factory.open_shm_publisher(jewels::Uuid<Tag>::random_uuid().to_string(), "ch1", layout, 2);
+  REQUIRE(publisher1_result);
+  auto pub_handle1_result = publisher1_result.value()->extract_publisher();
+  REQUIRE(pub_handle1_result);
+  PublisherHandle pub_handle1 = *std::move(pub_handle1_result);
+  Buffer& buffer1 = *publisher1_result.value()->buffer();
+
+  REQUIRE(buffer0.tail() == 0UL);
+  REQUIRE(buffer0.head() == 0UL);
+  REQUIRE(buffer1.tail() == 0UL);
+  REQUIRE(buffer1.head() == 0UL);
+  SECTION("Batch process")
+  {
+    auto reservation0 = pub_handle0.reserve();
+    REQUIRE(reservation0);
+    auto reservation1 = pub_handle1.reserve();
+    REQUIRE(reservation1);
+
+    auto reservations = std::array{*std::move(reservation0), *std::move(reservation1)};
+    SECTION("Both commit")
+    {
+      for (auto& reservation : reservations)
+      {
+        reservation.slots().begin().mark_for_commit();
+      }
+      REQUIRE(process_slots(std::span{reservations}, fake_publish_time));
+      REQUIRE(buffer0.tail() == 0UL);
+      REQUIRE(buffer0.head() == 1UL);
+      REQUIRE(buffer0.begin()->header()->publish_timestamp == fake_publish_time.time_since_epoch().count());
+      REQUIRE(buffer1.tail() == 0UL);
+      REQUIRE(buffer1.head() == 1UL);
+      REQUIRE(buffer1.begin()->header()->publish_timestamp == fake_publish_time.time_since_epoch().count());
+    }
+    SECTION("One commits")
+    {
+      reservations.front().slots().begin().mark_for_commit();
+      REQUIRE(process_slots(std::span{reservations}, fake_publish_time));
+      REQUIRE(buffer0.tail() == 0UL);
+      REQUIRE(buffer0.head() == 1UL);
+      REQUIRE(buffer0.begin()->header()->publish_timestamp == fake_publish_time.time_since_epoch().count());
+      REQUIRE(buffer1.tail() == 0UL);
+      REQUIRE(buffer1.head() == 0UL);
+      REQUIRE(buffer1.begin()->header()->publish_timestamp == PublisherReservation::unset_publish_timestamp);
+    }
+    SECTION("Fails")
+    {
+      for (auto index = 0UL; index < reservations.size(); index++)
+      {
+        DYNAMIC_SECTION("Fail on index: " << index)
+        {
+          REQUIRE(reservations.at(index).discard());
+          REQUIRE_FALSE(process_slots(std::span{reservations}, fake_publish_time));
+        }
+      }
+    }
+  }
+}
+
 } // namespace clockwork::pinion

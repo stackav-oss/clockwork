@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -101,7 +101,7 @@ def test_getitem() -> None:
     arr = VarArray_Int32_10(expected)
     for k, expected_value in enumerate(expected):
         assert arr[k] == expected_value
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         arr[4]
 
 
@@ -223,7 +223,7 @@ def test_pop_prim() -> None:
     assert len(arr) == 0
     assert arr == []
 
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         arr.pop(0)
 
     assert len(arr) == 0
@@ -263,7 +263,7 @@ def test_pop_msg() -> None:
     assert len(arr) == 0
     assert arr == []
 
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         arr.pop(0)
 
     assert len(arr) == 0
@@ -325,7 +325,7 @@ def test_delitem() -> None:
     assert arr == []
 
     # index error
-    with pytest.raises(IndexError, match=""):
+    with pytest.raises(IndexError):
         del arr[0]
 
 

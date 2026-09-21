@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate ProcessDescriptions from Process IR."""
@@ -8,14 +8,17 @@ from __future__ import annotations
 from uuid import UUID
 from clockwork.dsl.composition import (
     graphir,
+    logger_config,
     pdf,
     platform_diagnostics_config,
     system,
     tcp_bridge_config,
     tcp_bridge_config_proto,
 )
+from clockwork.dsl.composition.channel_config import ChannelType
 from clockwork.dsl.composition.str_manip import snake_from_camel
 from clockwork.dsl.ir import uuid_reg
+from clockwork.serialization.metadata import tachyon as tachyon_metadata
 
 
 def gen_tcp_bridge_config(
@@ -24,6 +27,8 @@ def gen_tcp_bridge_config(
     """Generate per-domain bridge configuration files for a system."""
     result = {}
     for domain_uuid, domain in physical_system.cpu_domains.items():
+        ctx = domain.system.system.module.context
+        logger_config_entities = logger_config.get_entities(ctx)
         config = tcp_bridge_config.TcpBridgeConfig(
             bridge_clients=[],
             bridge_servers=[],
@@ -38,6 +43,7 @@ def gen_tcp_bridge_config(
                     num_subscribers=0,
                     channel_name="",
                     is_bulk_data=False,
+                    channel_type=ChannelType.unspecified,
                 ),
             ),
             host_name=snake_from_camel(domain.logical.name),
@@ -48,11 +54,12 @@ def gen_tcp_bridge_config(
                 num_subscribers=0,
                 channel_name="",
                 is_bulk_data=False,
+                channel_type=ChannelType.unspecified,
             ),
         )
         bridge_process_uuid = uuid_reg.uuid_from_name(f"{domain.logical.value_key()}.__CLOCKWORK_BRIDGE__")
         port_to_channel: dict[int, graphir.Channel] = {}
-        for observer in domain.bridge_observers.values():
+        for observer_uuid, observer in domain.bridge_observers.items():
             if not isinstance(observer, system.TcpBridgeObserver):
                 continue
 
@@ -65,6 +72,13 @@ def gen_tcp_bridge_config(
             assert remote_domain.lan_connection is not None
             assert domain.lan_connection.lan is remote_domain.lan_connection.lan
 
+            message_repr = source_buffer.channel.channel.message_repr
+            message_repr_typespec = message_repr.typespec
+            # Only Tachyon encoding is supported currently
+            assert message_repr_typespec.instantiates.value_key() == "::Tachyon"
+            message_schema = message_repr.get_schema()
+            schema_definition = tachyon_metadata.get_serialized_metadata(ctx, message_schema)
+
             config.bridge_servers.append(
                 tcp_bridge_config.TcpBridgeServerConfig(
                     publisher_id=observer.source_pinion_buffer,
@@ -72,12 +86,17 @@ def gen_tcp_bridge_config(
                         num_slots=source_buffer.layout.num_slots,
                         message_size=source_buffer.layout.message_size,
                         is_published_once=source_buffer.layout.is_published_once,
+                        max_msgs_per_exec=source_buffer.layout.max_msgs_per_exec,
                     ),
                     listen_address=domain.lan_connection.address,
                     listen_port=observer.lan_port,
                     num_clients=len(observer.remote_producers),
                     channel_name=source_buffer.channel.channel.channel_name,
                     is_bulk_data=source_buffer.channel.is_bulk_data(),
+                    schema_encoding=logger_config_entities.schema_encoding.clockwork_tachyon,
+                    schema_definition=list(schema_definition),
+                    channel_type=source_buffer.channel.channel_type(),
+                    subscriber_key=domain.channel_link_keys[observer_uuid][1],
                 )
             )
             if port_to_channel.get(observer.lan_port) not in (None, source_buffer.channel.channel):
@@ -96,6 +115,9 @@ def gen_tcp_bridge_config(
             remote_domain = physical_system.cpu_domains[producer.source_domain]
             remote_observer = remote_domain.bridge_observers[producer.remote_source]
             assert isinstance(remote_observer, system.TcpBridgeObserver)
+            publisher_keys = {
+                key for key in (domain.channel_link_keys[link][0] for link in dest_buffer.observers) if key
+            }
             config.bridge_clients.append(
                 tcp_bridge_config.TcpBridgeClientConfig(
                     publisher_endpoint=pdf.PublishEndpoint(
@@ -105,13 +127,16 @@ def gen_tcp_bridge_config(
                             num_slots=dest_buffer.layout.num_slots,
                             message_size=dest_buffer.layout.message_size,
                             is_published_once=dest_buffer.layout.is_published_once,
+                            max_msgs_per_exec=dest_buffer.layout.max_msgs_per_exec,
                         ),
                         num_subscribers=dest_buffer.num_subscribers,
                         channel_name=dest_buffer.channel.channel.channel_name,
                         is_bulk_data=dest_buffer.channel.is_bulk_data(),
+                        channel_type=dest_buffer.channel.channel_type(),
                     ),
                     server_address=remote_domain.lan_connection.address,  # pyright: ignore[reportOptionalMemberAccess] # Linter doesn't know lan_connection is not None
                     server_port=remote_observer.lan_port,
+                    publisher_keys=list(publisher_keys),
                 )
             )
 
@@ -128,14 +153,16 @@ def gen_tcp_bridge_config(
                     num_slots=diagnostics_buffer.layout.num_slots,
                     message_size=diagnostics_buffer.layout.message_size,
                     is_published_once=diagnostics_buffer.layout.is_published_once,
+                    max_msgs_per_exec=diagnostics_buffer.layout.max_msgs_per_exec,
                 ),
                 num_subscribers=diagnostics_buffer.num_subscribers,
                 channel_name=diagnostics_buffer.channel.channel.channel_name,
                 is_bulk_data=diagnostics_buffer.channel.is_bulk_data(),
+                channel_type=diagnostics_buffer.channel.channel_type(),
             )
 
         if domain.bridge_status_producer:
-            bridge_status_producer = domain.platform_bridge_status_producers[domain.bridge_status_producer]
+            bridge_status_producer = domain.platform_status_producers[domain.bridge_status_producer]
             bridge_status_buffer = domain.buffers[bridge_status_producer.pinion_buffer]
             config.status_publish_endpoint = pdf.PublishEndpoint(
                 process_id=bridge_process_uuid,
@@ -144,10 +171,12 @@ def gen_tcp_bridge_config(
                     num_slots=bridge_status_buffer.layout.num_slots,
                     message_size=bridge_status_buffer.layout.message_size,
                     is_published_once=bridge_status_buffer.layout.is_published_once,
+                    max_msgs_per_exec=bridge_status_buffer.layout.max_msgs_per_exec,
                 ),
                 num_subscribers=bridge_status_buffer.num_subscribers,
                 channel_name=bridge_status_buffer.channel.channel.channel_name,
                 is_bulk_data=bridge_status_buffer.channel.is_bulk_data(),
+                channel_type=bridge_status_buffer.channel.channel_type(),
             )
 
         if config.bridge_clients or config.bridge_servers:

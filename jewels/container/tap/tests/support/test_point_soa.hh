@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Test SoA class representing what would be code-generated for a real Clockwork schema to create SoA containers.

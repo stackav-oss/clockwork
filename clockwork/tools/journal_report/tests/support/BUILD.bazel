@@ -1,0 +1,13 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_testonly = True)
+
+py_library(
+    name = "journal_fixtures",
+    srcs = ["journal_fixtures.py"],
+    visibility = ["//visibility:public"],
+    deps = ["//clockwork/journal:journal_py_library"],
+)

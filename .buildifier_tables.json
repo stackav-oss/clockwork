@@ -10,8 +10,12 @@
     "allowed_dep_trees": true,
     "allowed_dep_wildcards": true,
     "allowed_deps": true,
+    "cpp_deps": true,
+    "cpp_exe_deps": true,
     "generated": true,
-    "owners": true
+    "owners": true,
+    "proto_deps": true,
+    "py_deps": true
   },
   "NamePriority": {
     "owners": 1,

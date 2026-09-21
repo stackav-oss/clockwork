@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -15,7 +15,7 @@ py_test(
     name = "proto_typereg_test",
     srcs = [
         "proto_typereg_test.py",
-        ":__test__.py",
+        ":__test__",
     ],
     main = ":__test__.py",
     deps = [

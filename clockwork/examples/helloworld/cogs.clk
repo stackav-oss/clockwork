@@ -6,40 +6,39 @@
 use clockwork::examples::helloworld::helloworld_state;
 use clockwork::examples::helloworld::schema;
 
-
 // Define the producer cog.
 cog ProducerCog
 {
-    resources
-    {
+  resources
+  {
     memory: persistent;
-    }
+  }
 
-    states
+  states
+  {
+    my_state: Tappy<helloworld_state::ProducerState>
     {
-        my_state: Tappy<helloworld_state::ProducerState>
-        {
-            mutable: true;
-        }
+      mutable: true;
     }
+  }
 
-    outputs
-    {
-        my_output: Tappy<schema::SimpleSchema>;
-    }
+  outputs
+  {
+    my_output: Tappy<schema::SimpleSchema>;
+  }
 
-    execution
-    {
-        condition my_periodic: time_since_last_exec(500ms);
-        execute when: my_periodic;
-    }
+  execution
+  {
+    condition my_periodic: time_since_last_exec(500ms);
+    execute when: my_periodic;
+  }
 }
 
 // A channel has a type and the size of its buffer.
 channel Producer
 {
-    message_type: Tachyon<schema::SimpleSchema>;
-    max_num_messages: 10;
+  message_type: Tachyon<schema::SimpleSchema>;
+  max_num_messages: 10;
 }
 
 // cpu_domain defines a machine that we can run on. This subsequently allows us to tell clockwork which machine we want
@@ -49,58 +48,58 @@ cpu_domain DemoCpu;
 // Define the consumer cog.
 cog ConsumerCog
 {
-    inputs
+  inputs
+  {
+    input_a: Tappy<schema::SimpleSchema>
     {
-        input_a: Tappy<schema::SimpleSchema>
-        {
-            max_msgs: 4;
-        }
+      max_msgs: 4;
     }
+  }
 
-    execution
-    {
-        condition new_a: new_message(input_a);
-        execute when: new_a;
-    }
+  execution
+  {
+    condition new_a: new_message(input_a);
+    execute when: new_a;
+  }
 }
 
 box ProducerBox
 {
-    // Instantiate the producer cog. Connect it to the channel.
-    new producer: ProducerCog;
-    connect producer.my_output to Producer;
+  // Instantiate the producer cog. Connect it to the channel.
+  new producer: ProducerCog;
+  connect producer.my_output to Producer;
 
-    // Instantiate the memory. Connect it to the producer.
-    new memory_resource: HeapMemory(max_size=1'000);
-    connect memory_resource to producer.memory;
+  // Instantiate the memory. Connect it to the producer.
+  new memory_resource: HeapMemory(max_size=1'000);
+  connect memory_resource to producer.memory;
 
-    // Instantiate the state in the memory, connect it to the producer.
-    new state: State(representation=Tachyon<helloworld_state::ProducerState>, memory_resource=memory_resource);
-    connect state to producer.my_state;
+  // Instantiate the state in the memory, connect it to the producer.
+  new state: State(representation=Tachyon<helloworld_state::ProducerState>);
+  connect state to producer.my_state;
 }
 
 box ConsumerBox
 {
-    // Instantiate the consumer cog. Connect it to the channel.
-    new consumer: ConsumerCog;
-    connect Producer to consumer.input_a;
+  // Instantiate the consumer cog. Connect it to the channel.
+  new consumer: ConsumerCog;
+  connect Producer to consumer.input_a;
 }
 
 // Here we'll define a mapping between box and process, and between process and cpu_domain.
 box FullSystem
 {
-    // Instantiate the box and a process for it, and run the box on the process.
-    new producer_box: ProducerBox;
-    new producer_process: Process(executable=cogs_clk_exe);
-    apply HostProcess(process=producer_process) in producer_box;
+  // Instantiate the box and a process for it, and run the box on the process.
+  new producer_box: ProducerBox;
+  new producer_process: Process(executable=cogs_clk_exe);
+  apply HostProcess(process=producer_process) in producer_box;
 
-    // Instantiate the box and a process for it, and run the box on the process.
-    new consumer_box: ConsumerBox;
-    new consumer_process: Process(executable=cogs_clk_exe);
-    apply HostProcess(process=consumer_process) in consumer_box;
+  // Instantiate the box and a process for it, and run the box on the process.
+  new consumer_box: ConsumerBox;
+  new consumer_process: Process(executable=cogs_clk_exe);
+  apply HostProcess(process=consumer_process) in consumer_box;
 
-    // Specify which machine our processes run on.
-    apply HostCpuDomain(cpu_domain=DemoCpu) to producer_process;
-    apply HostCpuDomain(cpu_domain=DemoCpu) to consumer_process;
+  // Specify which machine our processes run on.
+  apply HostCpuDomain(cpu_domain=DemoCpu) to producer_process;
+  apply HostCpuDomain(cpu_domain=DemoCpu) to consumer_process;
 
 }

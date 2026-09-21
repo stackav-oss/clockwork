@@ -1,0 +1,11 @@
+#![generate()]
+
+use clockwork::common::signal_metadata_config::{SignalMetadataConfig};
+
+// Channel for persistent signal metadata (Clockwork metrics, user signal report groups)
+channel SignalMetadata
+{
+  name: "/clockwork/signal_metadata";
+  message_type: Tachyon<SignalMetadataConfig<>>;
+  max_num_messages: 1;
+}

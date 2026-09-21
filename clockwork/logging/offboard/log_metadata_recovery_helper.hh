@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -8,12 +8,14 @@
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/log_metadata_helper_interface.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 
 #include <functional>
 #include <memory>
 #include <memory_resource>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,13 +43,17 @@ public:
   LogMetadataRecoveryHelper& operator=(LogMetadataRecoveryHelper&&) noexcept = default;
 
   /// @see LogMetadataHelperInterface::initialize
-  [[nodiscard]] LogExpected<void>
-  initialize(const LogUri& metadata_file_uri, ChunkReaderWriterFactory<>& chunk_reader_factory) override;
+  LogOutcome initialize(
+    const LogUri& metadata_file_uri,
+    const std::pmr::unordered_set<std::string_view>& excluded_channels,
+    ChunkReaderWriterFactory<>& chunk_reader_factory) override;
 
-  /// @see LogMetadataHelperInterface::list_log_files
-  [[nodiscard]] LogExpected<std::pmr::vector<std::pmr::string>> list_log_files(
+  /// @see LogMetadataHelperInterface::get_log_file_map
+  LogOutcome get_log_file_map(
+    jewels::Out<std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>>> log_file_map,
     const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
-    const std::optional<LogInterval>& maybe_transmit_time_interval) const override;
+    const std::optional<LogInterval>& maybe_transmit_time_interval,
+    const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_excluded_channels) const override;
 
   /// Get the transmit time interval for the log
   /// @return Transmit time interval
@@ -89,17 +95,21 @@ private:
   std::pmr::unordered_set<std::pmr::string> persistent_channels_;
 
   /// List of log files found under the log directory, valid when initialized
-  std::pmr::vector<std::pmr::string> all_log_files_;
+  std::pmr::vector<LogUri> all_log_files_;
 };
 
 /// Helper function to make a log metadata file helper given a log URI
 /// @param[in] memory_resource Memory resource
 /// @param[in] log_uri Log directory URI
+/// @param[in] excluded_channels Channels to exclude from the log
 /// @param[in] chunk_reader_factory Chunk reader factory
-/// @return Pointer to a log metadata file helper or LogError on failure
-[[nodiscard]] LogExpected<std::shared_ptr<LogMetadataHelperInterface>> make_log_metadata_recovery_helper(
+/// @param[out] helper_ptr Log metadata helper pointer
+/// @return Success or LogError on failure
+LogOutcome make_log_metadata_recovery_helper(
   jewels::memory::MemoryResource memory_resource,
   const LogUri& log_uri,
-  ChunkReaderWriterFactory<>& chunk_reader_factory);
+  const std::pmr::unordered_set<std::string_view>& excluded_channels,
+  ChunkReaderWriterFactory<>& chunk_reader_factory,
+  jewels::Out<std::shared_ptr<LogMetadataHelperInterface>> helper_ptr);
 
 } // namespace clockwork_logging::offboard

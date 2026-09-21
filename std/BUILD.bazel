@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -9,10 +9,43 @@ package(
 )
 
 exports_files([
+    "aligner_metrics_policy.clk",
+    "cog_metrics_policy.clk",
     "pcie.clk",
     "signals.clk",
     "snapshot.clk",
+    "traits.clk",
 ])
+
+clk(
+    name = "aligner_metrics_policy_clk",
+    srcs = ["aligner_metrics_policy.clk"],
+    outs = [
+        "aligner_metrics_policy_clk_cc.cc",
+        "aligner_metrics_policy_clk_cc.hh",
+        "aligner_metrics_policy_clk_cc.inl",
+        "aligner_metrics_policy_clk_cc_types.cc",
+        "aligner_metrics_policy_clk_cc_types.hh",
+        "aligner_metrics_policy_clk_cc_types.inl",
+    ],
+    cpp_deps = [":cog_metrics_policy_clk_cc"],
+    generate = ["cpp"],
+    deps = [":cog_metrics_policy_clk"],
+)
+
+clk(
+    name = "cog_metrics_policy_clk",
+    srcs = ["cog_metrics_policy.clk"],
+    outs = [
+        "cog_metrics_policy_clk_cc.cc",
+        "cog_metrics_policy_clk_cc.hh",
+        "cog_metrics_policy_clk_cc.inl",
+        "cog_metrics_policy_clk_cc_types.cc",
+        "cog_metrics_policy_clk_cc_types.hh",
+        "cog_metrics_policy_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)
 
 clk(
     name = "pcie_clk",
@@ -27,6 +60,9 @@ clk(
         "signals_clk_cc.cc",
         "signals_clk_cc.hh",
         "signals_clk_cc.inl",
+        "signals_clk_cc_types.cc",
+        "signals_clk_cc_types.hh",
+        "signals_clk_cc_types.inl",
     ],
     generate = ["cpp"],
 )

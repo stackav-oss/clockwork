@@ -99,3 +99,75 @@ MultiNodeChan
 SinkChan
 SourceChan
 ```
+
+The `list-channels` command can filter logged channels and show the CPUs where
+the selected log receives each channel:
+
+```console
+$ bazel run @clockwork//clockwork/tools/topology:query -- TOPOLOGY_TARGET list-channels --logged-telemetry
+Channel: TelemetryChan
+  Telemetry log:
+    - CPU: Cpu1
+```
+
+The logging filters are mutually exclusive:
+
+- `--logged-telemetry` lists all telemetry-logged channels.
+- `--redundant-telemetry` lists telemetry channels with redundant logging.
+- `--non-redundant-telemetry` lists telemetry channels without redundant logging.
+- `--logged-events` lists all event-logged channels.
+
+Redundant log locations are marked with `(redundant)`.
+A channel queried with the `channel` command shows both its event and telemetry
+log locations.
+The logging filters also include logged multi-producer channels, which remain
+omitted from the unfiltered topology channel list.
+
+#### State and memory resource introspection
+
+In addition to channels, entities can be connected to states and memory resources.
+The `memory` and `state` commands allow for introspection into those entities.
+
+The `entity` command shows the connected entities:
+
+```console
+$ bazel run @clockwork//clockwork/tools/topology:query -- @clockwork//clockwork/tools/topology/tests:test_system_multi_node_topology_summary entity @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog
+...
+Entity: @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog
+  Process: @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_process_2
+  CPU: TestSystemCpu2
+  Inputs:
+    - MultiNodeChan
+  Outputs:
+    - SinkChan
+  States:
+    - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_state
+  Memory Resources:
+    - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_memory
+```
+
+To see how much memory the memory resource can use, use the `memory` command:
+
+```console
+$ bazel run @clockwork//clockwork/tools/topology:query -- @clockwork//clockwork/tools/topology/tests:test_system_multi_node_topology_summary memory @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_memory
+...
+Memory Resource: @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_memory
+  Type: HeapMemory
+  Size: 1000000 bytes
+  Entities:
+    - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog
+  States:
+```
+
+States can also use memory resources when they are defined externally:
+
+```console
+$ bazel run @clockwork//clockwork/tools/topology:query -- @clockwork//clockwork/tools/topology/tests:test_system_multi_node_topology_summary state @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_state
+...
+State: @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_state
+  Extern: Yes
+  Type: SinkState
+  Memory Resource: @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.state_memory
+  Entities:
+    - @clockwork::clockwork::tests::support::test_system_multi_node.test_system_multi_node.test_cogs_box_2.sink_cog
+```

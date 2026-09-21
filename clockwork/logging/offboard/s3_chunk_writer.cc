@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/s3_chunk_writer.hh"
@@ -15,7 +15,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <deque>
 #include <initializer_list>
 #include <memory>
 #include <memory_resource>

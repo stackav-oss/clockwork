@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -76,6 +76,7 @@ jewels::expected<DeterministicRunnerConfig, jewels::MonoError> build_determinist
   jewels::memory::MemoryResource memres_runner,
   std::pmr::vector<CogConfig> cogs,
   const scaffolding::TimerMap& timers,
+  const scaffolding::PublisherThrottleTimerVector& publisher_throttle_timers,
   const scaffolding::ChannelMap& scaffolding_channel_map,
   std::shared_ptr<AbstractCogQueue> queue,
   const DeterministicLoggingConfig& logging_config,

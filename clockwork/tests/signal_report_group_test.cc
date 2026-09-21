@@ -1,8 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/dial/include_common.hh"
 #include "clockwork/logging/decompress_option.hh"
 #include "clockwork/logging/log_interval.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "clockwork/repr_iface.hh"
@@ -13,6 +15,7 @@
 #include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/path.hh"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -26,6 +29,7 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -51,6 +55,10 @@ TEST_CASE("Signal report groups are published via system runner", "[signals][rep
   // and trigger report group publishing for the post-aggregated group.
   constexpr auto start_time = jewels::time::SyncTime(3000ms);
   constexpr auto end_time = start_time + 2000ms;
+
+  const auto memory_resource = jewels::memory::MemoryResource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
 
   SECTION("System runs successfully with signal report groups")
   {
@@ -78,7 +86,7 @@ TEST_CASE("Signal report groups are published via system runner", "[signals][rep
 
     // Read back the output log and verify the report group channel was created
     clockwork_logging::OffboardLogReader log_reader(
-      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress);
+      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
 
     REQUIRE(log_reader.open({}));
 
@@ -134,7 +142,7 @@ TEST_CASE("Signal report groups are published via system runner", "[signals][rep
 
     // Read report group messages from the output log
     clockwork_logging::OffboardLogReader log_reader(
-      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress);
+      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
     REQUIRE(log_reader.open([](std::string_view channel)
                             { return channel.find("report-groups/SignalCog/test_group") != std::string_view::npos; }));
 
@@ -229,7 +237,7 @@ TEST_CASE("Signal report groups are published via system runner", "[signals][rep
 
     // Read batched report group messages from the output log
     clockwork_logging::OffboardLogReader log_reader(
-      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress);
+      output_log_path, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
     REQUIRE(
       log_reader.open([](std::string_view channel)
                       { return channel.find("report-groups/SignalCog/batched_group") != std::string_view::npos; }));

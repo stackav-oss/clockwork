@@ -4,8 +4,6 @@
 #include "clockwork/cog/cog_timers.hh"
 
 #include "clockwork/cog/cog_passthrough_observer.hh"
-#include "clockwork/cog/detail.hh"
-#include "clockwork/cog/time_since_last_exec_handler.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/pinion/observer.hh"
@@ -34,7 +32,7 @@ CogTimers<Policies...>::CogTimers(jewels::memory::MemoryResource resource) noexc
 template <typename... Policies>
 bool CogTimers<Policies...>::validate() const
 {
-  return detail::validate_helper<TimerPtr>(timers_, [](const auto& timer) { return timer != nullptr; });
+  return std::apply([](const auto&... timers) { return (... && (timers != nullptr)); }, timers_);
 }
 
 template <typename... Policies>
@@ -68,6 +66,13 @@ jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError> CogTimers
   }
 
   return jewels::unexpected(jewels::MonoError{});
+}
+
+template <typename... Policies>
+template <std::size_t index>
+auto& CogTimers<Policies...>::get_handler()
+{
+  return *std::get<index>(timers_);
 }
 
 template <typename... Policies>

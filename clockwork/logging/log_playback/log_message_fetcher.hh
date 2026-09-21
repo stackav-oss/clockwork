@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,7 +7,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_playback/tachyon_upgrader.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -30,7 +30,7 @@ namespace clockwork_logging
 
 using ShmPublisherMap = std::pmr::unordered_map<
   jewels::Uuid<::clockwork::common::EndpointInstanceId>,
-  std::shared_ptr<::clockwork::pinion::ShmPublisher>,
+  std::shared_ptr<::clockwork::pinion::AbstractPublisher>,
   jewels::UuidHasher<::clockwork::common::EndpointInstanceId>>;
 
 // End of log channel name. Must match the channel name defined in end_of_log_channel.clk

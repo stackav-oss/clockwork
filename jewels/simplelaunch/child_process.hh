@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,7 +6,8 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/simplelaunch/config.hh"
-#include "jewels/simplelaunch/service_definition.hh"
+#include "jewels/simplelaunch/simplelaunch_status_clk_cc.hh"
+#include "jewels/simplelaunch/v1/service.pb.h"
 #include "jewels/time/sync_time.hh"
 
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -47,7 +48,7 @@ public:
   ChildProcessInfo& operator=(const ChildProcessInfo&) = delete;
 
   /// Get the Protobuf description of the child process.
-  [[nodiscard]] const ProcessInfo& get_process_info() const noexcept;
+  [[nodiscard]] const ::jewels::simplelaunch::v1::ProcessInfo& get_process_info() const noexcept;
 
   /// Set the state information.
   /// @param[in] state The new state of the child process.
@@ -89,7 +90,7 @@ private:
   /// A pointer to the Boost asio context.
   memory::ObjectPtr<boost::asio::io_context> io_ctx_ptr_;
   /// Information for gRPC status reporting.
-  ProcessInfo process_info_;
+  ::jewels::simplelaunch::v1::ProcessInfo process_info_;
   /// Timer for process exits.
   std::optional<boost::asio::basic_waitable_timer<jewels::time::SteadyClock>> maybe_timer_{};
 };

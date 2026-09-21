@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/memory/start_lifetime_as.hh"
@@ -9,7 +9,6 @@
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 
-#include <__stddef_offsetof.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>

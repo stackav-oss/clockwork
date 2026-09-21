@@ -1,4 +1,5 @@
 use clockwork::logging::writers::logger_channel_policies;
+use clockwork::examples::demo_system::logger_channel_policies as demo_system_logger_channel_policies;
 use clockwork::examples::demo_system::camera::camera;
 use clockwork::examples::demo_system::camera::video_channel_policies;
 use clockwork::examples::demo_system::imu::imu;

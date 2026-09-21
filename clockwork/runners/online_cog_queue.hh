@@ -1,17 +1,24 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/cog_envelope.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pointers.hh"
+#include "jewels/time/sync_time.hh"
 
 #include <chrono>
 #include <condition_variable>
 #include <list>
 #include <memory_resource>
 #include <mutex>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace clockwork
 {
@@ -74,6 +81,20 @@ public:
   [[nodiscard]] bool is_offline() const override;
 
 private:
+  using TimerUpdate = std::pair<jewels::memory::ObjectPtr<AbstractCog>, jewels::time::SyncTime>;
+  using TimerUpdates = std::pmr::vector<TimerUpdate>;
+
+  /// Scan the queue once for a ready Cog. Must be called with mutex_ held.
+  std::optional<CogEnvelope> try_pop_ready(
+    jewels::Out<std::optional<jewels::time::SyncTime>> earliest_throttle_deadline,
+    jewels::Out<TimerUpdates> timer_updates);
+
+  /// Arm publisher-throttle timers after releasing mutex_.
+  static void arm_publisher_throttle_timers(const TimerUpdates& timer_updates);
+
+  /// Memory resource for temporary queue-scan bookkeeping.
+  jewels::memory::MemoryResource memory_resource_;
+
   ///
   /// Mutex used for access to the queue.
   ///

@@ -13,11 +13,11 @@ Supported levels and general guidance are given below:
 ## Limiting log messages
 
 Verbose logging can sometimes obscure important (eg, error) events that the developer is actually interested in.
-Log messages can be pre-filtered by setting the environment variable `STACK_LOG_CERR_THRESHOLD` to one of the log levels above; eg, `export STACK_LOG_CERR_THRESHOLD=warn`.
+Log messages can be pre-filtered by setting the environment variable `CLOCKWORK_LOG_CERR_THRESHOLD` to one of the log levels above; eg, `export CLOCKWORK_LOG_CERR_THRESHOLD=warn`.
 By default, the log threshold is set to `info`.
 
 ## Enabling colorful logs
 
 By default, colorful logs are disabled.
-To configure colorful logs, set the environment variable `STACK_LOG_CERR_COLOR_MODE` to `always`, `never`, or `auto`.
+To configure colorful logs, set the environment variable `CLOCKWORK_LOG_CERR_COLOR_MODE` to `always`, `never`, or `auto`.
 Setting to `auto` will enable colorful logs for terminal output only.

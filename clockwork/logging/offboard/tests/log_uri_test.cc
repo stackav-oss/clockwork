@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/log_uri.hh"
@@ -98,6 +98,14 @@ TEST_CASE("try_make")
       REQUIRE_FALSE(LogUri::try_make("s3://bucket", memory_resource));
     }
   }
+}
+
+TEST_CASE("is_absolute_path")
+{
+  REQUIRE(LogUri::is_absolute_path("/"));
+  REQUIRE(LogUri::is_absolute_path("s3:"));
+  REQUIRE(LogUri::is_absolute_path("file:"));
+  REQUIRE_FALSE(LogUri::is_absolute_path("name"));
 }
 
 TEST_CASE("Comparison")

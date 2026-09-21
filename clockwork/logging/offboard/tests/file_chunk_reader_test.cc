@@ -1,7 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/file_chunk_reader.hh"
 #include "clockwork/logging/offboard/file_chunk_writer.hh"
 #include "jewels/filesystem/path.hh"

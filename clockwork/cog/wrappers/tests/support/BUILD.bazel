@@ -1,0 +1,451 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs",
+    srcs = [
+        "legacy_parameterized_unit_test_cogs.cc",
+        "legacy_parameterized_unit_test_cogs.inl",
+    ],
+    hdrs = ["legacy_parameterized_unit_test_cogs.hh"],
+    data = [":legacy_parameterized_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_parameterized_unit_test_cogs_cog",
+        ":legacy_parameterized_unit_test_cogs_dial",
+        ":legacy_parameterized_unit_test_cogs_impl",
+        ":legacy_parameterized_unit_test_cogs_types",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "legacy_parameterized_unit_test_cogs_clk",
+    srcs = ["legacy_parameterized_unit_test_cogs.clk"],
+    outs = [
+        "legacy_parameterized_unit_test_cogs.cc",
+        "legacy_parameterized_unit_test_cogs.hh",
+        "legacy_parameterized_unit_test_cogs.inl",
+        "legacy_parameterized_unit_test_cogs_cog.cc",
+        "legacy_parameterized_unit_test_cogs_cog.hh",
+        "legacy_parameterized_unit_test_cogs_cog.inl",
+        "legacy_parameterized_unit_test_cogs_dial.cc",
+        "legacy_parameterized_unit_test_cogs_dial.hh",
+        "legacy_parameterized_unit_test_cogs_dial.inl",
+        "legacy_parameterized_unit_test_cogs_test.cc",
+        "legacy_parameterized_unit_test_cogs_test.hh",
+        "legacy_parameterized_unit_test_cogs_test.inl",
+        "legacy_parameterized_unit_test_cogs_types.cc",
+        "legacy_parameterized_unit_test_cogs_types.hh",
+        "legacy_parameterized_unit_test_cogs_types.inl",
+    ],
+    deps = [
+        ":unit_test_configs_clk",
+        ":unit_test_messages_clk",
+        "//clockwork/cog/tests/support:unit_test_states_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs_cog",
+    srcs = [
+        "legacy_parameterized_unit_test_cogs_cog.cc",
+        "legacy_parameterized_unit_test_cogs_cog.inl",
+    ],
+    hdrs = ["legacy_parameterized_unit_test_cogs_cog.hh"],
+    data = [":legacy_parameterized_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_parameterized_unit_test_cogs_dial",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/tests/support:unit_test_cxx_state",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs_dial",
+    srcs = [
+        "legacy_parameterized_unit_test_cogs_dial.cc",
+        "legacy_parameterized_unit_test_cogs_dial.inl",
+    ],
+    hdrs = ["legacy_parameterized_unit_test_cogs_dial.hh"],
+    data = [":legacy_parameterized_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_parameterized_unit_test_cogs_types",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_cxx_state",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/dial:include_common",
+        "//jewels/container/tap:bitset",
+    ],
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs_impl",
+    srcs = ["legacy_parameterized_unit_test_cogs_impl.inl"],
+    hdrs = ["legacy_parameterized_unit_test_cogs_impl.hh"],
+    deps = [
+        ":legacy_parameterized_unit_test_cogs_dial",
+        "//clockwork/diagnostics:report_definitions",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs_test",
+    srcs = [
+        "legacy_parameterized_unit_test_cogs_test.cc",
+        "legacy_parameterized_unit_test_cogs_test.inl",
+    ],
+    hdrs = ["legacy_parameterized_unit_test_cogs_test.hh"],
+    data = [":legacy_parameterized_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_parameterized_unit_test_cogs",
+        "//clockwork/cog/wrappers:dummy_cog_queue",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "legacy_parameterized_unit_test_cogs_types",
+    srcs = [
+        "legacy_parameterized_unit_test_cogs_types.cc",
+        "legacy_parameterized_unit_test_cogs_types.inl",
+    ],
+    hdrs = ["legacy_parameterized_unit_test_cogs_types.hh"],
+    data = [":legacy_parameterized_unit_test_cogs_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs",
+    srcs = [
+        "legacy_unit_test_cogs.cc",
+        "legacy_unit_test_cogs.inl",
+    ],
+    hdrs = ["legacy_unit_test_cogs.hh"],
+    data = [":legacy_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_unit_test_cogs_cog",
+        ":legacy_unit_test_cogs_dial",
+        ":legacy_unit_test_cogs_impl",
+        ":legacy_unit_test_cogs_types",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+clk(
+    name = "legacy_unit_test_cogs_clk",
+    srcs = ["legacy_unit_test_cogs.clk"],
+    outs = [
+        "legacy_unit_test_cogs.cc",
+        "legacy_unit_test_cogs.hh",
+        "legacy_unit_test_cogs.inl",
+        "legacy_unit_test_cogs_cog.cc",
+        "legacy_unit_test_cogs_cog.hh",
+        "legacy_unit_test_cogs_cog.inl",
+        "legacy_unit_test_cogs_dial.cc",
+        "legacy_unit_test_cogs_dial.hh",
+        "legacy_unit_test_cogs_dial.inl",
+        "legacy_unit_test_cogs_test.cc",
+        "legacy_unit_test_cogs_test.hh",
+        "legacy_unit_test_cogs_test.inl",
+        "legacy_unit_test_cogs_types.cc",
+        "legacy_unit_test_cogs_types.hh",
+        "legacy_unit_test_cogs_types.inl",
+    ],
+    deps = [
+        ":unit_test_configs_clk",
+        ":unit_test_messages_clk",
+        "//clockwork/cog/tests/support:unit_test_states_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs_cog",
+    srcs = [
+        "legacy_unit_test_cogs_cog.cc",
+        "legacy_unit_test_cogs_cog.inl",
+    ],
+    hdrs = ["legacy_unit_test_cogs_cog.hh"],
+    data = [":legacy_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_unit_test_cogs_dial",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog:include_common",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs_dial",
+    srcs = [
+        "legacy_unit_test_cogs_dial.cc",
+        "legacy_unit_test_cogs_dial.inl",
+    ],
+    hdrs = ["legacy_unit_test_cogs_dial.hh"],
+    data = [":legacy_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_unit_test_cogs_types",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_cxx_state",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/dial:include_common",
+        "//jewels/container/tap:bitset",
+    ],
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs_impl",
+    srcs = ["legacy_unit_test_cogs_impl.cc"],
+    deps = [
+        ":legacy_unit_test_cogs_dial",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/memory:memory_resource",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs_test",
+    srcs = [
+        "legacy_unit_test_cogs_test.cc",
+        "legacy_unit_test_cogs_test.inl",
+    ],
+    hdrs = ["legacy_unit_test_cogs_test.hh"],
+    data = [":legacy_unit_test_cogs_clk"],
+    deps = [
+        ":legacy_unit_test_cogs",
+        "//clockwork/cog/wrappers:dummy_cog_queue",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/time:sync_time",
+    ],
+)
+
+cc_library(
+    name = "legacy_unit_test_cogs_types",
+    srcs = [
+        "legacy_unit_test_cogs_types.cc",
+        "legacy_unit_test_cogs_types.inl",
+    ],
+    hdrs = ["legacy_unit_test_cogs_types.hh"],
+    data = [":legacy_unit_test_cogs_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+clk(
+    name = "parameterized_unit_test_cogs_clk",
+    srcs = ["parameterized_unit_test_cogs.clk"],
+    outs = [
+        "parameterized_unit_test_cogs_clk_cc.cc",
+        "parameterized_unit_test_cogs_clk_cc.hh",
+        "parameterized_unit_test_cogs_clk_cc.inl",
+        "parameterized_unit_test_cogs_clk_cc_cog.cc",
+        "parameterized_unit_test_cogs_clk_cc_cog.hh",
+        "parameterized_unit_test_cogs_clk_cc_cog.inl",
+        "parameterized_unit_test_cogs_clk_cc_dial.cc",
+        "parameterized_unit_test_cogs_clk_cc_dial.hh",
+        "parameterized_unit_test_cogs_clk_cc_dial.inl",
+        "parameterized_unit_test_cogs_clk_cc_test.cc",
+        "parameterized_unit_test_cogs_clk_cc_test.hh",
+        "parameterized_unit_test_cogs_clk_cc_test.inl",
+        "parameterized_unit_test_cogs_clk_cc_types.cc",
+        "parameterized_unit_test_cogs_clk_cc_types.hh",
+        "parameterized_unit_test_cogs_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":test_policy_clk_cc",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
+        "//std:signals_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+    ],
+    deps = [
+        ":test_policy_clk",
+        ":unit_test_configs_clk",
+        ":unit_test_messages_clk",
+        "//clockwork/cog/tests/support:unit_test_states_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "parameterized_unit_test_cogs_clk_cc_impl",
+    srcs = ["parameterized_unit_test_cogs_clk_cc_impl.inl"],
+    hdrs = ["parameterized_unit_test_cogs_clk_cc_impl.hh"],
+    deps = [
+        ":parameterized_unit_test_cogs_clk_cc_dial",
+        "//clockwork/diagnostics:report_definitions",
+        "@catch2//:catch2_main",
+    ],
+)
+
+clk(
+    name = "test_policy_clk",
+    srcs = ["test_policy.clk"],
+    outs = [
+        "test_policy_clk_cc.cc",
+        "test_policy_clk_cc.hh",
+        "test_policy_clk_cc.inl",
+        "test_policy_clk_cc_types.cc",
+        "test_policy_clk_cc_types.hh",
+        "test_policy_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "unit_test_cogs_clk",
+    srcs = ["unit_test_cogs.clk"],
+    outs = [
+        "unit_test_cogs_clk_cc.cc",
+        "unit_test_cogs_clk_cc.hh",
+        "unit_test_cogs_clk_cc.inl",
+        "unit_test_cogs_clk_cc_cog.cc",
+        "unit_test_cogs_clk_cc_cog.hh",
+        "unit_test_cogs_clk_cc_cog.inl",
+        "unit_test_cogs_clk_cc_dial.cc",
+        "unit_test_cogs_clk_cc_dial.hh",
+        "unit_test_cogs_clk_cc_dial.inl",
+        "unit_test_cogs_clk_cc_test.cc",
+        "unit_test_cogs_clk_cc_test.hh",
+        "unit_test_cogs_clk_cc_test.inl",
+        "unit_test_cogs_clk_cc_types.cc",
+        "unit_test_cogs_clk_cc_types.hh",
+        "unit_test_cogs_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//std:cog_metrics_policy_clk_cc",
+        "//std:signals_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_cog",
+        "cpp_test_cog",
+    ],
+    deps = [
+        ":unit_test_configs_clk",
+        ":unit_test_messages_clk",
+        "//clockwork/cog/tests/support:unit_test_states_clk",
+        "//clockwork/diagnostics:report_clk",
+        "//std:cog_metrics_policy_clk",
+        "//std:signals_clk",
+    ],
+)
+
+cc_library(
+    name = "unit_test_cogs_clk_cc_impl",
+    srcs = ["unit_test_cogs_clk_cc_impl.cc"],
+    deps = [
+        ":unit_test_cogs_clk_cc_dial",
+        ":unit_test_configs_clk_cc",
+        ":unit_test_messages_clk_cc",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/memory:memory_resource",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+clk(
+    name = "unit_test_configs_clk",
+    srcs = ["unit_test_configs.clk"],
+    outs = [
+        "unit_test_configs_clk_cc.cc",
+        "unit_test_configs_clk_cc.hh",
+        "unit_test_configs_clk_cc.inl",
+        "unit_test_configs_clk_cc_types.cc",
+        "unit_test_configs_clk_cc_types.hh",
+        "unit_test_configs_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "unit_test_messages_clk",
+    srcs = ["unit_test_messages.clk"],
+    outs = [
+        "unit_test_messages_clk_cc.cc",
+        "unit_test_messages_clk_cc.hh",
+        "unit_test_messages_clk_cc.inl",
+        "unit_test_messages_clk_cc_types.cc",
+        "unit_test_messages_clk_cc_types.hh",
+        "unit_test_messages_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Global registry for Signal-related entities."""
@@ -34,7 +34,7 @@ class SignalInstanceInfo:
     signal_ir: ResolvedSignal = field(compare=False, hash=False)
     instance_name: str
     cog_instance: cog.CogInstance | None = field(default=None, compare=False, hash=False)
-    cog_class: cog.Cog | None = field(default=None, compare=False, hash=False)
+    cog_class: cog.Cog | cog.InstantiatedCog | None = field(default=None, compare=False, hash=False)
 
 
 class SignalRegistry(Context):

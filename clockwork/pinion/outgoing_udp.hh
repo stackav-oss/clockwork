@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -8,6 +8,7 @@
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/filesystem/error_code.hh"
@@ -69,8 +70,8 @@ protected:
 
   /// Connect the subscriber
   /// @param subscriber Subscriber handle to be connected
-  jewels::expected<void, IoConnection::Error>
-  connect_subscriber_impl(jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle& subscriber);
+  jewels::expected<void, IoConnection::Error> connect_subscriber_impl(
+    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, std::shared_ptr<pinion::AbstractChannel> subscriber);
 
 private:
   /// Helper function to write a specific range of messages to the socket.
@@ -81,7 +82,7 @@ private:
   // Class ID for the subscriber endpoint.
   jewels::Uuid<common::EndpointClassId> subscriber_id_;
   /// A subscriber handle to read from.
-  std::optional<pinion::SubscriberHandle> subscriber_;
+  std::shared_ptr<pinion::AbstractChannel> subscriber_;
   /// Socket address and port
   jewels::networking::SocketEndpoint socket_endpoint_;
   /// Socket address.
@@ -142,7 +143,8 @@ public:
 
   /// Connect the subscriber.
   [[nodiscard]] jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
-  connect_subscriber(jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber) final;
+  connect_subscriber(
+    jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> subscriber) final;
 
 private:
   /// Constructor

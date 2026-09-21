@@ -35,6 +35,10 @@ multicast_udp_socket IncomingMulticast
   port: 5000;
   direction: incoming;
   message_type: Tachyon<var_packet::VarPacket<4>>;
+  options
+  {
+    reuse_address: true;
+  }
 }
 
 // UDP socket.
@@ -56,6 +60,10 @@ multicast_udp_socket BidirectionalMulticast
   remote_port: 5002;
   direction: bidirectional;
   message_type: Tachyon<var_packet::VarPacket<4>>;
+  options
+  {
+    reuse_address: true;
+  }
 }
 
 // UDP socket.
@@ -67,7 +75,7 @@ udp_socket IncomingSocketBindIFace
   message_type: Tachyon<var_packet::VarPacket<4>>;
   options
   {
-      bind_to_interface: "lo";
+    bind_to_interface: "lo";
   }
 }
 
@@ -80,22 +88,22 @@ udp_socket IncomingSocketBindAddress
   message_type: Tachyon<var_packet::VarPacket<4>>;
   options
   {
-      bind_to_interface: 127.0.0.1;
+    bind_to_interface: 127.0.0.1;
   }
 }
 
 cpp_target hello_udp
 {
-    options
-    {
-        namespace clockwork::testing;
-    }
+  options
+  {
+    namespace clockwork::testing;
+  }
 
-    udp_socket IncomingUdpSocket;
-    udp_socket OutgoingUdpSocket;
-    udp_socket IncomingMulticast;
-    udp_socket OutgoingMulticast;
-    udp_socket BidirectionalMulticast;
-    udp_socket IncomingSocketBindIFace;
-    udp_socket IncomingSocketBindAddress;
+  udp_socket IncomingUdpSocket;
+  udp_socket OutgoingUdpSocket;
+  udp_socket IncomingMulticast;
+  udp_socket OutgoingMulticast;
+  udp_socket BidirectionalMulticast;
+  udp_socket IncomingSocketBindIFace;
+  udp_socket IncomingSocketBindAddress;
 }

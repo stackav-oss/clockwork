@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -31,6 +31,7 @@ cc_test(
         "//clockwork/dsl/tests/support:tapmsg",
         "//clockwork/dsl/tests/support:taptag",
         "//clockwork/dsl/tests/support:taptags_clk_cc",
+        "//jewels/container:at",
         "//jewels/container:compare",
         "//jewels/container/tap:optional",
         "//jewels/container/tap:var_array",
@@ -42,7 +43,6 @@ cc_test(
         "//jewels/utility:fix_clockwork_path",
         "//jewels/uuid",
         "@catch2//:catch2_main",
-        "@gsl//:util",
     ],
 )
 
@@ -56,7 +56,7 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
-        "//clockwork/dsl:clockwork_cst",
+        "//clockwork/dsl:clockwork_cst_protocol",
         "//clockwork/dsl/cpp:context",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
@@ -172,7 +172,7 @@ cc_test(
         "//jewels/callsig:outparam",
         "//jewels/container/tap:soa",
         "//jewels/container/tap:var_array",
-        "@boost//:iterator",
+        "@boost.iterator",
         "@catch2//:catch2_main",
     ],
 )
@@ -193,7 +193,6 @@ py_test(
         "//clockwork/dsl/serialization:tachyon_layout_reg",
         "//clockwork/dsl/serialization:tachyon_reg",
         "@clockwork_pip//pytest",
-        "@clockwork_pip//typing_extensions",
     ],
 )
 
@@ -279,6 +278,7 @@ cc_test(
     name = "tap_to_protobuf_converter_test",
     srcs = ["tap_to_protobuf_converter_test.cc"],
     deps = [
+        "//clockwork:repr_iface",
         "//clockwork/dsl/tests/support:better_than_inheritance_cc_library",
         "//clockwork/dsl/tests/support:better_than_inheritance_cpp",
         "//clockwork/dsl/tests/support:convert_hello_msg",

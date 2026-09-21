@@ -1,0 +1,24 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::cogs::testing)]
+
+// Doc
+schema Config1
+{
+  uuid: 5e480584-427c-4859-9f59-70a2f8d7a2f0;
+  fields
+  {
+    // Doc
+    #1 field1: Int32;
+  }
+}
+
+// Doc
+schema Config2
+{
+  uuid: 8c81c92f-6e5f-4724-8832-9d100be74e96;
+  fields
+  {
+    // Doc
+    #1 field2: Int32;
+  }
+}

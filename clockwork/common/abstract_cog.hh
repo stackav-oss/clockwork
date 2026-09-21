@@ -1,10 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/common/forward.hh"
+#include "clockwork/pinion/observer.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
@@ -12,12 +16,22 @@
 #include <wise_enum.h>
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <string_view>
 
 namespace clockwork
 {
 
 WISE_ENUM_CLASS((CogExecutionMode, uint8_t), online, deterministic);
+
+/// Result of preparing a Cog for execution.
+WISE_ENUM_CLASS(
+  (CogPrepareResult, uint8_t), ready, not_ready, states_lock_contention, reentry_lock_contention, publisher_throttled);
+
+/// Callsig outcome for Cog preparation. `ready` is the only successful result.
+using CogPrepareOutcome = jewels::Outcome<CogPrepareResult, CogPrepareResult::ready>;
 ///
 /// Parameter struct passed to all Cog executions.
 ///
@@ -80,14 +94,31 @@ public:
   /// E.g. Acquire any necessary locks (e.g. shared state mutexes).
   /// @note Every successful call to prepare_for_execution __must__ be followed
   ///   by a call to execute.
-  /// @return true if the Cog is is ready to be executed.
+  /// @param[out] throttled_until_out The publisher eligibility deadline when publisher throttled.
+  /// @param[in] current_time The current synchronized time.
+  /// @return The preparation result.
   ///
-  [[nodiscard]] virtual jewels::expected<void, CogExecutionError>
-  prepare_for_execution(jewels::time::SyncTime current_time) = 0;
+  virtual CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> throttled_until_out, jewels::time::SyncTime current_time) = 0;
+
+  /// Check whether this Cog requires a private publisher-throttle timer.
+  /// @return True for Cogs with at least one rate-limited publisher.
+  [[nodiscard]] virtual bool has_rate_limited_publishers() const;
+
+  /// Install the private publisher-throttle timer.
+  /// @param[in] timer The timer instance supplied by runner scaffolding.
+  /// @return Success if the timer was installed.
+  jewels::BinaryOutcome set_publisher_throttle_timer(std::shared_ptr<AbstractTimer> timer);
+
+  /// Arm the private publisher-throttle timer for an absolute deadline.
+  /// Repeated requests for the current deadline are inert.
+  /// @param[in] throttled_until The next publisher eligibility deadline.
+  /// @return Success if the timer is armed for the requested deadline.
+  jewels::BinaryOutcome arm_publisher_throttle_timer(jewels::time::SyncTime throttled_until);
 
   ///
   /// Execute the cog and unlock any shared resources.
-  /// @pre prepare_for_execution() was called and returned true.
+  /// @pre prepare_for_execution() was called and returned ready.
   /// @param[in] params Execution parameters (start time, etc).
   /// @return true if the Cog executed successfully.
   ///
@@ -110,6 +141,18 @@ private:
   /// whenever it is ready to execute.
   ///
   jewels::memory::ObjectPtr<AbstractCogQueue> queue_;
+
+  /// Protects the private publisher-throttle timer state.
+  mutable std::mutex publisher_throttle_timer_mutex_;
+
+  /// Private timer used only to wake the scheduler after publisher throttling.
+  std::shared_ptr<AbstractTimer> publisher_throttle_timer_;
+
+  /// Observer that forwards the private timer notification to the ready queue.
+  std::shared_ptr<pinion::Observer> publisher_throttle_timer_observer_;
+
+  /// Currently armed publisher-throttle deadline.
+  std::optional<jewels::time::SyncTime> publisher_throttle_timer_deadline_;
 };
 
 } // namespace clockwork

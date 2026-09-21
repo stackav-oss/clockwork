@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/metrics_chunk_reader.hh"
@@ -26,6 +26,7 @@ namespace clockwork_logging::offboard
   jewels::memory::MemoryResource memory_resource,
   ChunkLocation metrics_location,
   const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>& channel_info_map,
+  const std::pmr::unordered_set<uint16_t>& excluded_channel_ids,
   ChunkReader& chunk_reader,
   ChunkCompressor& chunk_compressor)
 {
@@ -64,32 +65,36 @@ namespace clockwork_logging::offboard
   }
   for (const auto& channel_entry : channel_entries_span)
   {
-    const auto info_iter = channel_info_map.find(channel_entry.channel_id);
-    if (info_iter == channel_info_map.end())
+    if (!excluded_channel_ids.contains(channel_entry.channel_id))
     {
-      jewels::log_cerr_error(
-        "Missing channel info for channel ID {} in {}", channel_entry.channel_id, chunk_reader.file_uri().string());
-      return jewels::unexpected(LogError::missing_channel_metadata);
+      const auto info_iter = channel_info_map.find(channel_entry.channel_id);
+      if (info_iter == channel_info_map.end())
+      {
+        jewels::log_cerr_error(
+          "Missing channel info for channel ID {} in {}", channel_entry.channel_id, chunk_reader.file_uri().string());
+        return jewels::unexpected(LogError::missing_channel_metadata);
+      }
+      std::pmr::string channel_name{info_iter->second.channel_name, memory_resource};
+      const LogInterval channel_interval{
+        LogTimestamp{channel_entry.min_transmit_time_ns}, LogTimestamp{channel_entry.max_transmit_time_ns}};
+      if (log_metrics.message_count == 0U)
+      {
+        log_metrics.transmit_time_interval = channel_interval;
+      }
+      else
+      {
+        log_metrics.transmit_time_interval.add_interval(channel_interval);
+      }
+      log_metrics.message_count += channel_entry.message_count;
+      log_metrics.byte_count += channel_entry.byte_count;
+      log_metrics.metrics_map.emplace(
+        std::move(channel_name),
+        reader::LoggedChannelMetrics{
+          .message_count = channel_entry.message_count,
+          .byte_count = channel_entry.byte_count,
+          .transmit_time_interval = channel_interval,
+        });
     }
-    const LogInterval channel_interval{
-      LogTimestamp{channel_entry.min_transmit_time_ns}, LogTimestamp{channel_entry.max_transmit_time_ns}};
-    if (log_metrics.message_count == 0U)
-    {
-      log_metrics.transmit_time_interval = channel_interval;
-    }
-    else
-    {
-      log_metrics.transmit_time_interval.add_interval(channel_interval);
-    }
-    log_metrics.message_count += channel_entry.message_count;
-    log_metrics.byte_count += channel_entry.byte_count;
-    log_metrics.metrics_map.emplace(
-      std::pmr::string{info_iter->second.channel_name, memory_resource},
-      reader::LoggedChannelMetrics{
-        .message_count = channel_entry.message_count,
-        .byte_count = channel_entry.byte_count,
-        .transmit_time_interval = channel_interval,
-      });
   }
   return {std::move(log_metrics)};
 }

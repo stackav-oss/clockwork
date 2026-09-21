@@ -1,0 +1,27 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::aligner_csr_test)]
+
+use clockwork::dsl::aligner::gen::tests::support::test_aligner::{TestAlignerAlignmentMsg};
+
+// A consumer cog that reads alignment output.
+//
+// This verifies that the programmatically-generated alignment schema is
+// importable by downstream modules that depend only on the _cc target
+// (not the _cc_aligner target).
+cog AlignmentConsumer
+{
+  inputs
+  {
+    // Alignment messages produced by TestAligner
+    alignment: Tappy<TestAlignerAlignmentMsg>
+    {
+      max_msgs: 10;
+    }
+  }
+
+  execution
+  {
+    condition new_alignment: new_message(alignment);
+    execute when: new_alignment;
+  }
+}

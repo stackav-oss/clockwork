@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -68,9 +68,14 @@ template <typename T>
 [[nodiscard]] inline char* increment_char_ptr(char* ptr, size_t count);
 
 /// Calling std::getenv is thread safe after C++11 as long as nothing is modifying the environment
-/// @param[in] var Environment variable name
+/// @param[in] env_var Environment variable name
 /// @return Environment variable value
 [[nodiscard]] inline const char* get_environment_variable(const char* env_var);
+
+/// Calling setenv is thread safe after C++11 as long as nothing is modifying the environment
+/// @param[in] env_var Environment variable name
+/// @param[in] env_val Environment variable value
+inline void set_environment_variable(const char* env_var, const char* env_val);
 
 } // namespace clockwork_logging::nolint_helper
 

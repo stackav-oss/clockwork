@@ -1,0 +1,92 @@
+use clockwork::tests::support::test_system_message::{TestMessage};
+
+// Test producer cog that can publish a burst of messages in one execution.
+cog BurstProducerCog
+{
+  outputs
+  {
+    burst_output: Tappy<TestMessage>
+    {
+      max_msgs_per_exec: 4;
+    }
+  }
+
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+// Test consumer cog with a bounded input view for the burst channel.
+cog BurstConsumerCog
+{
+  inputs
+  {
+    burst_input: Tappy<TestMessage>
+    {
+      max_msgs: 3;
+    }
+  }
+
+  execution
+  {
+    condition new_msg: new_message(burst_input, max=3);
+    execute when: new_msg;
+  }
+}
+
+// Code generation target for the queue-size regression test cogs.
+cpp_target queue_size_multi_output_cogs
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+
+  cog BurstProducerCog;
+  cog BurstConsumerCog;
+}
+
+// Channel that connects the burst producer to the bounded-view consumer.
+channel BurstChannel
+{
+  message_type: Tachyon<TestMessage>;
+  max_num_messages: 16;
+}
+
+// Box containing the producer and consumer used by the regression test.
+box QueueSizeMultiOutputBox
+{
+  new producer: BurstProducerCog;
+  new consumer: BurstConsumerCog;
+  connect producer.burst_output to BurstChannel;
+  connect BurstChannel to consumer.burst_input;
+}
+
+// CPU domain used by the regression test system.
+cpu_domain QueueSizeMultiOutputCpu;
+
+// Executable that hosts the queue-size regression test box.
+cpp_executable queue_size_multi_output_system_exe
+{
+  casing
+  {
+    box QueueSizeMultiOutputBox;
+  }
+}
+
+// System box wiring the regression test box into a process.
+box QueueSizeMultiOutputSystem
+{
+  new box: QueueSizeMultiOutputBox;
+  new proc: Process(executable=queue_size_multi_output_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=QueueSizeMultiOutputCpu) to proc;
+}
+
+// System target used to validate optimal queue sizing for bursty producers.
+system_target queue_size_multi_output_system
+{
+  box: QueueSizeMultiOutputSystem;
+}

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/log_file_reader.hh"
@@ -10,32 +10,46 @@
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/metadata_chunk_reader.hh"
 #include "clockwork/logging/offboard/metrics_chunk_reader.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 
 #include <functional>
 #include <ranges>
-#include <regex>
 #include <unordered_map>
 #include <utility>
 
 namespace clockwork_logging::offboard
 {
 
+using jewels::ok;
+using jewels::Out;
+
 LogFileReader::LogFileReader(
   jewels::memory::MemoryResource memory_resource,
   jewels::memory::NonNullSharedPtr<ChunkReader> chunk_reader_ptr,
-  jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr)
+  jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr,
+  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels)
   : memory_resource_(std::move(memory_resource)),
     chunk_reader_ptr_(std::move(chunk_reader_ptr)),
     chunk_compressor_ptr_(std::move(chunk_compressor_ptr)),
     channel_metadata_map_(memory_resource_)
 {
+  if (maybe_desired_channels)
+  {
+    maybe_desired_channels_.emplace(memory_resource_);
+    for (const auto& channel : *maybe_desired_channels)
+    {
+      // NOLINTNEXTLINE(modernize-use-emplace) compiler doesn't accept emplace(channel, memory_resource_)
+      maybe_desired_channels_->emplace(std::pmr::string{channel, memory_resource_});
+    }
+  }
 }
 
 [[nodiscard]] LogExpected<std::pmr::list<reader::MessageChunkHandle>> LogFileReader::get_message_chunk_list(
-  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
-  std::optional<LogInterval> maybe_log_interval)
+  const std::pmr::unordered_set<std::pmr::string>& desired_channels, std::optional<LogInterval> maybe_log_interval)
 {
   if (!metadata_map_ptr_)
   {
@@ -49,8 +63,9 @@ LogFileReader::LogFileReader(
     memory_resource_,
     index_chunk_handle.location,
     *metadata_map_ptr_,
+    *excluded_channel_ids_ptr_,
     maybe_log_interval,
-    maybe_desired_channels,
+    desired_channels,
     chunk_reader_ptr_,
     chunk_compressor_ptr_);
 }
@@ -102,6 +117,7 @@ LogFileReader::get_channel_metadata(std::string_view channel_name)
       memory_resource_,
       metrics_chunk_handle.location,
       *metadata_map_ptr_,
+      *excluded_channel_ids_ptr_,
       *metrics_chunk_handle.chunk_reader_ptr,
       *metrics_chunk_handle.chunk_compressor_ptr);
     if (!metrics_result)
@@ -110,8 +126,8 @@ LogFileReader::get_channel_metadata(std::string_view channel_name)
         "Failed to metrics metadata chunk from {}: {}", get_file_uri().string(), metrics_result.error());
       return jewels::unexpected(metrics_result.error());
     }
-    log_metrics_ptr_ = std::allocate_shared<reader::LogMetrics, std::pmr::polymorphic_allocator<reader::LogMetrics>>(
-      memory_resource_, std::move(metrics_result).value());
+    log_metrics_ptr_ =
+      jewels::memory::make_pmr_shared<reader::LogMetrics>(memory_resource_, std::move(metrics_result).value());
   }
   return jewels::memory::make_non_null_from_ref(*log_metrics_ptr_); // log_metrics_ptr_ set above
 }
@@ -143,27 +159,28 @@ LogFileReader::get_channel_metadata(std::string_view channel_name)
       return jewels::unexpected(trailer_result.error());
     }
     log_file_trailer_info_ptr_ =
-      std::allocate_shared<reader::LogFileTrailerInfo, std::pmr::polymorphic_allocator<reader::LogFileTrailerInfo>>(
-        memory_resource_, std::move(trailer_result).value());
+      jewels::memory::make_pmr_shared<reader::LogFileTrailerInfo>(memory_resource_, std::move(trailer_result).value());
   }
   if (!metadata_map_ptr_)
   {
     const auto& metadata_chunk_handle = log_file_trailer_info_ptr_->metadata_chunk_handle;
-    auto metadata_result = read_metadata_chunk(
-      memory_resource_,
-      metadata_chunk_handle.location,
-      *metadata_chunk_handle.chunk_reader_ptr,
-      *metadata_chunk_handle.chunk_compressor_ptr);
-    if (!metadata_result)
+    metadata_map_ptr_ =
+      jewels::memory::make_pmr_shared<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>>(memory_resource_);
+    excluded_channel_ids_ptr_ = jewels::memory::make_pmr_shared<std::pmr::unordered_set<uint16_t>>(memory_resource_);
+    if (const auto metadata_outcome = read_metadata_chunk(
+          memory_resource_,
+          metadata_chunk_handle.location,
+          *metadata_chunk_handle.chunk_reader_ptr,
+          *metadata_chunk_handle.chunk_compressor_ptr,
+          maybe_desired_channels_,
+          Out{*metadata_map_ptr_},
+          Out{*excluded_channel_ids_ptr_});
+        !ok(metadata_outcome))
     {
       jewels::log_cerr_error(
-        "Failed to read metadata chunk from {}: {}", get_file_uri().string(), metadata_result.error());
-      return jewels::unexpected(metadata_result.error());
+        "Failed to read metadata chunk from {}: {}", get_file_uri().string(), metadata_outcome.get());
+      return jewels::unexpected(metadata_outcome.get());
     }
-    metadata_map_ptr_ = std::allocate_shared<
-      std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>,
-      std::pmr::polymorphic_allocator<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>>>(
-      memory_resource_, std::move(metadata_result).value());
     for (const auto& channel_metadata : std::views::values(*metadata_map_ptr_))
     {
       channel_metadata_map_.emplace(

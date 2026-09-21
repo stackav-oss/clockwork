@@ -17,10 +17,9 @@ channel LongSleepChannel
 
 box TestSharedStateBox
 {
-  new memory: HeapMemory(max_size=10'000'000);
-  new cog_state: State(representation=Tachyon<ExecState>, memory_resource=memory);
-  new tester_state_no_sleep: State(representation=Tachyon<ExecState>, memory_resource=memory);
-  new tester_state_long_sleep: State(representation=Tachyon<ExecState>, memory_resource=memory);
+  new cog_state: State(representation=Tachyon<ExecState>);
+  new tester_state_no_sleep: State(representation=Tachyon<ExecState>);
+  new tester_state_long_sleep: State(representation=Tachyon<ExecState>);
 
   new no_sleep: NoSleepCog;
   new long_sleep: LongSleepCog;

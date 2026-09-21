@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/networking/socket_address.hh"
@@ -52,8 +52,8 @@ socklen_t SocketAddress::byte_size()
   return static_cast<socklen_t>(sizeof(sockaddr_in));
 }
 
-jewels::expected<RawSocketAddress, filesystem::ErrorCode>
-RawSocketAddress::create(const std::string_view address, const int32_t interface_index, const int32_t protocol) noexcept
+jewels::expected<RawSocketAddress, filesystem::ErrorCode> RawSocketAddress::create(
+  const std::string_view address, const int32_t interface_index, const uint16_t protocol) noexcept
 {
   constexpr auto mac_address_len{6};
   ::sockaddr_ll addr{};

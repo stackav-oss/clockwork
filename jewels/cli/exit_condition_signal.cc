@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/cli/exit_condition_signal.hh"
@@ -47,7 +47,8 @@ SignalExitCondition::SignalExitCondition()
   SigAction action;
   ::memset(&action, 0, sizeof(SigAction));
   action.sa_handler = jewels_cli_signal_exit_condition_handler;
-  ::sigaction(SIGINT, &action, &old_handler_);
+  ::sigaction(SIGINT, &action, &old_sigint_handler_);
+  ::sigaction(SIGTERM, &action, &old_sigterm_handler_);
 }
 
 SignalExitCondition::~SignalExitCondition()
@@ -56,7 +57,8 @@ SignalExitCondition::~SignalExitCondition()
   {
     jewels::log_cerr_error("SignalExitCondition failed to destroy semaphore: {}", filesystem::ErrorCode{errno});
   }
-  ::sigaction(SIGINT, &old_handler_, nullptr);
+  ::sigaction(SIGINT, &old_sigint_handler_, nullptr);
+  ::sigaction(SIGTERM, &old_sigterm_handler_, nullptr);
   active_condition = previous_;
 }
 

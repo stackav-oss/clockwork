@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Metadata generation and utilities for Tachyon representations."""
@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from clockwork.dsl.ir import clkbuiltins, clkenum, expr, node, primitive, schema, strongtypes, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, expr, node, primitive, schema, statement, strongtypes, typesys
 from clockwork.dsl.serialization import tachyon_layout_reg, tachyon_reg
 from clockwork.serialization.metadata import tachyon_model as model
 from clockwork.serialization.metadata import tachyon_model_pb2 as model_pb2
@@ -172,7 +172,7 @@ class Builder:
             return self.value_key_to_id[key]
         except KeyError:
             pass
-        if isinstance(typ, schema.InstantiateStmt):
+        if isinstance(typ, statement.InstantiateStmt):
             assert isinstance(typ.typespec, typesys.Instantiation)
             return self._handle_schema(schema.InstantiatedSchema.from_typespec(typ.typespec), key)
         if isinstance(typ, schema.InstantiatedSchema):

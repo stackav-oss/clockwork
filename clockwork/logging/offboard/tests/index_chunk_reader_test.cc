@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/compression_type.hh"
@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/offboard/chunk_compressor.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/file_chunk_reader.hh"
 #include "clockwork/logging/offboard/file_chunk_writer.hh"
 #include "clockwork/logging/offboard/index_chunk_reader.hh"
@@ -279,8 +280,16 @@ TEST_CASE("IndexChunkReader")
 
     SECTION("No filters")
     {
+      std::pmr::unordered_set<std::pmr::string> desired_channels = {"channel1", "channel2"};
       auto read_index_result = read_index_chunk(
-        memory_resource, write_result.value(), channel_info_map, {}, {}, reader_result.value(), compressor_ptr);
+        memory_resource,
+        write_result.value(),
+        channel_info_map,
+        {},
+        {},
+        desired_channels,
+        reader_result.value(),
+        compressor_ptr);
       REQUIRE(read_index_result);
       const std::vector<ExpectedChunkHandle> expected_chunk_handles = {
         ExpectedChunkHandle{
@@ -305,12 +314,14 @@ TEST_CASE("IndexChunkReader")
 
     SECTION("Filter by time range")
     {
+      std::pmr::unordered_set<std::pmr::string> desired_channels = {"channel1", "channel2"};
       auto read_index_result = read_index_chunk(
         memory_resource,
         write_result.value(),
         channel_info_map,
-        {{time1, time6}},
         {},
+        {{time1, time6}},
+        desired_channels,
         reader_result.value(),
         compressor_ptr);
       REQUIRE(read_index_result);
@@ -331,15 +342,42 @@ TEST_CASE("IndexChunkReader")
       REQUIRE(validate_message_chunk_handles(read_index_result.value(), expected_chunk_handles, {{time1, time6}}));
     }
 
+    SECTION("Filter by excluded channel ID")
+    {
+      std::pmr::unordered_set<uint16_t> channel_ids_to_exclude = {2U};
+      auto read_index_result = read_index_chunk(
+        memory_resource,
+        write_result.value(),
+        channel_info_map,
+        channel_ids_to_exclude,
+        {},
+        {},
+        reader_result.value(),
+        compressor_ptr);
+      REQUIRE(read_index_result);
+      const std::vector<ExpectedChunkHandle> expected_chunk_handles = {
+        ExpectedChunkHandle{
+          .index_entry_ptr = jewels::memory::make_non_null_from_ref(expected_indexes.at(0U)),
+          .chunk_index = 1U,
+        },
+        ExpectedChunkHandle{
+          .index_entry_ptr = jewels::memory::make_non_null_from_ref(expected_indexes.at(0U)),
+          .chunk_index = 0U,
+        },
+      };
+      REQUIRE(validate_message_chunk_handles(read_index_result.value(), expected_chunk_handles, {}));
+    }
+
     SECTION("Filter by channel name")
     {
-      std::pmr::unordered_set<std::pmr::string> expected_channels = {"channel1"};
+      std::pmr::unordered_set<std::pmr::string> desired_channels = {"channel1"};
       auto read_index_result = read_index_chunk(
         memory_resource,
         write_result.value(),
         channel_info_map,
         {},
-        expected_channels,
+        {},
+        desired_channels,
         reader_result.value(),
         compressor_ptr);
       REQUIRE(read_index_result);
@@ -358,13 +396,14 @@ TEST_CASE("IndexChunkReader")
 
     SECTION("Filter by channel name and time range")
     {
-      std::pmr::unordered_set<std::pmr::string> expected_channels = {"channel1"};
+      std::pmr::unordered_set<std::pmr::string> desired_channels = {"channel1"};
       auto read_index_result = read_index_chunk(
         memory_resource,
         write_result.value(),
         channel_info_map,
+        {},
         {{time5, time6}},
-        expected_channels,
+        desired_channels,
         reader_result.value(),
         compressor_ptr);
       REQUIRE(read_index_result);
@@ -388,7 +427,7 @@ TEST_CASE("IndexChunkReader")
     reader_result.value()->filesystem().inject_read_error(EIO);
     REQUIRE(
       read_index_chunk(
-        memory_resource, write_result.value(), channel_info_map, {}, {}, reader_result.value(), compressor_ptr) ==
+        memory_resource, write_result.value(), channel_info_map, {}, {}, {}, reader_result.value(), compressor_ptr) ==
       jewels::unexpected(LogError::io_error));
   }
 }

@@ -1,15 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/input_condition.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -21,6 +19,7 @@
 #include <gsl/util>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <memory_resource>
@@ -46,17 +45,15 @@ struct InputConditionFixture // NOLINT(clang-analyzer-optin.performance.Padding)
 
   InputConditionFixture()
     : resource(std::pmr::new_delete_resource()),
-      channel(resource),
-      publisher_handle(channel.make_publisher(1)),
-      subscriber_handle(channel.make_subscriber()),
-      subscriber(subscriber_handle)
+      channel(std::make_shared<InMemoryChannel<MsgType, Policy::max_view_size, false>>(resource)),
+      publisher_handle(channel->make_publisher(1)),
+      subscriber(channel)
   {
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, Policy::max_view_size, false> channel;
+  std::shared_ptr<InMemoryChannel<MsgType, Policy::max_view_size, false>> channel;
   pinion::PublisherHandle publisher_handle;
-  pinion::SubscriberHandle subscriber_handle;
   InputCondition<Policy> subscriber;
 
   /// Publish the message
@@ -70,7 +67,7 @@ struct InputConditionFixture // NOLINT(clang-analyzer-optin.performance.Padding)
 
   [[nodiscard]] auto make_iterator(size_t index) const
   {
-    return std::next(subscriber_handle.available().begin(), static_cast<ssize_t>(index));
+    return std::next(channel->available().begin(), static_cast<ssize_t>(index));
   }
 };
 

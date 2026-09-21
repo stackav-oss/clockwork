@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -17,6 +17,8 @@
 #include "clockwork/logging/writers/rate_filter.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -142,6 +144,9 @@ class Writer
 
     /// Channel type
     ChannelType channel_type{ChannelType::regular};
+
+    /// Lite compressor used to compress the channel
+    jewels::memory::NonNullSharedPtr<LiteCompressorInterface> compressor;
   };
 
   /// Struct used to store the last message logged to a persistent channel
@@ -461,6 +466,12 @@ public:
   /// @return Number of pending message data bytes
   [[nodiscard]] size_t get_pending_message_data_bytes() const;
 
+  /// Get the lite compressor for a logged channel
+  /// @param[in] channel_name Channel name
+  /// @return Lite compressor to use for the channel
+  [[nodiscard]] jewels::memory::NonNullSharedPtr<LiteCompressorInterface>
+  get_channel_compressor(std::string_view channel_name) const;
+
 private:
   /// Check that the resources needed to write a message are available and the max write backlog has not been exceeded
   /// @param[in] channel_name Channel name
@@ -572,12 +583,14 @@ private:
   /// @param[in] message_encoding Message encoding
   /// @param[in] channel_type Channel type
   /// @param[in] schema_id Schema ID
+  /// @param[in] compressor Lite compressor used to compress messages
   [[nodiscard]] jewels::memory::ObjectPtr<const ChannelMetadata> add_channel_metadata(
     std::string_view channel_name,
     CompressionType compression_type,
     MessageEncoding message_encoding,
     ChannelType channel_type,
-    uint16_t schema_id);
+    uint16_t schema_id,
+    jewels::memory::NonNullSharedPtr<LiteCompressorInterface> compressor);
 
   /// Write channel metadata to the log
   /// @param[in] channel_metadata Channel metadata
@@ -709,8 +722,8 @@ private:
   /// Map from channel name to the latest persistent message logged on the channel
   std::pmr::unordered_map<std::string_view, PersistentChannelMessage> persistent_channel_message_map_;
 
-  /// Compressor for lite-compressed messages
-  LiteCompressor compressor_;
+  /// Default compressor to use for lite-compressed messages
+  jewels::memory::NonNullSharedPtr<LiteCompressorInterface> default_compressor_;
 
   /// Number of schemas that have been added to the log
   uint16_t schema_count_{0U};

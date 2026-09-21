@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/factory.hh"
@@ -86,6 +86,16 @@ CogStateFactory::Ptr CogStateFactory::make(
   jewels::memory::MemoryResource /*memres_sys*/, jewels::memory::MemoryResource /*memres_state*/) const
 {
   return nullptr;
+}
+
+CogStateFactory::StateRestoreOutcome CogStateFactory::make(
+  jewels::Out<Ptr> /*state_out*/,
+  jewels::memory::MemoryResource /*memres_sys*/,
+  jewels::memory::MemoryResource /*memres_state*/,
+  jewels::Uuid<RepresentationTag> /*snapshot_representation_id*/,
+  std::span<const std::byte> /*snapshot_data*/) const
+{
+  return StateRestoreResult::invalid_class_uuid;
 }
 
 } // namespace clockwork

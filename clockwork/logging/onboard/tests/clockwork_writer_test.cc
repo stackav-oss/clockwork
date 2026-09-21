@@ -1,26 +1,32 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
-#include "clockwork/logging/lite_compressor.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/nolint_helper.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/log_format.hh"
 #include "clockwork/logging/onboard/null_message_handle.hh"
+#include "clockwork/logging/onboard/tests/support/test_message_clk_cc.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/onboard/writer_state.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
+#include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_lite_compressor.hh"
 #include "jewels/aligner/aligner.hh"
+#include "jewels/container/tap/var_array.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -37,11 +43,12 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <iterator>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -159,77 +166,74 @@ TEST_CASE("Log metadata")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const auto* schema_name1 = "Schema 1";
-  const auto schema_encoding1 = SchemaEncoding::unspecified;
-  const auto* schema_desc1 = "Schema description 1";
-
-  const auto* schema_name2 = "Schema 2";
-  const auto schema_encoding2 = SchemaEncoding::undefined;
-  const auto* schema_desc2 = "";
-
-  const auto* channel_name1 = "Channel 1";
-  const auto compression_type1 = CompressionType::none;
-  const auto message_encoding1 = MessageEncoding::unspecified;
-  const auto channel_type1 = ChannelType::regular;
-
-  const auto* channel_name2 = "Channel 2";
-  const auto compression_type2 = CompressionType::none;
-  const auto message_encoding2 = MessageEncoding::unspecified;
-  const auto channel_type2 = ChannelType::persistent;
-
-  const auto* channel_name3 = "Channel 3";
-  const auto compression_type3 = CompressionType::none;
-  const auto message_encoding3 = MessageEncoding::unspecified;
-  const auto channel_type3 = ChannelType::regular;
-
-  const auto* channel_name4 = "Channel 4";
-  const auto compression_type4 = CompressionType::none;
-  const auto message_encoding4 = MessageEncoding::unspecified;
-  const auto channel_type4 = ChannelType::persistent;
-
   const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
 
   std::unordered_map<std::string_view, uint16_t> channel_id_map;
   std::unordered_map<std::string_view, uint16_t> schema_id_map;
 
+  const auto* channel_name1 = "Channel 1";
+  const auto* channel_name2 = "Channel 2";
+  const auto* channel_name3 = "Channel 3";
+  const auto* channel_name4 = "Channel 4";
+
   const LoggedChannelMetadata channel_metadata1{
     .channel_name = channel_name1,
-    .compression_type = compression_type1,
-    .message_encoding = message_encoding1,
-    .channel_type = channel_type1,
-    .schema_name = schema_name1,
-    .schema_encoding = schema_encoding1,
-    .schema_definition = schema_desc1,
+    .compression_type = CompressionType::none,
+    .message_encoding =
+      static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::message_encoding),
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_definition.size()},
   };
 
   const LoggedChannelMetadata channel_metadata2{
     .channel_name = channel_name2,
-    .compression_type = compression_type2,
-    .message_encoding = message_encoding2,
-    .channel_type = channel_type2,
-    .schema_name = schema_name1,
-    .schema_encoding = schema_encoding1,
-    .schema_definition = schema_desc1,
+    .compression_type = CompressionType::none,
+    .message_encoding =
+      static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::message_encoding),
+    .channel_type = ChannelType::persistent,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_definition.size()},
   };
 
   const LoggedChannelMetadata channel_metadata3{
     .channel_name = channel_name3,
-    .compression_type = compression_type3,
-    .message_encoding = message_encoding3,
-    .channel_type = channel_type3,
-    .schema_name = schema_name2,
-    .schema_encoding = schema_encoding2,
-    .schema_definition = schema_desc2,
+    .compression_type = CompressionType::none,
+    .message_encoding =
+      static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::message_encoding),
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_definition.size()},
   };
 
   const LoggedChannelMetadata channel_metadata4{
     .channel_name = channel_name4,
-    .compression_type = compression_type4,
-    .message_encoding = message_encoding4,
-    .channel_type = channel_type4,
-    .schema_name = schema_name2,
-    .schema_encoding = schema_encoding2,
-    .schema_definition = schema_desc2,
+    .compression_type = CompressionType::none,
+    .message_encoding =
+      static_cast<MessageEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::message_encoding),
+    .channel_type = ChannelType::persistent,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_definition.size()},
   };
 
   SECTION("Single channel with schema")
@@ -238,7 +242,7 @@ TEST_CASE("Log metadata")
       memory_resource, memory_resource, max_write_mib_per_sec, max_log_file_duration, WriterEnvironment::normal};
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
     REQUIRE(writer.add_channel(channel_metadata1, time1));
-    schema_id_map[schema_name1] = 1U;
+    schema_id_map[clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_name] = 1U;
     channel_id_map[channel_name1] = 1U;
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
@@ -272,7 +276,7 @@ TEST_CASE("Log metadata")
 
     REQUIRE(writer.add_channel(channel_metadata1, time1));
     REQUIRE(writer.add_channel(channel_metadata1, time1));
-    schema_id_map[schema_name1] = 1U;
+    schema_id_map[clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage32>>::schema_name] = 1U;
     channel_id_map[channel_name1] = 1U;
 
     REQUIRE(writer.add_channel(channel_metadata2, time1));
@@ -281,7 +285,7 @@ TEST_CASE("Log metadata")
 
     REQUIRE(writer.add_channel(channel_metadata3, time1));
     REQUIRE(writer.add_channel(channel_metadata3, time1));
-    schema_id_map[schema_name2] = 2U;
+    schema_id_map[clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage128>>::schema_name] = 2U;
     channel_id_map[channel_name3] = 3U;
 
     REQUIRE(writer.add_channel(channel_metadata4, time1));
@@ -330,7 +334,7 @@ TEST_CASE("Log metadata")
 
     REQUIRE(writer.add_channel(channel_metadata1, time1));
     REQUIRE(writer.add_channel(channel_metadata1, time1));
-    schema_id_map[schema_name1] = 1U;
+    schema_id_map[channel_metadata1.schema_name] = 1U;
     channel_id_map[channel_name1] = 1U;
 
     REQUIRE(writer.add_channel(channel_metadata2, time1));
@@ -339,7 +343,7 @@ TEST_CASE("Log metadata")
 
     REQUIRE(writer.add_channel(channel_metadata3, time1));
     REQUIRE(writer.add_channel(channel_metadata3, time1));
-    schema_id_map[schema_name2] = 2U;
+    schema_id_map[channel_metadata3.schema_name] = 2U;
     channel_id_map[channel_name3] = 3U;
 
     REQUIRE(writer.add_channel(channel_metadata4, time1));
@@ -388,18 +392,11 @@ TEST_CASE("Log metadata")
       memory_resource, memory_resource, max_write_mib_per_sec, max_log_file_duration, WriterEnvironment::normal};
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
 
+    auto channel_metadata = channel_metadata1;
     const auto long_schema_name = std::string(64U * jewels::math::constants::bytes_per_kib<size_t>, 'X');
+    channel_metadata.schema_name = long_schema_name;
     REQUIRE(
-      writer.add_channel(
-        LoggedChannelMetadata{
-          channel_name1,
-          compression_type1,
-          message_encoding1,
-          channel_type1,
-          long_schema_name,
-          schema_encoding1,
-          schema_desc1},
-        time1) == jewels::unexpected(LogError::schema_name_exceeds_max_name_size));
+      writer.add_channel(channel_metadata, time1) == jewels::unexpected(LogError::schema_name_exceeds_max_name_size));
     REQUIRE(writer.get_status().status_string == "Schema name exceeds max size (65535)");
   }
 
@@ -410,17 +407,10 @@ TEST_CASE("Log metadata")
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
 
     const auto long_channel_name = std::string(64U * jewels::math::constants::bytes_per_kib<size_t>, 'X');
+    auto channel_metadata = channel_metadata1;
+    channel_metadata.channel_name = long_channel_name;
     REQUIRE(
-      writer.add_channel(
-        LoggedChannelMetadata{
-          long_channel_name,
-          compression_type1,
-          message_encoding1,
-          channel_type1,
-          schema_name1,
-          schema_encoding1,
-          schema_desc1},
-        time1) == jewels::unexpected(LogError::channel_name_exceeds_max_name_size));
+      writer.add_channel(channel_metadata, time1) == jewels::unexpected(LogError::channel_name_exceeds_max_name_size));
     REQUIRE(writer.get_status().status_string == "Channel name exceeds max size (65535)");
   }
 
@@ -431,29 +421,21 @@ TEST_CASE("Log metadata")
     REQUIRE(writer.open_log(log_dir.string(), log_file_prefix, time1));
 
     const auto long_schema_definition = std::string((256U * jewels::math::constants::bytes_per_kib<size_t>)+1U, 'X');
+    auto channel_metadata = channel_metadata1;
+    channel_metadata.schema_definition = long_schema_definition;
     REQUIRE(
-      writer.add_channel(
-        LoggedChannelMetadata{
-          channel_name1,
-          compression_type1,
-          message_encoding1,
-          channel_type1,
-          schema_name1,
-          schema_encoding1,
-          long_schema_definition},
-        time1) == jewels::unexpected(LogError::schema_definition_exceeds_max_size));
+      writer.add_channel(channel_metadata, time1) == jewels::unexpected(LogError::schema_definition_exceeds_max_size));
     REQUIRE(writer.get_status().status_string == "Schema definition exceeds max size (262144)");
   }
 }
 
 TEST_CASE("Log clockwork messages")
 {
-  constexpr size_t message_data_size = 1373U;
   constexpr size_t num_slots = 3U;
 
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
-    .message_size = message_data_size,
+    .message_size = sizeof(clockwork::Tappy<tests::TestMessage1384>),
     .is_published_once = false,
   };
 
@@ -466,7 +448,9 @@ TEST_CASE("Log clockwork messages")
   auto pinion_buffer = *maybe_pinion_buffer;
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
-  LiteCompressor compressor{memory_resource};
+  const auto compressor =
+    clockwork::serialization::TachyonLiteCompressor::make_compressor<clockwork::Tappy<tests::TestMessage1384>>(
+      memory_resource);
   static constexpr size_t max_write_mib_per_sec = 100U;
   static constexpr auto max_log_file_duration = std::chrono::seconds{0};
   const auto* log_file_prefix = "log_file_";
@@ -474,14 +458,7 @@ TEST_CASE("Log clockwork messages")
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto log_dir = test_dir.get_path() / log_file_prefix;
 
-  const auto* schema_name1 = "Schema 1";
-  const auto schema_encoding1 = SchemaEncoding::clockwork_tachyon;
-  const auto* schema_desc1 = "Schema description 1";
-
   const auto* channel_name1 = "Channel 1";
-  const auto compression_type1 = CompressionType::none;
-  const auto message_encoding1 = MessageEncoding::tachyon;
-  const auto channel_type1 = ChannelType::regular;
 
   const jewels::time::SteadyTime time1{std::chrono::seconds(1)};
 
@@ -490,16 +467,21 @@ TEST_CASE("Log clockwork messages")
 
   const LoggedChannelMetadata channel_metadata1{
     .channel_name = channel_name1,
-    .compression_type = compression_type1,
-    .message_encoding = message_encoding1,
-    .channel_type = channel_type1,
-    .schema_name = schema_name1,
-    .schema_encoding = schema_encoding1,
-    .schema_definition = schema_desc1,
+    .compression_type = CompressionType::none,
+    .message_encoding = static_cast<MessageEncoding>(
+      clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::message_encoding),
+    .channel_type = ChannelType::regular,
+    .schema_name = clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_name,
+    .schema_encoding =
+      static_cast<SchemaEncoding>(clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_encoding),
+    .schema_definition =
+      std::string_view{
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_definition.data(),
+        clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage1384>>::schema_definition.size()},
   };
 
-  schema_id_map[schema_name1] = 1U;
-  channel_id_map[channel_name1] = 1U;
+  schema_id_map[channel_metadata1.schema_name] = 1U;
+  channel_id_map[channel_metadata1.channel_name] = 1U;
 
   SECTION("Single message")
   {
@@ -519,8 +501,10 @@ TEST_CASE("Log clockwork messages")
 
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
@@ -551,7 +535,11 @@ TEST_CASE("Log clockwork messages")
 
       slot2.header()->sequence_number = sequence_number2;
       slot2.header()->publish_timestamp = message_time2.get_nanoseconds();
-      std::memset(slot2.message().data(), 'C', slot2.message().size());
+      auto& slot2_message =
+        *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot2.message())
+           .value();
+      slot2_message.get_underlying_data().resize(1384);
+      std::memset(slot2_message.get_mutable_data().data(), 'C', slot2_message.get_mutable_data().size());
 
       REQUIRE(writer2.log_clockwork_message(
         channel_name1,
@@ -616,7 +604,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -651,8 +639,10 @@ TEST_CASE("Log clockwork messages")
 
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
@@ -672,7 +662,10 @@ TEST_CASE("Log clockwork messages")
 
     slot2.header()->sequence_number = sequence_number2;
     slot2.header()->publish_timestamp = message_time2.get_nanoseconds();
-    std::memset(slot2.message().data(), 'C', slot2.message().size());
+    auto& slot2_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot2.message()).value();
+    slot2_message.get_underlying_data().resize(1384);
+    std::memset(slot2_message.get_mutable_data().data(), 'C', slot2_message.get_mutable_data().size());
 
     REQUIRE(
       writer.log_clockwork_message(
@@ -698,8 +691,10 @@ TEST_CASE("Log clockwork messages")
 
     slot3.header()->sequence_number = sequence_number3;
     slot3.header()->publish_timestamp = message_time3.get_nanoseconds();
-    std::memset(slot3.message().data(), '\0', 64U);
-    std::memset(&slot3.message()[64U], 'D', slot3.message().size() - 64U);
+    auto& slot3_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot3.message()).value();
+    slot3_message.get_underlying_data().resize(346);
+    std::memset(slot3_message.get_mutable_data().data(), 'D', slot3_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
@@ -729,7 +724,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -746,7 +741,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time3,
         .message_time = message_time3,
         .header = {},
-        .data = compressor.compress(slot3.message()),
+        .data = compressor->compress(slot3.message()),
       },
       channel_id_map,
       true);
@@ -780,8 +775,10 @@ TEST_CASE("Log clockwork messages")
 
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
@@ -800,7 +797,10 @@ TEST_CASE("Log clockwork messages")
 
     slot2.header()->sequence_number = sequence_number2;
     slot2.header()->publish_timestamp = message_time2.get_nanoseconds();
-    std::memset(slot2.message().data(), 'C', slot2.message().size());
+    auto& slot2_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot2.message()).value();
+    slot2_message.get_underlying_data().resize(1384);
+    std::memset(slot2_message.get_mutable_data().data(), 'C', slot2_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message(
       channel_name1,
@@ -847,7 +847,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -892,10 +892,12 @@ TEST_CASE("Log clockwork messages")
 
     auto slot1 = buffer_iterator1.dereference();
 
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(1300);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     const uint32_t messages_per_file = 191U;
     for (uint32_t i = 0U; i < messages_per_file; ++i)
@@ -939,7 +941,7 @@ TEST_CASE("Log clockwork messages")
           .log_time = log_time1,
           .message_time = message_time1,
           .header = {},
-          .data = compressor.compress(slot1.message()),
+          .data = compressor->compress(slot1.message()),
         },
         channel_id_map,
         true);
@@ -974,7 +976,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1008,10 +1010,12 @@ TEST_CASE("Log clockwork messages")
 
     auto slot1 = buffer_iterator1.dereference();
 
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
@@ -1055,7 +1059,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1070,7 +1074,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time2,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1105,7 +1109,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time2,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1143,10 +1147,12 @@ TEST_CASE("Log clockwork messages")
 
     auto slot1 = buffer_iterator1.dereference();
 
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(writer.log_clockwork_message_wait(
       channel_name1,
@@ -1189,7 +1195,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time1,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1204,7 +1210,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time2,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1219,7 +1225,7 @@ TEST_CASE("Log clockwork messages")
         .log_time = log_time2,
         .message_time = message_time1,
         .header = {},
-        .data = compressor.compress(slot1.message()),
+        .data = compressor->compress(slot1.message()),
       },
       channel_id_map,
       true);
@@ -1255,10 +1261,12 @@ TEST_CASE("Log clockwork messages")
 
     auto slot1 = buffer_iterator1.dereference();
 
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     const uint32_t messages_per_file = 5U;
     for (uint32_t i = 0U; i < messages_per_file; ++i)
@@ -1308,7 +1316,7 @@ TEST_CASE("Log clockwork messages")
           .log_time = log_time1,
           .message_time = message_time1,
           .header = {},
-          .data = compressor.compress(slot1.message()),
+          .data = compressor->compress(slot1.message()),
         },
         channel_id_map,
         true);
@@ -1345,7 +1353,7 @@ TEST_CASE("Log clockwork messages")
           .log_time = log_time1,
           .message_time = message_time1,
           .header = {},
-          .data = compressor.compress(slot1.message()),
+          .data = compressor->compress(slot1.message()),
         },
         channel_id_map,
         true);
@@ -1381,8 +1389,10 @@ TEST_CASE("Log clockwork messages")
 
     slot1.header()->sequence_number = sequence_number1;
     slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
-    std::memset(slot1.message().data(), '\0', 64U);
-    std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
+    auto& slot1_message =
+      *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+    slot1_message.get_underlying_data().resize(692);
+    std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
     REQUIRE(
       writer.log_clockwork_message(
@@ -1397,12 +1407,11 @@ TEST_CASE("Log clockwork messages")
 
 TEST_CASE("Error handlng")
 {
-  constexpr size_t message_data_size = 1373U;
   constexpr size_t num_slots = 1U;
 
   constexpr clockwork::pinion::BufferLayout pinion_layout{
     .num_slots = num_slots,
-    .message_size = message_data_size,
+    .message_size = sizeof(clockwork::Tappy<tests::TestMessage1384>),
     .is_published_once = false,
   };
 
@@ -1435,10 +1444,12 @@ TEST_CASE("Error handlng")
 
   auto slot1 = buffer_iterator1.dereference();
 
-  std::memset(slot1.message().data(), '\0', 64U);
-  std::memset(&slot1.message()[64U], 'B', slot1.message().size() - 64U);
   slot1.header()->sequence_number = sequence_number1;
   slot1.header()->publish_timestamp = message_time1.get_nanoseconds();
+  auto& slot1_message =
+    *nolint_helper::byte_span_to_mutable_value_ptr<clockwork::Tappy<tests::TestMessage1384>>(slot1.message()).value();
+  slot1_message.get_underlying_data().resize(692);
+  std::memset(slot1_message.get_mutable_data().data(), 'B', slot1_message.get_mutable_data().size());
 
   SECTION("Log not open")
   {

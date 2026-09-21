@@ -1,0 +1,197 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//:__subpackages__"])
+
+py_binary(
+    name = "journal_file_generator",
+    srcs = ["cli.py"],
+    main = "cli.py",
+    deps = [
+        ":generator",
+        ":instance_discovery",
+        ":readiness",
+        ":request",
+        ":topology_file",
+        ":writer",
+        "@clockwork_pip//cyclopts",
+    ],
+)
+
+py_library(
+    name = "alignment",
+    srcs = ["alignment.py"],
+    deps = [
+        ":alignment_message",
+        ":execution_extractor",
+        ":log_index",
+        ":request",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:py_log_reader",
+    ],
+)
+
+py_library(
+    name = "alignment_message",
+    srcs = ["alignment_message.py"],
+    deps = ["//clockwork/journal:journal_py_library"],
+)
+
+py_library(
+    name = "channel_summary",
+    srcs = ["channel_summary.py"],
+    deps = [
+        ":log_index",
+        ":request",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:py_log_reader",
+    ],
+)
+
+py_library(
+    name = "cog_channel",
+    srcs = ["cog_channel.py"],
+)
+
+py_library(
+    name = "execution_extractor",
+    srcs = ["execution_extractor.py"],
+    deps = [
+        ":cog_channel",
+        ":journal_metadata",
+        ":request",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/signal_extractor",
+    ],
+)
+
+py_library(
+    name = "generator",
+    srcs = ["generator.py"],
+    imports = ["../../.."],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":alignment",
+        ":channel_summary",
+        ":cog_channel",
+        ":execution_extractor",
+        ":instance_discovery",
+        ":log_index",
+        ":message_index",
+        ":readiness",
+        ":request",
+        ":scope",
+        ":snapshot_selector",
+        ":topology_file",
+        "//clockwork/journal:journal_py_library",
+    ],
+)
+
+py_library(
+    name = "instance_discovery",
+    srcs = ["instance_discovery.py"],
+    deps = [
+        ":cog_channel",
+        "//clockwork/dsl/composition:journal_topology",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:cog",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:path_resolver",
+        "//clockwork/dsl/ir:system_target",
+    ],
+)
+
+py_library(
+    name = "journal_metadata",
+    srcs = ["journal_metadata.py"],
+    deps = [
+        ":cog_channel",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+    ],
+)
+
+py_library(
+    name = "log_index",
+    srcs = ["log_index.py"],
+    deps = [
+        "//clockwork/logging/readers:py_log_reader",
+        "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
+        "@clockwork_pip//protobuf",
+    ],
+)
+
+py_library(
+    name = "message_index",
+    srcs = ["message_index.py"],
+    deps = [
+        ":log_index",
+        ":request",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:py_log_reader",
+    ],
+)
+
+py_library(
+    name = "readiness",
+    srcs = ["readiness.py"],
+    deps = ["//clockwork/journal:journal_py_library"],
+)
+
+py_library(
+    name = "request",
+    srcs = ["request.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "scope",
+    srcs = ["scope.py"],
+    deps = [
+        ":cog_channel",
+        ":log_index",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/signal_extractor",
+        "//clockwork/tools/topology",
+    ],
+)
+
+py_library(
+    name = "snapshot_selector",
+    srcs = ["snapshot_selector.py"],
+    deps = [
+        ":request",
+        ":scope",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:nb_types",
+        "//clockwork/logging/readers:py_log_reader",
+    ],
+)
+
+py_library(
+    name = "topology_file",
+    srcs = ["topology_file.py"],
+    deps = [
+        ":cog_channel",
+        "//clockwork/journal:journal_topology_py_library",
+        "//clockwork/logging/readers:nb_log_reader",
+        "@clockwork_pip//protobuf",
+    ],
+)
+
+py_library(
+    name = "writer",
+    srcs = ["writer.py"],
+    deps = ["//clockwork/journal:journal_py_library"],
+)

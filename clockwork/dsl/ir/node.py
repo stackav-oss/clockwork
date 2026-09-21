@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """IR Generic Base Classes."""
@@ -22,7 +22,7 @@ from typing import (
     Union,  # pyright: ignore[reportDeprecated] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
 )
 
-from fltk.fegen.pyrt.terminalsrc import Span
+from fltk.fegen.pyrt.span_protocol import SpanProtocol
 from typing_extensions import override
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -32,12 +32,24 @@ if TYPE_CHECKING:  # pragma: no cover
     from fltk.fegen.pyrt.terminalsrc import TerminalSource
 
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.ir.cst_util import format_line_with_error, get_span, span_for_node
 
+#
+# Key used to store the current system target in the for resolution
+#
+CURRENT_SYSTEM_TARGET_SCOPE_KEY: Final = "__CURRENT_SYSTEM_TARGET__"
+
+
 T = TypeVar("T")
 CstNodeTypes = TypeVar("CstNodeTypes")
+
+
+class CstNodeProtocol(Protocol):
+    """Common source-location interface implemented by generated CST nodes."""
+
+    span: SpanProtocol
 
 
 class Node(ABC, Generic[CstNodeTypes]):
@@ -70,7 +82,7 @@ class MultiCstNode(Node[CstNodeTypes], Generic[CstNodeTypes]):
         return self.cst_nodes
 
 
-CstNodeType = TypeVar("CstNodeType")
+CstNodeType = TypeVar("CstNodeType", bound=CstNodeProtocol)
 
 
 @dataclass
@@ -105,7 +117,7 @@ class CstNode(Node[CstNodeType], Generic[CstNodeType]):
         return append_error_line(self.cst_node, self.module, msg)
 
 
-def append_error_line(cst_node: CstNodeType | None, module: Module, msg: str) -> str:  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+def append_error_line(cst_node: CstNode[CstNodeType] | CstNodeProtocol | None, module: Module, msg: str) -> str:
     """Append source line/col information to an error message attached to a cst node, if possible.
 
     This only works if this node has access to a valid CST node and
@@ -117,9 +129,18 @@ def append_error_line(cst_node: CstNodeType | None, module: Module, msg: str) ->
         module: Module object containing the CST node.
         msg: Error message, without line information.
     """
-    if cst_node is None or module.terminals is None or not hasattr(cst_node, "span"):
+    if cst_node is None or module.terminals is None:
         return msg
-    msg += format_line_with_error(cst_node.span, module.terminals, module.module_id)  # pyright: ignore[reportAttributeAccessIssue] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
+    span = (
+        cst_node.span
+        if hasattr(cst_node, "span")
+        else cst_node.cst_node.span  # pyrefly: ignore[missing-attribute] # handled by hasattr check
+        if cst_node.cst_node  # pyrefly: ignore[missing-attribute] # handled by hasattr check
+        else None
+    )
+    if span is None:
+        return msg
+    msg += format_line_with_error(span, module.terminals, module.module_id)
     return msg
 
 
@@ -134,7 +155,7 @@ def enrich_error_if_possible(entity: Any, msg: str) -> str:  # noqa: ANN401 (Any
     """
     if hasattr(entity, "append_error_line"):
         return str(entity.append_error_line(msg))
-    if hasattr(entity, "span") and isinstance(entity.span, Span):
+    if hasattr(entity, "span") and isinstance(entity.span, SpanProtocol):
         return append_error_line(entity, entity.module, msg)
     if hasattr(entity, "fqn"):
         return f"In entity {entity.fqn}:\n{msg}"
@@ -289,6 +310,8 @@ class GenerateTarget(Enum):
     py_cog = 8
     py_exe = 9
     cpp_test_cog = 10
+    cpp_aligner = 11
+    cpp_combo_test = 12
 
 
 class UseResultType(Enum):
@@ -308,7 +331,14 @@ class PyCogWrapperType(Enum):
 
 # Generate targets that have no effect in use statements
 _UNUSABLE_GENERATE_TARGETS: Final = frozenset(
-    {GenerateTarget.cpp_cog, GenerateTarget.cpp_exe, GenerateTarget.py_exe, GenerateTarget.cpp_test_cog}
+    {
+        GenerateTarget.cpp_cog,
+        GenerateTarget.cpp_exe,
+        GenerateTarget.py_exe,
+        GenerateTarget.cpp_test_cog,
+        GenerateTarget.cpp_aligner,
+        GenerateTarget.cpp_combo_test,
+    }
 )
 
 
@@ -369,7 +399,7 @@ class ClkCppAttribute:
             msg = append_error_line(cst_node, module, "Cannot construct IR nodes from CST without a TerminalSource")
             raise ValueError(msg)
         result = ClkCppAttribute(cst_node=cst_node)
-        for value in cst_node.children_clk_cpp_value():
+        for value in cst_node.child_clk_cpp_values().children_clk_cpp_value():
             if namespace := value.maybe_clk_cpp_namespace():
                 if result.namespace is not None:
                     msg = append_error_line(namespace, module, "Duplicate namespace value")
@@ -489,7 +519,7 @@ class ClkProtoAttribute:
             msg = append_error_line(cst_node, module, "Cannot construct IR nodes from CST without a TerminalSource")
             raise ValueError(msg)
         result = ClkProtoAttribute(cst_node=cst_node)
-        for value in cst_node.children_clk_proto_value():
+        for value in cst_node.child_clk_proto_values().children_clk_proto_value():
             if package := value.maybe_clk_proto_package():
                 if result.package is not None:
                     msg = append_error_line(package, module, "Duplicate package value")
@@ -594,7 +624,7 @@ class ClkProtoConvAttribute:
             msg = append_error_line(cst_node, module, "Cannot construct IR nodes from CST without a TerminalSource")
             raise ValueError(msg)
         result = ClkProtoConvAttribute(cst_node=cst_node)
-        for value in cst_node.children_clk_proto_conv_value():
+        for value in cst_node.child_clk_proto_conv_values().children_clk_proto_conv_value():
             if namespace := value.maybe_clk_proto_conv_namespace():
                 if result.namespace is not None:
                     msg = append_error_line(namespace, module, "Duplicate namespace value")
@@ -813,10 +843,12 @@ class ClkAttributes:
         result = ClkAttributes(module=module)
 
         if maybe_cst_node is not None:
-            if isinstance(maybe_cst_node, cst.ClkInnerAttrs):
+            if maybe_cst_node.kind == cst.ClkInnerAttrs.kind:
                 clk_attrs = maybe_cst_node.children_clk_inner_attr()
+                is_outer_attrs = False
             else:
                 clk_attrs = maybe_cst_node.children_clk_outer_attr()
+                is_outer_attrs = True
             for clk_attr in clk_attrs:
                 attr = clk_attr.child_clk_attr()
                 for cpp_attr in attr.children_clk_cpp_attr():
@@ -827,7 +859,7 @@ class ClkAttributes:
                         msg = append_error_line(cpp_attr, module, "Duplicate cpp attribute")
                         raise ValueError(msg)
                     result.cpp_attr = ClkCppAttribute.from_cst(module, cpp_attr)
-                    if isinstance(maybe_cst_node, cst.ClkOuterAttrs):
+                    if is_outer_attrs:
                         if result.cpp_attr.namespace is not None:
                             msg = append_error_line(
                                 cpp_attr, module, "cpp namespace is only allowed in inner attributes"
@@ -848,7 +880,7 @@ class ClkAttributes:
                         msg = append_error_line(proto_attr, module, "Duplicate proto attribute")
                         raise ValueError(msg)
                     result.proto_attr = ClkProtoAttribute.from_cst(module, proto_attr)
-                    if isinstance(maybe_cst_node, cst.ClkOuterAttrs):
+                    if is_outer_attrs:
                         if result.proto_attr.package is not None:
                             msg = append_error_line(
                                 proto_attr, module, "proto package is only allowed in inner attributes"
@@ -885,7 +917,7 @@ class ClkAttributes:
                     if result.exe_attr is not None:
                         msg = append_error_line(exe_attr, module, "Duplicate exe attribute")
                         raise ValueError(msg)
-                    if isinstance(maybe_cst_node, cst.ClkOuterAttrs):
+                    if is_outer_attrs:
                         msg = append_error_line(exe_attr, module, "exe attribute is only allowed in inner attributes")
                         raise TypeError(msg)
                     result.exe_attr = ClkExeAttribute.from_cst(module, exe_attr)
@@ -898,7 +930,7 @@ class ClkAttributes:
                     if result.py_cog_attr is not None:
                         msg = append_error_line(py_cog_attr, module, "Duplicate py_cog attribute")
                         raise ValueError(msg)
-                    if isinstance(maybe_cst_node, cst.ClkOuterAttrs):
+                    if is_outer_attrs:
                         msg = append_error_line(
                             py_cog_attr, module, "py_cog attribute is only allowed in inner attributes"
                         )
@@ -993,6 +1025,7 @@ class Module(Node[cst.Module], DocableEntity):
     inner_scope: Scope
     terminals: TerminalSource | None = field(repr=False)
     cst_node: cst.Module | None = field(repr=False)
+    # pyrefly: ignore[unknown-name] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     unresolved_imports: list[UseResult]
     context: CompilerContext = field(repr=False)
     generates: frozenset[GenerateTarget] | None
@@ -1121,7 +1154,7 @@ class Module(Node[cst.Module], DocableEntity):
             repo_name, use_path, alias, use_targets=use_targets, cst_node=use, use_type=UseResultType.module
         )
 
-    def _handle_clk_generate_target(self, target: cst.ClkGenerateTarget) -> GenerateTarget:  # noqa: C901 One condition per target value
+    def _handle_clk_generate_target(self, target: cst.ClkGenerateTarget) -> GenerateTarget:  # noqa: C901, PLR0912 # One condition per target value
         target_value: GenerateTarget | None = None
         if target.maybe_cpp_cog() is not None:
             target_value = GenerateTarget.cpp_cog
@@ -1129,6 +1162,10 @@ class Module(Node[cst.Module], DocableEntity):
             target_value = GenerateTarget.cpp_exe
         elif target.maybe_cpp_test_cog() is not None:
             target_value = GenerateTarget.cpp_test_cog
+        elif target.maybe_cpp_aligner() is not None:
+            target_value = GenerateTarget.cpp_aligner
+        elif target.maybe_cpp_combo_test() is not None:
+            target_value = GenerateTarget.cpp_combo_test
         elif target.maybe_cpp() is not None:
             target_value = GenerateTarget.cpp
         elif target.maybe_proto() is not None and target.maybe_conv() is not None:
@@ -1173,11 +1210,12 @@ class Module(Node[cst.Module], DocableEntity):
             extern_scope.define(import_spec.import_name, entity, self.terminals)
             self.import_use_targets[module.module_id] = use_result.use_targets
 
-    def _handle_generate(self, generate_cst: cst.ClkGenerate) -> frozenset[GenerateTarget]:
+    def _handle_generate(self, generate_cst: cst.ClkGenerate) -> frozenset[GenerateTarget]:  # noqa: C901 # One branch per target type
         """Handle converting the generate target CST to IR."""
         generates = set()
-        for target in generate_cst.children_clk_generate_target():
-            generates.add(self._handle_clk_generate_target(target))
+        if generate_targets := generate_cst.maybe_clk_generate_targets():
+            for target in generate_targets.children_clk_generate_target():
+                generates.add(self._handle_clk_generate_target(target))
         if GenerateTarget.nanobind in generates and GenerateTarget.cpp not in generates:
             msg = append_error_line(generate_cst, self, "Generating nanobind depends on generating cpp")
             raise ValueError(msg)
@@ -1213,6 +1251,11 @@ class Module(Node[cst.Module], DocableEntity):
             msg = append_error_line(
                 generate_cst, self, "Generating cpp_test_cog depends on generating cpp_cog or py_cog"
             )
+        if GenerateTarget.cpp_aligner in generates and GenerateTarget.cpp not in generates:
+            msg = append_error_line(generate_cst, self, "Generating cpp_aligner depends on generating cpp")
+            raise ValueError(msg)
+        if GenerateTarget.cpp_combo_test in generates and GenerateTarget.cpp_test_cog not in generates:
+            msg = append_error_line(generate_cst, self, "Generating cpp_combo_test depends on generating cpp_test_cog")
             raise ValueError(msg)
         return frozenset(generates)
 
@@ -1222,12 +1265,15 @@ class Module(Node[cst.Module], DocableEntity):
         """Handle converting a clk_use target CST to IR."""
         assert self.generates is not None
         use_targets = set()
-        for target in use_target_cst.children_clk_generate_target():
-            target_value = self._handle_clk_generate_target(target)
-            if target_value in _UNUSABLE_GENERATE_TARGETS:
-                msg = append_error_line(target, self, f"Specifying {target_value.name} in use statement has no effect")
-                raise ValueError(msg)
-            use_targets.add(target_value)
+        if generate_targets := use_target_cst.maybe_clk_generate_targets():
+            for target in generate_targets.children_clk_generate_target():
+                target_value = self._handle_clk_generate_target(target)
+                if target_value in _UNUSABLE_GENERATE_TARGETS:
+                    msg = append_error_line(
+                        target, self, f"Specifying {target_value.name} in use statement has no effect"
+                    )
+                    raise ValueError(msg)
+                use_targets.add(target_value)
         use_targets = frozenset(use_targets)
         if use_targets == default_use_targets:
             msg = append_error_line(use_target_cst, self, "Explit use targets cannot duplicate the defaults")
@@ -1327,6 +1373,7 @@ class NamespacedModule(CstNode[cst.UseBody], NamedEntity, NamespaceEntity):
         This prevents us from recursively resolving into the referenced module,
         which will already be resolved.
         """
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return []
 
     @override
@@ -1376,6 +1423,28 @@ class Scope:
         return Scope(
             parent=self, uniq_path=f"{path_parent.uniq_path}.{name}", module_id_for_errors=self.module_id_for_errors
         )
+
+    def clone(self, parent: Scope | None) -> Scope:
+        """Create a new scope with the same direct name bindings but a different parent.
+
+        Useful when a module-level scope template needs to be inserted into a
+        different scope chain.  Only direct names (``self.names``) are copied;
+        names inherited from parent scopes are not.
+
+        Args:
+            parent: The parent scope for the clone.
+
+        Returns:
+            A new Scope with the same direct names but the specified parent.
+        """
+        cloned = Scope(
+            parent=parent,
+            uniq_path=self.uniq_path,
+            module_id_for_errors=self.module_id_for_errors,
+        )
+        for bound_name, entity in self.names.items():
+            cloned.define(bound_name, entity, None)
+        return cloned
 
     @override
     def __repr__(self) -> str:
@@ -1516,6 +1585,32 @@ class Doc(CstNode[cst.Doc]):
 ExpectedType = TypeVar("ExpectedType")
 
 
+class NamedBinding(NamedEntity, Generic[ExpectedType]):
+    """Represents a bound value."""
+
+    # fmt: off
+    @abstractmethod
+    # pyrefly: ignore[invalid-abstract-method] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    def bound_value(self) -> ExpectedType:
+    # fmt: on
+        """Get the bound value."""
+
+
+@dataclass
+class NamedBindingRef(NamedBinding[ExpectedType]):
+    """A way to reference an existing value while providing the NamedBinding interface.
+
+    This will be replaced by the bound value during the name resolution phase.
+    """
+
+    value: ExpectedType
+
+    @override
+    def bound_value(self) -> ExpectedType:
+        """Get the bound value."""
+        return self.value
+
+
 @dataclass
 class DeferredLookup(Generic[ExpectedType]):
     """Proxy node for deferring lookup of a node by identifier.
@@ -1571,6 +1666,8 @@ class DeferredLookup(Generic[ExpectedType]):
                     module_id=scope.module_id_for_errors,
                 )
             raise ValueError(msg)
+        if isinstance(result, NamedBindingRef):
+            result = result.bound_value()
         if not isinstance(result, self.expected_type):
             msg = f"For identifier {self.identifier}: Expected entity of type {self.expected_type}, got {type(result)}"
             if self.cst_identifier and self.terminals:
@@ -1622,7 +1719,7 @@ def resolve_names(parent: Any, scope: Scope) -> Any:  # noqa: ANN401 (Any is ess
         return {key: resolve_names(value, inner_scope) for key, value in parent.items()}
     if isinstance(parent, collections.abc.Iterable):
         return type(parent)(resolve_names(item, inner_scope) for item in parent)  # pyright: ignore[reportCallIssue] False positive
-    if not dataclasses.is_dataclass(parent):
+    if not dataclasses.is_dataclass(parent) or parent.__dataclass_params__.frozen:
         return parent
     return _resolve_recurse_dataclass(parent, inner_scope)
 
@@ -1636,10 +1733,14 @@ def _resolve_recurse_dataclass(parent: Any, scope: Scope) -> Any:  # noqa: ANN40
         child = getattr(parent, fld)
         if child is parent:
             continue
+        # pyrefly: ignore[implicit-any-type-argument] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         if isinstance(child, DeferredLookup | collections.abc.Iterable) or (
-            _is_ir_node(fld, child) and fld != "module"
+            _is_ir_node(fld, child) and fld not in ("module", "resolved", "resolved_value")
         ):
-            # We skip the "module" field because this is a reference back "up" the scope stack
+            # We skip the "module" field because this is a reference back "up"
+            # the scope stack. We also skip the "resolved" field because it
+            # will only ever contain a resolved value or None, and in either
+            # case there's no work to do.
             result = resolve_names(child, scope)
             if result is not child:
                 setattr(parent, fld, result)

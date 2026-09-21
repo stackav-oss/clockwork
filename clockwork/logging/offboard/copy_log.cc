@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/copy_log.hh"
@@ -7,6 +7,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/s3_otel_utils.hh"
@@ -70,7 +71,6 @@ namespace
     jewels::log_cerr_error("{}", exc.what());
     return jewels::unexpected(LogError::failed_to_open_log_file);
   }
-  __builtin_unreachable();
 }
 
 /// Open the destination log writer

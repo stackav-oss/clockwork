@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate logger configurations."""
@@ -8,9 +8,12 @@ from typing import cast
 from uuid import UUID
 
 from clockwork.dsl.composition import logger_config, logger_config_proto, publisher_config_proto, system
-from clockwork.dsl.composition.publisher_config import ChannelPublisherConfig, PublishedChannelConfig
+from clockwork.dsl.composition.publisher_config import (
+    ChannelPublisherConfig,
+    PublishedChannelConfig,
+    make_unbuffered_published_channel_config,
+)
 from clockwork.dsl.ir import box, primitive
-from clockwork.dsl.serialization import tachyon_reg
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
 from clockwork.serialization.metadata import tachyon_model_pb2 as model_pb2
 
@@ -53,12 +56,12 @@ def _gen_logger_configs_domain(domain: system.PhysicalCpuDomain) -> GeneratedLog
         )
         if log_observer.log_type in (
             logger_config_entities.log_type.redundant_telemetry,
-            logger_config_entities.log_type.telemetry,
+            logger_config_entities.log_type.non_redundant_telemetry,
         ):
             result.telemetry_config.channels.append(config)
         if log_observer.log_type in (
             logger_config_entities.log_type.redundant_telemetry,
-            logger_config_entities.log_type.telemetry,
+            logger_config_entities.log_type.non_redundant_telemetry,
             logger_config_entities.log_type.event,
         ):
             result.events_config.channels.append(config)
@@ -135,32 +138,10 @@ def _gen_channel_publisher_configs_domain(
             message_repr = data_source.channel.message_repr
             if message_repr is None:
                 continue
-            message_repr_typespec = message_repr.typespec
-            # Only Tachyon encoding is supported currently
-            assert message_repr_typespec.instantiates.value_key() == "::Tachyon"
-            message_schema = message_repr.get_schema()
-            schema_definition = tachyon_metadata.get_serialized_metadata(ctx, message_schema)
             channel_name = data_source.channel.channel_name
             assert isinstance(channel_name, primitive.StringValue)
-
-            constraint = tachyon_reg.constraint_for_type(ctx, message_schema)
-            if constraint is None:
-                msg = f"Missing Tachyon constraint for FirstMessage channel {channel_name.value}"
-                raise RuntimeError(msg)
-            # UUID 0 indicates no buffer is associated
-            # Num slots is set to 0 as it's not applicable for FirstMessage data sources
-            config = PublishedChannelConfig(
-                uuid=UUID(int=0),
-                num_slots=0,
-                message_size=constraint.size,
-                channel_name=channel_name.value,
-                schema_definition=list(schema_definition),
-                module_name=message_repr.schema_ir.schema.module.module_id.repo,
-                source_file_name=str(message_repr.schema_ir.schema.module.module_id.get_base_path()),
-                class_name=message_repr.schema_ir.schema_name,
-                is_published_once=False,
-            )
-            result.channels.append(config)
+            assert message_repr is not None
+            result.channels.append(make_unbuffered_published_channel_config(ctx, channel_name.value, message_repr))
 
     return result
 

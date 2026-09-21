@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Code gen utilities for converting from protobuf to TAP/Tachyon."""
@@ -201,10 +201,7 @@ def _generate_validation_statement(
     ):
         return None
 
-    return ValidationInfo(
-        lambda validation_params: _generate_standard_validator(validation_params),
-        [],
-    )
+    return ValidationInfo(_generate_standard_validator, [])
 
 
 def _generate_standard_validator(validation_params: ValidationParams) -> list[str]:

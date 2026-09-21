@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -12,7 +12,7 @@ from textwrap import dedent
 from typing import Final
 
 import pytest
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -59,7 +59,7 @@ def schema_firstpass(module: node.Module) -> schema.Schema:
     return schema.Schema.from_cst(
         module=module,
         scope=module.inner_scope,
-        cst_schema=next(module.cst_node.children_entity()).child_schema(),
+        cst_schema=next(iter(module.cst_node.children_entity())).child_schema(),
     )
 
 
@@ -118,7 +118,7 @@ def test_schema_cst_to_ir() -> None:
 def test_error_no_terminals(hellomsg_module: node.Module) -> None:
     hellomsg_module.terminals = None
     assert hellomsg_module.cst_node is not None
-    schema_cst = next(hellomsg_module.cst_node.children_entity()).child_schema()
+    schema_cst = next(iter(hellomsg_module.cst_node.children_entity())).child_schema()
     with pytest.raises(ValueError, match=r"Cannot construct IR nodes from CST without a TerminalSource"):
         schema.Schema.from_cst(
             module=hellomsg_module,
@@ -128,9 +128,7 @@ def test_error_no_terminals(hellomsg_module: node.Module) -> None:
     with pytest.raises(ValueError, match=r"Cannot construct IR nodes from CST without a TerminalSource"):
         schema.FieldDef.from_cst(
             module=hellomsg_module,
-            cst_node=next(
-                schema_cst.child_schema_fields_block().children_schema_field(),
-            ),
+            cst_node=next(iter(schema_cst.child_schema_fields_block().children_schema_field())),
         )
 
 
@@ -164,9 +162,7 @@ def test_error_bad_field_type_expression_during_resolution(hellomsg_schema_first
     )
     with pytest.raises(
         TypeError,
-        match=re.escape(
-            f"Type inference failed: {clkbuiltins.INT16.value_key()} != {clkbuiltins.TYPE_TYPE.value_key()}"
-        ),
+        match=re.escape("Type inference failed: ::Int16 and ::Type are disjoint"),
     ):
         schema_ir.fields[1].type_info = expr.TypeExpression.make(
             expr.SimpleExpr(
@@ -243,7 +239,7 @@ def test_parameter_type_mismatch() -> None:
     )
     with pytest.raises(
         TypeError,
-        match=re.escape(f"Type inference failed: {clkbuiltins.UINT64} != {clkbuiltins.UINT32}"),
+        match=re.escape("Type inference failed: ::UInt64 and ::UInt32 are disjoint"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "bad"), importer=fs_importer)
 
@@ -271,7 +267,7 @@ def test_instantiation_type_mismatch() -> None:
     )
     with pytest.raises(
         TypeError,
-        match=re.escape(f"Type inference failed: {clkbuiltins.UINT64} != {clkbuiltins.UINT32}"),
+        match=re.escape("Type inference failed: ::UInt64 and ::UInt32 are disjoint"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "bad"), importer=fs_importer)
 
@@ -342,7 +338,7 @@ def test_bad_parameter_default() -> None:
     )
     with pytest.raises(
         TypeError,
-        match=re.escape(f"Type inference failed: {clkbuiltins.DURATION} != {clkbuiltins.UINT64}"),
+        match=re.escape("Type inference failed: ::Duration and ::UInt64 are disjoint"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "bad"), importer=fs_importer)
 
@@ -364,7 +360,7 @@ def test_bad_field_init() -> None:
     )
     with pytest.raises(
         TypeError,
-        match=re.escape(f"Type inference failed: {clkbuiltins.DURATION} != {clkbuiltins.INT8}"),
+        match=re.escape("Type inference failed: ::Duration and ::Int8 are disjoint"),
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "bad"), importer=fs_importer)
 
@@ -452,6 +448,57 @@ def test_composition() -> None:
     assert isinstance(hola, clkenum.ValueRef)
     assert f6.type_info is hello_enum
     assert f6.init_value is hola
+
+
+def test_schema_alias_field_type_is_canonicalized() -> None:
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    source = dedent(
+        """
+        #![generate(cpp)]
+        #![cpp(namespace=clockwork::testing)]
+
+        // Maximum number of values.
+        max_num_values: UInt64 = 3;
+
+        // A parameterized test schema.
+        schema GenericSchema
+        {
+          parameters
+          {
+            // Maximum number of values.
+            #8 num_values: UInt64 = max_num_values;
+          }
+          fields
+          {
+            // Test values.
+            #0 values: VarArray<type=UInt8, max_size=num_values>;
+          }
+        }
+
+        instantiate GenericSchemaAlias: GenericSchema<>;
+
+        // A schema containing the alias.
+        schema WrapperSchema
+        {
+          fields
+          {
+            // The test schema.
+            #0 value: GenericSchemaAlias;
+          }
+        }
+        """,
+    )
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, "schema_alias"), importer=fs_importer)
+    wrapper_schema_ir = module.inner_scope.lookup("WrapperSchema")
+    assert isinstance(wrapper_schema_ir, schema.Schema)
+
+    wrapper_schema = schema.InstantiatedSchema.from_typespec(wrapper_schema_ir)
+    generic_schema = wrapper_schema.fields[0].type_info
+    assert isinstance(generic_schema, schema.InstantiatedSchema)
+    assert generic_schema.arguments is not None
+    num_values = generic_schema.arguments["num_values"]
+    assert isinstance(num_values, primitive.DecimalValue)
+    assert num_values.value == 3
 
 
 def test_field_source_ordering() -> None:

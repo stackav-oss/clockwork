@@ -4,6 +4,7 @@
 #include "clockwork/cog/input_condition.hh"
 
 #include "clockwork/dial/cond_messages_present.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
@@ -11,7 +12,7 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <optional>
+#include <memory>
 #include <ranges>
 #include <utility>
 
@@ -19,14 +20,14 @@ namespace clockwork
 {
 
 template <typename Policy>
-InputCondition<Policy>::InputCondition(pinion::SubscriberHandle subscriber) noexcept
-  : subscriber_(std::move(subscriber))
+InputCondition<Policy>::InputCondition(std::shared_ptr<pinion::AbstractChannel> channel) noexcept
+  : subscriber_(std::move(channel))
 {
 }
 
 template <typename Policy>
 InputCondition<Policy>::InputCondition() noexcept
-  : subscriber_(std::nullopt)
+  : subscriber_(nullptr)
 {
 }
 

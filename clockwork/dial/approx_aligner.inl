@@ -5,9 +5,11 @@
 
 #include "clockwork/dial/alignment_type_clk_cc.hh"
 #include "clockwork/dial/approx_aligner_config_clk_cc.hh"
+#include "jewels/container/tap/optional.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
+#include <algorithm>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -72,7 +74,7 @@ constexpr auto ApproxAligner<PolicyType, InputPolicies...>::find_alignment(
     };
   }
 
-  // No full alignment, return insuffient data if we have not exceeded the max timeout.
+  // No full alignment, return insufficient data if we have not exceeded the max timeout.
 
   if (!config.has_maximum_wait_time() || (elapsed_time < std::chrono::nanoseconds(config.value_maximum_wait_time())))
   {
@@ -86,23 +88,26 @@ constexpr auto ApproxAligner<PolicyType, InputPolicies...>::find_alignment(
 
   // Exceeded the max timeout, return the best partial alignment.
 
-  if (timeout_alignment)
+  if (!timeout_alignment)
   {
     return Result{
       .time_of_validity = now,
       .state = ApproxAlignerStateType::timeout,
-      .type = AlignmentType::partial,
-      .alignment = std::move(timeout_alignment),
+      .type = AlignmentType::none,
+      .alignment = {},
     };
   }
 
-  // No partial alignment found (i.e. no inputs at all).
+  const auto alignment_type =
+    std::any_of(values_array.begin(), values_array.end(), [](const auto& values) { return values.empty(); })
+      ? AlignmentType::incomplete
+      : AlignmentType::partial;
 
   return Result{
     .time_of_validity = now,
     .state = ApproxAlignerStateType::timeout,
-    .type = AlignmentType::none,
-    .alignment = {},
+    .type = alignment_type,
+    .alignment = std::move(timeout_alignment),
   };
 }
 
@@ -156,16 +161,22 @@ constexpr auto ApproxAligner<PolicyType, InputPolicies...>::find_full_alignment(
     ValueType score;
     IndexArray indices;
   };
-  auto below_thres_alignment = std::optional<IndexAlignment>();
-  auto above_thres_alignment = std::optional<IndexAlignment>();
+  std::optional<IndexAlignment> below_thres_alignment{};
+  std::optional<IndexAlignment> above_thres_alignment{};
 
-  auto generator =
-    detail::CombinationGenerator<ValueType, input_count>(jewels::memory::make_non_null_from_ref(values_array));
+  const auto max_missing_inputs_on_timeout{config.get_underlying_max_missing_inputs_on_timeout().value_or(0UL)};
+  auto generator = detail::CombinationGenerator<ValueType, input_count>(
+    jewels::memory::make_non_null_from_ref(values_array), max_missing_inputs_on_timeout);
 
   for (auto it = generator.begin(); it != generator.end(); ++it)
   {
-    auto score = Policy::objective(it.value_ptrs());
-    if (static_cast<double>(score) <= config.get_minimum_score_threshold())
+    // Treat each missing input contribution to the score equal to the min_score_threshold.
+    const auto missing_input_count{std::count(it.value_ptrs().begin(), it.value_ptrs().end(), nullptr)};
+    const auto base_missing_penalty{std::max(config.get_minimum_score_threshold(), 1.0)};
+    const auto missing_penalty{static_cast<ValueType>(static_cast<double>(missing_input_count) * base_missing_penalty)};
+    const auto score{Policy::objective(it.value_ptrs()) + missing_penalty};
+
+    if (static_cast<double>(score) <= config.get_minimum_score_threshold() && missing_input_count == 0)
     {
       if (
         !below_thres_alignment || (Policy::less_than(it.indices(), below_thres_alignment->indices) ||
@@ -230,8 +241,8 @@ namespace detail
 
 template <typename ValueType, size_t input_count>
 CombinationGenerator<ValueType, input_count>::CombinationGenerator(
-  jewels::memory::ObjectPtr<const ValueVectorsArray> inputs)
-  : inputs_(inputs)
+  jewels::memory::ObjectPtr<const ValueVectorsArray> inputs, size_t max_missing_inputs)
+  : inputs_(inputs), max_missing_inputs_(max_missing_inputs)
 {
 }
 
@@ -251,12 +262,26 @@ template <typename ValueType, size_t input_count>
 CombinationGenerator<ValueType, input_count>::Iterator::Iterator(const CombinationGenerator* generator, bool done)
   : generator_(generator), done_(done)
 {
+
+  if (const auto missing_input_count = static_cast<size_t>(std::count_if(
+        generator_->inputs_->begin(), generator_->inputs_->end(), [](const auto& values) { return values.empty(); }));
+      missing_input_count > std::min(generator_->max_missing_inputs_, input_count))
+  {
+    // Too many missing inputs, don't generate any combinations.
+    done_ = true;
+    return;
+  }
+
   for (size_t i = 0; i < input_count; ++i)
   {
     iterators_.at(i) = generator_->inputs_->at(i).begin();
-    if (generator_->inputs_->at(i).begin() != generator_->inputs_->at(i).end())
+    if (!generator_->inputs_->at(i).empty())
     {
       value_ptrs_.at(i) = &(*iterators_.at(i));
+    }
+    else if (generator_->max_missing_inputs_ > 0UL)
+    {
+      value_ptrs_.at(i) = nullptr;
     }
     else
     {
@@ -334,7 +359,7 @@ auto CombinationGenerator<ValueType, input_count>::Iterator::operator++() -> Ite
 
   for (size_t i = 0; i < input_count; ++i)
   {
-    value_ptrs_.at(i) = &(*iterators_.at(i));
+    value_ptrs_.at(i) = generator_->inputs_->at(i).empty() ? nullptr : &(*iterators_.at(i));
   }
 
   return *this;

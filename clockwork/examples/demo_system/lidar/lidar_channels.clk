@@ -6,7 +6,9 @@ use clockwork::examples::demo_system::lidar::lidar_message;
 channel RawLidarChannel
 {
   name: "/lidar/raw";
-message_type: Tachyon<lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>>;
+  message_type: Tachyon<
+    lidar_message::RawLidarMessage<lidar_message::returns_per_message, lidar_message::points_per_return>,
+  >;
   max_num_messages: 100;
 }
 

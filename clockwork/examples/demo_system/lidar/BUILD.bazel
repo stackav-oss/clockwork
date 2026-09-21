@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -36,9 +36,15 @@ clk(
         "lidar_clk_cc.cc",
         "lidar_clk_cc.hh",
         "lidar_clk_cc.inl",
+        "lidar_clk_cc_cog.cc",
+        "lidar_clk_cc_cog.hh",
+        "lidar_clk_cc_cog.inl",
         "lidar_clk_cc_dial.cc",
         "lidar_clk_cc_dial.hh",
         "lidar_clk_cc_dial.inl",
+        "lidar_clk_cc_types.cc",
+        "lidar_clk_cc_types.hh",
+        "lidar_clk_cc_types.inl",
         "lidar_clk_exe.cc",
         "lidar_clk_exe.hh",
         "lidar_clk_exe.inl",
@@ -74,10 +80,14 @@ cc_library(
         "//clockwork/dial:msg_input",
         "//clockwork/examples/demo_system/localization:pose_filter",
         "//clockwork/examples/demo_system/localization:pose_message_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
         "//jewels/container/tap:var_array",
         "//jewels/math:constants",
+        "//jewels/memory:aligned_storage",
         "//jewels/memory:memory_resource",
+        "//jewels/uuid",
     ],
 )
 
@@ -88,6 +98,9 @@ clk(
         "lidar_message_clk_cc.cc",
         "lidar_message_clk_cc.hh",
         "lidar_message_clk_cc.inl",
+        "lidar_message_clk_cc_types.cc",
+        "lidar_message_clk_cc_types.hh",
+        "lidar_message_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/examples/demo_system/localization:pose_message_clk_cc"],
     generate = ["cpp"],
@@ -101,6 +114,9 @@ clk(
         "lidar_state_clk_cc.cc",
         "lidar_state_clk_cc.hh",
         "lidar_state_clk_cc.inl",
+        "lidar_state_clk_cc_types.cc",
+        "lidar_state_clk_cc_types.hh",
+        "lidar_state_clk_cc_types.inl",
     ],
     cpp_deps = [":lidar_message_clk_cc"],
     generate = ["cpp"],

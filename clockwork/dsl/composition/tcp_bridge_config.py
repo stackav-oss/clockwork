@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to TCP Bridge Config schemas.
@@ -38,5 +38,5 @@ TcpBridgeServerConfig: Final[type[tcp_bridge_config_proto.TcpBridgeServerConfig]
 
 
 TcpBridgeConfig: Final[type[tcp_bridge_config_proto.TcpBridgeConfig]] = tachyon_dyn.get_instantiation_dataclass(
-    _MODULE.context, _MODULE, "TcpBridgeConfig", max_bridge_clients=1024, max_bridge_servers=512
+    _MODULE.context, _MODULE, "TcpBridgeConfig", max_bridge_clients=1400, max_bridge_servers=777
 )[0]

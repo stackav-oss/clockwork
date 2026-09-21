@@ -1,8 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
@@ -17,7 +18,7 @@
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
@@ -30,6 +31,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <fcntl.h>
 #include <functional>
 #include <memory>
@@ -37,6 +39,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -74,9 +77,9 @@ TEST_CASE("setup_states")
   const jewels::memory::MemoryResource memres_sys{std::pmr::get_default_resource()};
 
   MemResMap memres_map;
-  memres_map[state_1_memres] = std::make_shared<jewels::memory::MonitorResource>();
-  memres_map[state_2_memres] = std::make_shared<jewels::memory::MonitorResource>();
-  memres_map[state_4_memres] = std::make_shared<jewels::memory::MonitorResource>();
+  memres_map[state_1_memres] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(0, "state_1_memres");
+  memres_map[state_2_memres] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(0, "state_2_memres");
+  memres_map[state_4_memres] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(0, "state_4_memres");
   const jewels::memory::MemoryResource state_1_memres_v{memres_map[state_1_memres].get()};
   const jewels::memory::MemoryResource state_2_memres_v{memres_map[state_2_memres].get()};
   const jewels::memory::MemoryResource state_4_memres_v{memres_map[state_4_memres].get()};
@@ -178,6 +181,64 @@ TEST_CASE("setup_states")
       casing,
       std::span{test_data_sources},
       first_message_cache));
+  }
+
+  SECTION("with external state snapshot data")
+  {
+    const auto state_id = jewels::Uuid<common::StateInstanceId>::random_uuid();
+    const auto state_repr_id = jewels::Uuid<RepresentationTag>::random_uuid();
+    const auto snapshot_repr_id = jewels::Uuid<RepresentationTag>::random_uuid();
+    const std::vector<std::byte> snapshot_data(sizeof(uint64_t));
+    std::vector<Tappy<common::StateInstanceDescription<>>> test_configs;
+    test_configs.emplace_back();
+    test_configs.back().get_mutable_representation_id() = state_repr_id;
+    test_configs.back().get_mutable_state_instance_id() = state_id;
+    test_configs.back().get_underlying_instance_path_name().set_truncate("external_state");
+    test_configs.back().set_snapshot_representation_id(snapshot_repr_id);
+    test_configs.back().reset_maybe_buffer_layout();
+    test_configs.back().set_maybe_memory_resource(state_1_memres);
+    test_configs.back().set_init_data_source(0);
+
+    std::vector<Tappy<common::DataSource<>>> test_data_sources = {TapInit<Tachyon<common::DataSource<4096>>>{
+      .representation_id = snapshot_repr_id,
+      .data_source_type = common::DataSourceType::log_first_message,
+      .source_path_or_name = jewels::tap::VarString<4096>{"external_state_snapshot"},
+      .fallback_source = common::no_fallback_data_source_sentinel}};
+    FirstMessageCache test_first_message_cache(memres_sys);
+    test_first_message_cache["external_state_snapshot"].assign(snapshot_data.begin(), snapshot_data.end());
+
+    SECTION("restoration succeeds")
+    {
+      REQUIRE_CALL(
+        casing,
+        try_instantiate_state_from_snapshot(
+          state_id, state_repr_id, snapshot_repr_id, state_1_memres_v, ANY(std::span<const std::byte>)))
+        .RETURN(AbstractCasing::Outcome{AbstractCasing::OutcomeEnum::success});
+      CHECK(setup_states(
+        test_configs,
+        memres_sys,
+        memres_map,
+        channel_factory,
+        casing,
+        std::span{test_data_sources},
+        test_first_message_cache));
+    }
+    SECTION("conversion fails")
+    {
+      REQUIRE_CALL(
+        casing,
+        try_instantiate_state_from_snapshot(
+          state_id, state_repr_id, snapshot_repr_id, state_1_memres_v, ANY(std::span<const std::byte>)))
+        .RETURN(AbstractCasing::Outcome{AbstractCasing::OutcomeEnum::init_failure});
+      CHECK(!setup_states(
+        test_configs,
+        memres_sys,
+        memres_map,
+        channel_factory,
+        casing,
+        std::span{test_data_sources},
+        test_first_message_cache));
+    }
   }
 
   SECTION("with init data, matching representation")

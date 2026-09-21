@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
@@ -30,6 +31,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ratio>
@@ -148,7 +150,8 @@ TEST_CASE("Log with persistent channels")
     REQUIRE(filesystem.remove(test_log_path / "stack_log_metadata.pbtxt"));
   }
 
-  Reader reader{memory_resource, test_log_path};
+  const auto chunk_reader_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+  Reader reader{memory_resource, test_log_path, chunk_reader_factory};
 
   SECTION("Check metadata")
   {
@@ -480,7 +483,8 @@ TEST_CASE("Log with repeated persistent channels")
     REQUIRE(filesystem.remove(test_log_path / "stack_log_metadata.pbtxt"));
   }
 
-  Reader reader{memory_resource, test_log_path.string()};
+  const auto chunk_reader_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+  Reader reader{memory_resource, test_log_path.string(), chunk_reader_factory};
 
   SECTION("Check metadata")
   {

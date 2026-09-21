@@ -1,8 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/v1/writer_config.pb.h"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -14,6 +15,7 @@
 #include <google/protobuf/text_format.h>
 
 #include <fstream>
+#include <memory>
 #include <memory_resource>
 #include <span>
 #include <string>
@@ -28,26 +30,39 @@ TEST_CASE("File URIs")
 {
   constexpr auto sub_dir_name = "sub_dir";
   constexpr auto log_file_name = "file.slog";
+  constexpr auto sub_sub_dir_name = "sub_sub_dir";
+  constexpr auto sub_sub_dir_file_name = "test.xxx";
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   ChunkReaderWriterFactory factory{memory_resource};
   const jewels::testing::TmpDirectoryGuard test_dir;
   const auto sub_dir_path = test_dir.get_path() / sub_dir_name;
   const auto log_file_path = sub_dir_path / log_file_name;
+  const auto sub_sub_dir_path = sub_dir_path / sub_sub_dir_name;
+  const auto sub_sub_dir_file_path = sub_dir_path / sub_sub_dir_name / sub_sub_dir_file_name;
 
   REQUIRE(factory.make_chunk_writer(sub_dir_path.string()));
   REQUIRE(factory.make_chunk_reader(sub_dir_path.string()));
   REQUIRE(factory.exists(sub_dir_path.string()) == false);
   REQUIRE(factory.list_log_files(sub_dir_path.string()) == jewels::unexpected(LogError::no_such_file_or_directory));
-  REQUIRE(factory.create_directories(sub_dir_path.string()));
-  REQUIRE(factory.exists(sub_dir_path.string()) == true);
-  REQUIRE(factory.list_log_files(sub_dir_path.string()) == std::pmr::vector<std::pmr::string>{});
-  std::ofstream ofs{std::string(log_file_path)};
-  REQUIRE(ofs);
-  ofs.close();
+  REQUIRE(factory.list_subdirs(sub_dir_path.string()) == jewels::unexpected(LogError::no_such_file_or_directory));
+  REQUIRE(factory.create_directories(sub_sub_dir_path.string()));
+  std::ofstream ofs1{std::string(sub_sub_dir_file_path)};
+  REQUIRE(ofs1);
+  ofs1.close();
+  REQUIRE(factory.exists(sub_sub_dir_path.string()) == true);
+  REQUIRE(factory.list_log_files(sub_dir_path.string()) == std::pmr::vector<LogUri>{});
+  std::ofstream ofs2{std::string(log_file_path)};
+  REQUIRE(ofs2);
+  ofs2.close();
   REQUIRE(
     factory.list_log_files(sub_dir_path.string()) ==
-    std::pmr::vector<std::pmr::string>{std::pmr::string{log_file_path.string()}});
+    std::pmr::vector<LogUri>{LogUri::try_make(log_file_path.string(), memory_resource).value()});
+  REQUIRE(factory.list_subdirs(sub_dir_path.string()));
+  REQUIRE(factory.list_subdirs(sub_dir_path.string())->size() == 1U);
+  REQUIRE(
+    factory.list_subdirs(sub_dir_path.string()) ==
+    std::pmr::vector<LogUri>{LogUri::try_make(sub_sub_dir_path.string(), memory_resource).value()});
 }
 
 TEST_CASE("Read/Write text proto")

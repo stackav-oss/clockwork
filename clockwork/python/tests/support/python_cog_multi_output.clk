@@ -1,0 +1,80 @@
+use clockwork::python::python_state::{PythonState};
+use clockwork::python::tests::support::test_config;
+use clockwork::python::tests::support::test_input_message;
+use clockwork::python::tests::support::test_output_message;
+use clockwork::python::tests::support::test_state;
+
+// Python cog to exercise proposed multi-message output syntax.
+cog PythonCog
+{
+  configs
+  {
+    config: Tappy<test_config::TestConfig>;
+  }
+
+  states
+  {
+    python_state: PythonState
+    {
+      mutable: true;
+    }
+    state: Tappy<test_state::TestState>
+    {
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    input1: Tappy<test_input_message::TestInputMessage>;
+    input2: Tappy<test_input_message::TestInputMessage>;
+  }
+
+  outputs
+  {
+    output1: Tappy<test_output_message::TestOutputMessage>
+    {
+      max_msgs_per_exec: 4;
+    }
+    output2: Tappy<test_output_message::TestOutputMessage>
+    {
+      max_msgs_per_exec: 4;
+    }
+  }
+
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=1);
+    execute when: new_input1 or new_input2;
+  }
+
+  python
+  {
+    dial: "clockwork.python.tests.support.py_python_cog_multi_output_dial.PythonCogDial";
+    impl: "clockwork.python.tests.support.py_python_cog_impl.PythonCogImpl";
+  }
+}
+
+cpp_target python_cog_multi_output
+{
+  options
+  {
+    namespace clockwork::python::tests;
+  }
+
+  python_cog PythonCog;
+}
+
+py_target py_python_cog_multi_output_dial
+{
+  python_cog_dial PythonCog
+  {
+    configs.config: "clockwork.python.tests.support.test_config_clk_py.TestConfig";
+    states.state: "clockwork.python.tests.support.test_state_clk_nb.TestState";
+    inputs.input1: "clockwork.python.tests.support.test_input_message_clk_py.TestInputMessage";
+    inputs.input2: "clockwork.python.tests.support.test_input_message_clk_nb.TestInputMessage";
+    outputs.output1: "clockwork.python.tests.support.test_output_message_clk_py.TestOutputMessage";
+    outputs.output2: "clockwork.python.tests.support.test_output_message_clk_nb.TestOutputMessage";
+  }
+}

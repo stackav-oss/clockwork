@@ -1,7 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/hash/md5.hh"
+
+#include <openssl/md5.h>
 
 #include <cstdint>
 

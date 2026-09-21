@@ -1,0 +1,7 @@
+use clockwork::dsl::aligner::gen::tests::support::test_system_boxes;
+use clockwork::dsl::aligner::gen::tests::support::test_channel_policies;
+
+system_target aligner_test_system
+{
+  box: test_system_boxes::TestAlignerSystem;
+}

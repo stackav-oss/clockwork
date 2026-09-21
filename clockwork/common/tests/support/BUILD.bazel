@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -9,41 +9,15 @@ package(
 )
 
 cc_library(
-    name = "dummy_cog_queue",
-    srcs = ["dummy_cog_queue.cc"],
-    hdrs = ["dummy_cog_queue.hh"],
-    deps = [
-        "//clockwork/common:abstract_cog_queue",
-        "//clockwork/common:cog_envelope",
-        "//jewels/std:expected",
-    ],
-)
-
-cc_library(
-    name = "dummy_timer",
-    srcs = ["dummy_timer.cc"],
-    hdrs = ["dummy_timer.hh"],
-    deps = [
-        "//clockwork/common:abstract_timer",
-        "//jewels/time:sync_time",
-    ],
-)
-
-cc_library(
     name = "fake_cog",
     hdrs = ["fake_cog.hh"],
     deps = [
         "//clockwork/common:abstract_cog",
         "//clockwork/common:forward",
-        "//clockwork/common:process_description_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/container/tap:var_string",
-        "//jewels/filesystem:file",
-        "//jewels/memory:memory_resource",
+        "//jewels/callsig:outparam",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "//jewels/testing:tmp_directory_guard",
-        "//jewels/uuid",
+        "//jewels/time:sync_time",
     ],
 )
 
@@ -53,9 +27,6 @@ cc_library(
     deps = [
         "//clockwork/common:abstract_epoll_manager",
         "//jewels/filesystem:error_code",
-        "//jewels/filesystem:file_descriptor",
-        "//jewels/memory:memory_resource",
-        "//jewels/memory:pmr_shared_ptr",
         "//jewels/std:expected",
     ],
 )
@@ -69,7 +40,7 @@ cc_library(
         "//clockwork/common:abstract_cog",
         "//clockwork/common:abstract_cog_queue",
         "//clockwork/common:cog_envelope",
-        "//clockwork/common:cog_execution_error_clk_cc",
+        "//jewels/callsig:outparam",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/time:sync_time",

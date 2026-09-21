@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -12,6 +12,8 @@ cc_binary(
         "//clockwork/logging/readers:abstract_log_reader",
         "//clockwork/logging/readers:log_reader_factory",
         "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/log_cerr",
         "//jewels/math:constants",
         "//jewels/std:expected",

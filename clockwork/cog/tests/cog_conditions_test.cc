@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_conditions.hh"
@@ -8,9 +8,8 @@
 #include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
@@ -25,11 +24,11 @@
 #include <array>
 #include <chrono>
 #include <cstdint>
-#include <cstdio>
 #include <iterator>
 #include <limits>
 #include <memory_resource>
 #include <string_view>
+#include <sys/types.h>
 #include <tuple>
 #include <utility>
 
@@ -82,18 +81,17 @@ struct CogConditionsFixture // NOLINT(clang-analyzer-optin.performance.Padding).
   static constexpr auto policy_count = sizeof...(Policies);
   using ConditionsType = CogConditions<Policies...>;
   using PinionDifferenceType = typename ConditionsType::PinionDifferenceType;
-  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>...>;
+  using ChannelsTuple =
+    std::tuple<std::shared_ptr<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>>...>;
   using PublishersArray = std::array<pinion::PublisherHandle, policy_count>;
-  using SubscribersArray = std::array<pinion::SubscriberHandle, policy_count>;
 
   CogConditionsFixture()
     : resource(std::pmr::new_delete_resource()),
       channels(
-        make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>...>(resource)),
+        std::make_tuple(
+          std::make_shared<InMemoryChannel<typename Policies::MsgType, Policies::channel_size, false>>(resource)...)),
       publishers(
-        std::apply([](auto&... channel) -> PublishersArray { return {channel.make_publisher(1)...}; }, channels)),
-      subscribers(
-        std::apply([](auto&... channel) -> SubscribersArray { return {channel.make_subscriber()...}; }, channels)),
+        std::apply([](auto&... channel) -> PublishersArray { return {channel->make_publisher(1)...}; }, channels)),
       conditions(resource)
   {
   }
@@ -102,7 +100,6 @@ struct CogConditionsFixture // NOLINT(clang-analyzer-optin.performance.Padding).
   TestCog cog;
   ChannelsTuple channels;
   PublishersArray publishers;
-  SubscribersArray subscribers;
   ConditionsType conditions;
 
   /// Publish the message and return a pointer to the published message.
@@ -118,7 +115,7 @@ struct CogConditionsFixture // NOLINT(clang-analyzer-optin.performance.Padding).
   template <std::size_t i>
   [[nodiscard]] auto make_iterator(size_t index) const
   {
-    return std::next(std::get<i>(subscribers).available().begin(), static_cast<ssize_t>(index));
+    return std::next(std::get<i>(channels)->available().begin(), static_cast<ssize_t>(index));
   }
 };
 
@@ -163,11 +160,11 @@ TEST_CASE_METHOD(ConditionPolicyFixture, "basic operation", "[cog_conditions]")
   {
     constexpr auto unknown_id =
       jewels::Uuid<common::EndpointClassId>::from_string("b5e2c9a9-e351-4877-b5cc-77e76a7ebe63").value();
-    REQUIRE_FALSE(conditions.set_handle(unknown_id, std::get<0>(channels).make_subscriber()));
+    REQUIRE_FALSE(conditions.set_handle(unknown_id, std::get<0>(channels)));
   }
 
-  REQUIRE(conditions.set_handle(NewInputPolicy::endpoint_id, std::get<0>(channels).make_subscriber()));
-  REQUIRE(conditions.set_handle(AnyInputPolicy::endpoint_id, std::get<1>(channels).make_subscriber()));
+  REQUIRE(conditions.set_handle(NewInputPolicy::endpoint_id, std::get<0>(channels)));
+  REQUIRE(conditions.set_handle(AnyInputPolicy::endpoint_id, std::get<1>(channels)));
   REQUIRE(conditions.validate());
 
   // No active conditions before receiving any messages

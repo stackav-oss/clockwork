@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
@@ -24,7 +24,6 @@
 #include <cstring>
 #include <fcntl.h>
 #include <fstream> // IWYU pragma: keep
-#include <functional>
 #include <iostream>
 #include <iterator>
 #include <limits>
@@ -199,7 +198,7 @@ try_validate_record_trailer(std::span<const std::byte> record_data)
       "File data too small for schema record need: {}, size: {}", offset + record_size, file_data.size());
     return jewels::unexpected(jewels::MonoError{});
   }
-  const std::span record_span{&gsl::at(file_data, static_cast<ssize_t>(offset)), record_size};
+  const std::span record_span{&jewels::at(file_data, static_cast<ssize_t>(offset)), record_size};
   SchemaRecordHeader header{};
   std::memcpy(&header, record_span.data(), schema_record_header_size);
   if (!try_validate_record_header(header.header, record_size, RecordType::schema))
@@ -265,7 +264,7 @@ try_validate_record_trailer(std::span<const std::byte> record_data)
       "File data too small for channel record need: {}, size: {}", offset + record_size, file_data.size());
     return jewels::unexpected(jewels::MonoError{});
   }
-  const std::span record_span{&gsl::at(file_data, static_cast<ssize_t>(offset)), record_size};
+  const std::span record_span{&jewels::at(file_data, static_cast<ssize_t>(offset)), record_size};
   ChannelRecordHeader header{};
   std::memcpy(&header, record_span.data(), channel_record_header_size);
   if (!try_validate_record_header(header.header, record_size, RecordType::channel))
@@ -339,7 +338,7 @@ try_validate_record_trailer(std::span<const std::byte> record_data)
       "File data too small for end log file record need: {}, size: {}", offset + record_size, file_data.size());
     return jewels::unexpected(jewels::MonoError{});
   }
-  const std::span record_span{&gsl::at(file_data, static_cast<ssize_t>(offset)), record_size};
+  const std::span record_span{&jewels::at(file_data, static_cast<ssize_t>(offset)), record_size};
   EndLogFileRecordHeader header{};
   std::memcpy(&header, record_span.data(), end_log_file_record_header_size);
   if (!try_validate_record_header(header.header, record_size, RecordType::end_log_file))
@@ -425,7 +424,7 @@ corrupt_log_file(std::string_view file_path, size_t offset, std::string_view dat
       file_data.size());
     return jewels::unexpected(jewels::MonoError{});
   }
-  const std::span record_header_span{&gsl::at(file_data, static_cast<ssize_t>(offset)), message_record_header_size};
+  const std::span record_header_span{&jewels::at(file_data, static_cast<ssize_t>(offset)), message_record_header_size};
   MessageRecordHeader record_header{};
   std::memcpy(&record_header, record_header_span.data(), message_record_header_size);
   const auto record_size = message_record_header_size + msg.header.size() + msg.data.size() + record_trailer_size;
@@ -487,7 +486,7 @@ corrupt_log_file(std::string_view file_path, size_t offset, std::string_view dat
     return jewels::unexpected(jewels::MonoError{});
   }
   const auto header_offset = offset + message_record_header_size;
-  const std::span header_span{&gsl::at(file_data, static_cast<ssize_t>(header_offset)), msg.header.size()};
+  const std::span header_span{&jewels::at(file_data, static_cast<ssize_t>(header_offset)), msg.header.size()};
   if (
     (header_span.size() != msg.header.size()) ||
     (!msg.header.empty() && (std::memcmp(header_span.data(), msg.header.data(), msg.header.size()) != 0)))
@@ -497,7 +496,7 @@ corrupt_log_file(std::string_view file_path, size_t offset, std::string_view dat
     return jewels::unexpected(jewels::MonoError{});
   }
   const auto data_offset = header_offset + msg.header.size();
-  const std::span data_span{&gsl::at(file_data, static_cast<ssize_t>(data_offset)), msg.data.size()};
+  const std::span data_span{&jewels::at(file_data, static_cast<ssize_t>(data_offset)), msg.data.size()};
   if (std::memcmp(data_span.data(), msg.data.data(), msg.data.size()) != 0)
   {
     jewels::log_cerr_error("Invalid message data");
@@ -506,7 +505,7 @@ corrupt_log_file(std::string_view file_path, size_t offset, std::string_view dat
   const std::array checksum_spans = {
     std::as_bytes(record_header_span), std::as_bytes(header_span), std::as_bytes(data_span)};
   const auto trailer_offset = data_offset + msg.data.size();
-  const std::span trailer_span{&gsl::at(file_data, static_cast<ssize_t>(trailer_offset)), record_trailer_size};
+  const std::span trailer_span{&jewels::at(file_data, static_cast<ssize_t>(trailer_offset)), record_trailer_size};
   if (!try_validate_record_trailer(checksum_spans, std::as_bytes(trailer_span)))
   {
     return jewels::unexpected(jewels::MonoError{});

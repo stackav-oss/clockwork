@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -51,6 +51,19 @@ py_test(
     ],
 )
 
+py_test(
+    name = "formatter_test",
+    srcs = [
+        "formatter_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:fmt_lib",
+    ],
+)
+
 cc_test(
     name = "hello_udp_not_var_packet_test",
     srcs = ["hello_udp_not_var_packet_test.cc"],
@@ -59,7 +72,6 @@ cc_test(
         "//clockwork/dsl/tests/support:hello_udp_not_var_packet",
         "//clockwork/pinion:incoming_udp",
         "//clockwork/pinion:outgoing_udp",
-        "//jewels/filesystem:error_code",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -233,7 +245,9 @@ cc_test(
     name = "tapmsg_test",
     srcs = ["tapmsg_test.cc"],
     deps = [
+        "//clockwork:repr_iface",
         "//clockwork/dsl/tests/support:tapmsg",
+        "//jewels/container/tap:optional",
         "@catch2//:catch2_main",
     ],
 )
@@ -243,6 +257,17 @@ cc_test(
     srcs = ["taptags_test.cc"],
     deps = [
         "//clockwork/dsl/tests/support:taptags_clk_cc",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "tensor_test",
+    srcs = ["tensor_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/dsl/tests/support:tensor_msg_clk_cc",
+        "//jewels/container/tap:tensor",
         "@catch2//:catch2_main",
     ],
 )

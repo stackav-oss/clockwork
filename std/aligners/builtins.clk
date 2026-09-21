@@ -1,0 +1,17 @@
+#![generate()]
+
+use std::traits::{And};
+
+// Spec values can be composed with 'and': minimize(...) and maximize(...).
+impl And for Spec
+{
+  type Output = Spec;
+}
+
+// Compute temporal spread of timestamps relative to a reference time
+fn spread(ref,
+times...
+)
+{
+  sum(map(fn(t)|t - ref|, times))
+}

@@ -1,22 +1,23 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
 """Unit tests for tachyon_layout_reg module."""
 
 from collections.abc import Sequence
+from typing import override
 
 import pytest
 from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.ir import clkbuiltins, typesys
 from clockwork.dsl.serialization import tachyon_layout, tachyon_layout_reg, tachyon_reg
-from typing_extensions import override
 
 
 # Create a test type that isn't pre-registered in the registry
 class MockType(typesys.TypeVal):
     """Test type for unit tests."""
 
+    # pyrefly: ignore[missing-super-call] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     def __init__(self, name: str) -> None:
         """Create test type."""
         self.test_name = name

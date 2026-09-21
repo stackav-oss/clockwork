@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Data model for metadata for Tachyon representations.
@@ -28,6 +28,7 @@ InitialValue: TypeAlias = "SignedInitialValue | UnsignedInitialValue | FloatInit
 
 BUILT_IN_UUID_ADDED_IN_VERSION: Final = 2
 ENUM_UNDERLYING_TYPE_ADDED_IN_VERSION: Final = 3
+ENFORCE_VERSION_CHANGE_WHEN_ADDING_FIELDS_AND_VALUES_VERSION: Final = 4
 
 
 def _check_for_unexpected_history_changes(  # noqa: PLR0913 (mitigated by kwonly args)
@@ -81,7 +82,7 @@ class TachyonMetadata:
 
     outer_type_id: int
     types: Sequence[ClkType]
-    version: int = ENUM_UNDERLYING_TYPE_ADDED_IN_VERSION
+    version: int = ENFORCE_VERSION_CHANGE_WHEN_ADDING_FIELDS_AND_VALUES_VERSION
     python_required: bool = False
 
     def _is_legacy_wire_compatible(self, other: TachyonMetadata) -> bool:
@@ -144,7 +145,9 @@ class TachyonMetadata:
             msg = f"Expected outer type to be a schema for {self_outer_type.fqn}"
             raise TypeError(msg)
 
-        self_outer_type.check_for_unexpected_schema_changes(self.types, incoming_outer_type, incoming.types)
+        self_outer_type.check_for_unexpected_schema_changes(
+            self.types, incoming_outer_type, incoming.types, self.version
+        )
 
 
 @dataclass(slots=True)
@@ -275,11 +278,39 @@ class BuiltInType:
                     return False
         return True
 
-    def check_for_unexpected_schema_changes(  # noqa: C901 (disabling complexity to keep checks together)
+    def _check_allowed_schema_changes(
         self,
         self_types: Sequence[ClkType],
         incoming: ClkType,
         incoming_types: Sequence[ClkType],
+        metadata_version: int,
+        name: str,
+    ) -> None:
+        """Check changes allowed during a schema evolution."""
+        if self.fqn == ".Bitset":
+            if (
+                not isinstance(incoming, BuiltInType)
+                or incoming.fqn != self.fqn
+                or incoming.arguments != self.arguments
+            ):
+                msg = f"Unsupported Bitset size change for {name}"
+                raise ValueError(msg)
+            return
+        self_underlying_type = self.get_lowest_underlying_type(self_types, name)
+        incoming_underlying_type = (
+            incoming.get_lowest_underlying_type(incoming_types, name) if isinstance(incoming, BuiltInType) else incoming
+        )
+        if isinstance(self_underlying_type, (SchemaType, ClkEnumType)):
+            self_underlying_type.check_for_unexpected_schema_changes(
+                self_types, incoming_underlying_type, incoming_types, metadata_version, True, name
+            )
+
+    def check_for_unexpected_schema_changes(  # noqa: PLR0913 # Parameters match the ClkType interface.
+        self,
+        self_types: Sequence[ClkType],
+        incoming: ClkType,
+        incoming_types: Sequence[ClkType],
+        metadata_version: int,
         allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -292,6 +323,7 @@ class BuiltInType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            metadata_version: Schema metadata version.
             allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
@@ -302,41 +334,32 @@ class BuiltInType:
             name = self.fqn
 
         if allow_changes:
-            self_underlying_type = self.get_lowest_underlying_type(self_types, name)
-            incoming_underlying_type = (
-                incoming.get_lowest_underlying_type(incoming_types, name)
-                if isinstance(incoming, BuiltInType)
-                else incoming
-            )
-            if isinstance(self_underlying_type, (SchemaType, ClkEnumType)):
-                self_underlying_type.check_for_unexpected_schema_changes(
-                    self_types, incoming_underlying_type, incoming_types, True, name
+            self._check_allowed_schema_changes(self_types, incoming, incoming_types, metadata_version, name)
+            return
+        if not isinstance(incoming, BuiltInType):
+            msg = f"Unsupported field type change for {name}"
+            raise TypeError(msg)
+
+        if self.fqn != incoming.fqn:
+            msg = f"Unsupported field type change for {name}: {self.fqn} -> {incoming.fqn}"
+            raise ValueError(msg)
+
+        if len(self.arguments) != len(incoming.arguments):
+            msg = f"Incompatible arguments for {name}"
+            raise ValueError(msg)
+
+        for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=True):
+            if isinstance(self_arg, str):
+                if not isinstance(incoming_arg, str) or self_arg != incoming_arg:
+                    msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
+                    raise ValueError(msg)
+            else:
+                if not isinstance(incoming_arg, int):
+                    msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
+                    raise TypeError(msg)
+                self_types[self_arg].check_for_unexpected_schema_changes(
+                    self_types, incoming_types[incoming_arg], incoming_types, metadata_version, False, name
                 )
-        else:
-            if not isinstance(incoming, BuiltInType):
-                msg = f"Unsupported field type change for {name}"
-                raise TypeError(msg)
-
-            if self.fqn != incoming.fqn:
-                msg = f"Unsupported field type change for {name}: {self.fqn} -> {incoming.fqn}"
-                raise ValueError(msg)
-
-            if len(self.arguments) != len(incoming.arguments):
-                msg = f"Incompatible arguments for {name}"
-                raise ValueError(msg)
-
-            for self_arg, incoming_arg in zip(self.arguments, incoming.arguments, strict=True):
-                if isinstance(self_arg, str):
-                    if not isinstance(incoming_arg, str) or self_arg != incoming_arg:
-                        msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
-                        raise ValueError(msg)
-                else:
-                    if not isinstance(incoming_arg, int):
-                        msg = f"Unsupported parameter change for {name}: {self_arg} -> {incoming_arg}"
-                        raise TypeError(msg)
-                    self_types[self_arg].check_for_unexpected_schema_changes(
-                        self_types, incoming_types[incoming_arg], incoming_types, False, name
-                    )
 
 
 @dataclass(slots=True)
@@ -380,12 +403,17 @@ class SchemaType:
         return self.hash
 
     def _validate_modified_field(
-        self, self_fields: dict[int, SchemaField], incoming_field: SchemaField, name: str
+        self,
+        self_fields: dict[int, SchemaField],
+        self_added_fields: dict[int, SchemaField],
+        incoming_field: SchemaField,
+        name: str,
     ) -> None:
         """Check modified fields against the history.
 
         Args:
             self_fields: Fields in this type by field number.
+            self_added_fields: Fields potentially added to this type by field number.
             incoming_field: Incoming modified schema field.
             name: Name to use in exception strings.
 
@@ -395,7 +423,9 @@ class SchemaType:
         self_field_num = incoming_field.num
         while self_field_num in self.became:
             self_field_num = self.became[self_field_num]
-        if self_field_num not in self_fields and self_field_num not in self.removed:
+        if self_field_num in self_fields:
+            self_added_fields.pop(self_field_num, 0)
+        elif self_field_num not in self.removed:
             msg = f"Field number {self_field_num} ({incoming_field.name}) removed from {name} without updating history"
             raise ValueError(msg)
 
@@ -430,11 +460,12 @@ class SchemaType:
                     return False
         return True
 
-    def check_for_unexpected_schema_changes(
+    def check_for_unexpected_schema_changes(  # noqa: C901 (disabling complexity to keep checks together)
         self,
         self_types: Sequence[ClkType],
         incoming: ClkType,
         incoming_types: Sequence[ClkType],
+        metadata_version: int,
         _allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -447,6 +478,7 @@ class SchemaType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            metadata_version: Schema metadata version.
             _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
@@ -478,6 +510,7 @@ class SchemaType:
         )
 
         self_fields = {field.num: field for field in self.fields}
+        self_added_fields = {field.num: field for field in self.fields}
 
         # Allow field type changes if the version number has changed or if the incoming type is not
         # the same as this type due to a parameter change
@@ -496,14 +529,25 @@ class SchemaType:
                         self_types,
                         incoming_types[incoming_field.type_id],
                         incoming_types,
+                        metadata_version,
                         allow_changes,
                         incoming_field_name,
                     )
+                self_added_fields.pop(incoming_field.num, 0)
             elif self.version == incoming.version:
                 msg = f"Unsupported field removal: {incoming_field.name} removed from {name}"
                 raise ValueError(msg)
             else:
-                self._validate_modified_field(self_fields, incoming_field, name)
+                self._validate_modified_field(self_fields, self_added_fields, incoming_field, name)
+
+        if (
+            self_added_fields
+            and self.version == incoming.version
+            and metadata_version >= ENFORCE_VERSION_CHANGE_WHEN_ADDING_FIELDS_AND_VALUES_VERSION
+        ):
+            added_field_name = next(iter(self_added_fields.values())).name
+            msg = f"Unsupported field addition: {added_field_name} added to {name} without increasing version"
+            raise ValueError(msg)
 
 
 @dataclass(slots=True)
@@ -578,13 +622,19 @@ class ClkEnumType:
             self.hash = result.digest()
         return self.hash
 
-    def _validate_modified_value(self, self_values: dict[int, EnumValue], incoming_value: EnumValue, name: str) -> None:
+    def _validate_modified_value(
+        self,
+        self_values: dict[int, EnumValue],
+        self_added_values: dict[int, EnumValue],
+        incoming_value: EnumValue,
+        name: str,
+    ) -> None:
         """Check value changes against the history.
 
         Args:
             self_values: Values in this type by value number.
+            self_added_values: Values potentially added to this type by value number.
             incoming_value: Incoming modified enum value.
-            allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
         Raises:
@@ -593,7 +643,9 @@ class ClkEnumType:
         self_value_num = incoming_value.num
         while self_value_num in self.became:
             self_value_num = self.became[self_value_num]
-        if self_value_num not in self_values and self_value_num not in self.removed:
+        if self_value_num in self_values:
+            self_added_values.pop(self_value_num, 0)
+        elif self_value_num not in self.removed:
             msg = f"Value number {self_value_num} ({incoming_value.name}) removed from {name} without updating history"
             raise ValueError(msg)
 
@@ -612,11 +664,12 @@ class ClkEnumType:
         """
         return isinstance(incoming, ClkEnumType) and self.enum_uuid == incoming.enum_uuid
 
-    def check_for_unexpected_schema_changes(  # noqa: C901 (disabling complexity to keep checks together)
+    def check_for_unexpected_schema_changes(  # noqa: C901, PLR0912 (disabling complexity to keep checks together)
         self,
         _self_types: Sequence[ClkType],
         incoming: ClkType,
         _incoming_types: Sequence[ClkType],
+        metadata_version: int,
         _allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -626,6 +679,7 @@ class ClkEnumType:
             _self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             _incoming_types: Incoming tachyon metadata types.
+            metadata_version: Schema metadata version.
             _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
@@ -658,6 +712,7 @@ class ClkEnumType:
             msg = f"Unsupported schema change for {name}: num values went from {len(incoming.values)} to {len(self.values)}"
 
         self_values = {value.num: value for value in self.values}
+        self_added_values = {value.num: value for value in self.values}
 
         for incoming_value in incoming.values:
             incoming_value_name = name + f".{incoming_value.name}"
@@ -671,11 +726,21 @@ class ClkEnumType:
                     if self_value.value != incoming_value.value and self.version == incoming.version:
                         msg = f"Unsupported enum value change for {incoming_value_name} from {incoming_value.value} to {self_value.value}"
                         raise ValueError(msg)
+                self_added_values.pop(incoming_value.num, 0)
             elif self.version == incoming.version:
                 msg = f"Unsupported value removal: {incoming_value.name} removed from {name}"
                 raise ValueError(msg)
             else:
-                self._validate_modified_value(self_values, incoming_value, name)
+                self._validate_modified_value(self_values, self_added_values, incoming_value, name)
+
+        if (
+            self_added_values
+            and self.version == incoming.version
+            and metadata_version >= ENFORCE_VERSION_CHANGE_WHEN_ADDING_FIELDS_AND_VALUES_VERSION
+        ):
+            added_value_name = next(iter(self_added_values.values())).name
+            msg = f"Unsupported value addition: {added_value_name} added to {name} without increasing version"
+            raise ValueError(msg)
 
 
 @dataclass(slots=True)
@@ -743,6 +808,7 @@ class TagType:
         _self_types: Sequence[ClkType],
         incoming: ClkType,
         _incoming_types: Sequence[ClkType],
+        _metadata_version: int,
         _allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -754,6 +820,7 @@ class TagType:
             _self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             _incoming_types: Incoming tachyon metadata types.
+            _metadata_version: Schema metadata version.
             _allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
@@ -804,11 +871,12 @@ class StrongType:
             self_types, incoming_types[incoming.underlying_type_id], incoming_types
         )
 
-    def check_for_unexpected_schema_changes(
+    def check_for_unexpected_schema_changes(  # noqa: PLR0913 (disabling complexity to keep checks together)
         self,
         self_types: Sequence[ClkType],
         incoming: ClkType,
         incoming_types: Sequence[ClkType],
+        metadata_version: int,
         allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -821,6 +889,7 @@ class StrongType:
             self_types: Self tachyon metadata types.
             incoming: Schema type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            metadata_version: Schema metadata version.
             allow_changes: Allow type changes.
             name: Name to use in exception strings.
 
@@ -836,7 +905,7 @@ class StrongType:
                 raise TypeError(msg)
 
             self_types[self.underlying_type_id].check_for_unexpected_schema_changes(
-                self_types, incoming_types[incoming.underlying_type_id], incoming_types, False, name
+                self_types, incoming_types[incoming.underlying_type_id], incoming_types, metadata_version, False, name
             )
 
 
@@ -908,11 +977,12 @@ class SoaType:
             self_types, incoming_types[incoming.schema_type_id], incoming_types
         )
 
-    def check_for_unexpected_schema_changes(
+    def check_for_unexpected_schema_changes(  # noqa: PLR0913 (disabling complexity to keep checks together)
         self,
         self_types: Sequence[ClkType],
         incoming: ClkType,
         incoming_types: Sequence[ClkType],
+        metadata_version: int,
         allow_changes: bool = False,
         name: str = "",
     ) -> None:
@@ -922,6 +992,7 @@ class SoaType:
             self_types: Self tachyon metadata types.
             incoming: Type being upgraded to this type.
             incoming_types: Incoming tachyon metadata types.
+            metadata_version: Schema metadata version.
             allow_changes: Allow parameter changes (like container size).
             name: Name to use in exception strings.
 
@@ -945,7 +1016,12 @@ class SoaType:
             # When allow_changes is True, container size can change but the underlying schema must be compatible
             # Check the underlying schema for compatibility
             self_types[self.schema_type_id].check_for_unexpected_schema_changes(
-                self_types, incoming_types[incoming.schema_type_id], incoming_types, True, f"{name} schema"
+                self_types,
+                incoming_types[incoming.schema_type_id],
+                incoming_types,
+                metadata_version,
+                True,
+                f"{name} schema",
             )
         else:
             # When allow_changes is False, require exact match including container size
@@ -957,7 +1033,12 @@ class SoaType:
 
             # Check the underlying schema for changes (strict)
             self_types[self.schema_type_id].check_for_unexpected_schema_changes(
-                self_types, incoming_types[incoming.schema_type_id], incoming_types, False, f"{name} schema"
+                self_types,
+                incoming_types[incoming.schema_type_id],
+                incoming_types,
+                metadata_version,
+                False,
+                f"{name} schema",
             )
 
 

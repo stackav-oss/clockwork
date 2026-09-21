@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -16,25 +16,63 @@
 #include <cstddef>
 #include <memory>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace clockwork
 {
 
+namespace detail
+{
+
+/// Trait to determine the handler type for a timer policy.
+///
+/// If the policy defines a HandlerType alias, that type is used.
+/// Otherwise, defaults to TimeSinceLastExecHandler<Policy>.
+template <typename Policy, typename = void>
+struct HandlerTypeOf
+{
+  using type = TimeSinceLastExecHandler<Policy>;
+};
+
+template <typename Policy>
+struct HandlerTypeOf<Policy, std::void_t<typename Policy::HandlerType>>
+{
+  using type = typename Policy::HandlerType;
+};
+
+/// Alias for the handler type associated with a timer policy.
+template <typename Policy>
+using handler_type_t = typename HandlerTypeOf<Policy>::type;
+
+/// True if the cog policy defines `static constexpr bool has_dynamic_timer = true`.
+/// Used by SimpleCog to conditionally pass the dynamic timer handler to make_dial().
+template <typename P, typename = void>
+inline constexpr bool has_dynamic_timer_v = false;
+
+template <typename P>
+inline constexpr bool has_dynamic_timer_v<P, std::void_t<decltype(P::has_dynamic_timer)>> = P::has_dynamic_timer;
+
+} // namespace detail
+
 /// Helper class to handle the set of cog timers. Maintains the necessary bookkeeping and
 /// conversion to dial input types based on the templated policies.
 ///
-/// @tparam Policies see TimeSinceLastExecHandler::Policy
+/// @tparam Policies Timer policy structs. Each must provide:
+///   - static constexpr auto endpoint_id: UUID for wiring
+///   - static constexpr std::string_view name: for error messages
+///   Policies for TimeSinceLastExecHandler additionally provide threshold_ns.
+///   Policies for DynamicTimerHandler provide using HandlerType = DynamicTimerHandler<Policy>.
 template <typename... Policies>
 class CogTimers
 {
 public:
   static constexpr auto policy_count = sizeof...(Policies);
   template <typename Policy>
-  using TimerPtr = std::shared_ptr<TimeSinceLastExecHandler<Policy>>;
+  using TimerPtr = std::shared_ptr<detail::handler_type_t<Policy>>;
   using PoliciesTuple = std::tuple<Policies...>;
   using TimersTuple = std::tuple<TimerPtr<Policies>...>;
-  using ConditionsTuple = std::tuple<typename TimeSinceLastExecHandler<Policies>::ConditionType...>;
+  using ConditionsTuple = std::tuple<typename detail::handler_type_t<Policies>::ConditionType...>;
 
   /// Construct from a pinion timer handle.
   explicit CogTimers(jewels::memory::MemoryResource resource) noexcept;
@@ -99,6 +137,11 @@ public:
   ///
   /// @param[in] now Current time
   void notify_expired_unit_test_timers(jewels::time::SyncTime now);
+
+  /// Get a reference to the underlying handler at the given tuple index.
+  /// @tparam index The index of the timer in the handlers tuple.
+  template <std::size_t index>
+  [[nodiscard]] auto& get_handler();
 
 private:
   /// Memory resource

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/offboard_log_reader.hh"
@@ -40,10 +40,11 @@ OffboardLogReader::OffboardLogReader(
   std::string_view log_uri,
   std::optional<LogInterval> maybe_log_interval,
   std::optional<RelativeInterval> maybe_relative_interval,
-  DecompressOption decompress_option)
+  DecompressOption decompress_option,
+  std::shared_ptr<offboard::ChunkReaderWriterFactory<>> chunk_reader_factory)
   : AbstractLogReader(log_uri, maybe_log_interval, maybe_relative_interval),
     memory_resource_(std::pmr::new_delete_resource()),
-    reader_(memory_resource_, log_uri),
+    reader_(memory_resource_, log_uri, std::move(chunk_reader_factory)),
     decompress_option_(decompress_option)
 {
 }
@@ -128,7 +129,7 @@ std::vector<TopicMetadata> OffboardLogReader::get_metadata()
   }
   std::vector<TopicMetadata> topic_metadata;
   topic_metadata.reserve(metadata_result.value()->size());
-  for (const auto metadata : std::views::values(*metadata_result.value()))
+  for (const auto& metadata : std::views::values(*metadata_result.value()))
   {
     topic_metadata.push_back(
       TopicMetadata{
@@ -138,6 +139,7 @@ std::vector<TopicMetadata> OffboardLogReader::get_metadata()
         .channel_type = metadata.channel_type,
         .schema_encoding = metadata.schema_encoding,
         .schema_definition = std::string{metadata.schema_definition},
+        .is_amended = metadata.is_amended,
       });
   }
   std::ranges::sort(topic_metadata, [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
@@ -158,6 +160,7 @@ std::vector<TopicMetadata> OffboardLogReader::get_metadata()
     .channel_type = metadata_result->channel_type,
     .schema_encoding = metadata_result->schema_encoding,
     .schema_definition = std::string{metadata_result->schema_definition},
+    .is_amended = metadata_result->is_amended,
   };
 }
 
@@ -210,7 +213,7 @@ LogExpected<LogTimestamp> OffboardLogReader::end_time()
   return interval_result.value().get_end_timestamp();
 }
 
-std::optional<LoggedMessage> OffboardLogReader::next_message()
+std::optional<LoggedMessage> OffboardLogReader::next_message_impl()
 {
   if (!reader_)
   {

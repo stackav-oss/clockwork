@@ -5,6 +5,7 @@
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
+#include "clockwork/logging/lite_compressor_interface.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/log_writer_config_clk_cc.hh"
@@ -17,11 +18,12 @@
 #include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/message_rate_counter.hh"
 #include "clockwork/logging/writers/rate_status_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/channel_config_clk_cc.hh"
 #include "clockwork/pinion/channel_observer.hh"
-#include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
+#include "clockwork/pinion/meta_channel_factory.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/epoll_manager.hh"
@@ -60,6 +62,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace clockwork_logging
 {
@@ -102,7 +105,7 @@ LogWriterBase<Derived, BufferPoolT>::LogWriterBase(
     pinion_namespace_(pinion_namespace, memory_resource_),
     subscription_configs_(memory_resource_),
     channel_observer_ptrs_(log_writer_config.get_channels().size(), memory_resource_),
-    shm_subscriber_ptrs_(log_writer_config.get_channels().size(), memory_resource_),
+    subscriber_ptrs_(log_writer_config.get_channels().size(), memory_resource_),
     pending_subscriptions_(memory_resource_),
     persistent_channels_(memory_resource_),
     buffer_pool_ptr_(
@@ -230,6 +233,10 @@ template <typename Derived, typename BufferPoolT>
   if (const auto close_result = writer_.close_log(jewels::time::SteadyClock::now()); !close_result)
   {
     jewels::log_cerr_error("Failed to close the writer: {}", close_result.error());
+  }
+  if (const auto drain_result = writer_.drain_async_operations(); !drain_result)
+  {
+    jewels::log_cerr_error("Failed to drain outstanding async operations: {}", drain_result.error());
   }
   guarded_state_->state.store(LogWriterState::stopped, std::memory_order_release);
   return {};
@@ -382,6 +389,7 @@ LogWriterBase<Derived, BufferPoolT>::initialize(const clockwork::Tappy<LogWriter
   {
     return jewels::unexpected(LogError::already_initialized);
   }
+  guarded_state_->num_pending_subscriptions.store(log_writer_config.get_channels().size(), std::memory_order_release);
   for (const auto& channel_config : log_writer_config.get_channels())
   {
     const auto channel_name_iter =
@@ -395,19 +403,28 @@ LogWriterBase<Derived, BufferPoolT>::initialize(const clockwork::Tappy<LogWriter
       channel_config.get_channel_type());
     pending_subscriptions_.emplace_back(subscription_configs_.size() - 1U);
   }
-  auto shm_channel_factory_result =
-    clockwork::pinion::ShmChannelFactory::make(memory_resource_, pinion_namespace_, pinion_shm_root_);
-  if (!shm_channel_factory_result)
+  // TODO(OI-4714): Plumb channel types and publisher/subscriber keys through the log writer config
+  std::pmr::unordered_map<std::pmr::string, clockwork::pinion::ChannelType> channel_types;
+  std::pmr::unordered_map<std::pmr::string, std::pmr::vector<std::pmr::string>> publisher_keys;
+  std::pmr::unordered_map<std::pmr::string, std::pmr::string> subscriber_keys;
+  auto channel_factory_result = clockwork::pinion::MetaChannelFactory::make(
+    memory_resource_,
+    std::move(channel_types),
+    std::move(publisher_keys),
+    std::move(subscriber_keys),
+    pinion_namespace_,
+    pinion_shm_root_);
+  if (!channel_factory_result)
   {
     std::pmr::string status_string{"Failed to make shared memory channel factory", memory_resource_};
     jewels::log_cerr_error("{}", status_string);
     set_state_to_failed(std::move(status_string));
     return jewels::unexpected(LogError::clockwork_error);
   }
-  shm_channel_factory_ptr_ = std::allocate_shared<
-    clockwork::pinion::ShmChannelFactory,
-    std::pmr::polymorphic_allocator<clockwork::pinion::ShmChannelFactory>>(
-    memory_resource_, std::move(shm_channel_factory_result).value());
+  channel_factory_ptr_ = std::allocate_shared<
+    clockwork::pinion::MetaChannelFactory,
+    std::pmr::polymorphic_allocator<clockwork::pinion::MetaChannelFactory>>(
+    memory_resource_, std::move(channel_factory_result).value());
   if (const auto channel_result = add_channels(log_writer_config); !channel_result)
   {
     return jewels::unexpected(channel_result.error());
@@ -461,6 +478,19 @@ template <typename Derived, typename BufferPoolT>
 [[nodiscard]] std::string_view LogWriterBase<Derived, BufferPoolT>::get_low_rate_channel_name() const
 {
   return low_rate_channel_name_;
+}
+
+template <typename Derived, typename BufferPoolT>
+[[nodiscard]] jewels::memory::NonNullSharedPtr<LiteCompressorInterface>
+LogWriterBase<Derived, BufferPoolT>::get_channel_compressor(std::string_view channel_name) const
+{
+  return writer_.get_channel_compressor(channel_name);
+}
+
+template <typename Derived, typename BufferPoolT>
+[[nodiscard]] size_t LogWriterBase<Derived, BufferPoolT>::get_num_pending_subscriptions() const
+{
+  return guarded_state_->num_pending_subscriptions.load(std::memory_order_acquire);
 }
 
 template <typename Derived, typename BufferPoolT>
@@ -536,7 +566,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
   {
     const auto subscription_index = *pending_subscription_iter;
     const auto& pending_subscription = subscription_configs_.at(subscription_index);
-    auto open_result = shm_channel_factory_ptr_->open_subscriber(
+    auto open_result = channel_factory_ptr_->open_subscriber(
       pending_subscription.uuid_str,
       pending_subscription.channel_name,
       clockwork::pinion::BufferLayout{
@@ -545,7 +575,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
         .is_published_once = false,
       },
       1U);
-    if (open_result == jewels::unexpected(clockwork::pinion::ShmChannel::Error::missing))
+    if (open_result == jewels::unexpected(clockwork::pinion::AbstractChannel::Error::missing))
     {
       ++pending_subscription_iter;
       continue;
@@ -563,14 +593,14 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
       pending_subscription_iter = pending_subscriptions_.erase(pending_subscription_iter);
       continue;
     }
-    shm_subscriber_ptrs_.at(subscription_index) = std::move(open_result).value();
-    const auto& subscriber_ptr = shm_subscriber_ptrs_.at(subscription_index);
+    subscriber_ptrs_.at(subscription_index) = std::move(open_result).value();
+    const auto& subscriber_ptr = subscriber_ptrs_.at(subscription_index);
     channel_observer_ptrs_.at(subscription_index) = std::allocate_shared<
       ::clockwork::pinion::ChannelObserver,
       std::pmr::polymorphic_allocator<::clockwork::pinion::ChannelObserver>>(
       memory_resource_,
       memory_resource_,
-      subscriber_ptr->buffer(),
+      subscriber_ptr,
       jewels::memory::make_non_null_from_ref(*this),
       pending_subscription.channel_name,
       pending_subscription.channel_type);
@@ -582,7 +612,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
         std::back_inserter(status_string), "Failed to add observer for {}", pending_subscription.channel_name);
       jewels::log_cerr_error("{}", status_string);
       set_is_degraded(std::move(status_string));
-      shm_subscriber_ptrs_.at(subscription_index).reset();
+      subscriber_ptrs_.at(subscription_index).reset();
       channel_observer_ptrs_.at(subscription_index).reset();
       pending_subscription_iter = pending_subscriptions_.erase(pending_subscription_iter);
       continue;
@@ -592,6 +622,7 @@ void LogWriterBase<Derived, BufferPoolT>::poll_pending_subscriptions()
     observer.notify({});
     pending_subscription_iter = pending_subscriptions_.erase(pending_subscription_iter);
   }
+  guarded_state_->num_pending_subscriptions.store(pending_subscriptions_.size(), std::memory_order_release);
 }
 
 template <typename Derived, typename BufferPoolT>

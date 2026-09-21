@@ -1,0 +1,70 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.logging.realtime_playback.v1;
+
+option go_package = "github.com/stack-av/clockwork/logging/realtime_playback/v1";
+
+// Integrity metadata for one artifact file in the converter bundle.
+message FileIntegrity {
+  // Path relative to the bundle root.
+  string relative_path = 1;
+  // File size in bytes.
+  uint64 size_bytes = 2;
+  // Unseeded XXH3-64 checksum.
+  fixed64 xxh3 = 3;
+}
+
+// Camera pre-roll selected for one destination channel.
+message CameraChannelResult {
+  // Destination channel in the camera log.
+  string destination_channel_name = 1;
+  // Publish time of the selected IDR frame, when camera data was requested.
+  optional int64 idr_time_ns = 2;
+  // Number of messages written before the requested start.
+  uint64 preroll_message_count = 3;
+}
+
+// Initialization output for one process.
+message ProcessInitializationResult {
+  // Raw 16-byte process UUID.
+  bytes process_uuid = 1;
+  // Initialization log directory relative to the bundle root, when one was written.
+  optional string initialization_log_path = 2;
+}
+
+// Converter output for one SimpleLaunch node.
+message NodeResult {
+  // Explicit SimpleLaunch node name from the generated configuration.
+  string simplelaunch_node_name = 1;
+  // Regular log directory relative to the bundle root, when one was written.
+  optional string regular_log_path = 2;
+  // Camera log directory relative to the bundle root, when one was written.
+  optional string camera_log_path = 3;
+  // Per-process initialization results.
+  repeated ProcessInitializationResult processes = 4;
+  // Per-channel camera pre-roll results.
+  repeated CameraChannelResult camera_channels = 5;
+}
+
+// Complete metadata for one converted real-time playback bundle.
+message RealtimePlaybackConverterManifest {
+  // Converter manifest format version.
+  uint32 format_version = 1;
+  // Target platform identity from the generated configuration.
+  string platform_id = 2;
+  // Target platform configuration checksum.
+  fixed64 platform_config_xxh3 = 3;
+  // Inclusive requested interval start in nanoseconds.
+  int64 requested_start_time_ns = 4;
+  // Inclusive requested interval end in nanoseconds.
+  int64 requested_end_time_ns = 5;
+  // Node-organized converter results.
+  repeated NodeResult nodes = 6;
+  // Integrity metadata for every artifact file except this manifest.
+  repeated FileIntegrity files = 7;
+  // Sum of artifact file sizes, excluding this manifest.
+  uint64 total_artifact_size_bytes = 8;
+}

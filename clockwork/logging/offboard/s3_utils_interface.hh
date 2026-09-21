@@ -1,25 +1,19 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
-#include "jewels/memory/memory_resource.hh"
 
-#include <aws/core/client/CoreErrors.h>
-#include <aws/s3/S3Client.h>
 #include <aws/s3/model/CompletedPart.h>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory_resource>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 namespace clockwork_logging::offboard
@@ -94,8 +88,17 @@ public:
   /// @param[in] s3_uri S3 URI
   /// @param[in] offset File offset bytes
   /// @param[in] length Number of bytes to read
+  /// @return Data or LogError on failure
   [[nodiscard]] virtual LogExpected<std::pmr::vector<std::byte>>
   get_object(const LogUri& s3_uri, size_t offset, size_t length) const = 0;
+
+  /// Read an object from S3
+  /// @param[in] s3_uri S3 URI
+  /// @param[in] offset File offset bytes
+  /// @param[in] buffer_span Buffer span
+  /// @return Data or LogError on failure
+  [[nodiscard]] virtual LogExpected<std::span<std::byte>>
+  get_object(const LogUri& s3_uri, size_t offset, std::span<std::byte> buffer_span) const = 0;
 
   /// Delete an S3 object
   /// @param[in] s3_uri S3 URI

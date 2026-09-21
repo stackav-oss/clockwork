@@ -1,13 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
-#include "clockwork/logging/offboard/log_union_file_helper.hh"
+#include "clockwork/logging/offboard/log_metadata_file_helper.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/v1/log_union.pb.h"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -24,13 +27,17 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <unordered_set>
-#include <vector>
 
 namespace clockwork_logging::offboard
 {
 namespace
 {
+
+using jewels::ok;
+using jewels::Out;
 
 TEST_CASE("LogMetadataFileHelper")
 {
@@ -38,8 +45,9 @@ TEST_CASE("LogMetadataFileHelper")
     # proto-file: clockwork/logging/offboard/v1/log_metadata.proto
     # proto-message: LogMetadata
     log_writer_metadata {
-      channel: "channel1",
-      channel: "channel2",
+      channel: "channel1"
+      channel: "channel2"
+      channel: "excluded_channel"
       log_file_metadata {
         log_file_name: "channel12_0.slog"
         min_transmit_time_ns: 1000000000
@@ -52,8 +60,9 @@ TEST_CASE("LogMetadataFileHelper")
       }
     }
     log_writer_metadata {
-      channel: "channel3",
-      channel: "channel4",
+      channel: "channel3"
+      channel: "channel4"
+      channel: "excluded_channel"
       log_file_metadata {
         log_file_name: "channel34_0.slog"
         min_transmit_time_ns: 3000000000
@@ -75,8 +84,9 @@ TEST_CASE("LogMetadataFileHelper")
     # proto-file: clockwork/logging/offboard/v1/log_metadata.proto
     # proto-message: LogMetadata
     log_writer_metadata {
-      channel: "channel1",
-      channel: "channel5",
+      channel: "channel1"
+      channel: "channel5"
+      channel: "excluded_channel"
       log_file_metadata {
         log_file_name: "channel15_0.slog"
         min_transmit_time_ns: 1000000001
@@ -89,8 +99,9 @@ TEST_CASE("LogMetadataFileHelper")
       }
     }
     log_writer_metadata {
-      channel: "channel3",
-      channel: "channel6",
+      channel: "channel3"
+      channel: "channel6"
+      channel: "excluded_channel"
       log_file_metadata {
         log_file_name: "channel36_0.slog"
         min_transmit_time_ns: 3000000000
@@ -154,7 +165,6 @@ TEST_CASE("LogMetadataFileHelper")
   const auto log1_file2_uri = (log1_uri / "channel12_1.slog").string();
   const auto log1_file3_uri = (log1_uri / "channel34_0.slog").string();
   const auto log1_file4_uri = (log1_uri / "channel34_1.slog").string();
-  const auto log1_file5_uri = (log1_uri / "no_such_file1.slog").string();
 
   REQUIRE(chunk_reader_writer_factory.write_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
     log1_metadata_file_uri.string(), "", log1_metadata_protobuf));
@@ -162,14 +172,12 @@ TEST_CASE("LogMetadataFileHelper")
   REQUIRE(chunk_reader_writer_factory.write_log_file(log1_file2_uri, {}));
   REQUIRE(chunk_reader_writer_factory.write_log_file(log1_file3_uri, {}));
   REQUIRE(chunk_reader_writer_factory.write_log_file(log1_file4_uri, {}));
-  REQUIRE(chunk_reader_writer_factory.write_log_file(log1_file5_uri, {}));
 
   const auto log2_metadata_file_uri = log2_uri / "stack_log_metadata.pbtxt";
   const auto log2_file1_uri = (log2_uri / "channel15_0.slog").string();
   const auto log2_file2_uri = (log2_uri / "channel15_1.slog").string();
   const auto log2_file3_uri = (log2_uri / "channel36_0.slog").string();
   const auto log2_file4_uri = (log2_uri / "channel36_1.slog").string();
-  const auto log2_file5_uri = (log2_uri / "no_such_file2.slog").string();
 
   REQUIRE(chunk_reader_writer_factory.write_text_proto<::clockwork::logging::offboard::v1::LogMetadata>(
     log2_metadata_file_uri.string(), "", log2_metadata_protobuf));
@@ -177,7 +185,6 @@ TEST_CASE("LogMetadataFileHelper")
   REQUIRE(chunk_reader_writer_factory.write_log_file(log2_file2_uri, {}));
   REQUIRE(chunk_reader_writer_factory.write_log_file(log2_file3_uri, {}));
   REQUIRE(chunk_reader_writer_factory.write_log_file(log2_file4_uri, {}));
-  REQUIRE(chunk_reader_writer_factory.write_log_file(log2_file5_uri, {}));
 
   const auto log3_metadata_file_uri = log3_uri / "stack_log_metadata.pbtxt";
 
@@ -195,7 +202,7 @@ TEST_CASE("LogMetadataFileHelper")
     log_union_file_uri.string(), "", log_union_protobuf));
 
   LogUnionFileHelper helper(memory_resource);
-  REQUIRE(helper.initialize(log_union_file_uri, chunk_reader_writer_factory));
+  REQUIRE(ok(helper.initialize(log_union_file_uri, {"excluded_channel"}, chunk_reader_writer_factory)));
   REQUIRE(helper.get_transmit_time_interval() == LogInterval{time1, time8});
 
   REQUIRE(
@@ -204,101 +211,211 @@ TEST_CASE("LogMetadataFileHelper")
 
   SECTION("No desired channels or time range, unknown files are filtered out")
   {
-    REQUIRE(
-      helper.list_log_files({}, {}) == std::pmr::vector<std::pmr::string>{
-                                         log1_file1_uri,
-                                         log1_file2_uri,
-                                         log1_file3_uri,
-                                         log1_file4_uri,
-                                         log2_file1_uri,
-                                         log2_file2_uri,
-                                         log2_file3_uri,
-                                         log2_file4_uri});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, {}, {})));
+    REQUIRE(log_file_map.size() == 8U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file3_uri));
+    REQUIRE(log_file_map.at(log1_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel4"});
+    REQUIRE(log_file_map.contains(log1_file4_uri));
+    REQUIRE(log_file_map.at(log1_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel4"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel5"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel5"});
+    REQUIRE(log_file_map.contains(log2_file3_uri));
+    REQUIRE(log_file_map.at(log2_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel6"});
+    REQUIRE(log_file_map.contains(log2_file4_uri));
+    REQUIRE(log_file_map.at(log2_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel6"});
   }
 
   SECTION("Desired channels include all files")
   {
     const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel1", "channel3"};
-    REQUIRE(
-      helper.list_log_files(desired_channels, {}) == std::pmr::vector<std::pmr::string>{
-                                                       log1_file1_uri,
-                                                       log1_file2_uri,
-                                                       log1_file3_uri,
-                                                       log1_file4_uri,
-                                                       log2_file1_uri,
-                                                       log2_file2_uri,
-                                                       log2_file3_uri,
-                                                       log2_file4_uri});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, {}, {})));
+    REQUIRE(log_file_map.size() == 8U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log1_file3_uri));
+    REQUIRE(log_file_map.at(log1_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log1_file4_uri));
+    REQUIRE(log_file_map.at(log1_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file3_uri));
+    REQUIRE(log_file_map.at(log2_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log2_file4_uri));
+    REQUIRE(log_file_map.at(log2_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+  }
+
+  SECTION("Excluded channels include all files")
+  {
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{"channel2", "channel4", "channel5", "channel6"};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, {}, excluded_channels)));
+    REQUIRE(log_file_map.size() == 8U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log1_file3_uri));
+    REQUIRE(log_file_map.at(log1_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log1_file4_uri));
+    REQUIRE(log_file_map.at(log1_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file3_uri));
+    REQUIRE(log_file_map.at(log2_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
+    REQUIRE(log_file_map.contains(log2_file4_uri));
+    REQUIRE(log_file_map.at(log2_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3"});
   }
 
   SECTION("Desired channels include some files")
   {
     const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel1", "channel2"};
-    REQUIRE(
-      helper.list_log_files(desired_channels, {}) ==
-      std::pmr::vector<std::pmr::string>{log1_file1_uri, log1_file2_uri, log2_file1_uri, log2_file2_uri});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, {}, {})));
+    REQUIRE(log_file_map.size() == 4U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+  }
+
+  SECTION("Excluded channels include some files")
+  {
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{"channel3", "channel4", "channel5", "channel6"};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, {}, excluded_channels)));
+    REQUIRE(log_file_map.size() == 4U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
   }
 
   SECTION("No matching channels in desired channels")
   {
     const std::pmr::unordered_set<std::pmr::string> desired_channels{"no_such_channel1", "no_such_channel2"};
-    REQUIRE(helper.list_log_files(desired_channels, {}) == std::pmr::vector<std::pmr::string>{});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, {}, {})));
+    REQUIRE(log_file_map.empty());
+  }
+
+  SECTION("Excluded channels excluded all channels")
+  {
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{
+      "channel1", "channel2", "channel3", "channel4", "channel5", "channel6"};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, {}, excluded_channels)));
+    REQUIRE(log_file_map.empty());
   }
 
   SECTION("Desired time range covers entire log")
   {
     LogInterval transmit_time_interval{time1, time8};
-    REQUIRE(
-      helper.list_log_files({}, transmit_time_interval) == std::pmr::vector<std::pmr::string>{
-                                                             log1_file1_uri,
-                                                             log1_file2_uri,
-                                                             log1_file3_uri,
-                                                             log1_file4_uri,
-                                                             log2_file1_uri,
-                                                             log2_file2_uri,
-                                                             log2_file3_uri,
-                                                             log2_file4_uri});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, transmit_time_interval, {})));
+    REQUIRE(log_file_map.size() == 8U);
+    REQUIRE(log_file_map.contains(log1_file1_uri));
+    REQUIRE(log_file_map.at(log1_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file3_uri));
+    REQUIRE(log_file_map.at(log1_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel4"});
+    REQUIRE(log_file_map.contains(log1_file4_uri));
+    REQUIRE(log_file_map.at(log1_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel4"});
+    REQUIRE(log_file_map.contains(log2_file1_uri));
+    REQUIRE(log_file_map.at(log2_file1_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel5"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel5"});
+    REQUIRE(log_file_map.contains(log2_file3_uri));
+    REQUIRE(log_file_map.at(log2_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel6"});
+    REQUIRE(log_file_map.contains(log2_file4_uri));
+    REQUIRE(log_file_map.at(log2_file4_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel6"});
   }
 
   SECTION("Desired time range excludes log files")
   {
     LogInterval transmit_time_interval{time3, time6};
-    REQUIRE(
-      helper.list_log_files({}, transmit_time_interval) ==
-      std::pmr::vector<std::pmr::string>{log1_file2_uri, log1_file3_uri, log2_file2_uri, log2_file3_uri});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, transmit_time_interval, {})));
+    REQUIRE(log_file_map.size() == 4U);
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel2"});
+    REQUIRE(log_file_map.contains(log1_file3_uri));
+    REQUIRE(log_file_map.at(log1_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel4"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1", "channel5"});
+    REQUIRE(log_file_map.contains(log2_file3_uri));
+    REQUIRE(log_file_map.at(log2_file3_uri) == std::pmr::unordered_set<std::pmr::string>{"channel3", "channel6"});
   }
 
   SECTION("Desired time range excludes all files")
   {
     LogInterval transmit_time_interval{time0, time0};
-    REQUIRE(helper.list_log_files({}, transmit_time_interval) == std::pmr::vector<std::pmr::string>{});
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
+    REQUIRE(ok(helper.get_log_file_map(Out{log_file_map}, {}, transmit_time_interval, {})));
+    REQUIRE(log_file_map.empty());
   }
 
-  SECTION("Combine desired channels and time range")
+  SECTION("Combine desired channels, excluded channels and time range")
   {
-    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel1"};
+    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel1", "channel2"};
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{"channel2", "channel3"};
     LogInterval transmit_time_interval{time3, time6};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
     REQUIRE(
-      helper.list_log_files(desired_channels, transmit_time_interval) ==
-      std::pmr::vector<std::pmr::string>{log1_file2_uri, log2_file2_uri});
+      ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, transmit_time_interval, excluded_channels)));
+    REQUIRE(log_file_map.size() == 2U);
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel1"});
   }
 
-  SECTION("Combine desired channels and time range only from log1")
+  SECTION("Combine desired channels, excluded channels and time range only from log1")
   {
-    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel2"};
+    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel1", "channel2"};
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{"channel1", "channel3"};
     LogInterval transmit_time_interval{time3, time6};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
     REQUIRE(
-      helper.list_log_files(desired_channels, transmit_time_interval) ==
-      std::pmr::vector<std::pmr::string>{log1_file2_uri});
+      ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, transmit_time_interval, excluded_channels)));
+    REQUIRE(log_file_map.size() == 1U);
+    REQUIRE(log_file_map.contains(log1_file2_uri));
+    REQUIRE(log_file_map.at(log1_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel2"});
   }
 
-  SECTION("Combine desired channels and time range only from log2")
+  SECTION("Combine desired channels, excluded channels and time range only from log2")
   {
-    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel5"};
+    const std::pmr::unordered_set<std::pmr::string> desired_channels{"channel5", "channel6"};
+    const std::pmr::unordered_set<std::pmr::string> excluded_channels{"channel1", "channel6"};
     LogInterval transmit_time_interval{time3, time6};
+    std::pmr::unordered_map<std::pmr::string, std::pmr::unordered_set<std::pmr::string>> log_file_map;
     REQUIRE(
-      helper.list_log_files(desired_channels, transmit_time_interval) ==
-      std::pmr::vector<std::pmr::string>{log2_file2_uri});
+      ok(helper.get_log_file_map(Out{log_file_map}, desired_channels, transmit_time_interval, excluded_channels)));
+    REQUIRE(log_file_map.size() == 1U);
+    REQUIRE(log_file_map.contains(log2_file2_uri));
+    REQUIRE(log_file_map.at(log2_file2_uri) == std::pmr::unordered_set<std::pmr::string>{"channel5"});
   }
 }
 

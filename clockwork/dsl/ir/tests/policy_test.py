@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from clockwork.dsl.composition import logger_config
-from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, policy, primitive, pubsub
+from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, hardware, policy, primitive, pubsub
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
@@ -28,6 +28,10 @@ def test_policy(fs_importer: FilesystemImporter) -> None:
     policy_def = module.inner_scope.lookup("TestPolicy", recursive=False)
     assert isinstance(policy_def, policy.PolicyDef)
     policy_class = policy_def.get_resolved()
+
+    union_policy_def = module.inner_scope.lookup("UnionPolicy", recursive=False)
+    assert isinstance(union_policy_def, policy.PolicyDef)
+    union_policy_class = union_policy_def.get_resolved()
 
     test_chan = module.inner_scope.lookup("TestChan", recursive=False)
     assert isinstance(test_chan, pubsub.Channel)
@@ -57,6 +61,18 @@ def test_policy(fs_importer: FilesystemImporter) -> None:
 
     with pytest.raises(ValueError, match=re.escape("Missing value for field do_stuff of schema TestPolicySchema")):
         policy_class.evaluate_call(ir_node=None, module=module, args=[])
+
+    test_domain = module.inner_scope.lookup("TestDomain", recursive=False)
+    assert isinstance(test_domain, hardware.CpuDomain)
+
+    policy_inst = policy.lookup_policy(module, union_policy_class, test_chan)
+    assert isinstance(policy_inst, policy.PolicyData)
+    assert policy_inst.policy_class is union_policy_class
+    assert policy_inst.target is test_chan
+    policy_inst = policy.lookup_policy(module, union_policy_class, test_domain)
+    assert isinstance(policy_inst, policy.PolicyData)
+    assert policy_inst.policy_class is union_policy_class
+    assert policy_inst.target is test_domain
 
 
 def test_policy_bad_target(fs_importer: FilesystemImporter) -> None:
@@ -180,9 +196,7 @@ policy TestPolicy for false
 {
 }
 """
-    with pytest.raises(
-        TypeError, match=re.escape("Expected TypeDef(name='Type') but got PrimitiveBuiltinSerializable")
-    ):
+    with pytest.raises(TypeError, match=re.escape("Expected ::Type but got PrimitiveBuiltinSerializable")):
         compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), importer=fs_importer)
 
 
@@ -264,7 +278,7 @@ def test_logging_policy(fs_importer: FilesystemImporter) -> None:
 
     another_policy = policy.lookup_policy(system_module, policy_class, another_chan)
     assert isinstance(another_policy, policy.PolicyData)
-    assert another_policy.data.data["log_type"] is log_type.lookup("telemetry")
+    assert another_policy.data.data["log_type"] is log_type.lookup("non_redundant_telemetry")
 
     multi_publisher_policy = policy.lookup_policy(system_module, policy_class, multi_publisher_chan)
     assert isinstance(multi_publisher_policy, policy.PolicyData)

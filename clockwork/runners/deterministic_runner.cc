@@ -1,9 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/runners/deterministic_runner.hh"
 
 #include "clockwork/common/cog_envelope.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/log_cerr/log_time.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/time/conversions.hh"
 #include "jewels/time/sync_time.hh"
 
@@ -15,6 +19,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <tuple>
 #include <typeinfo>
@@ -22,6 +27,18 @@
 
 namespace clockwork
 {
+namespace
+{
+
+bool occurs_before(
+  const jewels::time::SyncTime candidate,
+  const std::optional<jewels::time::SyncTime>& first,
+  const std::optional<jewels::time::SyncTime>& second)
+{
+  return (!first || candidate < *first) && (!second || candidate < *second);
+}
+
+} // namespace
 
 DeterministicRunner::DeterministicRunner(DeterministicRunnerConfig config)
   : config_(std::move(config)), timers_(config_.resource)
@@ -114,6 +131,39 @@ jewels::time::SyncTime DeterministicRunner::maybe_update_time(const jewels::time
   return current_time_;
 }
 
+void DeterministicRunner::prepare_and_execute_cog(
+  jewels::memory::ObjectPtr<AbstractCog> cog, const jewels::time::SyncTime current_time)
+{
+  auto throttled_until = jewels::time::SyncTime::min();
+  switch (cog->prepare_for_execution(jewels::Out{throttled_until}, current_time).get())
+  {
+  case CogPrepareResult::ready:
+  {
+    // Remove before execution because publishing can enqueue downstream Cogs.
+    queue_->remove_next();
+    auto params = CogExecuteParams{.start_time = current_time, .execution_mode = CogExecutionMode::deterministic};
+    // The return value is ignored because all errors are already reported within execute() to the extent that we
+    // can report them at present. Some of this reporting/handling is being improved in OI-2593, and more will be
+    // done in OI-2730 when we have an improved observability framework.
+    std::ignore = cog->execute(params); // TODO(OI-2730): Report errors from execute via observability
+    break;
+  }
+  case CogPrepareResult::not_ready:
+    queue_->remove_next();
+    break;
+  case CogPrepareResult::publisher_throttled:
+    queue_->set_throttled_until(cog, throttled_until);
+    if (jewels::fails(cog->arm_publisher_throttle_timer(throttled_until)))
+    {
+      jewels::log_cerr_error("Failed to arm publisher-throttle timer for cog '{}'.", cog->get_name());
+    }
+    break;
+  case CogPrepareResult::states_lock_contention:
+  case CogPrepareResult::reentry_lock_contention:
+    break;
+  }
+}
+
 jewels::BinaryOutcome DeterministicRunner::start(
   jewels::time::SyncTime start_time, jewels::time::SyncTime end_time, jewels::cli::ExitCondition& exit)
 {
@@ -146,25 +196,11 @@ jewels::BinaryOutcome DeterministicRunner::start(
       current_log_time = config_.channel_publisher->try_next_message_time();
     }
 
-    if (
-      next_result && (!current_log_time || (next_result->ready_time < current_log_time)) &&
-      (!next_timer_time || (next_result->ready_time < next_timer_time)))
+    if (next_result && occurs_before(next_result->ready_time, current_log_time, next_timer_time))
     {
-      // Pop the result from the queue *before* executing it since downstream cogs can be added onto the queue
-      // after execute due to the outputs from the current cog.
-      queue_->pop({}); // NOLINT(cert-err33-c) False positive
-
       // Update the simulated time if ready time is in the future
       current_time = maybe_update_time(next_result->ready_time);
-      auto ready = next_result->cog->prepare_for_execution(current_time);
-      if (ready)
-      {
-        auto params = CogExecuteParams{.start_time = current_time, .execution_mode = CogExecutionMode::deterministic};
-        // The return value is ignored because all errors are already reported within execute() to the extent that we
-        // can report them at present. Some of this reporting/handling is being improved in OI-2593, and more will be
-        // done in OI-2730 when we have an improved observability framework.
-        std::ignore = next_result->cog->execute(params); // TODO(OI-2730): Report errors from execute via observability
-      }
+      prepare_and_execute_cog(next_result->cog, current_time);
     }
     else if (
       config_.channel_publisher && current_log_time && (!next_timer_time || (current_log_time < next_timer_time)))

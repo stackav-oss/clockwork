@@ -1,10 +1,27 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//jewels/simplelaunch:rules.bzl", "simplelaunch_runner")
 load("//tools/rules:cc.bzl", "cc_test")
 
 package(default_testonly = True)
+
+cc_test(
+    name = "launch_helpers_test",
+    srcs = ["launch_helpers_test.cc"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/filesystem",
+        "//jewels/filesystem:path",
+        "//jewels/memory:memory_resource",
+        "//jewels/simplelaunch:config",
+        "//jewels/simplelaunch:simplelaunch_impl",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "@catch2//:catch2_main",
+        "@protobuf",
+    ],
+)
 
 cc_test(
     name = "redirect_helper_test",
@@ -28,11 +45,38 @@ simplelaunch_runner(
 )
 
 cc_test(
-    name = "service_definition_test",
-    srcs = ["service_definition_test.cc"],
+    name = "simplelaunch_runner_test",
+    srcs = ["simplelaunch_runner_test.cc"],
+    data = [
+        "//jewels/simplelaunch/tests/support:exit_failure",
+        "//jewels/simplelaunch/tests/support:exit_success",
+        "//jewels/simplelaunch/tests/support:no_exit",
+    ],
     deps = [
-        "//jewels/simplelaunch:service_definition",
-        "//jewels/testing:wise_enum_proto_sync",
+        "//clockwork:repr_iface",
+        "//clockwork/common:platform_diagnostics_config_clk_cc",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/common:simplelaunch_runner_config_clk_cc",
+        "//clockwork/diagnostics:report_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:buffer_layout",
+        "//clockwork/pinion:channel_config_clk_cc",
+        "//clockwork/pinion:meta_channel_factory",
+        "//clockwork/pinion:slot_ref",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/callsig:outcome",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_string",
+        "//jewels/filesystem:path",
+        "//jewels/memory:memory_resource",
+        "//jewels/simplelaunch:simplelaunch_runner",
+        "//jewels/simplelaunch:simplelaunch_status_clk_cc",
+        "//jewels/simplelaunch/v1:config_cc_library",
+        "//jewels/std:expected",
+        "//jewels/testing:tmp_directory_guard",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
+        "@protobuf",
     ],
 )

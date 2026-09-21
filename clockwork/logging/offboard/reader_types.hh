@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,19 +7,22 @@
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_compressor.hh"
 #include "clockwork/logging/offboard/chunk_reader.hh"
 #include "clockwork/logging/offboard/log_format.hh"
+#include "clockwork/logging/schema_encoding_clk_cc.hh"
 
-#include <wise_enum.h>
-
-#include <cstddef>
+#include <compare>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <memory_resource>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <unordered_map>
 
 namespace clockwork_logging::offboard::reader
 {
@@ -47,6 +50,9 @@ struct LoggedChannelInfo
 
   /// Schema definition string
   std::pmr::string schema_definition{};
+
+  /// Channel is amended
+  bool is_amended{};
 };
 
 /// Metrics for a channel in a log file

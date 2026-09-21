@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Schema related IR for Proto Targets."""
@@ -10,11 +10,11 @@ from itertools import chain
 from pathlib import Path
 from typing import cast
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.bazel import proto_targets
 from clockwork.dsl.bazel.targets import Label
 from clockwork.dsl.composition.str_manip import upper_snake_from_camel
-from clockwork.dsl.ir import clkenum, expr, node, schema
+from clockwork.dsl.ir import clkenum, expr, node, schema, statement
 from clockwork.dsl.ir.cst_util import get_span
 from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.dsl.ir.representation import ReprInstantiation, ResolvedReprInstantiation
@@ -42,7 +42,7 @@ class ProtoGeneratedEntities:
 
     schemas: list[schema.Schema] = field(default_factory=list)
     enums: list[clkenum.ClkEnum] = field(default_factory=list)
-    instantiations: list[schema.InstantiateStmt] = field(default_factory=list)
+    schema_instantiations: list[statement.InstantiateStmt] = field(default_factory=list)
 
 
 @dataclass
@@ -64,21 +64,22 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
         options = ProtoTargetOptions.from_cst(cst_node.maybe_proto_target_options(), module, name)
         representations = []
         enums = []
-        for statement in cst_node.children_proto_target_statement():
-            if representation_cst := statement.maybe_proto_representation():
+        for statement_ir in cst_node.children_proto_target_statement():
+            if representation_cst := statement_ir.maybe_proto_representation():
                 representations.append(representation := ReprInstantiation.from_cst(representation_cst, module))
                 if representation.is_generic and not representation.name:
                     msg = f"Generic Representations in proto targets require an alias: {representation}"
                     raise ValueError(msg)
                 if representation.name:
                     module.inner_scope.define(representation.name, representation, module.terminals)
-            elif enum_cst := statement.maybe_proto_enum():
+            elif enum_cst := statement_ir.maybe_proto_enum():
                 enums.append(EnumTarget.from_cst(enum_cst, module, options.prefix_enum_value_names))
             else:
-                unknown_statement = get_span(statement.span, module.terminals)
+                unknown_statement = get_span(statement_ir.span, module.terminals)
                 msg = f"ProtoTarget unable to convert statement to IR: '{unknown_statement}'"
                 raise ValueError(msg)
 
+        # fmt: off
         return cls(
             module=module,
             cst_node=cst_node,
@@ -86,9 +87,11 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
             name=name,
             scope=module.inner_scope,
             options=options,
+            # pyrefly: ignore[bad-argument-type] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             representations=representations,
             enums=enums,
         )
+        # fmt: on
 
     @classmethod
     def from_generate_proto(
@@ -133,7 +136,7 @@ class ProtoTarget(node.NamedEntity, node.DocableEntity, node.CstNode[cst.ProtoTa
 
         representations: list[ReprInstantiation | ResolvedReprInstantiation] = []
 
-        for instantiation in entities.instantiations:
+        for instantiation in entities.schema_instantiations:
             assert isinstance(instantiation.typespec, Instantiation)
             assert isinstance(instantiation.typespec.instantiates, schema.Schema)
             representations.append(

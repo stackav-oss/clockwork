@@ -1,10 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/cog.hh"
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 
 #include <xxh3.h>
 
@@ -67,7 +69,8 @@ namespace clockwork::scaffolding
       return jewels::unexpected(jewels::MonoError());
     }
     const auto& cog = cog_it->second;
-    if (!cog->prepare_for_execution(init_time))
+    auto throttled_until = jewels::time::SyncTime::min();
+    if (jewels::fails(cog->prepare_for_execution(jewels::Out{throttled_until}, init_time)))
     {
       jewels::log_cerr_error("init cog '{}' failed prepare_for_execution", inst_id);
       return jewels::unexpected(jewels::MonoError());

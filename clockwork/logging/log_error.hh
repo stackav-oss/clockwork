@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -27,10 +27,10 @@ WISE_ENUM_CLASS(
   unhandled_exception,
   /// Unable to access log device
   bad_log_device,
-  /// Missing protobuf file
-  missing_protobuf_file,
-  /// Invalid protobuf file
-  invalid_protobuf_file,
+  /// Missing log file
+  missing_log_file,
+  /// Invalid log file
+  invalid_log_file,
   /// Log write error
   write_error,
   /// Log is not open
@@ -93,6 +93,8 @@ WISE_ENUM_CLASS(
   close_for_split_log_failed,
   // Missing channel metadata
   missing_channel_metadata,
+  // Missing schema metadata
+  missing_schema_metadata,
   // Message header exceeds max size
   message_header_exceeds_max_size,
   // Failed to pad for zero copy
@@ -231,6 +233,16 @@ WISE_ENUM_CLASS(
   s3_request_timeout,
   // S3 INVALID_OBJECT_STATE error
   s3_invalid_object_state,
+  // S3 ENCRYPTION_TYPE_MISMATCH error
+  s3_encryption_type_mismatch,
+  // S3 IDEMPOTENCY_PARAMETER_MISMATCH error
+  s3_idempotency_parameter_mismatch,
+  // S3 INVALID_REQUEST error
+  s3_invalid_request,
+  // S3 INVALID_WRITE_OFFSET error
+  s3_invalid_write_offset,
+  // S3 TOO_MANY_PARTS error
+  s3_too_many_parts,
   // Failed to load the vehicle configuration
   failed_to_load_vehicle_config,
   // Failed to deserialize configuration

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,9 +7,8 @@
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -103,7 +102,7 @@ public:
   /// @param[in] handle The underlying subscriber
   /// @return The observer to associate with the subscriber on success
   [[nodiscard]] virtual jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError>
-  set_handle(jewels::Uuid<common::EndpointClassId> uuid, pinion::SubscriberHandle handle) = 0;
+  set_handle(jewels::Uuid<common::EndpointClassId> uuid, std::shared_ptr<pinion::AbstractChannel> channel) = 0;
 
   /// Set up a subscriber endpoint without a handle for non-connected endpoints
   /// @param[in] uuid The id of the subscriber endpoint to set up

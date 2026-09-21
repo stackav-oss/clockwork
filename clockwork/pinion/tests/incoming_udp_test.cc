@@ -1,11 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/io/network_var_packet_clk_cc.hh"
 #include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
@@ -39,7 +39,6 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <memory>
 #include <memory_resource>
@@ -66,6 +65,8 @@ TEMPLATE_TEST_CASE(
   using Msg = Tachyon<TestType>;
   constexpr auto num_slots{10UL};
 
+  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
+
   const support::Sender sender{};
   constexpr auto address{"127.0.0.1"};
   constexpr auto incoming_port{0U};
@@ -85,8 +86,8 @@ TEMPLATE_TEST_CASE(
 
   SECTION("Mismatched message sizes")
   {
-    auto channel = std::make_unique<InMemoryChannel<bool, num_slots, false>>(memres);
-    auto publisher = channel->make_publisher(0UL);
+    auto bad_channel = std::make_unique<InMemoryChannel<bool, num_slots, false>>(memres);
+    auto publisher = bad_channel->make_publisher(0UL);
 
     // Size of message slot and size of UDP packet are not the same.
     REQUIRE(
@@ -94,7 +95,6 @@ TEMPLATE_TEST_CASE(
       jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
   }
 
-  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto subscriber = channel->make_subscriber();
   SECTION("Mismatched endpoint id")
   {
@@ -228,6 +228,8 @@ TEMPLATE_TEST_CASE(
   using Msg = Tachyon<TestType>;
   constexpr auto num_slots{10UL};
 
+  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
+
   const support::Sender sender{};
   constexpr auto address{"127.0.0.1"};
   constexpr auto incoming_port{0U};
@@ -240,7 +242,6 @@ TEMPLATE_TEST_CASE(
   REQUIRE(maybe_incoming_udp);
   auto incoming_udp = *std::move(maybe_incoming_udp);
 
-  auto channel = std::make_unique<InMemoryChannel<Msg, num_slots, false>>(memres);
   auto publisher = channel->make_publisher(0UL);
   auto subscriber = channel->make_subscriber();
 

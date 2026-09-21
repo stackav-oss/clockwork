@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -33,7 +33,7 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
     assert hello_chan.ir_node is hello_chan_ir
     multi_chan = graphir.lookup_channel("many_publishers", module.context)
     conns = [graphir.from_ir_connection(conn, module.context) for conn in box_ir.connections]
-    assert len(conns) == 18
+    assert len(conns) == 19
     (
         mem_hello_conn,
         hello_config,
@@ -44,6 +44,7 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
         latest_in,
         history_in,
         multi_in,
+        multi_connect_in,
         out_world,
         out_goodbye,
         out_multi1,
@@ -57,12 +58,21 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
     assert isinstance(mem_hello_conn, graphir.MemoryResourceConnection)
     assert mem_hello_conn.memory_resource.resource_type == box.MemResourceType.HEAP
     assert mem_hello_conn.memory_resource.max_size == 1e6
+    assert (
+        graphir.lookup_connected_cog_instance_member(mem_hello_conn.cog_instance_member, module.context)
+        == mem_hello_conn.memory_resource
+    )
     assert isinstance(hello_config, graphir.ConfigConnection)
     assert isinstance(hello_config.config_instance, box.SerializedDataFileInstance)
     assert hello_config.config_instance.file_path == Path("foo/bar.txtpb")
+    assert (
+        graphir.lookup_connected_cog_instance_member(hello_config.cog_instance_member, module.context)
+        == hello_config.config_instance
+    )
     assert isinstance(latest_in, graphir.ChannelToCogSubscribeConnection)
     assert isinstance(history_in, graphir.ChannelToCogSubscribeConnection)
     assert isinstance(multi_in, graphir.ChannelToCogSubscribeConnection)
+    assert isinstance(multi_connect_in, graphir.MultiChannelToCogSubscribeConnection)
     assert isinstance(out_world, graphir.ChannelToCogPublishConnection)
     assert isinstance(out_goodbye, graphir.ChannelToCogPublishConnection)
     assert isinstance(out_multi1, graphir.ChannelToCogPublishConnection)
@@ -74,6 +84,7 @@ def test_hellomod(fs_importer: FilesystemImporter) -> None:
     assert all(conn.channel is multi_chan for conn in (multi_in, out_multi1, out_multi2))
     latest_in_instance = latest_in.cog_instance_member
     assert isinstance(latest_in_instance, cog.CogInstanceMember)
+    assert graphir.lookup_connected_cog_instance_member(latest_in_instance, module.context) == hello_chan
     for conn in (history_in, out_world, out_goodbye):
         assert isinstance(conn, graphir.ChannelToCogSubscribeConnection | graphir.ChannelToCogPublishConnection)
         assert latest_in_instance.cog_instance is conn.cog_instance_member.cog_instance
@@ -255,3 +266,335 @@ box TestBox
     test_chan = graphir.lookup_channel("TestChan", module.context).ir_node
     assert fallback_conn.data_source.channel is test_chan
     assert init_conn.data_source.channel is test_chan
+
+
+def test_cog_output_connected_to_two_channels(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// Channel for HelloMsg messages
+channel HelloChan
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// Another channel for HelloMsg messages
+channel AnotherChan
+{
+    name: "Name that doesn't follow reasonable conventions!";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 101;
+    publishers: single;
+}
+
+// A multi-publisher channel for HelloMsg messages
+channel MultiPublisherChannel
+{
+    name: "many_publishers";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 11;
+    publishers: multiple;
+}
+
+box MemBox
+{
+    new mem_hello: HeapMemory(max_size=1'000'000);
+}
+
+box HelloBox
+{
+    new mem_box: MemBox;
+
+    new hello_cog: hellocog::HelloCogWithMetrics;
+    connect mem_box.mem_hello to hello_cog.mem_hello;
+
+    new hello_config: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/bar.txtpb");
+    connect hello_config to hello_cog.cfg_hello;
+
+    // Define rw_hello_init first so that we test topological sort in genpd correctly.
+    new rw_hello_init: hellocog::HelloInit2;
+    new ro_hello_init: hellocog::HelloInit;
+
+    new ro_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=ro_hello_init.result);
+    connect ro_hello to hello_cog.ro_hello;
+
+    new rw_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=rw_hello_init.result);
+    // This connection creates a dependency that forces a specific init cog ordering.
+    connect ro_hello to rw_hello_init.input;
+    connect rw_hello to hello_cog.rw_hello;
+
+    new extern_hello_memory: HeapMemory(max_size=1'000'000);
+    new extern_hello: State(representation=hellocog::CxxState, memory_resource=extern_hello_memory);
+    connect extern_hello to hello_cog.extern_hello;
+
+    connect HelloChan to hello_cog.latest_hello;
+    connect HelloChan to hello_cog.history_of_hellos;
+    connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
+    connect hello_cog.out_world to HelloChan;
+    connect hello_cog.out_world to AnotherChan;
+    connect hello_cog.out_goodbye to AnotherChan;
+    connect hello_cog.out_multi1 to MultiPublisherChannel;
+    connect hello_cog.out_multi2 to MultiPublisherChannel;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("HelloBox", recursive=False)
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape("out_world is already connected to HelloChan"),
+    ):
+        _ = [graphir.from_ir_connection(conn, module.context) for conn in box_ir.connections]
+
+
+def test_cog_input_connected_to_two_channels(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// Channel for HelloMsg messages
+channel HelloChan
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// Another channel for HelloMsg messages
+channel AnotherChan
+{
+    name: "Name that doesn't follow reasonable conventions!";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 101;
+    publishers: single;
+}
+
+// A multi-publisher channel for HelloMsg messages
+channel MultiPublisherChannel
+{
+    name: "many_publishers";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 11;
+    publishers: multiple;
+}
+
+box MemBox
+{
+    new mem_hello: HeapMemory(max_size=1'000'000);
+}
+
+box HelloBox
+{
+    new mem_box: MemBox;
+
+    new hello_cog: hellocog::HelloCogWithMetrics;
+    connect mem_box.mem_hello to hello_cog.mem_hello;
+
+    new hello_config: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/bar.txtpb");
+    connect hello_config to hello_cog.cfg_hello;
+
+    // Define rw_hello_init first so that we test topological sort in genpd correctly.
+    new rw_hello_init: hellocog::HelloInit2;
+    new ro_hello_init: hellocog::HelloInit;
+
+    new ro_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=ro_hello_init.result);
+    connect ro_hello to hello_cog.ro_hello;
+
+    new rw_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=rw_hello_init.result);
+    // This connection creates a dependency that forces a specific init cog ordering.
+    connect ro_hello to rw_hello_init.input;
+    connect rw_hello to hello_cog.rw_hello;
+
+    new extern_hello_memory: HeapMemory(max_size=1'000'000);
+    new extern_hello: State(representation=hellocog::CxxState, memory_resource=extern_hello_memory);
+    connect extern_hello to hello_cog.extern_hello;
+
+    connect HelloChan to hello_cog.latest_hello;
+    connect AnotherChan to hello_cog.latest_hello;
+    connect HelloChan to hello_cog.history_of_hellos;
+    connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
+    connect hello_cog.out_world to HelloChan;
+    connect hello_cog.out_goodbye to AnotherChan;
+    connect hello_cog.out_multi1 to MultiPublisherChannel;
+    connect hello_cog.out_multi2 to MultiPublisherChannel;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("HelloBox", recursive=False)
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape("latest_hello is already connected to HelloChan"),
+    ):
+        _ = [graphir.from_ir_connection(conn, module.context) for conn in box_ir.connections]
+
+
+def test_cog_memory_resource_connected_twice(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// Channel for HelloMsg messages
+channel HelloChan
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// Another channel for HelloMsg messages
+channel AnotherChan
+{
+    name: "Name that doesn't follow reasonable conventions!";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 101;
+    publishers: single;
+}
+
+// A multi-publisher channel for HelloMsg messages
+channel MultiPublisherChannel
+{
+    name: "many_publishers";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 11;
+    publishers: multiple;
+}
+
+box MemBox
+{
+    new mem_hello: HeapMemory(max_size=1'000'000);
+    new mem_hello2: HeapMemory(max_size=1'000'000);
+}
+
+box HelloBox
+{
+    new mem_box: MemBox;
+
+    new hello_cog: hellocog::HelloCogWithMetrics;
+    connect mem_box.mem_hello to hello_cog.mem_hello;
+    connect mem_box.mem_hello2 to hello_cog.mem_hello;
+
+    new hello_config: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/bar.txtpb");
+    connect hello_config to hello_cog.cfg_hello;
+
+    // Define rw_hello_init first so that we test topological sort in genpd correctly.
+    new rw_hello_init: hellocog::HelloInit2;
+    new ro_hello_init: hellocog::HelloInit;
+
+    new ro_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=ro_hello_init.result);
+    connect ro_hello to hello_cog.ro_hello;
+
+    new rw_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=rw_hello_init.result);
+    // This connection creates a dependency that forces a specific init cog ordering.
+    connect ro_hello to rw_hello_init.input;
+    connect rw_hello to hello_cog.rw_hello;
+
+    new extern_hello_memory: HeapMemory(max_size=1'000'000);
+    new extern_hello: State(representation=hellocog::CxxState, memory_resource=extern_hello_memory);
+    connect extern_hello to hello_cog.extern_hello;
+
+    connect HelloChan to hello_cog.latest_hello;
+    connect AnotherChan to hello_cog.latest_hello;
+    connect HelloChan to hello_cog.history_of_hellos;
+    connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
+    connect hello_cog.out_world to HelloChan;
+    connect hello_cog.out_goodbye to AnotherChan;
+    connect hello_cog.out_multi1 to MultiPublisherChannel;
+    connect hello_cog.out_multi2 to MultiPublisherChannel;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("HelloBox", recursive=False)
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape("mem_hello is already connected to @clockwork::test.box.mem_box.mem_hello"),
+    ):
+        _ = [graphir.from_ir_connection(conn, module.context) for conn in box_ir.connections]
+
+
+def test_cog_config_connected_twice(fs_importer: FilesystemImporter) -> None:
+    source_text = """
+use clockwork::dsl::tests::support::hellocog;
+use clockwork::dsl::tests::support::hellomsg;
+
+// Channel for HelloMsg messages
+channel HelloChan
+{
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 10;
+}
+
+// Another channel for HelloMsg messages
+channel AnotherChan
+{
+    name: "Name that doesn't follow reasonable conventions!";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 101;
+    publishers: single;
+}
+
+// A multi-publisher channel for HelloMsg messages
+channel MultiPublisherChannel
+{
+    name: "many_publishers";
+    message_type: Tachyon<hellomsg::HelloMsg>;
+    max_num_messages: 11;
+    publishers: multiple;
+}
+
+box MemBox
+{
+    new mem_hello: HeapMemory(max_size=1'000'000);
+}
+
+box HelloBox
+{
+    new mem_box: MemBox;
+
+    new hello_cog: hellocog::HelloCogWithMetrics;
+    connect mem_box.mem_hello to hello_cog.mem_hello;
+
+    new hello_config: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/bar.txtpb");
+    new hello_config2: SerializedDataFile(representation=Protobuf<hellomsg::HelloMsg>, path="foo/baz.txtpb");
+    connect hello_config to hello_cog.cfg_hello;
+    connect hello_config2 to hello_cog.cfg_hello;
+
+    // Define rw_hello_init first so that we test topological sort in genpd correctly.
+    new rw_hello_init: hellocog::HelloInit2;
+    new ro_hello_init: hellocog::HelloInit;
+
+    new ro_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=ro_hello_init.result);
+    connect ro_hello to hello_cog.ro_hello;
+
+    new rw_hello: State(representation=Tachyon<hellomsg::HelloMsg>, init=rw_hello_init.result);
+    // This connection creates a dependency that forces a specific init cog ordering.
+    connect ro_hello to rw_hello_init.input;
+    connect rw_hello to hello_cog.rw_hello;
+
+    new extern_hello_memory: HeapMemory(max_size=1'000'000);
+    new extern_hello: State(representation=hellocog::CxxState, memory_resource=extern_hello_memory);
+    connect extern_hello to hello_cog.extern_hello;
+
+    connect HelloChan to hello_cog.latest_hello;
+    connect AnotherChan to hello_cog.latest_hello;
+    connect HelloChan to hello_cog.history_of_hellos;
+    connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
+    connect hello_cog.out_world to HelloChan;
+    connect hello_cog.out_goodbye to AnotherChan;
+    connect hello_cog.out_multi1 to MultiPublisherChannel;
+    connect hello_cog.out_multi2 to MultiPublisherChannel;
+}
+"""
+    module = compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test"), fs_importer)
+    box_template_ir = module.inner_scope.lookup("HelloBox", recursive=False)
+    assert isinstance(box_template_ir, box.BoxTemplate)
+    box_ir = box_template_ir.make_instance(cst_node=None, module=module, scope=module.inner_scope, name="box", doc=None)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape("cfg_hello is already connected to @clockwork::test.box.hello_config"),
+    ):
+        _ = [graphir.from_ir_connection(conn, module.context) for conn in box_ir.connections]

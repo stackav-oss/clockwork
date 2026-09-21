@@ -1,16 +1,15 @@
 box TestSystemBox
-{
-}
+{}
 
 cpp_executable test_system_2_exe
 {
-    casing
-    {
-        box TestSystemBox;
-    }
+  casing
+  {
+    box TestSystemBox;
+  }
 }
 
 system_target test_system_2
 {
-    box: TestSystemBox;
+  box: TestSystemBox;
 }

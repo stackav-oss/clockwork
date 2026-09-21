@@ -1,7 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <memory_resource>
 #include <type_traits>
+#include <vector>
 
 namespace jewels::memory
 {
@@ -80,4 +82,60 @@ TEST_CASE("MemoryResource equality")
   CHECK(resource1 == resource2);
 }
 
+TEST_CASE("MemoryResource metrics")
+{
+  NewDeleteMemoryResource memory(0, "metrics_test_resource");
+  const MemoryResource resource{memory};
+  MemoryResourceMetrics metrics{};
+
+  memory.get_memory_resource_metrics(jewels::Out{metrics});
+  CHECK(metrics.total_allocated == 0);
+  CHECK(metrics.total_deallocated == 0);
+  CHECK(metrics.current_allocated == 0);
+  CHECK(metrics.peak_allocated == 0);
+  {
+    std::pmr::vector<uint32_t> vec{10, resource};
+    memory.get_memory_resource_metrics(jewels::Out{metrics});
+    CHECK(metrics.total_allocated == 40);
+    CHECK(metrics.total_deallocated == 0);
+    CHECK(metrics.current_allocated == 40);
+    CHECK(metrics.peak_allocated == 40);
+  }
+  memory.get_memory_resource_metrics(jewels::Out{metrics});
+  CHECK(metrics.total_allocated == 40);
+  CHECK(metrics.total_deallocated == 40);
+  CHECK(metrics.current_allocated == 0);
+  CHECK(metrics.peak_allocated == 40);
+
+  WrapperResource wrapper;
+  const MemoryResource resource2(wrapper);
+  CHECK(jewels::fails(resource2.get_memory_resource_metrics(jewels::Out{metrics})));
+}
+
+TEST_CASE("MemoryResource reset incremental metrics")
+{
+  NewDeleteMemoryResource memory(0, "metrics_reset_test_resource");
+  const MemoryResource resource{memory};
+  MemoryResourceMetrics metrics{};
+
+  memory.get_memory_resource_metrics(jewels::Out{metrics});
+  CHECK(metrics.total_allocated == 0);
+  CHECK(metrics.total_deallocated == 0);
+  CHECK(metrics.current_allocated == 0);
+  CHECK(metrics.peak_allocated == 0);
+  {
+    std::pmr::vector<uint32_t> vec{10, resource};
+  }
+  memory.get_memory_resource_metrics(jewels::Out{metrics});
+  CHECK(metrics.total_allocated == 40);
+  CHECK(metrics.total_deallocated == 40);
+  CHECK(metrics.current_allocated == 0);
+  CHECK(metrics.peak_allocated == 40);
+  memory.reset_incremental_metrics();
+  memory.get_memory_resource_metrics(jewels::Out{metrics});
+  CHECK(metrics.total_allocated == 0);
+  CHECK(metrics.total_deallocated == 0);
+  CHECK(metrics.current_allocated == 0);
+  CHECK(metrics.peak_allocated == 40);
+}
 } // namespace jewels::memory

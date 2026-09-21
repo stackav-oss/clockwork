@@ -59,7 +59,7 @@ After initialization the execute method is invoked execute the cog at a specific
 The following is a minimal example of how to execute a cog using defaults for all initializaiton.
 
 ```cpp
-#include example_clk_cc_test.hh”
+#include "example_clk_cc_test.hh”
 
 TEST_CASE(“ExampleCogTest”)
 {
@@ -362,6 +362,269 @@ TEST_CASE(“OutputCogTest”)
   const auto maybe_msg = test_cog.get_outputs().get_output1.try_get_next_message();
   REQUIRE(maybe_msg);
   REQUIRE(maybe_msg->get().get_field1 == 234);
+}
+```
+
+## Alignment Unit Testing
+
+The unit test framework supports three approaches for testing alignment pipelines, each at a different level of isolation:
+
+| Approach                                                       | What it tests                                                          | When to use                                                                |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [Aligner isolation](#aligners)                                 | Aligner only                                                           | Validating aligner behavior                                                |
+| [Consumer isolation](#consumer-cogs-with-aligned-inputs)       | Consumer cog with hand-crafted aligned message batches                 | Validating consumer behavior independent of aligner behavior               |
+| [Combo (aligner + consumer)](#combo-testing-aligner--consumer) | Full pipeline: upstream data → aligner → alignment → consumer → output | Validating end-to-end behavior of one aligner + one alignment consumer cog |
+
+### Aligners
+
+Aligner cogs can be unit tested by adding `cpp_test_cog` to the generate list alongside `cpp_aligner` (**not** `cpp_test_aligner`; aligners are generated as cogs and use the same basic unit test approach).
+
+```clk
+// example_aligner.clk
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+#![cpp(namespace=clockwork::example)]
+
+use messages::{SensorMsg};
+use std::aligners::state;
+
+// Example aligner for unit testing.
+aligner ExampleAligner
+{
+    inputs
+    {
+        tick: Tappy<SensorMsg> { max_msgs: 10; }
+        sensor: Tappy<SensorMsg> { max_msgs: 10; }
+    }
+    assume(is_strictly_increasing(tick.observation_time));
+    assume(is_strictly_increasing(sensor.observation_time));
+    require(|tick.observation_time - sensor.observation_time| <= 100ms);
+}
+```
+
+This generates a `_cc_test` Bazel target containing the test wrapper library.
+Add this target as a dependency of your `cc_test` rule (e.g. `":example_aligner_clk_cc_test"`).
+The test wrapper exposes the same API as regular cog test wrappers: `get_inputs()`, `get_outputs()`, `get_states()`, and so on.
+
+A minimal unit test for an aligner cog looks like the following.
+
+```cpp
+#include "example_aligner_clk_cc_test.hh"
+
+TEST_CASE("ExampleAlignerTest")
+{
+  ExampleAlignerTestWrapper test_cog;
+  auto now = jewels::time::SyncTime{std::chrono::milliseconds{3000}};
+  REQUIRE(test_cog.initialize(now));
+
+  // Publish sensor data before the tick. publish() returns a MessageHandle
+  // containing the sequence number assigned to the message.
+  now += std::chrono::milliseconds{1};
+  auto sensor = test_cog.get_inputs().get_sensor().publish(
+    [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime{std::chrono::milliseconds{3100}}); },
+    now);
+
+  // Publish the tick that triggers alignment.
+  now += std::chrono::milliseconds{1};
+  auto tick = test_cog.get_inputs().get_tick().publish(
+    [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime{std::chrono::milliseconds{3100}}); },
+    now);
+
+  REQUIRE(test_cog.execute(now));
+
+  // Verify the alignment output using the message handles.
+  const auto& alignment = test_cog.get_outputs().get_alignment().get_next_message();
+  CHECK(alignment.get_tick_seq() == tick.seqno);
+  CHECK(alignment.get_sensor_seq() == sensor.seqno);
+}
+```
+
+### Consumer Cogs with Aligned Inputs
+
+Consumer cogs that declare `aligned_inputs` can be unit tested with the generated test wrapper.
+Add `cpp_test_cog` to the generate list alongside `cpp_cog`:
+
+```clk
+#![generate(cpp, cpp_cog, cpp_test_cog)]
+```
+
+The test wrapper provides a `get_{group_name}()` accessor for each aligned input group.
+This returns a group struct with `publish_{input_name}()` methods for each upstream channel and a batch builder API for constructing alignment messages.
+
+```cpp
+auto aligned = test_cog.get_aligned();
+
+// Publish upstream messages — returns a MessageHandle with the assigned seqno
+auto sensor1 = aligned.publish_sensor(
+  [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime(3100ms)); }, now);
+auto cam1 = aligned.publish_camera(
+  [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime(3150ms)); }, now);
+
+// Build and publish an alignment message using the batch builder
+auto batch = aligned.make_batch();
+batch.set_sensor(sensor1);
+batch.set_camera(cam1);
+batch.set_lidar_range(lid1, lid2);
+batch.set_radar(rad1);              // optional input: set_* or unset_*
+batch.publish(now);
+
+REQUIRE(test_cog.execute(now));
+```
+
+The `AlignedBatch` builder validates that all required (non-optional) inputs are set before publishing.
+Optional inputs default to absent; use `unset_{name}()` to explicitly mark them absent after a prior `set_{name}()`.
+
+### Combo Testing (Aligner + Consumer)
+
+Combo testing allows testing the full pipeline from raw messages through alignment to consumer output in a single unit test.
+
+#### Setup
+
+Both the aligner and consumer modules must have `cpp_test_cog` in their `generate` lists.
+The consumer module additionally needs `cpp_combo_test`:
+
+```clk
+// aligner.clk
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+
+// consumer.clk
+#![generate(cpp, cpp_cog, cpp_test_cog, cpp_combo_test)]
+```
+
+In the consumer module's BUILD target, add the aligner's test wrapper as a dependency:
+
+```starlark
+clk(
+    name = "consumer_clk",
+    srcs = ["consumer.clk"],
+    generate = ["cpp", "cpp_cog", "cpp_test_cog", "cpp_combo_test"],
+    # Following must be provided manually and point to the right aligner test target:
+    cpp_combo_test_aligner_deps = [":aligner_clk_cc_test"],
+    ...
+)
+```
+
+#### Usage
+
+The combo wrapper is named `{ConsumerCog}ComboWrapper` and lives in the consumer module's `_cc_test` library.
+
+```cpp
+#include "consumer_clk_cc_test.hh"
+
+TEST_CASE("Combo test")
+{
+  ConsumerCogComboWrapper combo;
+  auto now = jewels::time::SyncTime{3000ms};
+  combo.initialize(now);
+
+  // Publish to shared upstream channels (visible to both aligner and consumer)
+  now += 1ms;
+  combo.publish_sensor(
+    [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime(3100ms)); }, now);
+  now += 1ms;
+  combo.publish_camera(
+    [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime(3150ms)); }, now);
+  now += 1ms;
+  combo.publish_lidar(
+    [](auto& msg) { msg.set_observation_time(jewels::time::SyncTime(3110ms)); }, now);
+
+  // Execute both aligner and consumer: returns true only if both execute
+  REQUIRE(combo.execute(now));
+
+  // Inspect consumer output
+  const auto& echo = combo.get_consumer().get_outputs().get_echo().get_next_message();
+  CHECK(echo.get_sensor_obs_time() == jewels::time::SyncTime(3100ms));
+}
+```
+
+#### Step-by-step execution
+
+Use `execute_aligner()` and `execute_consumer()` to run each cog independently and inspect intermediate state:
+
+```cpp
+REQUIRE(combo.execute_aligner(now));
+
+// Inspect the alignment message before running the consumer
+const auto& alignment =
+  combo.get_aligner().get_outputs().get_alignment().get_next_message();
+
+REQUIRE(combo.execute_consumer(now));
+```
+
+This is useful particularly if the consumer has additional execution triggers other than the alignment message, or to test the consumer's behavior when there are multiple pending alignments (run the aligner multiple times before running the consumer; simulates a slow consumer).
+
+#### Consumer regular inputs
+
+The combo wrapper also provides `publish_{name}()` methods for the consumer's regular (non-aligned) inputs, which are NOT shared with the aligner.
+
+#### Underlying wrappers
+
+Access the underlying aligner and consumer test wrappers via `get_aligner()` and `get_consumer()` for full control over inputs, outputs, and state.
+
+## Signals
+
+This example shows a cog that runs periodically with a single signal report group defined.
+The unit test wrapper provides access to the messages that are generated by the cog.
+Since messages from different report groups can be published at different cadences, the test wrapper does not present the signals from the cog as through a single object.
+If a cog only has one report group the messages generated by that report group are accessed by calling the `get_signals` method.
+If a cog has more than one report group, then the report group messages are accessed by calling `get_signals().get_<name>()`, because each report group is published in a separate message.
+
+```clk
+// example.clk
+#![generate(cpp, cpp_cog, cpp_test_cog)
+#![cpp_namespace=clockwork::example]
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupPolicyConfig, ReportGroupLogType};
+
+// Signals test cog
+cog SignalsCog
+{
+  signals group
+  {
+    // Doc
+    value1 signal Int64
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+policy ReportGroupPolicy for SignalsCog.group
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::none;
+  max_observations = 2;
+}
+```
+
+A unit test for this example might look like this.
+
+```cpp
+#include example/example_clk_cc_test.hh”
+
+TestCase("SignalsCogTest")
+{
+  auto now = jewels::time::SyncTime{};
+  SignalsCogTestWrapper test_cog;
+  test_cog.initialize(now);
+
+  now += std::chrono::milliseconds(100);
+  REQUIRE(test_cog.execute(current_time));
+
+  // Report group published every other execution
+  REQUIRE_FALSE(test_cog.get_signals()..try_get_next_message());
+
+  now += std::chrono::milliseconds(100);
+  REQUIRE(test_cog.execute(now));
+
+  auto signals_msg = test_cog.get_signals().get_next_message();
+  REQUIRE(signals_msg.get_execution_count() == 2U);
+  REQUIRE(signals_msg.get_value1_value_min() == 1);
+  REQUIRE(signals_msg.get_value1_value_max() == 2);
 }
 ```
 

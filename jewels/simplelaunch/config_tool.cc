@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/error_code.hh"
@@ -134,6 +134,10 @@ int32_t merge(std::span<char*> args)
     const auto& config = config_result.value();
     output_config.mutable_app()->Add(config.app().begin(), config.app().end());
     output_config.mutable_pre_launch()->Add(config.pre_launch().begin(), config.pre_launch().end());
+    if (output_config.runner_config_path().empty() && !config.runner_config_path().empty())
+    {
+      output_config.set_runner_config_path(config.runner_config_path());
+    }
   }
 
   std::string output_config_str;

@@ -1,120 +1,112 @@
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::dsl::tests::support)]
 
 use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupPolicyConfig, ReportGroupLogType};
 
 // Doc.
 cog ComprehensiveCog
 {
-    signals test_group
+  signalstest_group
+  {
+    // Basic signal with post-aggregation
+    basic_signal: signal UInt64
     {
-        // Basic signal with post-aggregation
-        basic_signal: signal UInt64
-        {
-            post_aggregation: ["min", "max"];
-        }
-
-        // Signal with pre and post aggregation
-        combined_signal: signal Duration
-        {
-            pre_aggregation: ["min", "max"];
-            post_aggregation: ["min", "final_value"];
-        }
-
-        // Signal with mean aggregation (should become Float64)
-        mean_signal: signal UInt32
-        {
-            pre_aggregation: ["sum"];
-            post_aggregation: ["mean", "max"];
-        }
-
-        // Signal with metadata that is preserved
-        metadata_preserved: signal Int64
-        {
-            metadata: SyncTime;
-            pre_aggregation: ["min"];
-            post_aggregation: ["max"];
-        }
-
-        // Signal with metadata stripped by aggregation
-        metadata_stripped: signal UInt32
-        {
-            metadata: SyncTime;
-            pre_aggregation: ["sum"];
-            post_aggregation: ["sum"];
-        }
+      post_aggregation: ["min", "max"];
     }
 
-    execution
+    // Signal with pre and post aggregation
+    combined_signal: signal Duration
     {
-        condition periodic: time_since_last_exec(100ms);
-        execute when: periodic;
+      pre_aggregation: ["min", "max"];
+      post_aggregation: ["min", "final_value"];
     }
+
+    // Signal with mean aggregation (should become Float64)
+    mean_signal: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+      post_aggregation: ["mean", "max"];
+    }
+
+    // Signal with metadata that is preserved
+    metadata_preserved: signal Int64
+    {
+      metadata: SyncTime;
+      pre_aggregation: ["min"];
+      post_aggregation: ["max"];
+    }
+
+    // Signal with metadata stripped by aggregation
+    metadata_stripped: signal UInt32
+    {
+      metadata: SyncTime;
+      pre_aggregation: ["sum"];
+      post_aggregation: ["sum"];
+    }
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(100ms);
+    execute when: periodic;
+  }
 }
 
 policy ReportGroupPolicy for ComprehensiveCog.test_group
 {
-    reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::telemetry;
-    min_observations = 5;
-    max_observations = 100;
-    max_duration = 30s;
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::non_redundant_telemetry;
+  min_observations = 5;
+  max_observations = 100;
+  max_duration = 30s;
 }
 
 // Doc.
 cog BatchedCog
 {
-    signals batched_group
+  signalsbatched_group
+  {
+    // Basic signal with default pre-aggregation (value)
+    basic_batched: signal UInt64;
+
+    // Signal with multiple pre-aggregations
+    multi_pre_agg: signal Int32
     {
-        // Basic signal with default pre-aggregation (value)
-        basic_batched: signal UInt64;
-
-        // Signal with multiple pre-aggregations
-        multi_pre_agg: signal Int32
-        {
-            pre_aggregation: ["min", "max"];
-        }
-
-        // Signal with mean pre-aggregation (expanded to sum+count for batched)
-        mean_pre_agg: signal UInt16
-        {
-            pre_aggregation: ["mean"];
-        }
-
-        // Signal with metadata preserved
-        with_metadata: signal Float32
-        {
-            metadata: SyncTime;
-            pre_aggregation: ["min"];
-        }
-
-        // Signal with metadata stripped (sum and count don't preserve metadata)
-        metadata_stripped: signal UInt32
-        {
-            metadata: SyncTime;
-            pre_aggregation: ["mean"];
-        }
+      pre_aggregation: ["min", "max"];
     }
 
-    execution
+    // Signal with mean pre-aggregation (expanded to sum+count for batched)
+    mean_pre_agg: signal UInt16
     {
-        condition periodic: time_since_last_exec(50ms);
-        execute when: periodic;
+      pre_aggregation: ["mean"];
     }
+
+    // Signal with metadata preserved
+    with_metadata: signal Float32
+    {
+      metadata: SyncTime;
+      pre_aggregation: ["min"];
+    }
+
+    // Signal with metadata stripped (sum and count don't preserve metadata)
+    metadata_stripped: signal UInt32
+    {
+      metadata: SyncTime;
+      pre_aggregation: ["mean"];
+    }
+  }
+
+  execution
+  {
+    condition periodic: time_since_last_exec(50ms);
+    execute when: periodic;
+  }
 }
 
 policy ReportGroupPolicy for BatchedCog.batched_group
 {
-    reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::event;
-    max_observations = 25;
-    max_duration = 10s;
-}
-
-cpp_target report_group_defs
-{
-    options
-    {
-        namespace clockwork::dsl::tests::support;
-    }
-    cog ComprehensiveCog;
-    cog BatchedCog;
+  reporting_strategy = ReportingStrategy::batched;
+  log_type = ReportGroupLogType::event;
+  max_observations = 25;
+  max_duration = 10s;
 }

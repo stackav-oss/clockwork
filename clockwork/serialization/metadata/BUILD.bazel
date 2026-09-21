@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
@@ -24,6 +24,7 @@ py_library(
         "//clockwork/dsl/ir:node",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:statement",
         "//clockwork/dsl/ir:strongtypes",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/serialization:tachyon_layout_reg",

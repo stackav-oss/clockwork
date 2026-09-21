@@ -1,0 +1,25 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "unit_test_cog_test",
+    srcs = ["unit_test_cog_test.cc"],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/tests/support:unit_test_states_clk_cc",
+        "//clockwork/cog/wrappers/tests/support:legacy_parameterized_unit_test_cogs_test",
+        "//clockwork/cog/wrappers/tests/support:legacy_unit_test_cogs_test",
+        "//clockwork/cog/wrappers/tests/support:parameterized_unit_test_cogs_clk_cc_test",
+        "//clockwork/cog/wrappers/tests/support:unit_test_cogs_clk_cc_test",
+        "//clockwork/cog/wrappers/tests/support:unit_test_configs_clk_cc",
+        "//clockwork/cog/wrappers/tests/support:unit_test_messages_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//jewels/memory:memory_resource",
+        "//jewels/utility:string_param",
+        "@catch2//:catch2_main",
+    ],
+)

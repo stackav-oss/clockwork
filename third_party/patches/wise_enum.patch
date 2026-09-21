@@ -3,7 +3,8 @@ new file mode 100644
 index 0000000..13c3ea3
 --- /dev/null
 +++ BUILD.bazel
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,8 @@
++load("@rules_cc//cc:defs.bzl", "cc_library")
 +
 +cc_library(
 +    name = "wise_enum",
@@ -16,8 +17,9 @@ new file mode 100644
 index 0000000..718d1ce
 --- /dev/null
 +++ MODULE.bazel
-@@ -0,0 +1 @@
+@@ -0,0 +1,2 @@
 +module(name = "wise_enum")
++bazel_dep(name = "rules_cc")
 diff --git wise_enum_detail.h wise_enum_detail.h
 index 1accbe7..2ad8766 100644
 --- wise_enum_detail.h

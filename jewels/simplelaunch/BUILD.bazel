@@ -1,4 +1,6 @@
-# Copyright 2025 Stack AV Co.
+load("//clockwork:rules.bzl", "clk")
+
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
@@ -18,6 +20,10 @@ cc_binary(
     deps = [
         ":config",
         ":simplelaunch_impl",
+        "//clockwork:repr_iface",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:simplelaunch_runner_config_clk_cc",
+        "//jewels/container:compare",
         "//jewels/filesystem",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:path",
@@ -35,7 +41,7 @@ cc_library(
     deps = [
         ":config",
         ":cpu_affinity",
-        ":service_definition",
+        ":simplelaunch_status_clk_cc",
         "//jewels/filesystem",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
@@ -43,11 +49,12 @@ cc_library(
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
+        "//jewels/simplelaunch/v1:service_cc_library",
         "//jewels/std:expected",
         "//jewels/time:sync_time",
         "//jewels/utility:fix_clockwork_path",
-        "@boost//:asio",
-        "@boost//:system",
+        "@boost.asio",
+        "@boost.system",
         "@fmt",
     ],
 )
@@ -134,29 +141,60 @@ cc_library(
     deps = [
         ":child_process",
         ":config",
-        ":service_definition",
+        ":simplelaunch_status_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/common:platform_diagnostics_config_clk_cc",
+        "//clockwork/common:process_description_clk_cc",
+        "//clockwork/common:simplelaunch_runner_config_clk_cc",
+        "//clockwork/diagnostics:report_definitions",
+        "//clockwork/diagnostics:reporter",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//clockwork/pinion:buffer_layout",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/runners:epoll_manager",
+        "//clockwork/scaffolding:channels",
+        "//jewels/container:compare",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
         "//jewels/filesystem:path",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
+        "//jewels/simplelaunch/v1:service_cc_library",
         "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
         "@abseil-cpp//absl/status",
-        "@boost//:asio",
-        "@boost//:beast",
-        "@boost//:system",
+        "@boost.asio",
+        "@boost.beast",
+        "@boost.system",
         "@fmt",
         "@protobuf",
+        "@wise_enum",
     ],
 )
 
-cc_library(
-    name = "service_definition",
-    hdrs = ["service_definition.hh"],
+clk(
+    name = "simplelaunch_channel_policies_clk",
+    srcs = ["simplelaunch_channel_policies.clk"],
+    generate = ["none"],
     visibility = ["//visibility:public"],
     deps = [
-        "//jewels/simplelaunch/v1:service_cc_library",
-        "@wise_enum",
+        ":simplelaunch_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
     ],
+)
+
+clk(
+    name = "simplelaunch_channels_clk",
+    srcs = ["simplelaunch_channels.clk"],
+    generate = ["none"],
+    visibility = ["//visibility:public"],
+    deps = [":simplelaunch_status_clk"],
 )
 
 sh_binary(
@@ -172,22 +210,63 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":config",
-        ":service",
+        ":simplelaunch_runner",
+        "//clockwork:repr_iface",
+        "//clockwork/common:exec_tools",
+        "//clockwork/common:simplelaunch_runner_config_clk_cc",
+        "//jewels/callsig:outcome",
         "//jewels/filesystem",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file_descriptor",
         "//jewels/filesystem:path",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:pointers",
         "//jewels/simplelaunch/v1:config_cc_library",
         "//jewels/std:expected",
         "//jewels/utility:fix_clockwork_path",
-        "@boost//:asio",
-        "@boost//:filesystem",
-        "@boost//:process",
-        "@boost//:system",
+        "@boost.fusion",
+        "@boost.process",
         "@fmt",
         "@protobuf",
     ],
+)
+
+cc_library(
+    name = "simplelaunch_runner",
+    srcs = ["simplelaunch_runner.cc"],
+    hdrs = ["simplelaunch_runner.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":service",
+        "//clockwork:repr_iface",
+        "//clockwork/common:simplelaunch_runner_config_clk_cc",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//clockwork/runners:epoll_manager",
+        "//jewels/callsig:outcome",
+        "//jewels/filesystem:error_code",
+        "//jewels/filesystem:path",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pointers",
+        "//jewels/simplelaunch/v1:config_cc_library",
+        "//jewels/std:expected",
+        "//jewels/time:sync_time",
+        "@boost.asio",
+        "@boost.system",
+    ],
+)
+
+clk(
+    name = "simplelaunch_status_clk",
+    srcs = ["simplelaunch_status.clk"],
+    outs = [
+        "simplelaunch_status_clk_cc.cc",
+        "simplelaunch_status_clk_cc.hh",
+        "simplelaunch_status_clk_cc.inl",
+        "simplelaunch_status_clk_cc_types.cc",
+        "simplelaunch_status_clk_cc_types.hh",
+        "simplelaunch_status_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+    visibility = ["//visibility:public"],
 )

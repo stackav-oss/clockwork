@@ -1,8 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/std/expected.hh"
@@ -25,7 +26,7 @@ class TestPublisher
 private:
   /// Private constructor, use try_open to create an instance
   /// @param[in] publisher_ptr Publisher open result pointer
-  explicit TestPublisher(std::shared_ptr<clockwork::pinion::ShmPublisher> publisher_ptr);
+  explicit TestPublisher(std::shared_ptr<clockwork::pinion::AbstractPublisher> publisher_ptr);
 
 public:
   ~TestPublisher() = default;
@@ -65,7 +66,7 @@ public:
 
 private:
   /// Pinion publisher pointer
-  std::shared_ptr<pinion::ShmPublisher> publisher_ptr_;
+  std::shared_ptr<pinion::AbstractPublisher> publisher_ptr_;
 };
 
 } // namespace clockwork::tools::tests::support

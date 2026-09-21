@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -7,6 +7,8 @@
 from pathlib import Path
 
 from clockwork.dsl.ir import clkbuiltins, clkenum, cog, compiler, importer, primitive, schema, typesys
+
+# pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 from clockwork.dsl.ir.cog_metrics_schema_generation import Decimal
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 

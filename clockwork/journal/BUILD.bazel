@@ -1,0 +1,129 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//clockwork:rules.bzl", "clk")
+
+# gazelle:proto_language go enabled false
+
+package(default_visibility = ["//visibility:public"])
+
+proto_cc_library(
+    name = "journal_cc_library",
+    srcs = ["journal.pb.cc"],
+    hdrs = ["journal.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "journal_cpp_compile",
+    outputs = [
+        "journal.pb.cc",
+        "journal.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "journal_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "journal_proto",
+    srcs = ["journal.proto"],
+)
+
+proto_compile(
+    name = "journal_py_compile",
+    outputs = [
+        "journal_pb2.py",
+        "journal_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "journal_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "journal_py_library",
+    srcs = ["journal_pb2.py"],
+    data = ["journal_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)
+
+proto_cc_library(
+    name = "journal_topology_cc_library",
+    srcs = ["journal_topology.pb.cc"],
+    hdrs = ["journal_topology.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "journal_topology_cpp_compile",
+    outputs = [
+        "journal_topology.pb.cc",
+        "journal_topology.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "journal_topology_proto",
+    visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "journal_topology_file_config_clk",
+    srcs = ["journal_topology_file_config.clk"],
+    outs = [
+        "journal_topology_file_config_clk_cc.cc",
+        "journal_topology_file_config_clk_cc.hh",
+        "journal_topology_file_config_clk_cc.inl",
+        "journal_topology_file_config_clk_cc_types.cc",
+        "journal_topology_file_config_clk_cc_types.hh",
+        "journal_topology_file_config_clk_cc_types.inl",
+        "journal_topology_file_config_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+)
+
+proto_library(
+    name = "journal_topology_proto",
+    srcs = ["journal_topology.proto"],
+)
+
+proto_compile(
+    name = "journal_topology_py_compile",
+    outputs = [
+        "journal_topology_pb2.py",
+        "journal_topology_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "journal_topology_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "journal_topology_py_library",
+    srcs = ["journal_topology_pb2.py"],
+    data = ["journal_topology_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)

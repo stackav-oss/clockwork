@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -46,6 +46,7 @@ public:
     .schema_name = "schema1",
     .schema_encoding = SchemaEncoding::undefined,
     .schema_definition = "",
+    .is_amended = true,
   };
 
   /// Channel 1 default header size
@@ -65,6 +66,7 @@ public:
     .schema_name = "schema2",
     .schema_encoding = SchemaEncoding::undefined,
     .schema_definition = "",
+    .is_amended = false,
   };
 
   /// Channel 2 default header size
@@ -84,6 +86,7 @@ public:
     .schema_name = "schema3",
     .schema_encoding = SchemaEncoding::undefined,
     .schema_definition = "",
+    .is_amended = true,
   };
 
   /// Channel 3 default header size

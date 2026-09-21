@@ -1,13 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/log_writer_config_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/channel_observer.hh"
 #include "clockwork/pinion/channel_observer_client.hh"
-#include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "jewels/container/compare.hh"
@@ -54,7 +54,7 @@ public:
 
 using ChannelMap = std::pmr::unordered_map<
   jewels::Uuid<::clockwork::common::EndpointInstanceId>,
-  std::shared_ptr<::clockwork::pinion::ShmPublisher>,
+  std::shared_ptr<::clockwork::pinion::AbstractPublisher>,
   jewels::UuidHasher<::clockwork::common::EndpointInstanceId>>;
 
 // Class used in single process simulations and tests to log all messages published to configured channels. Simply

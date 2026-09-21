@@ -1,0 +1,352 @@
+trivia_preserve: Trivia;
+preserve_blanks: 1;
+
+ws_allowed: nil;
+ws_required: nbsp;
+
+before ";" { nil; }
+after ";" { hard; }
+
+before "," { nil; }
+after "," { bsp; }
+
+before ":" { nil; }
+after ":" { nbsp; }
+
+before "." { nil; }
+after "." { nil; }
+
+before "::" { nil; }
+after "::" { nil; }
+
+before "<" { nil; }
+after "<" { nil; }
+before ">" { nil; }
+
+before "(" { nil; }
+after "(" { nil; }
+before ")" { nil; }
+
+before "[" { nil; }
+after "[" { nil; }
+before "]" { nil; }
+
+before "{" { hard; }
+after "{" { hard; }
+before "}" { hard; }
+after "}" { hard; }
+
+before "=" { nbsp; }
+after "=" { nbsp; }
+
+before "->" { nbsp; }
+after "->" { nbsp; }
+
+before "|" { nbsp; }
+after "|" { nbsp; }
+
+before "+" { nbsp; }
+after "+" { nbsp; }
+before "-" { nbsp; }
+after "-" { nbsp; }
+before "*" { nbsp; }
+after "*" { nbsp; }
+before "/" { nbsp; }
+after "/" { nbsp; }
+before "%" { nbsp; }
+after "%" { nbsp; }
+
+rule module
+{
+    after use { hard; }
+    after clk_use { hard; }
+    after entity { blank; }
+    after clk_entity { blank; }
+}
+
+rule cog { nest from after "{" to before "}"; }
+rule cog_blocks { nest from after "{" to before "}"; }
+rule cog_parameters_block { nest from after "{" to before "}"; }
+rule block { nest from after "{" to before "}"; }
+rule resources_block { nest from after "{" to before "}"; }
+rule report_group { nest from after "{" to before "}"; }
+rule signal_instance_block { nest from after "{" to before "}"; }
+rule configs_block { nest from after "{" to before "}"; }
+rule states_block { nest from after "{" to before "}"; }
+rule state_block { nest from after "{" to before "}"; }
+rule inputs_block { nest from after "{" to before "}"; }
+rule input_block { nest from after "{" to before "}"; }
+rule cog_aligned_inputs_block { nest from after "{" to before "}"; }
+rule cog_aligned_input_block { nest from after "{" to before "}"; }
+rule outputs_block { nest from after "{" to before "}"; }
+rule output_block { nest from after "{" to before "}"; }
+rule execution_block { nest from after "{" to before "}"; }
+rule condition_spec
+{
+    group;
+    nest from after "(" to before ")";
+    after "(" { soft; }
+    before ")" { soft; }
+}
+rule condition_expr
+{
+    group;
+    before op_and { bsp; }
+    after op_and { nbsp; }
+    before op_or { bsp; }
+    after op_or { nbsp; }
+}
+rule execute_when
+{
+    group;
+    nest from after ":" to before ";";
+}
+rule rate_limit_spec
+{
+    before output { nbsp; }
+    before "every" { nbsp; }
+    after "every" { nbsp; }
+}
+rule diagnostics_block { nest from after "{" to before "}"; }
+rule diagnostics_def { nest from after "{" to before "}"; }
+rule simulation_options_block { nest from after "{" to before "}"; }
+rule python_options_block { nest from after "{" to before "}"; }
+rule metrics_options_block { nest from after "{" to before "}"; }
+
+rule schema { nest from after "{" to before "}"; }
+rule schema_parameters_block { nest from after "{" to before "}"; }
+rule schema_fields_block { nest from after "{" to before "}"; }
+rule schema_options { nest from after "{" to before "}"; }
+rule schema_history_block { nest from after "{" to before "}"; }
+rule schema_field { after field_num { nbsp; } }
+
+rule enum { nest from after "{" to before "}"; }
+rule enum_option_block { nest from after "{" to before "}"; }
+rule enum_values_block { nest from after "{" to before "}"; }
+rule enum_history_block { nest from after "{" to before "}"; }
+rule enum_value
+{
+    after value_num { nbsp; }
+    before enum_value_details_block { nbsp; }
+}
+rule enum_value_default { before default { nbsp; } }
+rule enum_value_details_block
+{
+    group;
+    nest from after "{" to before "}";
+    before "{" { nil; }
+    after "{" { bsp; }
+    before "}" { bsp; }
+}
+rule enum_value_detail { after ";" { nil; } }
+
+rule strong_type { nest from after "{" to before "}"; }
+rule extern_type_body { nest from after "{" to before "}"; }
+rule serialized_form { nest from after "{" to before "}"; }
+rule cpp_extern { nest from after "{" to before "}"; }
+rule cpp_extern_block { nest from after "{" to before "}"; }
+rule cpp_extern_type { nest from after "{" to before "}"; }
+rule representation { nest from after "{" to before "}"; }
+rule repr_options { nest from after "{" to before "}"; }
+rule repr_fields { nest from after "{" to before "}"; }
+rule repr_field { nest from after "{" to before "}"; }
+rule channel { nest from after "{" to before "}"; }
+rule channel_parameters_block { nest from after "{" to before "}"; }
+rule signal_block { nest from after "{" to before "}"; }
+rule udp_socket { nest from after "{" to before "}"; }
+rule udp_socket_options { nest from after "{" to before "}"; }
+rule multicast_udp_socket { nest from after "{" to before "}"; }
+rule audio_source { nest from after "{" to before "}"; }
+
+rule py_target { nest from after "{" to before "}"; }
+rule py_python_cog_dial_block { nest from after "{" to before "}"; }
+rule cpp_target { nest from after "{" to before "}"; }
+rule cpp_target_options { nest from after "{" to before "}"; }
+rule nanobind_type_caster
+{
+    before "for" { nbsp; }
+    after "for" { nbsp; }
+    before "from" { nbsp; }
+    after "from" { nbsp; }
+}
+rule nanobind_target { nest from after "{" to before "}"; }
+rule casing { nest from after "{" to before "}"; }
+rule casing_extern { after "extern" { nbsp; } }
+rule casing_representation { after "representation" { nbsp; } }
+rule casing_interface { after "interface" { nbsp; } }
+rule casing_box { after "box" { nbsp; } }
+rule casing_instantiate_stmt { after "instantiate" { nbsp; } }
+rule connect_stmt
+{
+      group;
+      after "connect" { nbsp; }
+}
+rule cpp_executable { nest from after "{" to before "}"; }
+rule box { nest from after "{" to before "}"; }
+rule box_parameters_block { nest from after "{" to before "}"; }
+rule cpu_domain_options { nest from after "{" to before "}"; }
+rule pcie_link
+{
+    nest from after "{" to before "}";
+    before domain_a { nbsp; }
+    after domain_a { nbsp; }
+}
+rule system_target { nest from after "{" to before "}"; }
+rule system_options_block { nest from after "{" to before "}"; }
+rule ethernet { nest from after "{" to before "}"; }
+rule ethernet_ipv4 { nest from after "{" to before "}"; }
+rule proto_target { nest from after "{" to before "}"; }
+rule proto_target_options { nest from after "{" to before "}"; }
+rule policy_def { nest from after "{" to before "}"; }
+rule policy { nest from after "{" to before "}"; }
+
+rule list
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { soft; }
+    after trailing_comma { hard; }
+    before "]" { soft; }
+}
+rule legacy_became_spec
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { soft; }
+    after trailing_comma { hard; }
+    before "]" { soft; }
+}
+rule removed_spec
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { soft; }
+    after trailing_comma { hard; }
+    before "]" { soft; }
+}
+rule arg_list
+{
+    after trailing_comma { hard; }
+}
+rule instantiate
+{
+    group;
+    nest from after "<" to before ">";
+    after "<" { soft; }
+    before ">" { soft; }
+}
+rule call
+{
+    group;
+    nest from after "(" to before ")";
+    after "(" { soft; }
+    before ")" { soft; }
+}
+rule macro_call
+{
+    group;
+    nest from after "!(" to before ")";
+    after "!(" { soft; }
+    before ")" { soft; }
+}
+rule arg
+{
+    before "=" { nil; }
+    after "=" { nil; }
+}
+rule aggregation_list { group; }
+rule signal_pre_aggregation
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { nil; }
+    before "]" { nil; }
+}
+rule signal_option_post_aggregation
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { nil; }
+    before "]" { nil; }
+}
+rule signal_post_aggregation
+{
+    group;
+    nest from after "[" to before "]";
+    after "[" { nil; }
+    before "]" { nil; }
+}
+rule use_type { before use_alias { nbsp; } }
+rule use_block
+{
+    group;
+    nest from after "{" to before "}";
+    before "{" { nil; }
+    after "{" { soft; }
+    after trailing_separator { hard; }
+    before "}" { soft; }
+    after "}" { nil; }
+}
+rule use_block_separator
+{
+    after semicolon { bsp; }
+    after comma { bsp; }
+}
+rule go_package_slash_segment
+{
+    before slash { nil; }
+    after slash { nil; }
+}
+rule go_package_dash_segment
+{
+    before dash { nil; }
+    after dash { nil; }
+}
+rule clk_generate { group; }
+rule clk_generate_targets { group; }
+rule clk_use_target { group; }
+rule clk_inner_attr { group; }
+rule clk_outer_attr { group; }
+rule clk_attr { group; }
+rule clk_cpp_values { group; }
+rule clk_proto_values { group; }
+rule clk_proto_conv_values { group; }
+rule dfl_trait_def { nest from after "{" to before "}"; }
+rule dfl_trait_body { nest from after "{" to before "}"; }
+rule dfl_impl_decl
+{
+    nest from after "{" to before "}";
+    before "for" { nbsp; }
+    after "for" { nbsp; }
+}
+rule dfl_impl_body { nest from after "{" to before "}"; }
+rule dfl_fn_def { nest from after "{" to before "}"; }
+rule dfl_cond_expr { nest from after "{" to before "}"; }
+rule dfl_match_expr { nest from after "{" to before "}"; }
+rule dfl_comparison_expr
+{
+    before dfl_comparison_op { nbsp; }
+    after dfl_comparison_op { nbsp; }
+}
+rule dfl_call_suffix
+{
+    group;
+    nest from after "(" to before ")";
+    after "(" { nil; }
+    before ")" { nil; }
+}
+rule dfl_arg_list
+{
+    after dfl_arg { nil; }
+}
+rule dfl_arg
+{
+    after value { nil; }
+}
+rule dfl_abs_expr
+{
+    before "|" { nil; }
+    after "|" { nil; }
+}
+rule aligner { nest from after "{" to before "}"; }
+rule aligner_inputs_block { nest from after "{" to before "}"; }

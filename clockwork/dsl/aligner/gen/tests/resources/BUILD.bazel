@@ -1,0 +1,10 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_testonly = True)
+
+filegroup(
+    name = "expected_search_outputs",
+    srcs = glob(["expected_*.txt"]),
+    visibility = ["//visibility:public"],
+)

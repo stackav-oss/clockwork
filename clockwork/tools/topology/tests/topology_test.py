@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Tests for topology library."""
@@ -18,30 +18,71 @@ def fake_system() -> topology.System:
     proc_a = "proc_a"
     proc_b = "proc_b"
     cpus = [cpu_a, cpu_b]
+
+    states = [
+        topology.State(
+            name="source_state",
+            uuid="",
+            is_extern=False,
+            type="StateSchema",
+            memory_resource="",
+            entities=["source_cog"],
+        ),
+        topology.State(
+            name="sink_state",
+            uuid="",
+            is_extern=True,
+            type="StateClass",
+            memory_resource="state_resource",
+            entities=["sink_cog"],
+        ),
+    ]
+
+    memory_resources = {
+        "state_resource": topology.Memory(
+            name="state_resource", uuid="", type="HeapMemory", size_bytes=3200, entities=[], states=["sink_state"]
+        ),
+        "sink_resource": topology.Memory(
+            name="sink_resource", uuid="", type="HeapMemory", size_bytes=1600, entities=["sink_cog"], states=[]
+        ),
+    }
+
     entities = [
         topology.Entity(
             name="source_socket",
+            uuid="",
             inputs=[],
             outputs=["source_chan"],
             process=proc_a,
+            states=[],
+            memory_resources=[],
         ),
         topology.Entity(
             name="source_cog",
+            uuid="",
             inputs=["source_chan"],
             outputs=["multi_node_chan"],
             process=proc_a,
+            states=[topology.Endpoint(name="state", entity="source_state")],
+            memory_resources=[],
         ),
         topology.Entity(
             name="sink_cog",
+            uuid="",
             inputs=["multi_node_chan"],
             outputs=["sink_chan"],
             process=proc_b,
+            states=[topology.Endpoint(name="state", entity="sink_state")],
+            memory_resources=[topology.Endpoint(name="memory", entity="sink_resource")],
         ),
         topology.Entity(
             name="sink_socket",
+            uuid="",
             inputs=["sink_chan"],
             outputs=[],
             process=proc_b,
+            states=[],
+            memory_resources=[],
         ),
     ]
     channels = [
@@ -88,11 +129,17 @@ def fake_system() -> topology.System:
         channel.subscribers = sorted(entity.name for entity in entities if channel.name in entity.inputs)
     channel_dict = {channel.name: channel for channel in channels}
 
+    memory_dict = {memory.name: memory for memory in memory_resources.values()}
+
+    state_dict = {state.name: state for state in states}
+
     return topology.System(
         cpus=cpu_dict,
         entities=entity_dict,
         channels=channel_dict,
         processes=processes,
+        memory_resources=memory_dict,
+        states=state_dict,
     )
 
 
@@ -148,6 +195,22 @@ def test_channel_flow_for_cpu(fake_system: topology.System) -> None:
     )
 
 
+def test_channel_logging_classification(fake_system: topology.System) -> None:
+    channel = fake_system.channels["multi_node_chan"]
+    channel.telemetry_log_locations = [
+        topology.LogLocation(cpu="cpu_a"),
+        topology.LogLocation(cpu="cpu_b", is_redundant=True),
+    ]
+
+    assert channel.is_telemetry_logged
+    assert channel.is_redundant_telemetry_logged
+    assert not channel.is_non_redundant_telemetry_logged
+    assert not channel.is_event_logged
+
+    channel.event_log_locations = [topology.LogLocation(cpu="cpu_a")]
+    assert channel.is_event_logged
+
+
 def test_mismatched_cpu_name(fake_system: topology.System) -> None:
     fake_system.cpus["cpu_a"].name = "cpu_x"
     with pytest.raises(ValueError, match=r"Entity cpu_x has unexpected key cpu_a"):
@@ -163,6 +226,18 @@ def test_mismatched_entity_name(fake_system: topology.System) -> None:
 def test_mismatched_channel_name(fake_system: topology.System) -> None:
     fake_system.channels["source_chan"].name = "another_chan"
     with pytest.raises(ValueError, match=r"Entity another_chan has unexpected key source_chan"):
+        topology.validate_system(fake_system)
+
+
+def test_mismatched_memory_resource_name(fake_system: topology.System) -> None:
+    fake_system.memory_resources["state_resource"].name = "another_resource"
+    with pytest.raises(ValueError, match=r"Entity another_resource has unexpected key state_resource"):
+        topology.validate_system(fake_system)
+
+
+def test_mismatched_state_name(fake_system: topology.System) -> None:
+    fake_system.states["source_state"].name = "another_state"
+    with pytest.raises(ValueError, match=r"Entity another_state has unexpected key source_state"):
         topology.validate_system(fake_system)
 
 
@@ -259,4 +334,80 @@ def test_extraneous_subscriber(fake_system: topology.System) -> None:
 def test_missing_subscriber(fake_system: topology.System) -> None:
     fake_system.entities["sink_socket"].inputs.remove("sink_chan")
     with pytest.raises(ValueError, match=r"Channel sink_chan is expecting subscribers: sink_socket"):
+        topology.validate_system(fake_system)
+
+
+def test_entity_has_phantom_memory_resource(fake_system: topology.System) -> None:
+    fake_system.entities["source_socket"].memory_resources.append(
+        topology.Endpoint(name="memory", entity="unknown_memory_resource")
+    )
+    with pytest.raises(
+        ValueError, match=r"Entity source_socket has an unknown memory resource unknown_memory_resource."
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_entity_has_unexpected_memory_resource(fake_system: topology.System) -> None:
+    fake_system.memory_resources["sink_resource"].entities.clear()
+    with pytest.raises(
+        ValueError,
+        match=r"Memory resource sink_resource is not expecting sink_cog to be an entity.",
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_memory_resource_missing_entity(fake_system: topology.System) -> None:
+    fake_system.memory_resources["sink_resource"].entities.append("source_cog")
+    with pytest.raises(
+        ValueError,
+        match=r"Memory resource sink_resource is expecting entities: source_cog",
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_state_has_phantom_memory_resource(fake_system: topology.System) -> None:
+    fake_system.states["source_state"].memory_resource = "unknown_memory_resource"
+    with pytest.raises(ValueError, match=r"State source_state has an unknown memory resource unknown_memory_resource."):
+        topology.validate_system(fake_system)
+
+
+def test_state_has_unexpected_memory_resource(fake_system: topology.System) -> None:
+    fake_system.memory_resources["state_resource"].states.clear()
+    with pytest.raises(
+        ValueError,
+        match=r"Memory resource state_resource is not expecting sink_state to be a state.",
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_memory_resource_missing_state(fake_system: topology.System) -> None:
+    fake_system.memory_resources["state_resource"].states.append("source_state")
+    with pytest.raises(
+        ValueError,
+        match=r"Memory resource state_resource is expecting states: source_state",
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_entity_has_phantom_state(fake_system: topology.System) -> None:
+    fake_system.entities["source_socket"].states.append(topology.Endpoint(name="state", entity="unknown_state"))
+    with pytest.raises(ValueError, match=r"Entity source_socket has an unknown state unknown_state."):
+        topology.validate_system(fake_system)
+
+
+def test_entity_has_unexpected_state(fake_system: topology.System) -> None:
+    fake_system.states["source_state"].entities.clear()
+    with pytest.raises(
+        ValueError,
+        match=r"State source_state is not expecting source_cog to be an entity.",
+    ):
+        topology.validate_system(fake_system)
+
+
+def test_state_missing_entity(fake_system: topology.System) -> None:
+    fake_system.states["source_state"].entities.append("sink_cog")
+    with pytest.raises(
+        ValueError,
+        match=r"State source_state is expecting entities: sink_cog",
+    ):
         topology.validate_system(fake_system)

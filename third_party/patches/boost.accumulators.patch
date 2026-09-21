@@ -1,0 +1,66 @@
+diff --git MODULE.bazel MODULE.bazel
+new file mode 100644
+--- /dev/null
++++ MODULE.bazel
+@@ -0,0 +1,27 @@
++module(
++    name = "boost.accumulators",
++    version = "1.90.0.bcr.1",
++    bazel_compatibility = [">=7.6.0"],
++    compatibility_level = 0,
++)
++
++bazel_dep(name = "boost.array", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.assert", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.circular_buffer", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.concept_check", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.config", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.core", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.fusion", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.iterator", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.mpl", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.numeric_conversion", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.parameter", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.preprocessor", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.range", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.serialization", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.static_assert", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.throw_exception", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.tuple", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.type_traits", version = "1.90.0.bcr.1")
++bazel_dep(name = "boost.typeof", version = "1.90.0.bcr.1")
++bazel_dep(name = "rules_cc", version = "0.2.18")
+diff --git BUILD.bazel BUILD.bazel
+new file mode 100644
+--- /dev/null
++++ BUILD.bazel
+@@ -0,0 +1,29 @@
++load("@rules_cc//cc:cc_library.bzl", "cc_library")
++
++cc_library(
++    name = "boost.accumulators",
++    hdrs = glob(["include/**/*.hpp"]),
++    includes = ["include"],
++    visibility = ["//visibility:public"],
++    deps = [
++        "@boost.array",
++        "@boost.assert",
++        "@boost.circular_buffer",
++        "@boost.concept_check",
++        "@boost.config",
++        "@boost.core",
++        "@boost.fusion",
++        "@boost.iterator",
++        "@boost.mpl",
++        "@boost.numeric_conversion",
++        "@boost.parameter",
++        "@boost.preprocessor",
++        "@boost.range",
++        "@boost.serialization",
++        "@boost.static_assert",
++        "@boost.throw_exception",
++        "@boost.tuple",
++        "@boost.type_traits",
++        "@boost.typeof",
++    ],
++)

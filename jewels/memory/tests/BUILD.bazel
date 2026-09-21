@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -60,16 +60,19 @@ cc_test(
     srcs = ["memory_resource_test.cc"],
     deps = [
         "//jewels/memory:memory_resource",
+        "//jewels/memory:new_delete_memory_resource",
         "@catch2//:catch2_main",
     ],
 )
 
 cc_test(
-    name = "monitor_resource_test",
-    srcs = ["monitor_resource_test.cc"],
+    name = "new_delete_memory_resource_test",
+    srcs = ["new_delete_memory_resource_test.cc"],
     deps = [
+        "//jewels/callsig:outparam",
+        "//jewels/memory:instrumented_pmr_resource",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:monitor_resource",
+        "//jewels/memory:new_delete_memory_resource",
         "@catch2//:catch2_main",
     ],
 )
@@ -78,8 +81,10 @@ cc_test(
     name = "pmr_shared_ptr_test",
     srcs = ["pmr_shared_ptr_test.cc"],
     deps = [
+        "//jewels/callsig:outparam",
+        "//jewels/memory:instrumented_pmr_resource",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:monitor_resource",
+        "//jewels/memory:new_delete_memory_resource",
         "//jewels/memory:pmr_shared_ptr",
         "@catch2//:catch2_main",
     ],
@@ -89,8 +94,11 @@ cc_test(
     name = "pmr_unique_ptr_test",
     srcs = ["pmr_unique_ptr_test.cc"],
     deps = [
+        "//jewels/callsig:outparam",
+        "//jewels/memory:allocator_deleter",
+        "//jewels/memory:instrumented_pmr_resource",
         "//jewels/memory:memory_resource",
-        "//jewels/memory:monitor_resource",
+        "//jewels/memory:new_delete_memory_resource",
         "//jewels/memory:pmr_unique_ptr",
         "@catch2//:catch2_main",
     ],
@@ -101,6 +109,7 @@ cc_test(
     srcs = ["pointers_test.cc"],
     deps = [
         "//jewels/memory:error",
+        "//jewels/memory:pmr_unique_ptr",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "@catch2//:catch2_main",

@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 // IWYU pragma: private, include "jewels/meta/integer_sequence.hh"
 #pragma once
 
+#include <cstddef>
 #include <utility>
 
 namespace jewels::meta::detail

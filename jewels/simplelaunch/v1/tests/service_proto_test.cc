@@ -1,0 +1,23 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#include "jewels/simplelaunch/simplelaunch_status_clk_cc.hh"
+#include "jewels/simplelaunch/v1/service.pb.h"
+#include "jewels/testing/wise_enum_proto_sync.hh"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <string>
+
+namespace jewels::simplelaunch
+{
+namespace
+{
+
+TEST_CASE("ProcessState")
+{
+  REQUIRE_WISE_ENUM_PROTO_SYNC(ProcessState, ::jewels::simplelaunch::v1::ProcessState);
+}
+
+} // namespace
+} // namespace jewels::simplelaunch

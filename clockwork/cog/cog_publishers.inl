@@ -5,8 +5,12 @@
 
 #include "clockwork/cog/detail.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -18,8 +22,9 @@
 #include "jewels/uuid/uuid.hh"
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
-#include <functional>
+#include <memory>
 #include <optional>
 #include <tuple>
 #include <utility>
@@ -80,7 +85,7 @@ bool CogPublishers<Policies...>::validate_published_once_outputs() const
   auto validate = []<typename Policy>(const Publisher<Policy>& publisher)
   {
     return publisher.handle &&
-           (!publisher.handle->buffer().is_published_once() || publisher.handle->buffer().get_publish_count() == 0);
+           (!publisher.handle->layout().is_published_once || publisher.handle->get_publish_count() == 0);
   };
   return detail::validate_helper<Publisher>(publishers_, validate);
 }
@@ -110,50 +115,66 @@ jewels::expected<void, jewels::MonoError> CogPublishers<Policies...>::set_handle
   return jewels::unexpected(jewels::MonoError{});
 }
 
-template <typename... Policies>
-auto CogPublishers<Policies...>::reserve_slots() -> jewels::expected<ReservedSlotsArray, jewels::MonoError>
+namespace detail
 {
-  auto slots = std::apply(
-    [](auto&... publisher) { return std::make_tuple(publisher.handle->reserve(publisher.connected)...); }, publishers_);
 
-  if (!std::apply([](auto&... slot) -> bool { return (static_cast<bool>(slot) && ...); }, slots))
-  {
-    return jewels::unexpected{jewels::MonoError{}};
-  }
-
-  return std::apply([](auto&... slot) -> ReservedSlotsArray { return {std::move(*slot)...}; }, slots);
-}
-
-namespace
+template <typename Result, typename Inputs, typename Make>
+jewels::expected<Result, jewels::MonoError> collect_into(Inputs& inputs, Make make_outputs)
 {
-template <typename... Policies, typename ArrayType, std::size_t... indices>
-auto make_publishables_impl(ArrayType& slots, std::index_sequence<indices...> /*unused*/)
-{
-  return std::make_tuple(
-    pinion::Publishable<typename Policies::MsgType>::try_make(
-      jewels::memory::make_non_null_from_ref(slots.at(indices)))...);
-}
-} // namespace
-
-template <typename... Policies>
-auto CogPublishers<Policies...>::make_publishables(ReservedSlotsArray& slots)
-  -> jewels::expected<PublishablesTuple, jewels::MonoError>
-{
-  auto publishables = make_publishables_impl<Policies...>(slots, std::make_index_sequence<policy_count>{});
-
-  if (!std::apply([](auto&... publishable) -> bool { return (static_cast<bool>(publishable) && ...); }, publishables))
-  {
-    return jewels::unexpected{jewels::MonoError{}};
-  }
+  auto outputs = std::apply(make_outputs, inputs);
 
   return std::apply(
-    [](auto&... publishable) -> PublishablesTuple { return std::make_tuple(std::move(*publishable)...); },
-    publishables);
+    [](auto&... output) -> jewels::expected<Result, jewels::MonoError>
+    {
+      if (!(static_cast<bool>(output) && ...))
+      {
+        return jewels::unexpected{jewels::MonoError{}};
+      }
+
+      return Result{std::move(*output)...};
+    },
+    outputs);
+}
+
+} // namespace detail
+
+template <typename... Policies>
+template <typename PolicyT>
+jewels::expected<pinion::PublisherReservation, pinion::ReserveError>
+CogPublishers<Policies...>::Publisher<PolicyT>::reserve() const
+{
+  return handle->reserve(PolicyT::max_msgs_per_exec, connected);
 }
 
 template <typename... Policies>
-void CogPublishers<Policies...>::update_rate_limiters(const jewels::time::SyncTime current_time)
+auto CogPublishers<Policies...>::reserve_slots() -> jewels::expected<ReservationArray, jewels::MonoError>
 {
+  return detail::collect_into<ReservationArray>(
+    publishers_, [](auto&... publisher) { return std::make_tuple(publisher.reserve()...); });
+}
+
+template <typename... Policies>
+auto CogPublishers<Policies...>::make_publishables(ReservationArray& reservations)
+  -> jewels::expected<PublishablesTuple, jewels::MonoError>
+{
+  return detail::collect_into<PublishablesTuple>(
+    reservations,
+    [](auto&... reservation)
+    {
+      return std::make_tuple(
+        pinion::Publishable<typename Policies::MsgType, Policies::max_msgs_per_exec>::try_make(
+          jewels::memory::make_non_null_from_ref(reservation))...);
+    });
+}
+
+template <typename... Policies>
+auto CogPublishers<Policies...>::update_rate_limiters(
+  jewels::Out<jewels::time::SyncTime> throttled_until_out,
+  jewels::Out<PublisherThrottleSet> throttled_publishers_out,
+  const jewels::time::SyncTime current_time) -> jewels::BinaryOutcome
+{
+  PublisherThrottleSet throttled_publishers;
+  auto latest_deadline = jewels::time::SyncTime::min();
   for (size_t i = 0; i < rate_limiters_.size(); i++)
   {
     auto& limiter = rate_limiters_.at(i);
@@ -172,26 +193,37 @@ void CogPublishers<Policies...>::update_rate_limiters(const jewels::time::SyncTi
 
     if (throttled)
     {
-      throttled = !(*limiter)(current_time);
+      auto publisher_deadline = jewels::time::SyncTime::min();
+      if (jewels::fails(limiter->check_credit(jewels::Out{publisher_deadline}, current_time)))
+      {
+        throttled_publishers.set(i);
+        latest_deadline = std::max(latest_deadline, publisher_deadline);
+      }
+      else
+      {
+        throttled = false;
+      }
     }
   }
-}
-
-template <typename... Policies>
-bool CogPublishers<Policies...>::any_throttled() const
-{
-  return std::any_of(publishers_throttled_.begin(), publishers_throttled_.end(), std::identity{});
-}
-
-template <typename... Policies>
-void CogPublishers<Policies...>::update_throttle_status(const ReservedSlotsArray& slots)
-{
-  for (size_t i = 0; i < slots.size(); i++)
+  if (throttled_publishers.any())
   {
-    auto& slot = slots.at(i);
+    *throttled_until_out = latest_deadline;
+    *throttled_publishers_out = throttled_publishers;
+    return jewels::failure;
+  }
+  return jewels::success;
+}
+
+template <typename... Policies>
+void CogPublishers<Policies...>::update_throttle_status(const ReservationArray& reservations)
+{
+  for (size_t i = 0; i < reservations.size(); i++)
+  {
+    auto& reservation = reservations.at(i);
+    auto slot_ref = reservation.slots().begin();
     auto& limiter = rate_limiters_.at(i);
     auto& throttled = publishers_throttled_.at(i);
-    if (limiter && !throttled && slot.state() == pinion::ReservationState::State::commit)
+    if (limiter && !throttled && slot_ref.state() == pinion::ReservationState::commit)
     {
       // Something was published to this buffer during this cycle. Signal that
       // we should check with the rate limiter in the next cycle.
@@ -205,12 +237,12 @@ template <typename... Policies>
 template <typename Report, typename Enum, Enum... signal_ids>
 void CogPublishers<Policies...>::set_infra_diagnostics(
   Report& report,
-  const ReservedSlotsArray& slots,
+  const ReservationArray& reservations,
   jewels::time::SyncTime publish_time,
   std::integer_sequence<Enum, signal_ids...> /*signal_ids*/) const
 {
   static_assert(sizeof...(signal_ids) <= sizeof...(Policies));
-  auto dispatch = [&slots, &report, &publish_time]<
+  auto dispatch = [&reservations, &report, &publish_time]<
                     Enum signal_id0,
                     Enum... signal_id,
                     size_t policy_idx0,
@@ -226,7 +258,7 @@ void CogPublishers<Policies...>::set_infra_diagnostics(
     {
       static_assert(sizeof...(signal_id) > 0, "diagnostic signal and Policy::has_diagnostics count mismatch");
       const size_t count =
-        (std::get<policy_idx0>(slots).state() == pinion::ReservationState::State::commit ? 1UL : 0UL);
+        (std::get<policy_idx0>(reservations).slots().begin().state() == pinion::ReservationState::commit ? 1UL : 0UL);
       report.template set<signal_id0>({.timestamp = publish_time, .count = count});
       if constexpr (sizeof...(Policy) > 0)
       {

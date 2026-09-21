@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package resolver
@@ -83,6 +83,9 @@ func TestResolveGenerateAll(t *testing.T) {
 		"test_file_clk_cc.cc",
 		"test_file_clk_cc.hh",
 		"test_file_clk_cc.inl",
+		"test_file_clk_cc_cog.cc",
+		"test_file_clk_cc_cog.hh",
+		"test_file_clk_cc_cog.inl",
 		"test_file_clk_cc_dial.cc",
 		"test_file_clk_cc_dial.hh",
 		"test_file_clk_cc_dial.inl",
@@ -92,6 +95,9 @@ func TestResolveGenerateAll(t *testing.T) {
 		"test_file_clk_cc_test.cc",
 		"test_file_clk_cc_test.hh",
 		"test_file_clk_cc_test.inl",
+		"test_file_clk_cc_types.cc",
+		"test_file_clk_cc_types.hh",
+		"test_file_clk_cc_types.inl",
 		"test_file_clk_exe.cc",
 		"test_file_clk_exe.hh",
 		"test_file_clk_exe.inl",
@@ -107,36 +113,35 @@ func TestResolveGenerateAll(t *testing.T) {
 	}, inputRule.AttrStrings("outs"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file1_clk",
-		"//src/testing/clockwork:file2_clk",
-		"//src/testing/clockwork:file3_clk",
-		"//src/testing/clockwork:file4_clk",
-		"//src/testing/clockwork:file5_clk",
 		":file1_clk",
+		":file2_clk",
+		":file3_clk",
+		":file4_clk",
+		":file5_clk",
 		"@other_repo//src/testing/clockwork:file2_clk",
 	}, inputRule.AttrStrings("deps"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file1_clk_cc",
-		"//src/testing/clockwork:file2_clk_cc",
-		"//src/testing/clockwork:file2_clk_proto_conv",
-		"//src/testing/clockwork:file3_clk_cc",
+		":file1_clk_cc",
+		":file2_clk_cc",
+		":file2_clk_proto_conv",
+		":file3_clk_cc",
 		"@other_repo//src/testing/clockwork:file2_clk_cc",
 		"@other_repo//src/testing/clockwork:file2_clk_proto_conv",
 	}, inputRule.AttrStrings("cpp_deps"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file3_clk_py",
-		"//src/testing/clockwork:file4_clk_nb",
-		"//src/testing/clockwork:file5_clk_nb",
-		"//src/testing/clockwork:file5_clk_py",
+		":file3_clk_py",
+		":file4_clk_nb",
+		":file5_clk_nb",
+		":file5_clk_py",
 		"@other_repo//src/testing/clockwork:file2_clk_nb",
 		"@other_repo//src/testing/clockwork:file2_clk_py",
 	}, inputRule.AttrStrings("py_deps"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file2_clk_proto",
-		"//src/testing/clockwork:file4_clk_proto",
+		":file2_clk_proto",
+		":file4_clk_proto",
 		"@other_repo//src/testing/clockwork:file2_clk_proto",
 	}, inputRule.AttrStrings("proto_deps"))
 
@@ -208,6 +213,9 @@ func TestResolveGeneratePyExe(t *testing.T) {
 	}, inputRule.AttrKeys())
 
 	assert.Equal(t, []string{
+		"test_file_clk_cc_cog.cc",
+		"test_file_clk_cc_cog.hh",
+		"test_file_clk_cc_cog.inl",
 		"test_file_clk_cc_dial.cc",
 		"test_file_clk_cc_dial.hh",
 		"test_file_clk_cc_dial.inl",
@@ -222,29 +230,28 @@ func TestResolveGeneratePyExe(t *testing.T) {
 	}, inputRule.AttrStrings("outs"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file1_clk",
-		"//src/testing/clockwork:file2_clk",
-		"//src/testing/clockwork:file3_clk",
-		"//src/testing/clockwork:file4_clk",
-		"//src/testing/clockwork:file5_clk",
 		":file1_clk",
+		":file2_clk",
+		":file3_clk",
+		":file4_clk",
+		":file5_clk",
 		"@other_repo//src/testing/clockwork:file2_clk",
 	}, inputRule.AttrStrings("deps"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file1_clk_cc",
-		"//src/testing/clockwork:file2_clk_cc",
-		"//src/testing/clockwork:file2_clk_proto_conv",
-		"//src/testing/clockwork:file3_clk_cc",
+		":file1_clk_cc",
+		":file2_clk_cc",
+		":file2_clk_proto_conv",
+		":file3_clk_cc",
 		"@other_repo//src/testing/clockwork:file2_clk_cc",
 		"@other_repo//src/testing/clockwork:file2_clk_proto_conv",
 	}, inputRule.AttrStrings("cpp_deps"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file3_clk_py",
-		"//src/testing/clockwork:file4_clk_nb",
-		"//src/testing/clockwork:file5_clk_nb",
-		"//src/testing/clockwork:file5_clk_py",
+		":file3_clk_py",
+		":file4_clk_nb",
+		":file5_clk_nb",
+		":file5_clk_py",
 		"@other_repo//src/testing/clockwork:file2_clk_nb",
 		"@other_repo//src/testing/clockwork:file2_clk_py",
 	}, inputRule.AttrStrings("py_deps"))
@@ -252,6 +259,102 @@ func TestResolveGeneratePyExe(t *testing.T) {
 	assert.Equal(t, []string{
 		"//clockwork/scaffolding:offline_main",
 	}, inputRule.AttrStrings("cpp_exe_deps"))
+}
+
+func TestResolveGenerateAlignerWithTestCog(t *testing.T) {
+	inputRule := rule.NewRule(common.ClkRule, "test_aligner_clk")
+	inputLabel := label.New("test_repo", "src/testing/clockwork", "test_aligner_clk")
+
+	inputGenerate := true
+	inputGenerates := []string{"cpp", "cpp_aligner", "cpp_test_cog"}
+	inputClkImports := []common.ClkImport{}
+	inputCppImports := []common.ClkImport{}
+	inputProtoImports := []common.ClkImport{}
+	inputPyImports := []common.ClkImport{}
+	inputCppExeImports := []common.ClkImport{}
+	inputGoProtoImportPath := ""
+	inputImports := common.NewImports(
+		inputGenerate,
+		inputGenerates,
+		inputClkImports,
+		inputCppImports,
+		inputProtoImports,
+		inputPyImports,
+		inputCppExeImports,
+		inputGoProtoImportPath)
+
+	r := ClkResolver{}
+
+	r.Resolve(nil, nil, nil, inputRule, inputImports, inputLabel)
+
+	// cpp_test_cog with cpp_aligner (but no cpp_cog) produces the unified
+	// _cc_test files via the umbrella library.
+	assert.Equal(t, []string{
+		"test_aligner_clk_cc.cc",
+		"test_aligner_clk_cc.hh",
+		"test_aligner_clk_cc.inl",
+		"test_aligner_clk_cc_cog.cc",
+		"test_aligner_clk_cc_cog.hh",
+		"test_aligner_clk_cc_cog.inl",
+		"test_aligner_clk_cc_dial.cc",
+		"test_aligner_clk_cc_dial.hh",
+		"test_aligner_clk_cc_dial.inl",
+		"test_aligner_clk_cc_impl.cc",
+		"test_aligner_clk_cc_impl.hh",
+		"test_aligner_clk_cc_impl.inl",
+		"test_aligner_clk_cc_test.cc",
+		"test_aligner_clk_cc_test.hh",
+		"test_aligner_clk_cc_test.inl",
+		"test_aligner_clk_cc_types.cc",
+		"test_aligner_clk_cc_types.hh",
+		"test_aligner_clk_cc_types.inl",
+	}, inputRule.AttrStrings("outs"))
+}
+
+func TestResolveGenerateConsumerWithComboTest(t *testing.T) {
+	inputRule := rule.NewRule(common.ClkRule, "consumer_clk")
+	inputLabel := label.New("test_repo", "src/testing/clockwork", "consumer_clk")
+
+	inputGenerate := true
+	inputGenerates := []string{"cpp", "cpp_cog", "cpp_test_cog", "cpp_combo_test"}
+	inputClkImports := []common.ClkImport{}
+	inputCppImports := []common.ClkImport{}
+	inputProtoImports := []common.ClkImport{}
+	inputPyImports := []common.ClkImport{}
+	inputCppExeImports := []common.ClkImport{}
+	inputGoProtoImportPath := ""
+	inputImports := common.NewImports(
+		inputGenerate,
+		inputGenerates,
+		inputClkImports,
+		inputCppImports,
+		inputProtoImports,
+		inputPyImports,
+		inputCppExeImports,
+		inputGoProtoImportPath)
+
+	r := ClkResolver{}
+
+	r.Resolve(nil, nil, nil, inputRule, inputImports, inputLabel)
+
+	// cpp_combo_test adds no extra outs beyond what cpp_cog + cpp_test_cog produce
+	assert.Equal(t, []string{
+		"consumer_clk_cc.cc",
+		"consumer_clk_cc.hh",
+		"consumer_clk_cc.inl",
+		"consumer_clk_cc_cog.cc",
+		"consumer_clk_cc_cog.hh",
+		"consumer_clk_cc_cog.inl",
+		"consumer_clk_cc_dial.cc",
+		"consumer_clk_cc_dial.hh",
+		"consumer_clk_cc_dial.inl",
+		"consumer_clk_cc_test.cc",
+		"consumer_clk_cc_test.hh",
+		"consumer_clk_cc_test.inl",
+		"consumer_clk_cc_types.cc",
+		"consumer_clk_cc_types.hh",
+		"consumer_clk_cc_types.inl",
+	}, inputRule.AttrStrings("outs"))
 }
 
 func TestResolveGenerateNone(t *testing.T) {
@@ -297,12 +400,11 @@ func TestResolveGenerateNone(t *testing.T) {
 	assert.Equal(t, []string{"none"}, inputRule.AttrStrings("generate"))
 
 	assert.Equal(t, []string{
-		"//src/testing/clockwork:file1_clk",
-		"//src/testing/clockwork:file2_clk",
-		"//src/testing/clockwork:file3_clk",
-		"//src/testing/clockwork:file4_clk",
-		"//src/testing/clockwork:file5_clk",
 		":file1_clk",
+		":file2_clk",
+		":file3_clk",
+		":file4_clk",
+		":file5_clk",
 		"@other_repo//src/testing/clockwork:file2_clk",
 	}, inputRule.AttrStrings("deps"))
 }

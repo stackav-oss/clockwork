@@ -1,0 +1,25 @@
+#![generate(cpp, cpp_cog, cpp_test_cog)]
+#![cpp(namespace=clockwork::testing::multiple_aligned_consumer)]
+
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner::{SimpleAligner, ConsumerEchoMsg};
+use clockwork::dsl::composition::tests::support::secondary_consumer_aligner;
+
+// A cog that consumes two independent alignment groups
+cog MultipleAlignedConsumerCog
+{
+  aligned_inputs
+  {
+    first: SimpleAligner;
+    second: secondary_consumer_aligner::SecondaryAligner;
+  }
+  outputs
+  {
+    echo: Tappy<ConsumerEchoMsg>;
+  }
+  execution
+  {
+    condition new_first: new_message(first);
+    condition new_second: new_message(second);
+    execute when: new_first and new_second;
+  }
+}

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/log_processor.hh"
@@ -13,15 +13,19 @@ namespace clockwork_logging
 LogProcessor::LogProcessor(const LogReaderConfig& config)
   : log_uri_(config.uri),
     reader_(std::make_unique<LogReader>(config.uri, config.interval, config.relative_interval)),
-    topic_filter_(config.topic_filter)
+    topic_filter_(config.topic_filter),
+    sequence_number_filter_(config.sequence_number_filter)
 {
 }
 
 LogProcessor::LogProcessor(
-  std::unique_ptr<AbstractLogReader> reader, std::function<bool(std::string_view)> topic_filter)
+  std::unique_ptr<AbstractLogReader> reader,
+  std::function<bool(std::string_view)> topic_filter,
+  std::function<bool(std::string_view, uint32_t)> sequence_number_filter)
   : log_uri_(reader->log_uri()),
     reader_(std::make_unique<LogReader>(std::move(reader))),
-    topic_filter_(std::move(topic_filter))
+    topic_filter_(std::move(topic_filter)),
+    sequence_number_filter_(std::move(sequence_number_filter))
 {
 }
 
@@ -41,7 +45,7 @@ bool LogProcessor::process()
   if (!current_message_iterator_)
   {
     const auto topic_filter = augment_topic_filter(topic_filter_, std::views::keys(callbacks_));
-    if (const auto open_result = reader_->open(topic_filter); !open_result)
+    if (const auto open_result = reader_->open(topic_filter, sequence_number_filter_); !open_result)
     {
       return false;
     }

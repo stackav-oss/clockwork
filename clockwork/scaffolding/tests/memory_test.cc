@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
@@ -6,9 +6,11 @@
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/memory.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/memory/instrumented_pmr_resource.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
 
@@ -31,16 +33,18 @@ namespace
 
 TEST_CASE("memory")
 {
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(1024, "memory");
   const jewels::memory::MemoryResource resource(memory);
   std::vector<Tappy<common::MemoryResource<>>> configs;
+  jewels::memory::MemoryResourceMetrics metrics;
 
   SECTION("empty")
   {
     auto map = setup_memory_resources(configs, resource, resource);
     CHECK(map.has_value());
     CHECK(map->empty());
-    CHECK(memory.used() == 0);
+    memory.get_memory_resource_metrics(jewels::Out(metrics));
+    CHECK(metrics.current_allocated == 0);
   }
 
   SECTION("default")
@@ -51,10 +55,13 @@ TEST_CASE("memory")
     auto map = setup_memory_resources(configs, resource, resource);
     CHECK(map.has_value());
     CHECK(map->size() == configs.size());
-    CHECK(memory.used() > 0);
-    auto* cfg_res = dynamic_cast<jewels::memory::MonitorResource*>(map->at(configs[0].get_memory_resource_id()).get());
+    memory.get_memory_resource_metrics(jewels::Out(metrics));
+    CHECK(metrics.current_allocated > 0);
+    auto* cfg_res =
+      dynamic_cast<jewels::memory::NewDeleteMemoryResource*>(map->at(configs[0].get_memory_resource_id()).get());
     CHECK(cfg_res != nullptr);
-    CHECK(cfg_res->used() == 0);
+    cfg_res->get_memory_resource_metrics(jewels::Out(metrics));
+    CHECK(metrics.current_allocated == 0);
   }
 }
 
@@ -71,9 +78,9 @@ TEST_CASE("connect_memory_resources")
   const auto endpoint_3b_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
   MemResMap memres_map;
-  memres_map[memory_1_id] = std::make_shared<jewels::memory::MonitorResource>();
-  memres_map[memory_2_id] = std::make_shared<jewels::memory::MonitorResource>();
-  memres_map[memory_3_id] = std::make_shared<jewels::memory::MonitorResource>();
+  memres_map[memory_1_id] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(100, "memory_1");
+  memres_map[memory_2_id] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(100, "memory_2");
+  memres_map[memory_3_id] = std::make_shared<jewels::memory::NewDeleteMemoryResource>(100, "memory_3");
   const jewels::memory::MemoryResource memory_1_v{memres_map[memory_1_id].get()};
   const jewels::memory::MemoryResource memory_2_v{memres_map[memory_2_id].get()};
   const jewels::memory::MemoryResource memory_3_v{memres_map[memory_3_id].get()};

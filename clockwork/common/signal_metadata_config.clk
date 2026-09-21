@@ -3,22 +3,26 @@
 use clockwork::common::constants;
 use clockwork::common::process_description;
 
-
 // The type of logging requested (event vs telemetry)
 enum LogType
 {
-    uuid: acca0266-322b-484b-80a8-d79f55feaf48;
-    values
-    {
-        // Don't log
-        #0 none default;
+  uuid: acca0266-322b-484b-80a8-d79f55feaf48;
+  values
+  {
+    // Don't log
+    #0 none default;
 
-        // Log during events only
-        #1 event;
+    // Log during events only
+    #1 event;
 
-        // Log in telemetry log (all the time) and also in events
-        #2 telemetry;
-    }
+    // Log non-redundantly in telemetry log (all the time) and also in events
+    #2 non_redundant_telemetry;
+  }
+
+  history
+  {
+    version: 3;
+  }
 }
 
 // Aggregation types for signals
@@ -70,7 +74,23 @@ enum ReportGroupType
   }
 }
 
+// Source used to determine whether a report-group signal is present
+enum SignalValiditySource
+{
+  uuid: 9dc88515-e678-4c41-8079-cd85bb7ac4d9;
 
+  values
+  {
+    // Metadata predates explicit signal presence tracking
+    #0 legacy_assume_present default;
+
+    // Presence is determined from a serialized count-derived field
+    #1 count_field;
+
+    // Presence is determined from a generated signal-presence bit
+    #2 presence_bit;
+  }
+}
 
 // Signal definition with pre-aggregation configuration
 schema SignalMetadata
@@ -80,7 +100,7 @@ schema SignalMetadata
   parameters
   {
     // Maximum signal name size
-    #0 max_signal_name_size = 300;
+    #0 max_signal_name_size = 150;
 
     // Maximum aggregation definition string size
     #1 max_aggregation_definition_size = 80;
@@ -102,7 +122,12 @@ schema SignalMetadata
 
     // Indexes into SignalMetadataConfig.signal_instance_names
     // Lists all instances of this signal
-    #6 signal_instance_indexes: VarArray<UInt32, 50>;
+    #6 signal_instance_indexes: VarArray<UInt32, 4002>;
+  }
+
+  history
+  {
+    version: 8;
   }
 }
 
@@ -133,6 +158,17 @@ schema ReportGroupSignalMetadata
 
     // Optional alias for the signal (used when multiple instances exist)
     #4 alias: Optional<VarString<max_alias_size>>;
+
+    // Source used to determine whether this signal is present
+    #5 validity_source: SignalValiditySource;
+
+    // Clockwork field number for count_field, or bit index for presence_bit
+    #6 validity_index: UInt32;
+  }
+
+  history
+  {
+    version: 5;
   }
 }
 
@@ -146,10 +182,10 @@ schema ReportGroupMetadata
   parameters
   {
     // Maximum report group name size
-    #0 max_report_group_name_size = 300;
+    #0 max_report_group_name_size = 100;
 
     // Maximum number of signals in a report group
-    #1 max_num_signals = 50;
+    #1 max_num_signals = 250;
   }
 
   fields
@@ -192,11 +228,17 @@ schema CogReportGroupsMetadata
 
   fields
   {
-    // Cog class ID (from process_description.clk)
-    #1 cog_class_id: Uuid<process_description::CogClassId>;
+    // Fully-qualified cog class path
+    #3 cog_path: VarString<500>;
 
     // Report groups defined for this cog class
     #2 report_groups: VarArray<ReportGroupMetadata<>, max_num_report_groups>;
+  }
+
+  history
+  {
+    version: 4;
+    removed: [1];
   }
 }
 
@@ -228,7 +270,7 @@ schema ReportGroupInstanceMetadata
     #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum number of signal instances per report group
-    #1 max_num_signal_instances = 50;
+    #1 max_num_signal_instances = 256;
   }
 
   fields
@@ -259,14 +301,20 @@ schema CogInstanceMetadata
 
   fields
   {
-    // Cog class ID (from process_description.clk)
-    #1 cog_class_id: Uuid<process_description::CogClassId>;
+    // Fully-qualified cog class path
+    #4 cog_path: VarString<500>;
 
-    // Cog instance ID (from process_description.clk)
-    #2 cog_instance_id: Uuid<process_description::CogInstanceId>;
+    // Fully-qualified cog instance path
+    #5 cog_instance_path: VarString<550>;
 
     // Report group instances for this cog instance
     #3 report_group_instances: VarArray<ReportGroupInstanceMetadata<>, max_num_report_group_instances>;
+  }
+
+  history
+  {
+    version: 7;
+    removed: [1, 2];
   }
 }
 
@@ -288,14 +336,23 @@ schema ReportGroupChannelMetadata
     // Channel name
     #1 channel_name: VarString<max_channel_name_size>;
 
-    // Cog class ID that publishes to this channel
-    #2 cog_class_id: Uuid<process_description::CogClassId>;
+    // Fully-qualified cog class path
+    #6 cog_path: VarString<max_channel_name_size>;
 
-    // Cog instance ID that publishes to this channel
-    #3 cog_instance_id: Uuid<process_description::CogInstanceId>;
+    // Fully-qualified cog instance path
+    #7 cog_instance_path: VarString<max_channel_name_size>;
 
     // Index into CogReportGroups.report_groups
     #4 report_group_index: UInt32;
+
+    // Whether this channel belongs to a cog metrics report group
+    #5 is_cog_metrics_channel: Bool;
+  }
+
+  history
+  {
+    version: 6;
+    removed: [2, 3];
   }
 }
 
@@ -312,10 +369,10 @@ schema SignalMetadataConfig
     #0 max_num_signals = 2046;
 
     // Maximum number of cog classes
-    #1 max_num_cogs = 2046;
+    #1 max_num_cogs = 551;
 
     // Maximum number of cog instances
-    #2 max_num_cog_instances = 2046;
+    #2 max_num_cog_instances = 1200;
 
     // Maximum number of report group channels
     #3 max_num_report_group_channels = 2046;
@@ -325,7 +382,7 @@ schema SignalMetadataConfig
   {
     // Array of all signal instance names in the system
     // Signal instance indexes reference positions in this array
-    #4 signal_instance_names: VarArray<VarString<300>, 4096>;
+    #4 signal_instance_names: VarArray<VarString<550>, 10240>;
 
     // All signal definitions in the system
     #5 signals: VarArray<SignalMetadata<>, max_num_signals>;
@@ -338,6 +395,11 @@ schema SignalMetadataConfig
 
     // Report group channel mappings
     #8 report_group_channels: VarArray<ReportGroupChannelMetadata<>, max_num_report_group_channels>;
+  }
+
+  history
+  {
+    version: 11;
   }
 }
 

@@ -15,6 +15,6 @@ schema SimpleSchemaV2
   history
   {
     version: 3;
-    legacy_became: [1->2];
+    legacy_became: [1 -> 2];
   }
 }

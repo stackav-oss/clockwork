@@ -1,13 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/nolint_helper.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
+#include "clockwork/logging/onboard/offboard_buffered_reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "jewels/aligner/aligner.hh"
 #include "jewels/container/at.hh"
 #include "jewels/container/circular_buffer.hh"
+#include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -17,6 +20,7 @@
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_message.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -46,6 +50,9 @@ struct TestReaderPolicy
   /// Filesystem library type
   using FilesystemType = jewels::filesystem::testing::FilesystemWrapper;
 
+  /// S3 utilities library type
+  using S3UtilsType = offboard::S3Utils;
+
   /// Read buffer size
   static constexpr size_t read_buffer_size = 32U;
 
@@ -56,8 +63,10 @@ struct TestReaderPolicy
   static constexpr size_t min_io_error_recover_read_size = 8U;
 };
 
-TEST_CASE("BufferedReader")
+TEMPLATE_TEST_CASE("BufferedReader", "", BufferedReader<TestReaderPolicy>, OffboardBufferedReader<TestReaderPolicy>)
 {
+  using BufferedReaderType = TestType;
+
   constexpr auto* test_file_name = "test_file";
 
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
@@ -72,7 +81,8 @@ TEST_CASE("BufferedReader")
   REQUIRE(ofs);
   ofs.close();
 
-  BufferedReader<TestReaderPolicy> reader{memory_resource};
+  const auto reader_ptr = tests::make_buffered_reader<BufferedReaderType>();
+  auto& reader = *reader_ptr;
 
   SECTION("Read with copy_out")
   {
@@ -82,6 +92,7 @@ TEST_CASE("BufferedReader")
 
     const auto start_time = jewels::time::SteadyClock::now();
     REQUIRE(reader.open(test_file_path.string()));
+    REQUIRE(reader);
 
     size_t read_offset = 0U;
     while (read_offset < write_data_size)
@@ -176,35 +187,42 @@ TEST_CASE("BufferedReader")
 
   SECTION("Read with I/O error injection")
   {
-    constexpr size_t read_size = 127;
-    const size_t io_error_offset = 319U;
-    const size_t io_error_length = 2U;
-    const size_t aligned_io_error_start_offset =
-      jewels::Aligner<TestReaderPolicy::min_io_error_recover_read_size>::align_prev(io_error_offset);
-    const size_t aligned_io_error_end_offset =
-      jewels::Aligner<TestReaderPolicy::min_io_error_recover_read_size>::align_next(io_error_offset + io_error_length);
-
-    REQUIRE(reader.open(test_file_path.string()));
-
-    auto expected_data = write_data;
-    std::memset(
-      &expected_data.at(aligned_io_error_start_offset), 0, aligned_io_error_end_offset - aligned_io_error_start_offset);
-    reader.get_filesystem().inject_read_io_errors(io_error_offset, io_error_length);
-
-    size_t read_offset = 0U;
-    while (read_offset < write_data_size)
+    if constexpr (std::is_same_v<BufferedReaderType, BufferedReader<TestReaderPolicy>>)
     {
-      CAPTURE(read_size, read_offset);
-      REQUIRE(reader);
-      const auto bytes_to_read = std::min(read_size, write_data_size - read_offset);
-      const auto copy_result = reader.zero_copy_out(0U, bytes_to_read);
-      REQUIRE(copy_result);
-      REQUIRE(
-        std::ranges::equal(*copy_result | std::views::join, std::span{&expected_data.at(read_offset), bytes_to_read}));
-      REQUIRE(reader.advance(bytes_to_read));
-      read_offset += bytes_to_read;
+      constexpr size_t read_size = 127;
+      const size_t io_error_offset = 319U;
+      const size_t io_error_length = 2U;
+      const size_t aligned_io_error_start_offset =
+        jewels::Aligner<TestReaderPolicy::min_io_error_recover_read_size>::align_prev(io_error_offset);
+      const size_t aligned_io_error_end_offset =
+        jewels::Aligner<TestReaderPolicy::min_io_error_recover_read_size>::align_next(
+          io_error_offset + io_error_length);
+
+      REQUIRE(reader.open(test_file_path.string()));
+
+      auto expected_data = write_data;
+      std::memset(
+        &expected_data.at(aligned_io_error_start_offset),
+        0,
+        aligned_io_error_end_offset - aligned_io_error_start_offset);
+      reader.get_filesystem().inject_read_io_errors(io_error_offset, io_error_length);
+
+      size_t read_offset = 0U;
+      while (read_offset < write_data_size)
+      {
+        CAPTURE(read_size, read_offset);
+        REQUIRE(reader);
+        const auto bytes_to_read = std::min(read_size, write_data_size - read_offset);
+        const auto copy_result = reader.zero_copy_out(0U, bytes_to_read);
+        REQUIRE(copy_result);
+        REQUIRE(
+          std::ranges::equal(
+            *copy_result | std::views::join, std::span{&expected_data.at(read_offset), bytes_to_read}));
+        REQUIRE(reader.advance(bytes_to_read));
+        read_offset += bytes_to_read;
+      }
+      REQUIRE_FALSE(reader);
     }
-    REQUIRE_FALSE(reader);
   }
 
   SECTION("Advance to pattern")
@@ -288,17 +306,20 @@ TEST_CASE("BufferedReader")
 
     SECTION("Open fails in open")
     {
-      constexpr size_t read_size = 1U;
-      std::array<std::byte, read_size> read_data{};
-      reader.get_filesystem().inject_open_error(EBADMSG);
-      REQUIRE(reader.open(test_file_path.string()) == jewels::unexpected(LogError::unspecified_system_error));
-      REQUIRE(reader.copy_out(0U, {read_data}) == jewels::unexpected(LogError::not_open));
-      REQUIRE(reader.zero_copy_out(0U, 1U) == jewels::unexpected(LogError::not_open));
-      REQUIRE(reader.advance(1U) == jewels::unexpected(LogError::not_open));
-      REQUIRE(reader.advance(std::as_bytes(std::span{read_data})) == jewels::unexpected(LogError::not_open));
-      REQUIRE(reader.skip_pad_bytes() == jewels::unexpected(LogError::not_open));
-      REQUIRE(reader.get_window_offset() == 0U);
-      REQUIRE(reader.get_bytes_remaining() == 0U);
+      if constexpr (std::is_same_v<BufferedReaderType, BufferedReader<TestReaderPolicy>>)
+      {
+        constexpr size_t read_size = 1U;
+        std::array<std::byte, read_size> read_data{};
+        reader.get_filesystem().inject_open_error(EBADMSG);
+        REQUIRE(reader.open(test_file_path.string()) == jewels::unexpected(LogError::unspecified_system_error));
+        REQUIRE(reader.copy_out(0U, {read_data}) == jewels::unexpected(LogError::not_open));
+        REQUIRE(reader.zero_copy_out(0U, 1U) == jewels::unexpected(LogError::not_open));
+        REQUIRE(reader.advance(1U) == jewels::unexpected(LogError::not_open));
+        REQUIRE(reader.advance(std::as_bytes(std::span{read_data})) == jewels::unexpected(LogError::not_open));
+        REQUIRE(reader.skip_pad_bytes() == jewels::unexpected(LogError::not_open));
+        REQUIRE(reader.get_window_offset() == 0U);
+        REQUIRE(reader.get_bytes_remaining() == 0U);
+      }
     }
 
     SECTION("Open fails in get file size")

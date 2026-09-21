@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/compression_type.hh"
@@ -12,6 +12,7 @@
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/onboard/types.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "clockwork/logging/tests/support/test_message_clk_cc.hh"
 #include "clockwork/logging/writers/log_writer_state_clk_cc.hh"
 #include "clockwork/logging/writers/logger.hh"
 #include "clockwork/logging/writers/logger_config_clk_cc.hh"
@@ -19,10 +20,9 @@
 #include "clockwork/logging/writers/tests/support/test_log_writer_config.hh"
 #include "clockwork/logging/writers/tests/support/test_publisher.hh"
 #include "clockwork/repr_iface.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v1_clk_cc.hh"
-#include "clockwork/serialization/py/tests/support/simple_schema_v2_clk_cc.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
@@ -38,6 +38,7 @@
 #include <gsl/util>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -146,6 +147,11 @@ TEST_CASE("Log messages")
     REQUIRE(test_logger_status.get_drop_count() == 0U);
     REQUIRE(test_logger_status.get_status_string().empty());
 
+    while (test_logger_ptr->get_num_pending_subscriptions() != 0U)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
     constexpr size_t messages_per_channel = 10U;
     constexpr std::chrono::milliseconds message_interval(1);
     LogTimestamp message_time{std::chrono::hours(1)};
@@ -165,6 +171,7 @@ TEST_CASE("Log messages")
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
+
     while (!expected_channels.empty())
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -180,8 +187,11 @@ TEST_CASE("Log messages")
           channel_iter = expected_channels.erase(channel_iter);
           continue;
         }
-        REQUIRE(message_counts.at(expected_channel) <= expected_count);
-        if (message_counts.at(expected_channel) == expected_count)
+        if (message_counts.contains(expected_channel))
+        {
+          REQUIRE(message_counts.at(expected_channel) <= expected_count);
+        }
+        if (message_counts.contains(expected_channel) && message_counts.at(expected_channel) == expected_count)
         {
           channel_iter = expected_channels.erase(channel_iter);
         }
@@ -202,7 +212,8 @@ TEST_CASE("Log messages")
   const auto expected_log_path = (test_dir.get_path() / log_directory_name).string();
 
   // Check the logged messages
-  onboard::Reader<onboard::BufferedReader<TestReaderPolicy>> reader{memory_resource, expected_log_path};
+  onboard::Reader<onboard::BufferedReader<TestReaderPolicy>> reader{
+    memory_resource, expected_log_path, std::make_shared<onboard::BufferedReader<TestReaderPolicy>>(memory_resource)};
   REQUIRE(reader.open());
   for (size_t i = 0U; i < expected_message_count; ++i)
   {
@@ -216,27 +227,21 @@ TEST_CASE("Log messages")
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(
-    metadata_result->schema_name ==
-    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_name);
+  REQUIRE(metadata_result->schema_name == clockwork::LoggingTraits<clockwork::Tappy<TestMessage1>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
   REQUIRE(
     std::ranges::equal(
-      metadata_result->schema_definition,
-      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV1>>::schema_definition));
+      metadata_result->schema_definition, clockwork::LoggingTraits<clockwork::Tappy<TestMessage1>>::schema_definition));
 
   metadata_result = reader.get_channel_metadata("channel2");
   REQUIRE(metadata_result);
   REQUIRE(metadata_result->compression_type == CompressionType::none);
   REQUIRE(metadata_result->message_encoding == MessageEncoding::tachyon);
-  REQUIRE(
-    metadata_result->schema_name ==
-    clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_name);
+  REQUIRE(metadata_result->schema_name == clockwork::LoggingTraits<clockwork::Tappy<TestMessage2>>::schema_name);
   REQUIRE(metadata_result->schema_encoding == SchemaEncoding::clockwork_tachyon);
   REQUIRE(
     std::ranges::equal(
-      metadata_result->schema_definition,
-      clockwork::LoggingTraits<clockwork::Tappy<clockwork::tests::SimpleSchemaV2>>::schema_definition));
+      metadata_result->schema_definition, clockwork::LoggingTraits<clockwork::Tappy<TestMessage2>>::schema_definition));
 }
 
 } // namespace

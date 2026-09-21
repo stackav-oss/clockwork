@@ -1,18 +1,21 @@
-#![generate(cpp)]
+#![generate(cpp, py)]
 #![cpp(namespace=clockwork_logging)]
 
 use clockwork::logging::log_uuid_tag::{LogUuidTag};
 use[] clockwork::common::constants;
 
 // Published channel configuration
-schema PublishedChannelConfig {
+schema PublishedChannelConfig
+{
+  uuid: 4711008f-2a97-42d5-85ac-c9175174739d;
+
   parameters
   {
     // Maximum channel name size
     #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum schema definition size
-    #1 max_schema_definition_size = 30000;
+    #1 max_schema_definition_size = constants::MAX_SCHEMA_DEFINITION_SIZE;
 
     // Max module name size
     #2 max_module_name_size = 31;
@@ -28,56 +31,44 @@ schema PublishedChannelConfig {
   {
     // Channel UUID
     #5 uuid: Uuid<LogUuidTag>;
-
     // Number of slots
     #6 num_slots: UInt32;
-
     // Message size in bytes
     #7 message_size: UInt32;
-
     // Channel name
     #8 channel_name: VarString<max_channel_name_size>;
-
     // Schema definition
     #9 schema_definition: VarArray<Byte, max_schema_definition_size>;
-
     // Schema module name
     #10 module_name: VarString<max_module_name_size>;
-
     // Schema source file name
     #11 source_file_name: VarString<max_path_name_size>;
-
     // Schema class name
     #12 class_name: VarString<max_class_name_size>;
-
     // Set to true if channel is published once
     #13 is_published_once: Bool;
   }
 }
-
 // Channel publisher configuration
-schema ChannelPublisherConfig {
+schema ChannelPublisherConfig
+{
+  uuid: 1454ade6-b57e-4155-9a90-dabcf1fddc83;
+
   parameters
   {
     // Maximum channel name size
     #0 max_channel_name_size = constants::MAX_CHANNEL_NAME_SIZE;
-
     // Maximum schema definition size
-    #1 max_schema_definition_size = 30000;
-
+    #1 max_schema_definition_size = constants::MAX_SCHEMA_DEFINITION_SIZE;
     // Max module name size
     #2 max_module_name_size = 31;
-
     // Max path name size
     #3 max_path_name_size = 511;
-
     // Max class name size
     #4 max_class_name_size = 63;
-
     // Maximum number of channels
     #5 max_num_channels = 555;
   }
-
   fields
   {
     // Published channels
@@ -87,8 +78,10 @@ schema ChannelPublisherConfig {
         max_schema_definition_size=max_schema_definition_size,
         max_module_name_size=max_module_name_size,
         max_path_name_size=max_path_name_size,
-        max_class_name_size=max_class_name_size>,
-      max_num_channels>;
+        max_class_name_size=max_class_name_size,
+      >,
+      max_num_channels,
+    >;
   }
 }
 

@@ -1,0 +1,23 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Configuration for sanitizers."""
+
+exports_files([
+    "sanitizer_compile_ignorelist.txt",
+    "asan_test_suppressions.txt",
+    "lsan_test_suppressions.txt",
+    "ubsan_test_suppressions.txt",
+])
+
+config_setting(
+    name = "aubsan",
+    values = {"features": "address_and_undefined_behavior_sanitizers"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "tsan",
+    values = {"features": "thread_sanitizer"},
+    visibility = ["//visibility:public"],
+)

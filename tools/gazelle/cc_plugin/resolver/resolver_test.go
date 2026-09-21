@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package resolver
@@ -34,7 +34,7 @@ func TestSetDeps_IgnoreDuplicates(t *testing.T) {
 	test := func(name string, newLabels []label.Label, expectedDeps []string) {
 		t.Run(name, func(t *testing.T) {
 			r := rule.NewRule(common.CCLibraryRule, "SkFile")
-			setDeps(r, testLabel, newLabels)
+			setDeps(r, testLabel, newLabels, nil)
 			assert.Equal(t, expectedDeps, r.AttrStrings("deps"))
 		})
 	}
@@ -47,6 +47,7 @@ func TestSetDeps_IgnoreDuplicates(t *testing.T) {
 			label.New("@skia", "include/core", "SkTypes"),
 			label.New("@skia", "include/core", "SkMath"),
 			label.New("@skia", "src/core", "SkMacros"),
+			label.New("", "src/core", "SkGenerated"),
 			label.New("@skia", "include/core", "SkMath"),
 			label.New("@skia", "src/gpu", "GrGpu"),
 		},
@@ -54,12 +55,24 @@ func TestSetDeps_IgnoreDuplicates(t *testing.T) {
 			"//include/core:SkMath",
 			"//include/core:SkTypes",
 			"//src/gpu:GrGpu",
+			":SkGenerated",
 			":SkMacros",
 		})
 }
 
-func TestThirdPartyDep_Success(t *testing.T) {
-	assert.Equal(t, label.New("", "third_party", "libpng"), thirdPartyDep("//third_party:libpng"))
+func TestResolve_PreservesRepositoryOnlyThirdPartyDependencies(t *testing.T) {
+	t.Parallel()
+
+	inputRule := rule.NewRule(common.CCLibraryRule, "MyFile")
+	imports := common.NewImports(nil, nil, []string{"c/DefaultSettings.h", "boost/iterator/iterator_facade.hpp"}, []common.ThirdPartyMapItem{
+		{Re: "c/.*", Dep: "@clarabel_cpp"},
+		{Re: "boost/([^/.]+).*", Dep: "@boost.$1"},
+	})
+
+	resolver := CppResolver{}
+	resolver.Resolve(nil, nil, nil, inputRule, imports, label.New("@SomeRepo", "src", "MyFile"))
+
+	assert.Equal(t, []string{"@boost.iterator", "@clarabel_cpp"}, inputRule.AttrStrings("deps"))
 }
 
 func TestResolve_RespectsIgnorePrefix(t *testing.T) {

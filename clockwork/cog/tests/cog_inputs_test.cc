@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_conditions.hh"
@@ -8,12 +8,14 @@
 #include "clockwork/dial/cond_messages_present.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
-#include "jewels/container/circular_buffer.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
@@ -23,15 +25,15 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <limits>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <ranges>
@@ -116,7 +118,8 @@ template <typename... Policies>
 struct CogInputsFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test code performance is not a concern.
 {
   static constexpr auto policy_count = sizeof...(Policies);
-  using ChannelsTuple = std::tuple<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>...>;
+  using ChannelsTuple =
+    std::tuple<std::shared_ptr<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>>...>;
   using PublishersArray = std::array<pinion::PublisherHandle, policy_count>;
   using ConditionsType = CogConditions<NewMin1Policy<Policies>...>;
   using ConditionsTuple = typename ConditionsType::ConditionsTuple;
@@ -124,9 +127,10 @@ struct CogInputsFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
   CogInputsFixture()
     : resource(std::pmr::new_delete_resource()),
       channels(
-        make_tuple_repeat<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>...>(resource)),
+        std::make_tuple(
+          std::make_shared<InMemoryChannel<typename Policies::MsgType, Policies::max_view_size, false>>(resource)...)),
       publishers(
-        std::apply([](auto&... channel) -> PublishersArray { return {channel.make_publisher(1)...}; }, channels)),
+        std::apply([](auto&... channel) -> PublishersArray { return {channel->make_publisher(1)...}; }, channels)),
       subscriber(resource, false)
   {
   }
@@ -166,6 +170,8 @@ struct NoCopyInputPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
 };
 
 struct CopyInputPolicy
@@ -181,6 +187,8 @@ struct CopyInputPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
 };
 
 using InputPolicyFixture = CogInputsFixture<NoCopyInputPolicy, CopyInputPolicy>;
@@ -198,18 +206,14 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
   {
     constexpr auto unknown_id =
       jewels::Uuid<common::EndpointClassId>::from_string("b5e2c9a9-e351-4877-b5cc-77e76a7ebe63").value();
-    REQUIRE_FALSE(subscriber.set_handle(
-      unknown_id, std::get<0>(channels).make_subscriber(), jewels::memory::make_non_null_from_ref(cog)));
+    REQUIRE_FALSE(
+      subscriber.set_handle(unknown_id, std::get<0>(channels), jewels::memory::make_non_null_from_ref(cog)));
   }
 
   REQUIRE(subscriber.set_handle(
-    NoCopyInputPolicy::endpoint_id,
-    std::get<0>(channels).make_subscriber(),
-    jewels::memory::make_non_null_from_ref(cog)));
+    NoCopyInputPolicy::endpoint_id, std::get<0>(channels), jewels::memory::make_non_null_from_ref(cog)));
   REQUIRE(subscriber.set_handle(
-    CopyInputPolicy::endpoint_id,
-    std::get<1>(channels).make_subscriber(),
-    jewels::memory::make_non_null_from_ref(cog)));
+    CopyInputPolicy::endpoint_id, std::get<1>(channels), jewels::memory::make_non_null_from_ref(cog)));
   REQUIRE(subscriber.validate());
 
   // Empty views before receiving any messages
@@ -265,6 +269,25 @@ TEST_CASE_METHOD(InputPolicyFixture, "basic operation", "[cog_inputs]")
     REQUIRE(input1.end() == input1.get_first_new());
   }
 
+  SECTION("commit one input selected at runtime")
+  {
+    typename decltype(subscriber)::LastViewedTuple commit_result;
+    REQUIRE(jewels::ok(subscriber.commit_single(jewels::Out{commit_result}, *inputs, 1U)));
+    CHECK(std::get<0>(commit_result) == CopyInputPolicy::endpoint_id);
+    subscriber.reset_saved_state();
+
+    inputs = subscriber.make_dial_inputs<ConditionsType>(conds, fake_publish_time);
+    REQUIRE(inputs);
+    CHECK(std::get<0>(*inputs).get_cursor_view().size() == 1U);
+    CHECK(std::get<1>(*inputs).get_cursor_view().empty());
+  }
+
+  SECTION("reject an invalid runtime input index")
+  {
+    typename decltype(subscriber)::LastViewedTuple commit_result;
+    REQUIRE(jewels::fails(subscriber.commit_single(jewels::Out{commit_result}, *inputs, 2U)));
+  }
+
   SECTION("overrun subscriber 1")
   {
     REQUIRE_FALSE(subscriber.is_overrun());
@@ -317,8 +340,8 @@ TEST_CASE_METHOD(InputPolicyFixture, "unit test operation", "[cog_inputs]")
   auto& publisher1 = publishers.at(0);
   auto& publisher2 = publishers.at(1);
 
-  subscriber.template set_unit_test_input<0, TestCog>(std::get<0>(channels).make_subscriber());
-  subscriber.template set_unit_test_input<1, TestCog>(std::get<1>(channels).make_subscriber());
+  subscriber.template set_unit_test_input<0, TestCog>(std::get<0>(channels));
+  subscriber.template set_unit_test_input<1, TestCog>(std::get<1>(channels));
   REQUIRE(subscriber.validate());
 
   // Empty views before receiving any messages

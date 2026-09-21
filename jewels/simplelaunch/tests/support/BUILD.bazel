@@ -1,0 +1,25 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_binary")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "exit_failure",
+    srcs = ["exit_failure.cc"],
+)
+
+cc_binary(
+    name = "exit_success",
+    srcs = ["exit_success.cc"],
+)
+
+cc_binary(
+    name = "no_exit",
+    srcs = ["no_exit.cc"],
+    deps = ["//jewels/cli:exit_condition_signal"],
+)

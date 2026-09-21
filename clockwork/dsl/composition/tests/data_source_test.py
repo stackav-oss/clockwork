@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -74,7 +74,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -140,7 +140,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -156,6 +156,86 @@ system_target test_system
     assert data_source.data_source_type == pdf.DataSourceType.log_first_message
     assert data_source.source_path_or_name == "TestChan"
     assert data_source.fallback_source == pdf.NO_FALLBACK_DATA_SOURCE_SENTINEL
+
+
+@pytest.mark.parametrize(
+    ("channel_type", "should_compile"),
+    [
+        ("Tachyon<clk_hellomsg::HelloMsg>", True),
+        ("Tachyon<clk_hellomsg::BetterThanInheritance>", False),
+    ],
+)
+def test_data_source_first_message_to_external_state(
+    fs_importer: FilesystemImporter, channel_type: str, should_compile: bool
+) -> None:
+    """Require a FirstMessage channel to use an external state's serialized representation."""
+    source_text = f"""
+use clockwork::dsl::tests::support::clk_hellocog;
+use clockwork::dsl::tests::support::clk_hellomsg;
+
+// Channel
+channel TestChan
+{{
+    message_type: {channel_type};
+    max_num_messages: 10;
+}}
+
+box TestBox
+{{
+    new memory: HeapMemory(max_size=1'000'000);
+    new first_msg: FirstMessage(channel=TestChan);
+    new state: State(representation=clk_hellocog::CxxState, memory_resource=memory);
+    connect first_msg to state;
+}}
+
+cpu_domain TestCpu;
+
+box TestSys
+{{
+    new box: TestBox;
+    new proc: Process(executable=exe);
+    apply HostProcess(process=proc) in box;
+    apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+}}
+
+cpp_executable exe
+{{
+    casing
+    {{
+    }}
+}}
+
+system_target test_system
+{{
+    box: TestSys;
+}}
+"""
+    module = compiler.compile_source_text(
+        source_text, ModuleID(CLK_REPO, f"test_external_first_message_{should_compile}"), fs_importer
+    )
+    sys_ir = module.inner_scope.lookup("test_system", recursive=False)
+    assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
+
+    if not should_compile:
+        with pytest.raises(TypeError, match="does not match state type"):
+            system.make_system(
+                [sys_ir.get_resolved().box_instance],
+                sys_ir.module,
+                sys_ir.require_logging_policies,
+                sys_ir.use_simplelaunch,
+            )
+        return
+
+    logical_system = system.make_system(
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
+    )
+    physical_system = system.make_physical_system(logical_system)
+    process_descs = genpd.gen_pd_sys(physical_system)
+    (pd,) = process_descs.values()
+    (state_instance,) = pd.state_graph.state_instances
+    assert state_instance.snapshot_representation_id is not None
+    data_source = pd.data_sources[state_instance.init_data_source]
+    assert data_source.representation_id == state_instance.snapshot_representation_id
 
 
 def test_data_source_fallback_chain(fs_importer: FilesystemImporter) -> None:
@@ -206,7 +286,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -312,7 +392,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -408,7 +488,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -473,7 +553,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -525,7 +605,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)
@@ -606,7 +686,7 @@ system_target test_system
     assert isinstance(sys_ir, system_target.UnresolvedSystemTarget)
 
     logical_system = system.make_system(
-        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies
+        [sys_ir.get_resolved().box_instance], sys_ir.module, sys_ir.require_logging_policies, sys_ir.use_simplelaunch
     )
     physical_system = system.make_physical_system(logical_system)
     process_descs = genpd.gen_pd_sys(physical_system)

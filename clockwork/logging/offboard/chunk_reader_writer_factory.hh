@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -8,6 +8,7 @@
 #include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/file_chunk_reader_writer_factory.hh"
 #include "clockwork/logging/offboard/s3_chunk_reader_writer_factory.hh"
+#include "jewels/filesystem/filesystem.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
@@ -38,7 +39,7 @@ WISE_ENUM_CLASS(
 /// functions needed to read and write logs.
 ///
 /// @tparam S3UtilsType S3 utility helper class type
-template <typename S3UtilsType = S3Utils>
+template <typename S3UtilsType = S3Utils, typename FilesystemType = jewels::filesystem::Filesystem>
 class ChunkReaderWriterFactory
 {
 public:
@@ -52,6 +53,10 @@ public:
   ChunkReaderWriterFactory& operator=(const ChunkReaderWriterFactory& other) = delete;
   ChunkReaderWriterFactory(ChunkReaderWriterFactory&&) noexcept = default;
   ChunkReaderWriterFactory& operator=(ChunkReaderWriterFactory&&) noexcept = default;
+
+  /// Accessor to the filesystem instance used by the file chunk reader/writer factory
+  /// @return Instance used to access the filesystem
+  [[nodiscard]] FilesystemType& get_filesystem();
 
   /// Create a shared pointer to a chunk reader
   /// @param[in] uri_str Log URI
@@ -68,6 +73,11 @@ public:
   /// @return True iff an object exists at the log URI or LogError on failure
   [[nodiscard]] LogExpected<bool> exists(std::string_view uri_str);
 
+  /// Get the size of a file
+  /// @param[in] uri_str Log URI
+  /// @return File size in bytes or LogError on failure
+  [[nodiscard]] LogExpected<size_t> get_size(std::string_view uri_str);
+
   /// Create the directories for a log URI
   /// @param[in] uri_str Log URI
   /// @return LogError on failure
@@ -75,8 +85,15 @@ public:
 
   /// Get the log files found under a log URI
   /// @param[in] uri_str Log URI
+  /// @param[in] suffix Log file suffix
   /// @return Vector of log file paths or LogError on failure
-  [[nodiscard]] LogExpected<std::pmr::vector<std::pmr::string>> list_log_files(std::string_view uri_str);
+  [[nodiscard]] LogExpected<std::pmr::vector<LogUri>>
+  list_log_files(std::string_view uri_str, std::string_view suffix = log_file_suffix);
+
+  /// Get the subdirectories found under a log URI
+  /// @param[in] uri_str Log URI
+  /// @return Vector of log file paths or LogError on failure
+  [[nodiscard]] LogExpected<std::pmr::vector<LogUri>> list_subdirs(std::string_view uri_str);
 
   /// Write a file to a log
   /// @param[in] uri_str Log file URI
@@ -88,6 +105,14 @@ public:
   /// @param[in] uri_str Log file URI
   /// @return File data or LogError on failure
   [[nodiscard]] LogExpected<std::pmr::vector<std::byte>> read_log_file(std::string_view uri_str);
+
+  /// Read a file from a log
+  /// @param[in] uri_str Log file URI
+  /// @param[in] offset File offset
+  /// @param[in] buffer_span Buffer used to read the data
+  /// @return File data span or LogError on failure
+  [[nodiscard]] LogExpected<std::span<std::byte>>
+  read_log_file(std::string_view uri_str, size_t offset, std::span<std::byte> buffer_span);
 
   /// Write a string serialized protobuf to a log
   /// @tparam ProtobufType Protobuf type
@@ -130,7 +155,7 @@ private:
   jewels::memory::MemoryResource memory_resource_;
 
   /// File chunk reader/writer factory
-  FileChunkReaderWriterFactory file_factory_;
+  FileChunkReaderWriterFactory<FilesystemType> file_factory_;
 
   /// S3 chunk reader/writer factory, initialized when required
   std::optional<S3ChunkReaderWriterFactory<S3UtilsType>> maybe_s3_factory_;

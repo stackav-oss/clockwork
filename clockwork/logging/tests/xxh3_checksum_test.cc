@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/xxh3_checksum.hh"
@@ -8,7 +8,6 @@
 #include <array>
 #include <cstddef>
 #include <span>
-#include <type_traits>
 
 namespace clockwork_logging
 {

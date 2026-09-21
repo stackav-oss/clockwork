@@ -1,13 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/cog/interface.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -37,6 +38,8 @@ struct CogStateDataImpl : CogStateData
 
   // The state
   StateType state;
+  // The state's memory resource
+  jewels::memory::MemoryResource memres;
   // Read mutex
   std::shared_mutex mutex;
   // List of observers to notify on mutex release.
@@ -70,7 +73,7 @@ struct CogStateDataImpl<Tap<Tachyon<SchemaType>>> : CogStateData
   // The backing buffer handle
   pinion::PublisherHandle publisher;
   // The backing store for the current backing of state
-  std::optional<pinion::ReservedSlot> current_slot;
+  std::optional<pinion::PublisherReservation> current_slot;
   // The backing store for the current backing of state
   std::optional<pinion::Publishable<StateType>> current_publishable;
   // Read mutex
@@ -142,9 +145,10 @@ public:
   /// @return Pointer to the state record
   [[nodiscard]] RecordPtrType get_record_ptr() const;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init) this is meant for aggregate initialization
   struct StateSnapshotInfo
   {
-    pinion::PublisherHandle snapshot_publisher;
+    pinion::PublisherHandle snapshot_publisher; // has no default constructor
     std::optional<std::chrono::nanoseconds> interval;
     std::optional<uint32_t> cycles;
     uint32_t execution_count = 0;

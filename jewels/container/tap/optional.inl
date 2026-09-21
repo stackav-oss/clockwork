@@ -3,6 +3,8 @@
 
 #include "jewels/container/tap/optional.hh"
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/tap/constants.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/meta/concepts.hh"
@@ -37,7 +39,8 @@ constexpr Optional<Value>::Optional(std::nullopt_t /*nullopt*/) noexcept
 template <jewels::meta::ImplicitLifetimeType Value>
 template <class Other>
   requires(std::is_constructible_v<Value, const Other&> && !std::is_same_v<Value, Other>)
-constexpr Optional<Value>::Optional(const Optional<Other>& other)
+constexpr Optional<Value>::Optional(const Optional<Other>& other) noexcept(
+  std::is_nothrow_constructible_v<Value, const Other&>)
 {
   if (other.has_value())
   {
@@ -47,7 +50,8 @@ constexpr Optional<Value>::Optional(const Optional<Other>& other)
 
 template <jewels::meta::ImplicitLifetimeType Value>
 template <class... Args>
-constexpr Optional<Value>::Optional(std::in_place_t /*in_place*/, Args&&... args)
+constexpr Optional<Value>::Optional(std::in_place_t /*in_place*/, Args&&... args) noexcept(
+  std::is_nothrow_constructible_v<Value, Args...>)
 {
   emplace(std::forward<Args>(args)...);
 }
@@ -55,7 +59,7 @@ constexpr Optional<Value>::Optional(std::in_place_t /*in_place*/, Args&&... args
 template <jewels::meta::ImplicitLifetimeType Value>
 template <class Other>
   requires(!detail::is_optional_v<Other> && std::is_constructible_v<Value, Other &&>)
-constexpr Optional<Value>::Optional(Other&& other)
+constexpr Optional<Value>::Optional(Other&& other) noexcept(std::is_nothrow_constructible_v<Value, Other&&>)
 {
   emplace(std::forward<Other>(other));
 }
@@ -63,7 +67,8 @@ constexpr Optional<Value>::Optional(Other&& other)
 template <jewels::meta::ImplicitLifetimeType Value>
 template <class Other>
   requires(std::is_constructible_v<Value, const Other&> && !std::is_same_v<Other, Value>)
-constexpr Optional<Value>& Optional<Value>::operator=(const Optional<Other>& other)
+constexpr Optional<Value>&
+Optional<Value>::operator=(const Optional<Other>& other) noexcept(std::is_nothrow_constructible_v<Value, const Other&>)
 {
   if (other.has_value())
   {
@@ -81,7 +86,8 @@ template <class Other>
   requires(
     (std::is_constructible_v<Value, const Other&> && std::is_assignable_v<Value&, const Other&>) &&
     !detail::is_optional_v<Other>)
-constexpr Optional<Value>& Optional<Value>::operator=(const Other& other)
+constexpr Optional<Value>& Optional<Value>::operator=(const Other& other) noexcept(
+  std::is_nothrow_constructible_v<Value, const Other&> && std::is_nothrow_assignable_v<Value&, const Other&>)
 {
   if (has_value())
   {
@@ -171,8 +177,55 @@ constexpr const Value&& Optional<Value>::value() const&&
 }
 
 template <jewels::meta::ImplicitLifetimeType Value>
+constexpr jewels::BinaryOutcome Optional<Value>::value(jewels::Out<Value*> value_out) & noexcept
+{
+  if (!has_value())
+  {
+    return jewels::failure;
+  }
+  *value_out = operator->();
+  return jewels::success;
+}
+
+template <jewels::meta::ImplicitLifetimeType Value>
+constexpr jewels::BinaryOutcome Optional<Value>::value(jewels::Out<const Value*> value_out) const& noexcept
+{
+  if (!has_value())
+  {
+    return jewels::failure;
+  }
+  *value_out = operator->();
+  return jewels::success;
+}
+
+template <jewels::meta::ImplicitLifetimeType Value>
+constexpr jewels::BinaryOutcome
+Optional<Value>::value(jewels::FactoryOut<Value> value_out) && noexcept(std::is_nothrow_move_constructible_v<Value>)
+{
+  if (!has_value())
+  {
+    return jewels::failure;
+  }
+  value_out->emplace(std::move(**this));
+  return jewels::success;
+}
+
+template <jewels::meta::ImplicitLifetimeType Value>
+constexpr jewels::BinaryOutcome Optional<Value>::value(jewels::FactoryOut<Value> value_out) const&& noexcept(
+  std::is_nothrow_copy_constructible_v<Value>)
+{
+  if (!has_value())
+  {
+    return jewels::failure;
+  }
+  value_out->emplace(**this);
+  return jewels::success;
+}
+
+template <jewels::meta::ImplicitLifetimeType Value>
 template <class Other>
 constexpr Value Optional<Value>::value_or(Other&& default_value) const
+  noexcept(std::is_nothrow_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Value, Other&&>)
 {
   if (has_value())
   {
@@ -199,7 +252,7 @@ constexpr void Optional<Value>::reset() noexcept
 
 template <jewels::meta::ImplicitLifetimeType Value>
 template <class... Args>
-constexpr Value& Optional<Value>::emplace(Args&&... args)
+constexpr Value& Optional<Value>::emplace(Args&&... args) noexcept(std::is_nothrow_constructible_v<Value, Args...>)
 {
   jewels::memory::ObjectPolicy<Value>::construct(fields_.storage, std::forward<Args>(args)...);
   fields_.has_value = true;
@@ -208,6 +261,7 @@ constexpr Value& Optional<Value>::emplace(Args&&... args)
 
 template <jewels::meta::ImplicitLifetimeType Value>
 constexpr bool Optional<Value>::operator==(const Optional<Value>& other) const
+  noexcept(noexcept(std::declval<const Value&>() == std::declval<const Value&>()))
 {
   if (has_value() == other.has_value())
   {
@@ -218,6 +272,7 @@ constexpr bool Optional<Value>::operator==(const Optional<Value>& other) const
 
 template <jewels::meta::ImplicitLifetimeType Value>
 constexpr bool Optional<Value>::operator==(const Value& other) const
+  noexcept(noexcept(std::declval<const Value&>() == std::declval<const Value&>()))
 {
   return has_value() && **this == other;
 }

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -18,6 +18,7 @@ class TestChannelSpyNanobindClass:
 
     def test_spy_config(self) -> None:
         """Test the channel spy configuration."""
+        # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
@@ -32,6 +33,7 @@ class TestChannelSpyNanobindClass:
 
     def test_subscribe_raw_python(self) -> None:
         """Test subscribing with raw callbacks."""
+        # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())
@@ -81,6 +83,7 @@ class TestChannelSpyNanobindClass:
 
     def test_subscribe_raw_python_detects_overruns(self) -> None:
         """Test subscribing with raw callbacks."""
+        # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         tmp_dir = tmp_directory_guard.TmpDirectoryGuard()
         shm_root_dir = tmp_dir.path
         socket_ns = str(uuid.uuid4())

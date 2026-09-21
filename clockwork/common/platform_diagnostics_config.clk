@@ -2,10 +2,12 @@
 #![cpp(namespace=clockwork)]
 
 use clockwork::common::process_description;
+use[] clockwork::common::constants;
 use clockwork::diagnostics::report;
 
 // Configuration for a platform component that produces diagnostics
-schema PlatformDiagnosticsConfig {
+schema PlatformDiagnosticsConfig
+{
   fields
   {
     // Producer ID
@@ -18,6 +20,6 @@ schema PlatformDiagnosticsConfig {
     #3 instance_id: VarString<max_size=32>;
 
     // Diagnostics publish endpoint
-    #4 publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=300>;
+    #4 publish_endpoint: process_description::PublishEndpoint<max_channel_name_len=constants::MAX_CHANNEL_NAME_SIZE>;
   }
 }

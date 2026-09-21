@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_binary")
@@ -11,6 +11,7 @@ cc_binary(
         "//clockwork/logging/offboard:copy_log",
         "//jewels/filesystem",
         "//jewels/filesystem:error_code",
+        "//jewels/filesystem:file_descriptor",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/otel",

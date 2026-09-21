@@ -13,6 +13,7 @@
 
 namespace jewels::memory
 {
+
 template <class T>
 [[nodiscard]] ObjectPtr<T> make_non_null_from_ref(T& object) noexcept
 {
@@ -30,12 +31,6 @@ template <class Ptr>
 {
   return ptr != nullptr ? jewels::expected<NonNullPtr<Ptr>, MemoryError>{std::move(ptr)}
                         : jewels::unexpected(MemoryError::null_pointer_error);
-}
-
-template <typename T, typename... Args>
-[[nodiscard]] NonNullUniquePtr<T> make_unique(Args&&... args)
-{
-  return NonNullUniquePtr<T>(std::make_unique<T>(std::forward<Args>(args)...));
 }
 
 template <typename T, typename... Args>

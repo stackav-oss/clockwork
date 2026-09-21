@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package parsers
@@ -328,6 +328,109 @@ use [ proto ] norepo::use::proto;
 		expectedPyImports,
 		expectedCppExeImports,
 		expectedGoProtoImportPath)
+
+	actualImports := ParseClkFile(source, false)
+	require.Equal(t, expectedImports, actualImports)
+}
+
+func TestParseClkFile_MultilineCppTypeHeader(t *testing.T) {
+	const source = `#![ generate ( cpp ) ]
+#[ cpp (
+  type_namespace = stack::detection::event_triggers,
+  type_header = "autonomy/detection/event_triggers/event_trigger_metrics_state.hh"
+) ]
+extern_type EventTriggerMetricsState;
+`
+
+	const sourceWithTrailingComma = `#![ generate ( cpp ) ]
+#[ cpp (
+  type_namespace = stack::detection::event_triggers,
+  type_header = "autonomy/detection/event_triggers/event_trigger_metrics_state.hh",
+) ]
+extern_type EventTriggerMetricsState;
+`
+
+	expectedImports := common.NewImports(
+		true,
+		[]string{"cpp"},
+		[]common.ClkImport{},
+		[]common.ClkImport{
+			common.ClkImport{Repo: "", ImportPath: "autonomy::detection::event_triggers::event_trigger_metrics_state"},
+		},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		"",
+	)
+
+	actualImports := ParseClkFile(source, false)
+	require.Equal(t, expectedImports, actualImports)
+	actualImports = ParseClkFile(sourceWithTrailingComma, false)
+	require.Equal(t, expectedImports, actualImports)
+}
+
+func TestParseClkFile_MultilineCompactCppTypeHeader(t *testing.T) {
+	const source = `#![generate(cpp)]
+#[cpp(type_namespace=stack::detection::event_triggers,
+type_header="autonomy/detection/event_triggers/event_trigger_metrics_state.hh")]
+extern_type EventTriggerMetricsState;
+`
+
+	expectedImports := common.NewImports(
+		true,
+		[]string{"cpp"},
+		[]common.ClkImport{},
+		[]common.ClkImport{
+			common.ClkImport{Repo: "", ImportPath: "autonomy::detection::event_triggers::event_trigger_metrics_state"},
+		},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		"",
+	)
+
+	actualImports := ParseClkFile(source, false)
+	require.Equal(t, expectedImports, actualImports)
+}
+
+func TestParseClkFile_MultilineProtoGoPackage(t *testing.T) {
+	const source = `#![ generate ( proto, go_proto ) ]
+#![ proto (
+  package = stack.autonomy.mapping.data_model,
+  go_package = github.com/stack-av-llc/av/autonomy/mapping/data_model/enums
+) ]
+`
+
+	expectedImports := common.NewImports(
+		true,
+		[]string{"go_proto", "proto"},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		"github.com/stack-av-llc/av/autonomy/mapping/data_model/enums",
+	)
+
+	actualImports := ParseClkFile(source, false)
+	require.Equal(t, expectedImports, actualImports)
+}
+
+func TestParseClkFile_CompactProtoGoPackage(t *testing.T) {
+	const source = `#![generate(proto, go_proto)]
+#![proto(go_package=github.com/stack-av-llc/av/services/swac)]
+`
+
+	expectedImports := common.NewImports(
+		true,
+		[]string{"go_proto", "proto"},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		[]common.ClkImport{},
+		"github.com/stack-av-llc/av/services/swac",
+	)
 
 	actualImports := ParseClkFile(source, false)
 	require.Equal(t, expectedImports, actualImports)

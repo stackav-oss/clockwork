@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -12,6 +12,7 @@
 #include "clockwork/logging/offboard/reader.hh"
 #include "clockwork/logging/offboard/tests/support/test_support.hh"
 #include "clockwork/logging/offboard/types.hh"
+#include "clockwork/logging/offboard/v1/log_metadata.pb.h"
 #include "clockwork/logging/offboard/v1/log_union.pb.h"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
@@ -31,6 +32,7 @@
 #include <cstring>
 #include <functional>
 #include <map>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -128,7 +130,8 @@ TEST_CASE("copy_log")
                      /*source_uri=*/source_log_path.string(),
                      /*dest_uri=*/dest_log_path.string()));
 
-    Reader reader{memory_resource, dest_log_path.string()};
+    const auto chunk_reader_writer_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    Reader reader{memory_resource, dest_log_path.string(), chunk_reader_writer_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -229,7 +232,8 @@ TEST_CASE("copy_log")
         /*maybe_excluded_channels=*/excluded_channels));
     }
 
-    Reader reader{memory_resource, dest_log_path.string()};
+    const auto chunk_reader_writer_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+    Reader reader{memory_resource, dest_log_path.string(), chunk_reader_writer_factory};
 
     const auto metadata_result = reader.get_metadata();
     REQUIRE(metadata_result);
@@ -363,9 +367,9 @@ TEST_CASE("copy_log_union")
 
   const auto source_log_union_file_uri = source_log_union_path / "stack_log_union.pbtxt";
 
-  ChunkReaderWriterFactory chunk_reader_writer_factory{memory_resource};
-  REQUIRE(chunk_reader_writer_factory.create_directories(source_log_union_path.string()));
-  REQUIRE(chunk_reader_writer_factory.write_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
+  const auto chunk_reader_writer_factory = std::make_shared<ChunkReaderWriterFactory<>>(memory_resource);
+  REQUIRE(chunk_reader_writer_factory->create_directories(source_log_union_path.string()));
+  REQUIRE(chunk_reader_writer_factory->write_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
     source_log_union_file_uri.string(), "", source_log_union_protobuf));
 
   SECTION("Deep copy")
@@ -376,7 +380,7 @@ TEST_CASE("copy_log_union")
                        /*source_uri=*/source_log_union_path.string(),
                        /*dest_uri=*/dest_log_path.string()));
 
-      Reader reader{memory_resource, dest_log_path.string()};
+      Reader reader{memory_resource, dest_log_path.string(), chunk_reader_writer_factory};
 
       const auto metadata_result = reader.get_metadata();
       REQUIRE(metadata_result);
@@ -478,7 +482,7 @@ TEST_CASE("copy_log_union")
           /*maybe_excluded_channels=*/excluded_channels));
       }
 
-      Reader reader{memory_resource, dest_log_path.string()};
+      Reader reader{memory_resource, dest_log_path.string(), chunk_reader_writer_factory};
 
       const auto metadata_result = reader.get_metadata();
       REQUIRE(metadata_result);
@@ -528,7 +532,7 @@ TEST_CASE("copy_log_union")
 
     const auto dest_log_union_file_uri = dest_log_path / "stack_log_union.pbtxt";
 
-    const auto read_result = chunk_reader_writer_factory.read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
+    const auto read_result = chunk_reader_writer_factory->read_text_proto<::clockwork::logging::offboard::v1::LogUnion>(
       dest_log_union_file_uri.string());
     REQUIRE(read_result);
     REQUIRE(read_result->log_union_entry(0).absolute_path() == source_log_path1.string_view());

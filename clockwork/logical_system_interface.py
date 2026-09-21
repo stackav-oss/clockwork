@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Public-facing interface for processing and modification of LogicalSystems."""
@@ -38,7 +38,24 @@ from clockwork.dsl.ir.box import (
     StateInstance,
 )
 from clockwork.dsl.ir.clkenum import ResolvedEnum, ResolvedValueDef, ValueRef
-from clockwork.dsl.ir.cog import CogInstance, CogInstanceMember, ConfigDef, InputDef, OutputDef, StateDef
+
+# fmt: off
+from clockwork.dsl.ir.cog import (
+    # pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    CogAlignedInputDef,
+    CogInstance,
+    CogInstanceMember,
+    CogInstanceMemberElement,
+    ConfigDef,
+    # pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    InputDef,
+    # pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+    OutputDef,
+    StateDef,
+)
+
+# fmt: on
+from clockwork.dsl.ir.cog_components import InputDefElement
 from clockwork.dsl.ir.compiler import compile_source_file, create_filesystem_importer
 from clockwork.dsl.ir.hardware import CpuDomain
 from clockwork.dsl.ir.policy import (
@@ -52,13 +69,14 @@ from clockwork.dsl.ir.policy import (
     lookup_all_policies,
     lookup_policy,
 )
+from clockwork.dsl.ir.pubsub import InstantiatedChannel
 from clockwork.dsl.ir.schema import SchemaInstance
-from clockwork.dsl.ir.typesys import TypeVal, Value
+from clockwork.dsl.ir.typesys import TypeUnion, TypeVal, Value
 from clockwork.dsl.ir.udp import UdpSocketEndpointInstance
 from clockwork.dsl.ir.uuid_reg import lookup_uuid, register_entity_with_stable_key
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
     from pathlib import Path
     from uuid import UUID
 
@@ -85,6 +103,7 @@ class GeneratedSystemFiles:
     diagnostics_database_config_files: list[Path]
     logged_channel_metadata_files: list[Path]
     metrics_channel_metadata_files: list[Path]
+    signal_metadata_files: list[Path]
 
 
 class LogicalSystemInterface:
@@ -157,6 +176,7 @@ class LogicalSystemInterface:
             diagnostics_database_config_files=generated_system_files.diagnostics_database_config_files,
             logged_channel_metadata_files=generated_system_files.logged_channel_metadata_files,
             metrics_channel_metadata_files=generated_system_files.metrics_channel_metadata_files,
+            signal_metadata_files=generated_system_files.signal_metadata_files,
         )
 
     def get_channels(self) -> list[ChannelInterface]:
@@ -228,6 +248,10 @@ class LogicalSystemInterface:
     def remove_cog(self, cog: CogInterface) -> None:
         """Remove a cog from the system."""
         cog.remove_self_from_system()
+
+    def remove_cogs(self, cogs: list[CogInterface]) -> None:
+        """Remove cogs from the system in a single pass over their connections."""
+        _remove_cogs(self.logical_system, cogs)
 
     def add_data_source(self, data_source: DataSourceInterface) -> DataSourceInterface:
         """Add a data source to the system. Return the new data source."""
@@ -347,6 +371,13 @@ class LogicalSystemInterface:
             for uuid in self.logical_system.states
         ]
 
+    def get_memory_resource_instances(self) -> list[ConnectableInterface]:
+        """Get all memory resource instances in the system."""
+        return [
+            ConnectableInterface(self.logical_system, uuid, self.logical_system.mem_resources)
+            for uuid in self.logical_system.mem_resources
+        ]
+
     def _get_policy_field_value(self, policy: PolicyClass, field_name: str) -> ResolvedValueDef:
         """Helper to get a field value from a policy class."""
         field_value = None
@@ -365,9 +396,11 @@ class LogicalSystemInterface:
     def add_telemetry_log_observers(self, channels: list[ChannelInterface]) -> None:
         """Set a channel to be written to the telemetry log."""
         channel_logging_policy_class = logger_config.get_channel_logging_policy(self.logical_system.module.context)
-        telemetry_value = self._get_policy_field_value(channel_logging_policy_class, "telemetry")
-        if telemetry_value.source is None:
-            error_str = "Can't find telemetry value source value in order to assign to a logging policy."
+        non_redundant_telemetry_value = self._get_policy_field_value(
+            channel_logging_policy_class, "non_redundant_telemetry"
+        )
+        if non_redundant_telemetry_value.source is None:
+            error_str = "Can't find non_redundant_telemetry value source value in order to assign to a logging policy."
             raise RuntimeError(error_str)
         persistent_value = self._get_policy_field_value(channel_logging_policy_class, "persistent")
         if persistent_value.source is None:
@@ -377,14 +410,14 @@ class LogicalSystemInterface:
         for channel in channels:
             if isinstance(channel.channel, MetricsChannel):
                 continue
-            type_infos = list(channel_logging_policy_class.target_bound)
+            type_infos = list(channel_logging_policy_class.target_bound.alternatives())
             if (
                 isinstance(channel.channel.channel.ir_node.type_info, TypeVal)
                 and channel.channel.channel.ir_node.type_info not in type_infos
             ):
                 type_infos.append(channel.channel.channel.ir_node.type_info)
-            channel_logging_policy_class.target_bound = list(type_infos)
-            schema_args = [("log_type", ValueRef.make(telemetry_value.source))]
+            channel_logging_policy_class.target_bound = TypeUnion.make(types=type_infos)
+            schema_args = [("log_type", ValueRef.make(non_redundant_telemetry_value.source))]
             if channel.is_persistent():
                 _logger.debug("Marking channel %s as persistent", channel.get_name())
                 schema_args.append(("channel_type", ValueRef.make(persistent_value.source)))
@@ -407,7 +440,8 @@ class LogicalSystemInterface:
     def is_endpoint_connected_to_cog(self, endpoint: EndpointInterface, cog: CogInterface) -> bool:
         """Determine whether an endpoint is connected to a cog."""
         return (
-            isinstance(endpoint.endpoint.entity, CogInstanceMember) and endpoint.endpoint.entity.cog_instance is cog.cog
+            isinstance(endpoint.endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
+            and endpoint.endpoint.entity.cog_instance is cog.cog
         )
 
     def connect_channel_observer(self, channel: ChannelInterface, observer: EndpointInterface) -> None:
@@ -482,6 +516,7 @@ class LogicalSystemInterface:
                     [system_target_ir.box_instance],
                     system_target_ir.module,
                     system_target_ir.require_logging_policies,
+                    False,
                     compiler_context,
                 )
         if logical_system is None:
@@ -506,6 +541,10 @@ class EndpointInterface:
     def is_log_producer(self) -> bool:
         """Determine whether this endpoint is a log producer."""
         return isinstance(self.endpoint.entity, LogProducer)
+
+    def is_state(self) -> bool:
+        """Determine whether this endpoint is a state."""
+        return isinstance(self.endpoint.entity, CogInstanceMember) and isinstance(self.endpoint.entity.member, StateDef)
 
     def get_log_producer_source_name(self) -> str:
         """Get the source name of a log producer."""
@@ -537,7 +576,7 @@ class EndpointInterface:
 
     def delete(self) -> None:
         """Remove this endpoint from the system."""
-        if isinstance(self.endpoint.entity, CogInstanceMember):
+        if isinstance(self.endpoint.entity, (CogInstanceMember, CogInstanceMemberElement)):
             error_str = "Cog member endpoints cannot be deleted from the system. Consider deleting the cog instead."
             raise TypeError(error_str)
         if isinstance(self.endpoint.entity, UdpSocketEndpointInstance):
@@ -569,9 +608,7 @@ class ChannelInterface:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self.channel_name: str = channel_name
-        self.channel: Channel | MetricsChannel = (
-            self._logical_system.channels | self._logical_system.metrics_channels
-        )[self.channel_name]
+        self.channel: Channel | MetricsChannel = self._logical_system.get_channel(self.channel_name)
         self._logging_policy: ChannelLoggingPolicy | None = self._lookup_logging_policy()
 
     def is_metrics_channel(self) -> bool:
@@ -616,12 +653,23 @@ class ChannelInterface:
         """Get the smallest queue size for the channel that still meets the requirements for all observers."""
         if self.is_published_once():
             return 1
-        optimal_queue_size = 1
+        max_msgs_per_exec = 1
+        for endpoint in self.get_producers():
+            if isinstance(endpoint.endpoint.entity, (CogInstanceMember, CogInstanceMemberElement)):
+                member = endpoint.endpoint.entity.member
+                if isinstance(member, OutputDef):
+                    max_msgs = member.max_msgs_per_exec
+                    assert isinstance(max_msgs, int), f"Unresolved max_msgs_per_exec on {endpoint.endpoint.entity.name}"
+                    max_msgs_per_exec = max(max_msgs_per_exec, max_msgs)
+
+        optimal_queue_size = max_msgs_per_exec
         for endpoint in self.get_observers():
-            if isinstance(endpoint.endpoint.entity, CogInstanceMember):
-                view_max_messages = endpoint.endpoint.entity.member.view_params.max_msgs + 1
-                if isinstance(view_max_messages, int):
-                    optimal_queue_size = max(optimal_queue_size, view_max_messages)
+            if isinstance(endpoint.endpoint.entity, (CogInstanceMember, CogInstanceMemberElement)):
+                member = endpoint.endpoint.entity.member
+                assert isinstance(member, (InputDef, InputDefElement, CogAlignedInputDef))
+                max_msgs = member.view_params.max_msgs
+                assert isinstance(max_msgs, int), f"Unresolved max_msgs on {endpoint.endpoint.entity.name}"
+                optimal_queue_size = max(optimal_queue_size, max_msgs + max_msgs_per_exec)
         return optimal_queue_size
 
     def _lookup_logging_policy(self) -> ChannelLoggingPolicy | None:
@@ -706,12 +754,16 @@ class ChannelInterface:
                 assert isinstance(output_channel, GraphirChannel)
             self._logical_system.ensure_channel(output_channel)
         input_channel_name = alternative_input_channel_name or channel_name
+        # fmt: off
         log_producer = LogProducer(
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             name=f"logreader-({input_channel_name})-to-({output_channel_name})",
+            # pyrefly: ignore[unexpected-keyword] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             scope=self._logical_system.module.inner_scope,
             type_info=LOG_PRODUCER_TYPE,
             source_name=input_channel_name,
         )
+        # fmt: on
         register_entity_with_stable_key(self._logical_system.module.context, log_producer)
         self._logical_system.add_log_producer(
             log_producer,
@@ -739,12 +791,15 @@ class ConnectableInterface:
     """Public interface to clockwork logical system connectable."""
 
     def __init__(
-        self, logical_system: LogicalSystem, connectable_uuid: UUID, connectable_dict: dict[UUID, Any]
+        self,
+        logical_system: LogicalSystem,
+        connectable_uuid: UUID,
+        connectable_dict: Mapping[UUID, Connectable[Any, Any]],
     ) -> None:
         """Constructor."""
         self._logical_system: LogicalSystem = logical_system
         self._connectable_uuid: UUID = connectable_uuid
-        self.connectable: Connectable[Any, CogInstanceMember[Any]] = connectable_dict[self._connectable_uuid]
+        self.connectable: Connectable[Any, Any] = connectable_dict[self._connectable_uuid]
 
     def get_name(self) -> str:
         """Get the name of the connectable."""
@@ -753,12 +808,20 @@ class ConnectableInterface:
             raise RuntimeError(error_str)
         return self.connectable.entity.fqn
 
+    def get_uuid(self) -> UUID:
+        """Get the UUID of the connectable."""
+        return self._connectable_uuid
+
     def get_endpoints(self) -> list[EndpointInterface]:
         """Get the endpoints on a connectable."""
         return [
             EndpointInterface(self._logical_system, endpoint_uuid, endpoint)
             for endpoint_uuid, endpoint in self.connectable.endpoints.items()
         ]
+
+    def is_state(self) -> bool:
+        """Determine whether this connectable is a state."""
+        return isinstance(self.connectable.entity, StateInstance)
 
     def add_self_to_new_system(self, new_logical_system: LogicalSystem, process_policy_data: PolicyData) -> None:
         """Add this connectable to a new system (and make the appropriate connections)."""
@@ -803,6 +866,9 @@ class ConnectableInterface:
             with contextlib.suppress(KeyError):
                 new_logical_system.add_config(self.connectable.entity)
         elif isinstance(self.connectable.entity, StateInstance):
+            if self.connectable.entity.memory_resource is not None:
+                with contextlib.suppress(KeyError):
+                    new_logical_system.add_memory_resource(self.connectable.entity.memory_resource)
             with contextlib.suppress(KeyError):
                 new_logical_system.add_state(self.connectable.entity)
         elif isinstance(self.connectable.entity, MemoryResourceInstance):
@@ -812,6 +878,8 @@ class ConnectableInterface:
     def _make_connections_to_cogs(self, new_logical_system: LogicalSystem) -> None:
         """Make connections to cogs in the new system."""
         for endpoint in self.connectable.endpoints.values():
+            if not isinstance(endpoint.entity, CogInstanceMember):
+                continue
             for cog in new_logical_system.cogs.values():
                 if endpoint.entity.cog_instance is cog:
                     if isinstance(self.connectable.entity, FirstMessageInstance | SerializedDataFileInstance):
@@ -963,6 +1031,10 @@ class CogInterface:
         """Get the cog name."""
         return self.cog.fqn
 
+    def get_class_name(self) -> str:
+        """Get the cog class name."""
+        return self.cog.cog_class.fqn
+
     def get_uuid(self) -> UUID:
         """Get the cog UUID."""
         return self.cog_uuid
@@ -1003,21 +1075,35 @@ class CogInterface:
         """Names of any input channels."""
         channel_names = []
         for entity in self.cog.members:
-            if not isinstance(entity.member, InputDef):
+            if not isinstance(entity.member, (InputDef, InputDefElement, CogAlignedInputDef)):
                 continue
-            endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
-            endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
-            if not isinstance(endpoint.connected_to, Channel):
-                continue
-            channel_names.append(endpoint.connected_to.channel.channel_name)
+            if isinstance(entity.member, InputDef) and entity.elements:
+                for element in entity.elements:
+                    endpoint_uuid = lookup_uuid(self.logical_system.module.context, element)
+                    endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
+                    if not isinstance(endpoint.connected_to, Channel):
+                        continue
+                    channel_names.append(endpoint.connected_to.channel.channel_name)
+            else:
+                endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
+                endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
+                if not isinstance(endpoint.connected_to, Channel):
+                    continue
+                channel_names.append(endpoint.connected_to.channel.channel_name)
         return channel_names
 
     def get_endpoint_by_input_name(self, name: str) -> EndpointInterface | None:
         """Get an endpoint by its name in the cog inputs."""
         for entity in self.cog.members:
-            if not isinstance(entity.member, InputDef):
+            if not isinstance(entity.member, (InputDef, CogAlignedInputDef)):
                 continue
-            if entity.name == name:
+            if isinstance(entity.member, InputDef) and entity.member.elements:
+                for element in entity.member.elements:
+                    if element.name == name:
+                        endpoint_uuid = lookup_uuid(self.logical_system.module.context, element)
+                        endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
+                        return EndpointInterface(self.logical_system, endpoint_uuid, endpoint)
+            elif entity.name == name:
                 endpoint_uuid = lookup_uuid(self.logical_system.module.context, entity)
                 endpoint = self.logical_system.observer_endpoints[endpoint_uuid]
                 return EndpointInterface(self.logical_system, endpoint_uuid, endpoint)
@@ -1055,6 +1141,31 @@ class CogInterface:
         # Now connect the new config
         self.logical_system.connect_config(config=data_source.data_source, endpoint=endpoint.endpoint.entity)
 
+    def get_connected_states(self) -> list[ConnectableInterface]:
+        """Get the states that feed into this cog."""
+        all_state_connectables = self._get_connectables(self.logical_system.states)
+        state_connectables_to_endpoints = {
+            connectable: [
+                endpoint
+                for endpoint in connectable.get_endpoints()
+                if endpoint.uuid in connectable.connectable.endpoints
+            ]
+            for connectable in all_state_connectables
+        }
+        state_connectables_to_endpoints_connected_to_cog = {
+            connectable: [
+                endpoint
+                for endpoint in endpoints
+                if endpoint.is_state() and endpoint.endpoint.entity.cog_instance is self.cog
+            ]
+            for connectable, endpoints in state_connectables_to_endpoints.items()
+        }
+        return [
+            connectable
+            for connectable, endpoints in state_connectables_to_endpoints_connected_to_cog.items()
+            if endpoints
+        ]
+
     def get_connectables(self) -> list[ConnectableInterface]:
         """Get the connectables that feed into this cog."""
         return [
@@ -1074,7 +1185,7 @@ class CogInterface:
                 endpoint = endpoint_dict.get(endpoint_uuid)
                 if (
                     endpoint
-                    and isinstance(endpoint.entity, CogInstanceMember)
+                    and isinstance(endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
                     and endpoint.entity in removed_cog.members
                 ):
                     _remove_endpoint(self.logical_system, endpoint_uuid)
@@ -1093,22 +1204,23 @@ class CogInterface:
                     endpoint = connectable.endpoints[endpoint_uuid]
                     if (
                         endpoint
-                        and isinstance(endpoint.entity, CogInstanceMember)
+                        and isinstance(endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
                         and endpoint.entity.cog_instance is removed_cog
                     ):
                         _remove_endpoint(self.logical_system, endpoint_uuid)
                         if not len(connectable.endpoints):
                             removal_fn(self.logical_system, connectable_uuid)
 
-    def _get_connectables(
-        self, connectable_dict: dict[UUID, Connectable[Any, CogInstanceMember[Any]]]
-    ) -> list[ConnectableInterface]:
+    def _get_connectables(self, connectable_dict: Mapping[UUID, Connectable[Any, Any]]) -> list[ConnectableInterface]:
         """Get the connectables this cog depends on."""
         connectable_interfaces: list[ConnectableInterface] = []
         for connectable_uuid, connectable in connectable_dict.items():
             connectable_feeds_cog = False
             for endpoint in connectable.endpoints.values():
-                if endpoint.entity.cog_instance is self.cog:
+                if (
+                    isinstance(endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
+                    and endpoint.entity.cog_instance is self.cog
+                ):
                     connectable_feeds_cog = True
                     break
             if connectable_feeds_cog:
@@ -1152,6 +1264,103 @@ class CogInterface:
             )
 
         return CogInterface(new_logical_system_interface, new_cog_uuid)
+
+
+def _remove_cogs(logical_system: LogicalSystem, cogs: list[CogInterface]) -> None:
+    """Remove cogs and their endpoints without rescanning system connections per cog."""
+    cog_uuids = {cog.cog_uuid for cog in cogs}
+    if not cog_uuids:
+        return
+
+    removed_cogs = [logical_system.cogs[cog_uuid] for cog_uuid in cog_uuids]
+    removed_cog_ids = set()
+    removed_cog_member_ids = set()
+    for cog in removed_cogs:
+        removed_cog_ids.add(id(cog))
+        for member in cog.members:
+            removed_cog_member_ids.add(id(member))
+            if member.elements:
+                for element in member.elements:
+                    removed_cog_member_ids.add(id(element))
+    endpoint_uuids_to_remove = _get_endpoint_uuids_to_remove(logical_system, removed_cog_member_ids, removed_cog_ids)
+    _remove_cog_entities(logical_system, cog_uuids)
+    _remove_endpoint_references(logical_system, endpoint_uuids_to_remove)
+
+
+def _get_endpoint_uuids_to_remove(
+    logical_system: LogicalSystem, removed_cog_member_ids: set[int], removed_cog_ids: set[int]
+) -> set[UUID]:
+    """Find endpoints that belong to the cogs selected for removal."""
+    endpoint_uuids_to_remove: set[UUID] = set()
+
+    for endpoint_dict in _get_endpoint_dicts(logical_system):
+        for endpoint_uuid, endpoint in endpoint_dict.items():
+            if (
+                isinstance(endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
+                and id(endpoint.entity) in removed_cog_member_ids
+            ):
+                endpoint_uuids_to_remove.add(endpoint_uuid)
+
+    for connectable_dict, _ in _get_connectable_infos(logical_system):
+        for connectable in connectable_dict.values():
+            for endpoint_uuid, endpoint in connectable.endpoints.items():
+                if (
+                    endpoint
+                    and isinstance(endpoint.entity, (CogInstanceMember, CogInstanceMemberElement))
+                    and id(endpoint.entity.cog_instance) in removed_cog_ids
+                ):
+                    endpoint_uuids_to_remove.add(endpoint_uuid)
+    return endpoint_uuids_to_remove
+
+
+def _remove_cog_entities(logical_system: LogicalSystem, cog_uuids: set[UUID]) -> None:
+    """Remove the selected cog entities from a logical system."""
+    for cog_uuid in cog_uuids:
+        logical_system.all_entities.pop(cog_uuid)
+        logical_system.entity_to_process.pop(cog_uuid)
+        logical_system.cogs.pop(cog_uuid)
+
+
+def _remove_endpoint_references(logical_system: LogicalSystem, endpoint_uuids_to_remove: set[UUID]) -> None:
+    """Remove endpoints from system-wide collections and their connectables."""
+    for endpoint_uuid in endpoint_uuids_to_remove:
+        _remove_entity(logical_system, endpoint_uuid)
+        logical_system.snapshot_metadata.pop(endpoint_uuid, None)
+    for endpoint_dict in _get_endpoint_dicts(logical_system):
+        for endpoint_uuid in endpoint_uuids_to_remove:
+            endpoint_dict.pop(endpoint_uuid, None)
+
+    for channel in (logical_system.channels | logical_system.metrics_channels).values():
+        for endpoints in [channel.producers, channel.observers]:
+            for endpoint_uuid in list(endpoints.keys()):
+                if endpoint_uuid in endpoint_uuids_to_remove:
+                    endpoints.pop(endpoint_uuid)
+
+    _remove_endpoints_from_connectables(logical_system, endpoint_uuids_to_remove)
+
+
+def _remove_endpoints_from_connectables(logical_system: LogicalSystem, endpoint_uuids_to_remove: set[UUID]) -> None:
+    """Remove endpoints from connectables and delete newly orphaned connectables."""
+    for connectable_dict, removal_fn in _get_connectable_infos(logical_system):
+        for connectable_uuid, connectable in list(connectable_dict.items()):
+            removed_endpoint = False
+            for endpoint_uuid in list(connectable.endpoints.keys()):
+                if endpoint_uuid in endpoint_uuids_to_remove:
+                    connectable.endpoints.pop(endpoint_uuid)
+                    removed_endpoint = True
+            if removed_endpoint and not connectable.endpoints:
+                removal_fn(logical_system, connectable_uuid)
+
+
+def _get_connectable_infos(
+    logical_system: LogicalSystem,
+) -> list[tuple[dict[UUID, Connectable[Any, Any]], Callable[[LogicalSystem, UUID], None]]]:
+    """Get connectable collections and their corresponding removal functions."""
+    return [
+        (logical_system.configs, _remove_config),
+        (logical_system.states, _remove_state),
+        (logical_system.mem_resources, _remove_mem_resource),
+    ]
 
 
 def _remove_entity(logical_system: LogicalSystem, entity_uuid: UUID) -> None:
@@ -1222,6 +1431,7 @@ class DataSourceInterface:
             return str(self.data_source.file_path)
         if self.is_message():
             assert not isinstance(self.data_source.channel.channel_name, expr.Expr)
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             return str(self.data_source.channel.channel_name.value)
         error_str = "Unhandled data source type while trying to get name."
         raise TypeError(error_str)
@@ -1293,7 +1503,8 @@ def _get_channel_with_alternate_name(
     if isinstance(channel, MetricsChannel):
         return _get_metrics_channel_with_alternate_name(channel, alternative_channel_name)
     updated_ir_node = copy(channel.channel.ir_node)
-    updated_ir_node.name = alternative_channel_name
+    if not isinstance(updated_ir_node, InstantiatedChannel):
+        updated_ir_node.name = alternative_channel_name
     updated_ir_node.channel_name = primitive.StringValue.make(alternative_channel_name)
     return GraphirChannel(
         channel.channel.doc,
@@ -1306,8 +1517,10 @@ def _get_channel_with_alternate_name(
         channel.channel.is_diagnostics,
         channel.channel.is_bridge_status,
         channel.channel.is_c2c_bridge_status,
+        channel.channel.is_simplelaunch_status,
         channel.channel.enforce_backwards_compatibility,
         channel.channel.is_bulk_data,
+        channel.channel.channel_type,
         updated_ir_node,
     )
 

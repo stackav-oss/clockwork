@@ -1,12 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/tools/channel_spy/channel_spy.hh"
 #include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/types.hh"
+#include "jewels/container/compare.hh"
 
-#include <Python.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>         // IWYU pragma: keep
 #include <nanobind/stl/function.h>    // IWYU pragma: keep

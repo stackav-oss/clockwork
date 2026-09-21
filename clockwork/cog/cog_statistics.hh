@@ -1,15 +1,18 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/cog/execute_cog_timing.hh"
 #include "clockwork/dsl/cog/ten_nanosecond_type.hh"
+#include "jewels/memory/instrumented_pmr_resource.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
 #include <wise_enum.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory_resource>
@@ -61,6 +64,10 @@ public:
   /// @return mean
   [[nodiscard]] std::optional<double> mean() const;
 
+  /// Get the sum of all observed values.
+  /// @return The sum, or nullopt when no values have been observed.
+  [[nodiscard]] std::optional<T> sum() const;
+
 private:
   /// Current min value.
   T min_{};
@@ -85,11 +92,26 @@ inline std::optional<double> MinMaxMean<TenNanoseconds>::mean() const;
 /// Metrics common to all cogs that are written in the event log
 struct EventMetrics
 {
+  /// Timestamp passed to the cog dial at execution start
+  int64_t dial_start_time{}; // 8 bytes (units 1ns signed)
+
   /// Start of execution time
   int64_t execution_start_time{}; // 8 bytes (units 1ns signed)
 
   /// Execution duration
   TenNanoseconds execution_duration{};
+
+  /// Wall time spent in the generated cog execution body
+  std::optional<TenNanoseconds> execute_cog_wall_duration;
+
+  /// Thread CPU time spent in the generated cog execution body
+  std::optional<TenNanoseconds> execute_cog_thread_cpu_duration;
+
+  /// Thread user CPU time spent in the generated cog execution body
+  std::optional<TenNanoseconds> execute_cog_thread_user_duration;
+
+  /// Thread system CPU time spent in the generated cog execution body
+  std::optional<TenNanoseconds> execute_cog_thread_system_duration;
 
   /// Latency between when the cog first became ready and when it actually executed
   TenNanoseconds latency_first_ready_to_execution{};
@@ -105,6 +127,24 @@ struct EventMetrics
 
   /// Output metrics
   std::pmr::unordered_map<size_t, uint16_t> output_metrics;
+
+  /// Memory resource metrics
+  std::pmr::unordered_map<size_t, jewels::memory::MemoryResourceMetrics> resource_metrics;
+
+  /// Publisher throttle episode counts by publisher index.
+  std::pmr::unordered_map<size_t, uint16_t> publisher_throttle_counts;
+
+  /// Wait from first publisher rejection through the final eligibility deadline.
+  TenNanoseconds publisher_throttle_wait_duration{};
+
+  /// Latency from the final publisher eligibility deadline to execution start.
+  TenNanoseconds post_throttle_exec_latency{};
+
+  /// Final publisher eligibility deadline as an absolute nanosecond timestamp.
+  int64_t last_throttled_until{};
+
+  /// Whether this execution experienced publisher throttling.
+  bool was_publisher_throttled{};
 };
 
 /// Metrics common to all cogs that are written in the telemetry log.
@@ -128,11 +168,35 @@ struct TelemetryMetrics
   /// Execution Duration
   MinMaxMean<TenNanoseconds> execution_duration{};
 
+  /// Generated cog execution body wall-time duration
+  MinMaxMean<TenNanoseconds> execute_cog_wall_duration{};
+
+  /// Generated cog execution body thread CPU duration
+  MinMaxMean<TenNanoseconds> execute_cog_thread_cpu_duration{};
+
+  /// Generated cog execution body thread user CPU duration
+  MinMaxMean<TenNanoseconds> execute_cog_thread_user_duration{};
+
+  /// Generated cog execution body thread system CPU duration
+  MinMaxMean<TenNanoseconds> execute_cog_thread_system_duration{};
+
   /// Output metrics
   std::pmr::unordered_map<size_t, MinMaxMean<uint16_t>> output_metrics;
 
   /// Conditions Mask Vector
   std::pmr::vector<uint64_t> conditions_mask_vector;
+
+  /// Publisher throttle episode distributions by publisher index; sum is the telemetry count.
+  std::pmr::unordered_map<size_t, MinMaxMean<uint64_t>> publisher_throttle_counts;
+
+  /// Number of executions affected by publisher throttling.
+  uint64_t throttled_execution_count{};
+
+  /// Publisher throttle wait duration distribution.
+  MinMaxMean<TenNanoseconds> publisher_throttle_wait_duration{};
+
+  /// Post-throttle execution latency distribution.
+  MinMaxMean<TenNanoseconds> post_throttle_exec_latency{};
 };
 
 /// CogExecution states. Should really be nested in CogMetrics but that would prevent using WISE_ENUM_CLASS
@@ -156,9 +220,14 @@ public:
   StateTransitionExpected execution_attempted(jewels::time::SyncTime attempt_time);
 
   /// Indicate that execution of the cog began
+  /// @param dial_start_time Timestamp passed to the cog dial for this execution.
   /// @param execution_time the time execution began
   /// @return A StateTransitionExpected indicating success or failure of the state transition
-  StateTransitionExpected execution_started(jewels::time::SyncTime execution_time, uint64_t conditions_mask);
+  StateTransitionExpected execution_started(
+    jewels::time::SyncTime dial_start_time, jewels::time::SyncTime execution_time, uint64_t conditions_mask);
+
+  /// Record durations from the generated cog execution body.
+  void execute_cog_completed(const ExecuteCogMetrics& execute_cog_metrics);
 
   /// Indicate that the execution of the cog has completed
   /// @param execution_complete_time time execution of the cog completed
@@ -194,6 +263,29 @@ public:
   /// @param output_index The index of the output to update
   /// @param value The value to update the output metrics with
   void update_output_metrics(size_t output_index, uint16_t value);
+
+  /// Update memory resource metrics for a specific memory resource index.
+  /// @param resource_index The index of the memory resource to update
+  /// @param metrics The MemoryResourceMetrics to update with
+  void update_resource_metrics(size_t resource_index, const jewels::memory::MemoryResourceMetrics& metrics);
+
+  /// Update publisher-throttle episode tracking for one publisher.
+  /// @param[in] publisher_index Compile-time publisher policy index.
+  /// @param[in] is_throttled Whether this publisher was rejected in the current check.
+  /// @param[in] rejection_time Time of the rate-limiter check.
+  /// @param[in] effective_deadline Effective Cog eligibility deadline for this failed check.
+  void update_publisher_throttle(
+    size_t publisher_index,
+    bool is_throttled,
+    jewels::time::SyncTime rejection_time,
+    jewels::time::SyncTime effective_deadline);
+
+  /// Construct a snapshot of the current execution's metrics from internal state.
+  /// Unlike event_metrics() which returns the legacy batch, this reads directly
+  /// from the current execution's state variables and the output_metrics_map_.
+  /// Must be called after execution_completed() and update_output_metrics().
+  /// @return An EventMetrics populated with the current execution's data.
+  [[nodiscard]] EventMetrics current_execution_metrics() const;
 
 private:
   /// Check if the event metrics batch is full
@@ -254,6 +346,9 @@ private:
   /// Timestamp when execution started
   jewels::time::SyncTime execution_start_time_{};
 
+  /// Timestamp passed to the cog dial when execution started
+  jewels::time::SyncTime dial_start_time_{};
+
   /// Optional timestamp of the previous execution start time (used for period calculations)
   std::optional<jewels::time::SyncTime> previous_execution_start_time_{};
 
@@ -262,6 +357,9 @@ private:
 
   /// Conditions Mask
   uint64_t conditions_mask_{};
+
+  /// Durations from the current generated cog execution body
+  std::optional<ExecuteCogMetrics> execute_cog_metrics_;
 
   /// Collection of event metrics for batch processing
   std::pmr::vector<EventMetrics> event_metrics_;
@@ -273,6 +371,27 @@ private:
 
   /// Output metrics map
   OutputMetricsMap output_metrics_map_;
+
+  using MemoryResourceMetricsMap = std::pmr::unordered_map<size_t, jewels::memory::MemoryResourceMetrics>;
+
+  /// Memory resource metrics map
+  MemoryResourceMetricsMap resource_metrics_map_;
+
+  using PublisherThrottleActiveMap = std::pmr::unordered_map<size_t, bool>;
+
+  /// Active throttle episode state by publisher index.
+  PublisherThrottleActiveMap publisher_throttle_active_;
+
+  using PublisherThrottleCountMap = std::pmr::unordered_map<size_t, uint16_t>;
+
+  /// Pending per-execution throttle episode counts by publisher index.
+  PublisherThrottleCountMap publisher_throttle_counts_;
+
+  /// First rejection time for the pending throttled execution.
+  std::optional<jewels::time::SyncTime> publisher_throttle_first_rejection_time_;
+
+  /// Final effective eligibility deadline for the pending throttled execution.
+  jewels::time::SyncTime publisher_throttle_final_deadline_{};
 };
 
 struct InputMetrics

@@ -1,0 +1,41 @@
+diff --git MODULE.bazel MODULE.bazel
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -10,6 +10,9 @@ python.toolchain(
+     is_default = True,
+     python_version = "3.10",
+ )
++python.toolchain(
++    python_version = "3.12",
++)
+ 
+ pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+ pip.parse(
+@@ -17,6 +20,11 @@ pip.parse(
+     python_version = "3.10",
+     requirements_lock = "//:requirements_lock.txt",
+ )
++pip.parse(
++    hub_name = "pypi",
++    python_version = "3.12",
++    requirements_lock = "//:requirements_lock.txt",
++)
+ use_repo(pip, "pypi")
+ 
+ # Third-party Rust dependencies (pyo3, regex-automata, and transitive graph).
+@@ -28,13 +36,10 @@
+ # The tests/* fixture crates have their own [workspace] declarations and are excluded.
+ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+ crate.from_cargo(
++    cargo_config = "@@//:.cargo/config.toml",
+     name = "fltk_crates",
+     cargo_lockfile = "//:Cargo.lock",
+-    manifests = [
+-        "//:Cargo.toml",
+-        "//crates/fltk-cst-core:Cargo.toml",
+-        "//crates/fltk-parser-core:Cargo.toml",
+-    ],
++    manifests = ["//:Cargo.toml"],
+     # TODO(verify-pyo3-ext-module): confirm that the `extension-module` feature is
+     # active on the @fltk_crates//:pyo3 target after crate_universe resolution.
+     # In crate_universe `from_cargo`, pyo3's extension-module feature should be

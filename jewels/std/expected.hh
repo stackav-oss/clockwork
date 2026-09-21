@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -21,27 +21,27 @@ struct MonoError
 {
 };
 
-constexpr bool operator==([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator==(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return true;
 }
-constexpr bool operator!=([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator!=(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return false;
 }
-constexpr bool operator<([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator<(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return false;
 }
-constexpr bool operator>([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator>(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return false;
 }
-constexpr bool operator<=([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator<=(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return true;
 }
-constexpr bool operator>=([[maybe_unused]] MonoError lhs, [[maybe_unused]] MonoError rhs) noexcept
+constexpr bool operator>=(MonoError /*lhs*/, MonoError /*rhs*/) noexcept
 {
   return true;
 }
@@ -52,7 +52,7 @@ namespace std
 template <>
 struct hash<::jewels::MonoError>
 {
-  size_t operator()([[maybe_unused]] const ::jewels::MonoError& val) const noexcept
+  size_t operator()(const ::jewels::MonoError& /*val*/) const noexcept
   {
     // 8888 is a randomly chosen value as all MonoError should hash to the same result
     constexpr size_t magic_mono_error_hash = 8888;

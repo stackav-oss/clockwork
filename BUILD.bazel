@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest")
@@ -9,6 +9,9 @@ load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest
 # gazelle:proto file
 # gazelle:python_generation_mode file
 # gazelle:python_default_visibility NONE
+# gazelle:python_generate_pyi_deps false
+# gazelle:python_generate_pyi_srcs false
+# gazelle:python_resolve_sibling_imports true
 
 # gazelle:map_kind bzl_library bzl_library @bazel_skylib//:bzl_library.bzl
 
@@ -34,13 +37,19 @@ load("@rules_python_gazelle_plugin//manifest:defs.bzl", "gazelle_python_manifest
 # gazelle:resolve py fltk @fltk
 # gazelle:resolve py tckdd @tckdd
 # gazelle:resolve py mcap @mcap//:mcap_py
-# gazelle:resolve py mypy_boto3_s3 @pyright_requirements//mypy_boto3_s3
 # gazelle:resolve py clockwork.dsl.tests.support.pytapmsg //clockwork/dsl/tests/support:pytapmsg
 # gazelle:resolve py root_repo_py @root_repo//:root_repo_py
 # gazelle:resolve py clockwork.dsl.clockwork_cst //clockwork/dsl:clockwork_cst
+# gazelle:resolve py clockwork.dsl.clockwork_py_cst //clockwork/dsl:clockwork_py_cst
+# gazelle:resolve py clockwork.dsl.clockwork_py_cst.* //clockwork/dsl:clockwork_py_cst
 # gazelle:resolve py clockwork.dsl //clockwork/dsl:clockwork_cst
 # gazelle:resolve py clockwork //clockwork/dsl:clockwork_cst
+# gazelle:resolve py clockwork_native //clockwork/dsl:clockwork_native
+# gazelle:resolve py clockwork_native.cst //clockwork/dsl:clockwork_native
+# gazelle:resolve py clockwork_native.cst.* //clockwork/dsl:clockwork_native
 # keep-sorted end
+
+exports_files([".cargo/config.toml"])
 
 filegroup(
     name = "buildifier_config",

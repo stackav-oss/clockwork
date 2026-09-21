@@ -1,13 +1,29 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "clockwork/common/abstract_cog.hh"
+#include "clockwork/common/abstract_epoll_manager.hh"
+#include "clockwork/common/abstract_timer.hh"
+#include "clockwork/common/forward.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/observer.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "clockwork/tags.hh"
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/std/expected.hh"
+#include "jewels/uuid/uuid.hh"
 
-#include <trompeloeil.hpp>
+#include <trompeloeil/mock.hpp>
 
 #include <algorithm>
+#include <cstddef>
+#include <future>
+#include <memory>
+#include <optional>
 #include <span>
 
 namespace std
@@ -69,6 +85,15 @@ public:
                                     jewels::memory::MemoryResource),
     override);
 
+  MAKE_MOCK5(
+    try_instantiate_state_from_snapshot,
+    (Outcome)(jewels::Uuid<common::StateInstanceId>,
+              jewels::Uuid<RepresentationTag>,
+              jewels::Uuid<RepresentationTag>,
+              jewels::memory::MemoryResource,
+              std::span<const std::byte>),
+    override);
+
   MAKE_MOCK4(
     try_instantiate_config,
     (jewels::expected<void, Error>)(jewels::Uuid<common::ConfigInstanceId>,
@@ -90,7 +115,7 @@ public:
   MAKE_MOCK2(
     try_connect_subscriber,
     (jewels::expected<std::shared_ptr<pinion::Observer>, Error>)(jewels::Uuid<common::EndpointInstanceId>,
-                                                                 pinion::SubscriberHandle),
+                                                                 std::shared_ptr<pinion::AbstractChannel> channel),
     override);
 
   MAKE_MOCK2(
@@ -142,6 +167,11 @@ public:
   MAKE_MOCK1(start_cog, (jewels::expected<void, Error>)(jewels::Uuid<common::CogInstanceId>), override);
 
   MAKE_MOCK1(stop_cog, (jewels::expected<std::future<void>, Error>)(jewels::Uuid<common::CogInstanceId>), override);
+
+  MAKE_CONST_MOCK1(has_schema_representation, (bool)(const jewels::Uuid<RepresentationTag>&), noexcept override);
+
+  MAKE_CONST_MOCK1(
+    has_io_connection_class, (bool)(const jewels::Uuid<common::IoConnectionClassId>&), noexcept override);
 };
 
 } // namespace clockwork::scaffolding

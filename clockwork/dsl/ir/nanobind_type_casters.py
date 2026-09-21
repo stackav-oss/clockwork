@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Nanobind type caster specializations."""
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.cpp import context, typereg, types
 from clockwork.dsl.cpp.context import CppChunk, Header, SystemHeader
 from clockwork.dsl.ir import clkbuiltins, clkenum, expr, node, schema, typesys
@@ -234,7 +234,7 @@ def _render_schema_caster(nanobind_caster: ResolvedNanobindTypeCaster) -> contex
     assert isinstance(tappy_type, types.CppTemplateType)
     cpp_mod.header_chunk.context.add_includes(tappy_type.includes)
     tappy_cpp_type = tappy_type.render(NB_DETAIL_NAMESPACE)
-    friendly_tappy_type = tappy_type.render(tappy_type.cpp_namespace)
+    friendly_tappy_type = tappy_type.render(tappy_type.cpp_namespace or "")
 
     nb_preamble = CppChunk()
     caster_type = types.CppStruct(

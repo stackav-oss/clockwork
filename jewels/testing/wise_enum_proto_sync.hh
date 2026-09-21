@@ -1,13 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include <catch2/catch_test_macros.hpp>
-#include <wise_enum.h>
-
-#include <cctype>
-#include <cstring>
 
 // lint is turned off as the macro format allows Check2 to give expected
 // debug output as to the failure. if a tempalte function is used

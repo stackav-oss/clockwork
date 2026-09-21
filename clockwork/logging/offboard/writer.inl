@@ -6,6 +6,7 @@
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
+#include "clockwork/logging/lite_compressor_interface.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
@@ -27,8 +28,12 @@
 #include "clockwork/logging/offboard/writer_config.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serialization/cpp/tachyon_lite_compressor.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 
@@ -45,8 +50,8 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
-#include <regex>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -56,6 +61,9 @@
 
 namespace clockwork_logging::offboard
 {
+
+using jewels::ok;
+using jewels::Out;
 
 template <typename S3UtilsType>
 Writer<S3UtilsType>::FileWriterState::FileWriterState(
@@ -212,6 +220,7 @@ template <typename S3UtilsType>
       .schema_name = std::pmr::string{channel_metadata.schema_name, memory_resource_},
       .schema_encoding = channel_metadata.schema_encoding,
       .schema_definition = std::pmr::string{channel_metadata.schema_definition, memory_resource_},
+      .is_amended = channel_metadata.is_amended,
     });
   if (!metadata_result)
   {
@@ -287,7 +296,8 @@ template <typename S3UtilsType>
 Writer<S3UtilsType>::Writer(
   jewels::memory::MemoryResource memory_resource, MessageChunkIndexFormat message_chunk_index_format)
   : memory_resource_(std::move(memory_resource)),
-    lite_compressor_(memory_resource_),
+    lite_compressor_map_(memory_resource_),
+    default_lite_compressor_(jewels::memory::make_pmr_shared<LiteCompressor>(memory_resource_, memory_resource_)),
     message_chunk_index_format_(message_chunk_index_format),
     async_work_queue_ptr_(
       jewels::memory::allocate_shared<AsyncWorkQueue, std::pmr::polymorphic_allocator<AsyncWorkQueue>>(
@@ -299,6 +309,12 @@ Writer<S3UtilsType>::Writer(
     channel_names_(memory_resource_),
     writer_config_(memory_resource_)
 {
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] bool Writer<S3UtilsType>::is_open() const
+{
+  return maybe_file_writer_state_.has_value();
 }
 
 template <typename S3UtilsType>
@@ -314,12 +330,12 @@ Writer<S3UtilsType>::open(std::string_view uri_str, std::string_view config_str,
     const auto exists_result = chunk_writer_factory_.exists(uri_str);
     if (!exists_result)
     {
-      jewels::log_cerr_error("Failed to create chunk writer for {}: {}", uri_str, exists_result.error());
+      jewels::log_cerr_error("Failed to create writer for {}: {}", uri_str, exists_result.error());
       return jewels::unexpected(exists_result.error());
     }
     if (exists_result.value())
     {
-      jewels::log_cerr_error("Failed to create chunk writer for {}: {}", uri_str, "Directory exists");
+      jewels::log_cerr_error("Failed to create writer for {}: {}", uri_str, "Directory exists");
       return jewels::unexpected(LogError::log_already_exists);
     }
   }
@@ -356,11 +372,12 @@ template <typename S3UtilsType>
 }
 
 template <typename S3UtilsType>
-[[nodiscard]] LogExpected<ChunkWriter::WriteMetrics> Writer<S3UtilsType>::close()
+LogOutcome Writer<S3UtilsType>::close(
+  Out<ChunkWriter::WriteMetrics> write_metrics, Out<::clockwork::logging::offboard::v1::LogMetadata> log_metadata)
 {
   if (!maybe_file_writer_state_)
   {
-    return jewels::unexpected(LogError::not_open);
+    return LogError::not_open;
   }
   std::pmr::vector<std::future<LogExpected<ChunkWriter::WriteMetrics>>> close_futures{memory_resource_};
   close_futures.reserve(maybe_file_writer_state_->size());
@@ -368,35 +385,50 @@ template <typename S3UtilsType>
   {
     close_futures.emplace_back(std::async(std::launch::async, [&file_writer]() { return file_writer.close(); }));
   }
-  LogExpected<ChunkWriter::WriteMetrics> close_result;
+  LogOutcome close_outcome = LogError::success;
+  *write_metrics = {};
   for (auto& close_future : close_futures)
   {
     const auto writer_result = close_future.get();
-    if (writer_result && close_result)
+    if (!writer_result)
     {
-      close_result.value() += writer_result.value();
+      close_outcome = writer_result.error();
     }
-    else if (!writer_result && close_result)
+    else if (ok(close_outcome))
     {
-      close_result = writer_result;
+      *write_metrics += writer_result.value();
     }
   }
-  std::pmr::string log_metadata_uri{memory_resource_};
-  fmt::format_to(std::back_inserter(log_metadata_uri), "{}/{}", uri_str_, log_metadata_filename);
-  const auto log_metadata = get_log_metadata_protobuf();
-  if (const auto write_result =
-        chunk_writer_factory_.write_text_proto(log_metadata_uri, log_metadata_proto_header, log_metadata);
-      !write_result && close_result)
+  if (ok(close_outcome))
   {
-    close_result = jewels::unexpected(write_result.error());
+    *log_metadata = get_log_metadata_protobuf();
   }
-  uri_str_.clear();
   file_name_prefix_to_writer_map_.clear();
   channel_name_to_writer_map_.clear();
   persistent_channels_.clear();
   channel_names_.clear();
-  maybe_file_writer_state_ = std::nullopt;
-  return close_result;
+  maybe_file_writer_state_.reset();
+  return close_outcome;
+}
+
+template <typename S3UtilsType>
+[[nodiscard]] LogExpected<ChunkWriter::WriteMetrics> Writer<S3UtilsType>::close()
+{
+  ChunkWriter::WriteMetrics write_metrics;
+  ::clockwork::logging::offboard::v1::LogMetadata log_metadata;
+  if (const auto close_outcome = close(Out{write_metrics}, Out{log_metadata}); !ok(close_outcome))
+  {
+    return jewels::unexpected(close_outcome.get());
+  }
+  std::pmr::string log_metadata_uri{memory_resource_};
+  fmt::format_to(std::back_inserter(log_metadata_uri), "{}/{}", uri_str_, log_metadata_filename);
+  if (const auto write_result =
+        chunk_writer_factory_.write_text_proto(log_metadata_uri, log_metadata_proto_header, log_metadata);
+      !write_result)
+  {
+    return jewels::unexpected(write_result.error());
+  }
+  return write_metrics;
 }
 
 template <typename S3UtilsType>
@@ -441,6 +473,26 @@ template <typename S3UtilsType>
     persistent_channels_.emplace(channel_names_.back());
   }
   channel_name_to_writer_map_.emplace(channel_names_.back(), writer_iter->second);
+  if (channel_metadata.schema_encoding == SchemaEncoding::clockwork_tachyon)
+  {
+    try
+    {
+      auto lite_compressor = clockwork::serialization::TachyonLiteCompressor::make_compressor(
+        memory_resource_,
+        channel_names_.back(),
+        std::as_bytes(std::span{channel_metadata.schema_definition.data(), channel_metadata.schema_definition.size()}));
+      lite_compressor_map_.emplace(channel_names_.back(), std::move(lite_compressor));
+    }
+    catch (const std::runtime_error& exc)
+    {
+      jewels::log_cerr_warn("Failed to make compressor for {}, using default", channel_metadata.channel_name);
+      lite_compressor_map_.emplace(channel_names_.back(), default_lite_compressor_);
+    }
+  }
+  else
+  {
+    lite_compressor_map_.emplace(channel_names_.back(), default_lite_compressor_);
+  }
   return {};
 }
 
@@ -451,7 +503,16 @@ template <typename S3UtilsType>
   bool is_lite_compressed = message.is_lite_compressed;
   if (!is_lite_compressed)
   {
-    const auto compressed_data = lite_compressor_.compress(message.data);
+    std::span<const std::span<const std::byte>> compressed_data;
+    const auto lite_compressor_iter = lite_compressor_map_.find(message.channel_name);
+    if (lite_compressor_iter == lite_compressor_map_.end())
+    {
+      compressed_data = default_lite_compressor_->compress(message.data);
+    }
+    else
+    {
+      compressed_data = lite_compressor_iter->second->compress(message.data);
+    }
     const auto compressed_data_size = std::accumulate(
       compressed_data.begin(),
       compressed_data.end(),
@@ -573,7 +634,7 @@ template <typename S3UtilsType>
 template <typename S3UtilsType>
 template <clockwork::TappyType T>
 [[nodiscard]] LogExpected<void>
-Writer<S3UtilsType>::create_channel(std::string_view channel_name, ChannelType channel_type)
+Writer<S3UtilsType>::create_channel(std::string_view channel_name, ChannelType channel_type, bool is_amended)
 {
   return create_channel(
     LoggedChannelMetadata{
@@ -585,6 +646,7 @@ Writer<S3UtilsType>::create_channel(std::string_view channel_name, ChannelType c
       .schema_definition =
         std::string_view{
           clockwork::LoggingTraits<T>::schema_definition.data(), clockwork::LoggingTraits<T>::schema_definition.size()},
+      .is_amended = is_amended,
     });
 }
 

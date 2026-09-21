@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/index_chunk_reader.hh"
@@ -47,14 +47,16 @@ struct ChannelEntry
 /// Read the channel index entries for the channels we want to read from the log
 /// @param[in] memory_resource Memory resource
 /// @param[in] channel_info_map Information on the channels logged in this file
-/// @param[in] maybe_desired_channels Optional set of desired channels
+/// @param[in] channel_ids_to_exclide Set of channel IDs to exclude
+/// @param[in] desired_channels Set of desired channels
 /// @param[in] index_data Index chunk data
 /// @param[in] file_uri Log file URI
 /// @return Vector of channel index entries or LogError on failure
 LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
   jewels::memory::MemoryResource memory_resource,
   const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>& channel_info_map,
-  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  const std::pmr::unordered_set<uint16_t>& channel_ids_to_exclude,
+  const std::pmr::unordered_set<std::pmr::string>& desired_channels,
   const std::pmr::vector<std::byte>& index_data,
   const LogUri& file_uri)
 {
@@ -74,6 +76,10 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
   channel_entries.reserve(channel_entries_size);
   for (const auto& channel_entry : channel_entries_span)
   {
+    if (channel_ids_to_exclude.contains(channel_entry.channel_id))
+    {
+      continue;
+    }
     const auto info_iter = channel_info_map.find(channel_entry.channel_id);
     if (info_iter == channel_info_map.end())
     {
@@ -82,7 +88,7 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
       return jewels::unexpected(LogError::missing_channel_metadata);
     }
     const auto& channel_info = info_iter->second;
-    if (maybe_desired_channels && !maybe_desired_channels->contains(channel_info.channel_name))
+    if (!desired_channels.contains(channel_info.channel_name))
     {
       continue;
     }
@@ -106,12 +112,14 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
 
 } // namespace
 
+// NOLINTNEXTLINE(readability-function-size) Passing parameters in struct is not practical
 [[nodiscard]] LogExpected<std::pmr::list<reader::MessageChunkHandle>> read_index_chunk(
   jewels::memory::MemoryResource memory_resource,
   ChunkLocation index_location,
   const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>& channel_info_map,
+  const std::pmr::unordered_set<uint16_t>& channel_ids_to_exclude,
   const std::optional<LogInterval>& maybe_log_interval,
-  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  const std::pmr::unordered_set<std::pmr::string>& desired_channels,
   const jewels::memory::NonNullSharedPtr<ChunkReader>& chunk_reader_ptr,
   const jewels::memory::NonNullSharedPtr<ChunkCompressor>& chunk_compressor_ptr)
 {
@@ -128,7 +136,12 @@ LogExpected<std::pmr::vector<ChannelEntry>> read_channel_entries(
     return jewels::unexpected(decompress_result.error());
   }
   const auto channel_entries_result = read_channel_entries(
-    memory_resource, channel_info_map, maybe_desired_channels, decompress_result.value(), chunk_reader_ptr->file_uri());
+    memory_resource,
+    channel_info_map,
+    channel_ids_to_exclude,
+    desired_channels,
+    decompress_result.value(),
+    chunk_reader_ptr->file_uri());
   if (!channel_entries_result)
   {
     return jewels::unexpected(channel_entries_result.error());

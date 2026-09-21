@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/offboard/chunk_compressor.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/file_chunk_reader.hh"
 #include "clockwork/logging/offboard/file_chunk_writer.hh"
 #include "clockwork/logging/offboard/log_format.hh"
@@ -14,6 +15,8 @@
 #include "clockwork/logging/offboard/reader_types.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
@@ -24,16 +27,22 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cerrno>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <memory_resource>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace clockwork_logging::offboard
 {
 namespace
 {
+
+using jewels::ok;
+using jewels::Out;
 
 TEST_CASE("Metadata chunk reader/writer")
 {
@@ -69,6 +78,19 @@ TEST_CASE("Metadata chunk reader/writer")
   constexpr auto schema_encoding2 = SchemaEncoding::undefined;
   constexpr auto schema_definition2 = "schema_definition 2";
 
+  constexpr auto channel_name4 = "channel4";
+  constexpr auto compression_type4 = CompressionType::zstd;
+  constexpr auto message_encoding4 = MessageEncoding::undefined;
+  constexpr auto channel_type4 = ChannelType::persistent;
+  constexpr auto schema_name4 = "schema4";
+  constexpr auto schema_encoding4 = SchemaEncoding::undefined;
+  constexpr auto schema_definition4 = "schema_definition 4";
+
+  const std::pmr::unordered_set<std::pmr::string> desired_channels = {"channel_1", "channel2", "channel3"};
+
+  std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo> metadata_map;
+  std::pmr::unordered_set<uint16_t> channel_ids_to_exclude;
+
   SECTION("Empty metadata")
   {
     REQUIRE(file_writer.open());
@@ -76,9 +98,16 @@ TEST_CASE("Metadata chunk reader/writer")
     REQUIRE(write_result);
     REQUIRE(file_writer.close());
     REQUIRE(file_reader.open());
-    const auto read_result = read_metadata_chunk(memory_resource, write_result.value(), file_reader, compressor);
-    REQUIRE(read_result);
-    REQUIRE(read_result.value().empty());
+    REQUIRE(ok(read_metadata_chunk(
+      memory_resource,
+      write_result.value(),
+      file_reader,
+      compressor,
+      desired_channels,
+      Out{metadata_map},
+      Out{channel_ids_to_exclude})));
+    REQUIRE(metadata_map.empty());
+    REQUIRE(channel_ids_to_exclude.empty());
   }
 
   SECTION("Chunk with metadata")
@@ -109,6 +138,19 @@ TEST_CASE("Metadata chunk reader/writer")
         }) == 2U);
     REQUIRE(metadata_writer.get_channel_id("channel2") == 2U);
     REQUIRE(metadata_writer.get_compression_type(2U) == compression_type2);
+    REQUIRE(
+      metadata_writer.add_channel(
+        reader::LoggedChannelInfo{
+          .compression_type = compression_type4,
+          .channel_name = channel_name4,
+          .message_encoding = message_encoding4,
+          .channel_type = channel_type4,
+          .schema_name = schema_name4,
+          .schema_encoding = schema_encoding4,
+          .schema_definition = schema_definition4,
+        }) == 3U);
+    REQUIRE(metadata_writer.get_channel_id("channel4") == 3U);
+    REQUIRE(metadata_writer.get_compression_type(3U) == compression_type4);
 
     REQUIRE(file_writer.open());
     const auto write_result = metadata_writer.write_chunk(compressor, file_writer);
@@ -116,9 +158,14 @@ TEST_CASE("Metadata chunk reader/writer")
     REQUIRE(file_writer.close());
     REQUIRE(file_reader.open());
 
-    const auto read_result = read_metadata_chunk(memory_resource, write_result.value(), file_reader, compressor);
-    REQUIRE(read_result);
-    const auto& metadata_map = read_result.value();
+    REQUIRE(ok(read_metadata_chunk(
+      memory_resource,
+      write_result.value(),
+      file_reader,
+      compressor,
+      desired_channels,
+      Out{metadata_map},
+      Out{channel_ids_to_exclude})));
     REQUIRE(metadata_map.size() == 2U);
     REQUIRE(metadata_map.contains(1U));
     REQUIRE(metadata_map.at(1U).channel_name == channel_name1);
@@ -136,6 +183,8 @@ TEST_CASE("Metadata chunk reader/writer")
     REQUIRE(metadata_map.at(2U).schema_name == schema_name2);
     REQUIRE(metadata_map.at(2U).schema_encoding == schema_encoding2);
     REQUIRE(metadata_map.at(2U).schema_definition == schema_definition2);
+    REQUIRE(channel_ids_to_exclude.size() == 1U);
+    REQUIRE(channel_ids_to_exclude.contains(3U));
   }
 
   SECTION("Error handling")
@@ -236,8 +285,15 @@ TEST_CASE("Metadata chunk reader/writer")
       REQUIRE(write_result);
       REQUIRE(file_writer.close());
       REQUIRE(
-        read_metadata_chunk(memory_resource, write_result.value(), file_reader, compressor) ==
-        jewels::unexpected(LogError::not_open));
+        read_metadata_chunk(
+          memory_resource,
+          write_result.value(),
+          file_reader,
+          compressor,
+          desired_channels,
+          Out{metadata_map},
+          Out{channel_ids_to_exclude})
+          .get() == LogError::not_open);
     }
 
     SECTION("Read fails")
@@ -249,8 +305,15 @@ TEST_CASE("Metadata chunk reader/writer")
       REQUIRE(file_reader.open());
       file_reader.filesystem().inject_read_error(EIO);
       REQUIRE(
-        read_metadata_chunk(memory_resource, write_result.value(), file_reader, compressor) ==
-        jewels::unexpected(LogError::io_error));
+        read_metadata_chunk(
+          memory_resource,
+          write_result.value(),
+          file_reader,
+          compressor,
+          desired_channels,
+          Out{metadata_map},
+          Out{channel_ids_to_exclude})
+          .get() == LogError::io_error);
     }
 
     SECTION("Decompression fails")
@@ -262,8 +325,15 @@ TEST_CASE("Metadata chunk reader/writer")
       REQUIRE(onboard::tests::corrupt_log_file(test_file_path.string(), 10U, "XXX"));
       REQUIRE(file_reader.open());
       REQUIRE(
-        read_metadata_chunk(memory_resource, write_result.value(), file_reader, compressor) ==
-        jewels::unexpected(LogError::decompression_failure));
+        read_metadata_chunk(
+          memory_resource,
+          write_result.value(),
+          file_reader,
+          compressor,
+          desired_channels,
+          Out{metadata_map},
+          Out{channel_ids_to_exclude})
+          .get() == LogError::decompression_failure);
     }
   }
 }

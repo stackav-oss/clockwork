@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -133,6 +133,47 @@ def test_constraint_for_uuid(context: CompilerContext) -> None:
     )
     constraint = tachyon_reg.FieldConstraint(size=16, alignment=8)
     assert tachyon_reg.constraint_for_type(context, typ) == constraint
+
+
+@pytest.mark.parametrize(
+    ("bit_size", "expected_size"),
+    [(1, 1), (8, 1), (9, 2), (64, 8), (65, 9)],
+)
+def test_constraint_for_bitset(context: CompilerContext, bit_size: int, expected_size: int) -> None:
+    bitset = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.BITSET,
+        arguments={"size": primitive.DecimalValue(type_info=clkbuiltins.UINT64, value=Decimal(bit_size))},
+    )
+    assert tachyon_reg.constraint_for_type(context, bitset) == tachyon_reg.FieldConstraint(
+        size=expected_size, alignment=1
+    )
+
+
+def test_constraint_for_zero_size_bitset_is_rejected(context: CompilerContext) -> None:
+    bitset = typesys.Instantiation(
+        type_info=clkbuiltins.TYPE_TYPE,
+        instantiates=clkbuiltins.BITSET,
+        arguments={"size": primitive.DecimalValue(type_info=clkbuiltins.UINT64, value=Decimal(0))},
+    )
+    with pytest.raises(ValueError, match="Bitset size must be greater than zero"):
+        tachyon_reg.constraint_for_type(context, bitset)
+
+
+def test_zero_size_bitset_schema_is_rejected(fs_importer: importer.FilesystemImporter) -> None:
+    source = """
+// Schema with an invalid bitset.
+schema InvalidBitset
+{
+  fields
+  {
+    // Bits.
+    #0 bits: Bitset<0>;
+  }
+}
+"""
+    with pytest.raises(ValueError, match="Bitset size must be greater than zero"):
+        compiler.compile_source_text(source, ModuleID("test", "invalid_bitset"), fs_importer)
 
 
 def test_register_type_raises_for_generic(context: CompilerContext) -> None:

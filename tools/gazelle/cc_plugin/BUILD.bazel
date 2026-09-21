@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@gazelle//:def.bzl", "gazelle_binary")
@@ -6,13 +6,17 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cc_plugin",
-    srcs = ["extension.go"],
+    srcs = [
+        "extension.go",
+        "init.go",
+    ],
     data = [":third_party_mapping"],
     importpath = "github.com/stackav-oss/clockwork/tools/gazelle/cc_plugin",
     visibility = ["//visibility:public"],
     deps = [
         "//tools/gazelle/cc_plugin/language",
         "@@gazelle+//language",
+        "@com_github_bazelbuild_buildtools//tables",
     ],
 )
 

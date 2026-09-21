@@ -5,8 +5,8 @@
 
 #include "clockwork/cog/input_condition.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/slot_ref.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -47,13 +47,13 @@ bool CogConditions<Policies...>::validate() const
 
 template <typename... Policies>
 jewels::expected<void, jewels::MonoError> CogConditions<Policies...>::set_handle(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle handle)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> channel)
 {
-  auto try_set = [&endpoint_id, &handle]<typename Policy>(std::unique_ptr<InputCondition<Policy>>& condition) -> bool
+  auto try_set = [&endpoint_id, &channel]<typename Policy>(std::unique_ptr<InputCondition<Policy>>& condition) -> bool
   {
     if (endpoint_id == Policy::endpoint_id)
     {
-      condition = std::make_unique<InputCondition<Policy>>(handle);
+      condition = std::make_unique<InputCondition<Policy>>(channel);
       return true;
     }
     return false;
@@ -180,9 +180,9 @@ auto CogConditions<Policies...>::get_max_new_msgs(const ConditionsTuple& conditi
 
 template <typename... Policies>
 template <size_t index>
-void CogConditions<Policies...>::set_unit_test_condition(pinion::SubscriberHandle handle)
+void CogConditions<Policies...>::set_unit_test_condition(std::shared_ptr<pinion::AbstractChannel> channel)
 {
-  std::get<index>(conditions_) = std::make_unique<InputCondition<PolicyType<index>>>(handle);
+  std::get<index>(conditions_) = std::make_unique<InputCondition<PolicyType<index>>>(channel);
 }
 
 } // namespace clockwork

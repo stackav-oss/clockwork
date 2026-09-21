@@ -28,8 +28,14 @@ box ExampleBox
   new output_cog: example_cog::ExampleOutput;
 
   new memory: HeapMemory(max_size=4'096);
-  new input1_config: SerializedDataFile(representation=Protobuf<test_config::TestConfig>, path="clockwork/python/example/resources/input1_config.pbtxt");
-  new input2_config: SerializedDataFile(representation=Protobuf<test_config::TestConfig>, path="clockwork/python/example/resources/input2_config.pbtxt");
+  new input1_config: SerializedDataFile(
+    representation=Protobuf<test_config::TestConfig>,
+    path="clockwork/python/example/resources/input1_config.pbtxt",
+  );
+  new input2_config: SerializedDataFile(
+    representation=Protobuf<test_config::TestConfig>,
+    path="clockwork/python/example/resources/input2_config.pbtxt",
+  );
   new python_state: State(representation=PythonState, memory_resource=memory, init=init_cog.python_state);
   new input1_state: State(representation=Tachyon<test_state::TestState>, init=init_cog.input1_state);
   new input2_state: State(representation=Tachyon<test_state::TestState>, init=init_cog.input2_state);
@@ -39,11 +45,11 @@ box ExampleBox
 
   connect python_state to input1_cog.python_state;
   connect input1_state to input1_cog.state;
-  connect input1_cog.output to  example_channels::Input1Channel;
+  connect input1_cog.output to example_channels::Input1Channel;
 
   connect python_state to input2_cog.python_state;
   connect input2_state to input2_cog.state;
-  connect input2_cog.output to  example_channels::Input2Channel;
+  connect input2_cog.output to example_channels::Input2Channel;
 
   connect python_state to output_cog.python_state;
   connect example_channels::Input1Channel to output_cog.input1;
@@ -54,7 +60,10 @@ box ExampleBox
 box ExampleSpyBox
 {
   new spy_config_memory: HeapMemory(max_size=10'000'000);
-  new spy_config: SerializedDataFile(representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>, path="clockwork/python/example/example_sys.example_sys.LocalHost_channel_spy_config.tachyon");
+  new spy_config: SerializedDataFile(
+    representation=Tachyon<channel_spy_config::ChannelSpyConfig<>>,
+    path="clockwork/python/example/example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
+  );
   new spy_config_init_cog: channel_spy_config_init::SpyConfigInitCog;
 
   connect spy_config_memory to spy_config_init_cog.memres;
@@ -63,13 +72,26 @@ box ExampleSpyBox
 
 box ExampleLoggerBox
 {
-  new telemetry_log_writer_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/python/example/example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon");
-  new example_logger_config: SerializedDataFile(representation=Protobuf<logger_config::LoggerConfig>, path="clockwork/python/example/resources/logger_config.pbtxt");
-  new logger_channel_rates_config: SerializedDataFile(representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>, path="clockwork/python/example/resources/channel_rates_config.pbtxt");
+  new telemetry_log_writer_config: SerializedDataFile(
+    representation=Tachyon<log_writer_config::LogWriterConfig<>>,
+    path="clockwork/python/example/example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
+  );
+  new example_logger_config: SerializedDataFile(
+    representation=Protobuf<logger_config::LoggerConfig>,
+    path="clockwork/python/example/resources/logger_config.pbtxt",
+  );
+  new logger_channel_rates_config: SerializedDataFile(
+    representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>,
+    path="clockwork/python/example/resources/channel_rates_config.pbtxt",
+  );
   new logger_init_cog: logger::LoggerInitCog;
   new logger_status_publisher_cog: logger::LoggerStatusPublisherCog;
   new logger_memory: HeapMemory(max_size=300'000'000);
-  new logger_state: State(representation=logger::LoggerCogState, memory_resource=logger_memory, init=logger_init_cog.logger_state);
+  new logger_state: State(
+    representation=logger::LoggerCogState,
+    memory_resource=logger_memory,
+    init=logger_init_cog.logger_state,
+  );
 
   connect telemetry_log_writer_config to logger_init_cog.log_writer_config;
   connect example_logger_config to logger_init_cog.logger_config;

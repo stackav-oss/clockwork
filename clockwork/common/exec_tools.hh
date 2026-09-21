@@ -1,8 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/pinion/shm_channel_factory.hh"
+#include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/channel_config_clk_cc.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/runners/channel_publisher.hh"
 #include "clockwork/runners/deterministic_channel_handler.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -22,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace clockwork
@@ -31,9 +36,17 @@ class PinionArgs
 public:
   PinionArgs(jewels::memory::MemoryResource memres, TCLAP::ArgContainer& parser);
 
-  [[nodiscard]] jewels::expected<pinion::ShmChannelFactory, jewels::MonoError> make_factory() const;
+  [[nodiscard]] jewels::expected<std::shared_ptr<pinion::AbstractChannelFactory>, jewels::MonoError>
+  make_factory(const Tappy<common::ProcessDescription<>>& config) const;
+
+  [[nodiscard]] jewels::expected<std::shared_ptr<pinion::AbstractChannelFactory>, jewels::MonoError> make_factory(
+    std::pmr::unordered_map<std::pmr::string, pinion::ChannelType> channel_types,
+    std::pmr::unordered_map<std::pmr::string, std::pmr::vector<std::pmr::string>> publisher_keys,
+    std::pmr::unordered_map<std::pmr::string, std::pmr::string> subscriber_keys) const;
 
 private:
+  [[nodiscard]] pinion::AbstractChannel::ResumeBehavior resume() const;
+
   jewels::memory::MemoryResource memres_;
   TCLAP::ValueArg<std::string> arg_pinion_dir_;
   TCLAP::ValueArg<std::string> arg_pinion_ns_;
@@ -64,6 +77,7 @@ struct ExecutionParams
   std::optional<std::string> cog_gpu_assignment_config_path{};
   std::optional<bool> suppress_schema_mismatch_errors{};
   std::optional<std::string> metrics_channel_metadata_config_path{};
+  std::optional<std::string> signal_metadata_config_path{};
   /// Playback speed multiplier for deterministic runner. 1.0 = real-time, 0.5 = half speed, 2.0 = double speed.
   /// If not set (or set to 0.0), runs as fast as possible. Experimental flag controlled via --playback-speed.
   std::optional<double> playback_speed{};
@@ -88,6 +102,7 @@ private:
   TCLAP::ValueArg<uint64_t> end_time_ns_;
   TCLAP::ValueArg<std::string> cog_gpu_assignment_config_path_;
   TCLAP::ValueArg<std::string> metrics_channel_metadata_config_path_;
+  TCLAP::ValueArg<std::string> signal_metadata_config_path_;
   TCLAP::SwitchArg suppress_schema_mismatch_errors_;
 };
 

@@ -1,11 +1,26 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
+load("//clockwork:rules.bzl", "clk")
 load("//tools/rules:cc.bzl", "cc_library")
 
 package(
     default_testonly = True,
     default_visibility = ["//visibility:public"],
+)
+
+clk(
+    name = "test_message_clk",
+    srcs = ["test_message.clk"],
+    outs = [
+        "test_message_clk_cc.cc",
+        "test_message_clk_cc.hh",
+        "test_message_clk_cc.inl",
+        "test_message_clk_cc_types.cc",
+        "test_message_clk_cc_types.hh",
+        "test_message_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
 )
 
 cc_library(
@@ -16,7 +31,10 @@ cc_library(
 
 cc_library(
     name = "test_support",
-    srcs = ["test_support.cc"],
+    srcs = [
+        "test_support.cc",
+        "test_support.inl",
+    ],
     hdrs = ["test_support.hh"],
     deps = [
         "//clockwork/logging:channel_type_clk_cc",
@@ -27,6 +45,7 @@ cc_library(
         "//clockwork/logging:xxh3_checksum",
         "//clockwork/logging:zstd_helper",
         "//clockwork/logging/onboard:log_format",
+        "//clockwork/logging/onboard:reader",
         "//clockwork/logging/onboard:types",
         "//jewels/container:at",
         "//jewels/filesystem",

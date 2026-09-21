@@ -12,15 +12,9 @@ enum ChannelType
   values
   {
     // Regular channel
-    #0 regular default
-    {
-      underlying_value: 0;
-    }
+    #0 regular default { underlying_value: 0; }
 
     // Persistent channel
-    #1 persistent
-    {
-      underlying_value: 1;
-    }
+    #1 persistent { underlying_value: 1; }
   }
 }

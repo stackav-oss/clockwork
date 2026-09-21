@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "jewels/filesystem/file.hh"
@@ -24,9 +25,15 @@ class ShmPublisher;
 ///
 /// Convience tool for opening channels
 ///
-class ShmChannelFactory
+class ShmChannelFactory : public AbstractChannelFactory
 {
 public:
+  ~ShmChannelFactory() override;
+  ShmChannelFactory(const ShmChannelFactory&) = delete;
+  ShmChannelFactory(ShmChannelFactory&&) = default;
+  ShmChannelFactory& operator=(const ShmChannelFactory&) = delete;
+  ShmChannelFactory& operator=(ShmChannelFactory&&) = default;
+
   ///
   /// Create a factory using canonical values for the socket_ns and shm_dir, potentially including a namespace in the
   /// path to allow for creation of independent shm channel pools
@@ -53,32 +60,31 @@ public:
     ShmChannel::ResumeBehavior resume_behavior);
 
   ///
-  /// Attempt to open a shared memory channel with the specified role using the common settings of this factory
-  /// @param role indicates if this is to be a ShmPublisher or ShmSubscriber
-  /// @param uuid_str UUID string name of the channel, used as the filename (in shm_dir)
-  /// @param channel_name Human readable channel name
-  /// @param layout the BufferLayout to use for the channel's backing buffer
-  /// @param max_subscribers maximum size of the in-process and socket observer collections
-  ///
-  jewels::expected<std::shared_ptr<ShmChannel>, pinion::ShmChannel::Error> open(
-    pinion::ShmChannel::Role role,
-    std::string_view uuid_str,
-    std::string_view channel_name,
-    const BufferLayout& layout,
-    size_t max_subscribers);
-
-  ///
   /// Attempt to open a shared memory channel using the common settings of this factory.
   /// @param uuid_str UUID string name of the channel, used as the filename (in shm_dir)
   /// @param channel_name Human readable channel name
   /// @param layout the BufferLayout to use for the channel's backing buffer
   /// @param max_subscribers maximum size of the in-process and socket observer collections
   ///@{
-  jewels::expected<std::shared_ptr<ShmPublisher>, pinion::ShmChannel::Error> open_publisher(
+  jewels::expected<std::shared_ptr<AbstractPublisher>, pinion::ShmChannel::Error> open_publisher(
+    std::string_view uuid_str,
+    std::string_view channel_name,
+    const BufferLayout& layout,
+    size_t max_subscribers) override;
+  jewels::expected<std::shared_ptr<AbstractSubscriber>, pinion::ShmChannel::Error> open_subscriber(
+    std::string_view uuid_str,
+    std::string_view channel_name,
+    const BufferLayout& layout,
+    size_t max_subscribers) override;
+  jewels::expected<std::shared_ptr<AbstractSubscriber>, pinion::ShmChannel::Error>
+  open_spy(std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers)
+    override;
+
+  jewels::expected<std::shared_ptr<ShmPublisher>, pinion::ShmChannel::Error> open_shm_publisher(
     std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
-  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_subscriber(
+  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_shm_subscriber(
     std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
-  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_spy(
+  jewels::expected<std::shared_ptr<ShmSubscriber>, pinion::ShmChannel::Error> open_shm_spy(
     std::string_view uuid_str, std::string_view channel_name, const BufferLayout& layout, size_t max_subscribers);
   ///@}
 
@@ -106,32 +112,6 @@ private:
   jewels::filesystem::Directory shm_dir_;
   std::pmr::string socket_ns_;
   ShmChannel::ResumeBehavior resume_behavior_;
-};
-
-///
-/// A RAII registration of channel factories that allow passing a 'current' factory down the stack.
-/// Primarily meant to provide the main/scaffolding factory (with the associated namespace etc) to multi-channel
-/// subscriber cogs.
-///
-class ShmChannelFactoryContext
-{
-public:
-  /// Constructor
-  /// @param[in] factory Shared memory channel factory
-  explicit ShmChannelFactoryContext(ShmChannelFactory& factory);
-  ~ShmChannelFactoryContext();
-  ShmChannelFactoryContext(const ShmChannelFactoryContext&) = delete;
-  ShmChannelFactoryContext(ShmChannelFactoryContext&&) = delete;
-  ShmChannelFactoryContext& operator=(const ShmChannelFactoryContext&) = delete;
-  ShmChannelFactoryContext& operator=(ShmChannelFactoryContext&&) = delete;
-
-  static ShmChannelFactory* get();
-
-private:
-  ShmChannelFactory& factory_;
-  ShmChannelFactoryContext* previous_;
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables): RAII managed trivial type
-  static ShmChannelFactoryContext* current_;
 };
 
 } // namespace clockwork::pinion

@@ -1,0 +1,167 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
+load("//tools/rules:python.bzl", "py_test")
+
+package(default_testonly = True)
+
+py_pytest_main(
+    name = "__test__",
+    deps = ["@clockwork_pip//pytest"],
+)
+
+py_test(
+    name = "anomalies_test",
+    srcs = [
+        "anomalies_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:anomalies",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report/tests/support:journal_fixtures",
+    ],
+)
+
+py_test(
+    name = "channel_flow_test",
+    srcs = [
+        "channel_flow_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:view_model",
+    ],
+)
+
+py_test(
+    name = "execution_detail_test",
+    srcs = [
+        "execution_detail_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+    ],
+)
+
+py_test(
+    name = "fixtures_and_size_test",
+    srcs = [
+        "fixtures_and_size_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report/tests/support:journal_fixtures",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "memory_statistics_test",
+    srcs = [
+        "memory_statistics_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:view_model",
+    ],
+)
+
+py_test(
+    name = "message_sequence_test",
+    srcs = [
+        "message_sequence_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:view_model",
+        "//clockwork/tools/journal_report/tests/support:journal_fixtures",
+    ],
+)
+
+py_test(
+    name = "request_reader_renderer_test",
+    srcs = [
+        "request_reader_renderer_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/tools/journal_report"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:reader",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:request",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "server_test",
+    srcs = [
+        "server_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:request",
+        "//clockwork/tools/journal_report:server",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "timeline_test",
+    srcs = [
+        "timeline_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:view_model",
+    ],
+)
+
+py_test(
+    name = "view_model_test",
+    srcs = [
+        "view_model_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/tools/journal_report:renderer",
+        "//clockwork/tools/journal_report:view_model",
+    ],
+)

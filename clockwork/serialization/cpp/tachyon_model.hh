@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
@@ -6,6 +6,7 @@
 #include "clockwork/serialization/cpp/clk_type.hh"
 #include "clockwork/serialization/metadata/tachyon_model.pb.h"
 #include "jewels/hash/md5.hh"
+#include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
 #include <cstddef>
@@ -21,15 +22,10 @@ namespace clockwork::serialization
 class TachyonModel
 {
 public:
-  /// Latest metadata protobuf version
-  static constexpr int32_t built_in_uuid_added_in_version = 2;
-  static constexpr int32_t enum_underlying_type_added_in_version = 3;
-  static constexpr int32_t latest_metadata_protobuf_version = enum_underlying_type_added_in_version;
-
   /// Constructor, use from_proto to make a new instance
   /// @param[in] outer_type_id Index of the schema's outer type
   /// @param[in] types_size Number of types in the metadata
-  TachyonModel(size_t outer_type_id, std::unique_ptr<ClkTypeFactory> factory);
+  TachyonModel(size_t outer_type_id, std::shared_ptr<ClkTypeFactory> factory);
 
   ~TachyonModel() noexcept = default;
 
@@ -39,24 +35,28 @@ public:
   TachyonModel& operator=(TachyonModel&&) = delete;
 
   /// Create an instance from a tachyon metadata protobuf
+  /// @param[in] memory_resource Memory resource
   /// @param[in] metadata_proto Tachyon metadata protobuf
   /// @returns Tachyon model instance
   /// @throws runtime_error on failure.
-  [[nodiscard]] static std::unique_ptr<TachyonModel>
-  from_proto(std::unique_ptr<metadata::TachyonMetadata> metadata_proto);
+  [[nodiscard]] static std::shared_ptr<TachyonModel> from_proto(
+    const jewels::memory::MemoryResource& memory_resource,
+    const std::shared_ptr<metadata::TachyonMetadata>& metadata_proto);
 
   /// Create an instance from a tachyon metadata protobuf
   /// @param[in] metadata_proto Tachyon metadata protobuf
   /// @returns Tachyon model instance
   /// @throws runtime_error on failure.
-  [[nodiscard]] static std::unique_ptr<TachyonModel> from_proto(const metadata::TachyonMetadata& metadata_proto);
+  [[nodiscard]] static std::shared_ptr<TachyonModel>
+  from_proto(const jewels::memory::MemoryResource& memory_resource, const metadata::TachyonMetadata& metadata_proto);
 
   /// Create an instance from a tachyon type
   /// @tparam T Clockwork type
+  /// @param[in] memory_resource Memory resource
   /// @returns Tachyon model instance
   /// @throws runtime_error on failure.
   template <typename T>
-  [[nodiscard]] static std::unique_ptr<TachyonModel> from_type()
+  [[nodiscard]] static std::shared_ptr<TachyonModel> from_type(const jewels::memory::MemoryResource& memory_resource)
     requires(TachyonType<T> || TappyType<T>);
 
   /// Outer type accessor
@@ -93,12 +93,16 @@ public:
   /// @throws runtime_error if unexpected schema changes are found
   void check_for_unexpected_schema_changes(TachyonModel& other);
 
+  /// Make a lite compressor for this schema
+  /// @return Instance to find the chunks of zeros in the schema for lite-compression
+  [[nodiscard]] jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> make_lite_compressor();
+
 private:
   /// Index of the schema's outer type
   size_t outer_type_id_;
 
   /// Clockwork type factory for the types in the schema protobuf
-  std::unique_ptr<ClkTypeFactory> factory_;
+  std::shared_ptr<ClkTypeFactory> factory_;
 
   /// Cached computed metadata hash value
   std::optional<jewels::hash::MD5HashValue> maybe_cached_metadata_hash_;

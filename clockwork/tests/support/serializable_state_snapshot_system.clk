@@ -1,0 +1,99 @@
+use clockwork::tests::support::snapshot_test_cogs::{
+  SerializableState,
+  SerializableStateReaderCog,
+  SerializableStateWriterCog,
+};
+use clockwork::tests::support::snapshot_test_messages::{SerializableStateSnapshot};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogReaderPolicy, LogType};
+use clockwork::logging::channel_type::{ChannelType};
+use std::snapshot::{TakeSnapshots};
+
+// Input updates for the online state
+channel SerializableStateUpdateChannel
+{
+  message_type: Tachyon<SerializableStateSnapshot>;
+  max_num_messages: 3;
+}
+
+policy LogReaderPolicy for SerializableStateUpdateChannel
+{}
+
+// Online serialized state snapshots
+channel SerializableStateSnapshotChannel
+{
+  message_type: Tachyon<SerializableStateSnapshot>;
+  max_num_messages: 3;
+}
+
+policy ChannelLoggingPolicy for SerializableStateSnapshotChannel
+{
+  log_type = LogType::non_redundant_telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+// Snapshot input used by FirstMessage during offline restoration
+channel SerializableStateRestoreChannel
+{
+  message_type: Tachyon<SerializableStateSnapshot>;
+  max_num_messages: 1;
+}
+
+policy LogReaderPolicy for SerializableStateRestoreChannel
+{}
+
+// Value observed by the dependent cog after restoration
+channel SerializableStateObservedChannel
+{
+  message_type: Tachyon<SerializableStateSnapshot>;
+  max_num_messages: 1;
+}
+
+policy ChannelLoggingPolicy for SerializableStateObservedChannel
+{
+  log_type = LogType::non_redundant_telemetry;
+  channel_type = ChannelType::persistent;
+}
+
+box SerializableStateSnapshotBox
+{
+  new memory: HeapMemory(max_size=10'000'000);
+  new reader_memory: HeapMemory(max_size=10'000'000);
+  new writer_state: State(representation=SerializableState, memory_resource=memory);
+  new reader_state: State(representation=SerializableState, memory_resource=reader_memory);
+  new restore_state: FirstMessage(channel=SerializableStateRestoreChannel);
+
+  new writer: SerializableStateWriterCog;
+  new reader: SerializableStateReaderCog;
+
+  connect writer_state to writer.state;
+  connect SerializableStateUpdateChannel to writer.update;
+  apply TakeSnapshots(channel=SerializableStateSnapshotChannel, interval=1ms) to writer.state;
+
+  connect reader_state to reader.state;
+  connect restore_state to reader_state;
+  connect reader.observed to SerializableStateObservedChannel;
+}
+
+cpp_executable serializable_state_snapshot_system_exe
+{
+  casing
+  {
+    extern SerializableState;
+    box SerializableStateSnapshotBox;
+  }
+}
+
+cpu_domain SerializableStateSnapshotCpu;
+
+box SerializableStateSnapshotSystem
+{
+  new box: SerializableStateSnapshotBox;
+  new proc: Process(executable=serializable_state_snapshot_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=SerializableStateSnapshotCpu) to proc;
+}
+
+system_target serializable_state_snapshot_system
+{
+  box: SerializableStateSnapshotSystem;
+}

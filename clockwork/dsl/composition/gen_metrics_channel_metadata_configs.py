@@ -1,10 +1,11 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate channel spy configurations."""
 
 from uuid import UUID
 
+from clockwork.dsl.compiler_context import CompilerContext
 from clockwork.dsl.composition import metrics_channel_metadata_config_proto, system
 from clockwork.dsl.composition.metrics_channel_metadata_config import (
     CSC_MODULE,
@@ -12,19 +13,24 @@ from clockwork.dsl.composition.metrics_channel_metadata_config import (
     MetricsChannelMetadataConfig,
 )
 from clockwork.dsl.ir import clkbuiltins, node, representation, schema, typesys
+from clockwork.dsl.ir.uuid_reg import lookup_uuid
 from clockwork.serialization.metadata import tachyon as tachyon_metadata
 
 
 def _generate_metrics_metadata_config_domain(
     domain: system.PhysicalCpuDomain,
+    compiler_context: CompilerContext,
 ) -> metrics_channel_metadata_config_proto.MetricsChannelMetadataConfig:
     all_metrics_channels_metadata = []
     for buffer in domain.metrics_buffers.values():
         metrics_channel_name = buffer.channel.channel.channel_name
-        metrics_channel_uuid = buffer.channel.channel.uuid
         cog_path = buffer.channel.channel.cog_path
 
         cog_instance_path = buffer.channel.channel.cog_instance_path
+        # Although, this is technically the cog instance UUID, the actual metrics channel UUID is not helpful in this
+        # context. The cog instance UUID is what's actually a part of the channel name and from a user perspective is what's
+        # interesting. The metrics channel UUID is just an internal implementation detail.
+        metrics_channel_uuid = lookup_uuid(compiler_context, cog_instance_path)
         all_metrics_channels_metadata.append(
             MetricsChannelMetadata(
                 metrics_channel_name=metrics_channel_name,
@@ -67,5 +73,5 @@ def gen_metrics_channel_metadata_configs(
     """Generate metrics channel metadata configs for a system."""
     result = {}
     for domain_uuid, domain in sys.cpu_domains.items():
-        result[domain_uuid] = _generate_metrics_metadata_config_domain(domain)
+        result[domain_uuid] = _generate_metrics_metadata_config_domain(domain, sys.system.module.context)
     return result

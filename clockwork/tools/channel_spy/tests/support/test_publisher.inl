@@ -3,12 +3,13 @@
 
 #include "clockwork/tools/channel_spy/tests/support/test_publisher.hh"
 
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/slot.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -23,6 +24,7 @@
 #include <cstring>
 #include <memory>
 #include <memory_resource>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -34,7 +36,7 @@ namespace clockwork::tools::tests::support
 
 template <typename MessageType>
   requires TappyType<MessageType>
-TestPublisher<MessageType>::TestPublisher(std::shared_ptr<pinion::ShmPublisher> publisher_ptr)
+TestPublisher<MessageType>::TestPublisher(std::shared_ptr<pinion::AbstractPublisher> publisher_ptr)
   : publisher_ptr_(std::move(publisher_ptr))
 {
 }
@@ -104,10 +106,10 @@ TestPublisher<MessageType>::publish(int64_t message_time, std::span<const std::b
     jewels::log_cerr_error("Failed to reserve a slot");
     return jewels::unexpected(jewels::MonoError{});
   }
-  auto& reserved_slot = reserve_result.value();
-  auto slot = reserved_slot.slot();
+  auto& reservation = reserve_result.value();
+  auto slot = reservation.slots().front();
   std::memcpy(slot.message().data(), data.data(), data.size());
-  if (const auto result = reserved_slot.commit(jewels::time::SyncTime{std::chrono::nanoseconds(message_time)}); !result)
+  if (const auto result = reservation.commit(jewels::time::SyncTime{std::chrono::nanoseconds(message_time)}); !result)
   {
     jewels::log_cerr_error("Failed to commit slot", result.error());
     return jewels::unexpected(jewels::MonoError{});

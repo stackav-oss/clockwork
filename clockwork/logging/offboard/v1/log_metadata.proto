@@ -1,9 +1,22 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 syntax = "proto3";
 
 package clockwork.logging.offboard.v1;
+
+// Path to another log
+message LogPath {
+  oneof log_path_oneof {
+    // Path to the union entry relative to the union directory
+    string relative_path = 1;
+
+    // Absolute path to the union entry
+    string absolute_path = 2;
+  }
+  // Channels to exclude
+  repeated string excluded_channel = 3;
+}
 
 // Log file metadata
 message LogFileMetadata {

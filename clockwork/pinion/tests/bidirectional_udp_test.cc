@@ -1,15 +1,17 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/io/network_var_packet_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/bidirectional_udp.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/io_connection.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/sock_opt.hh"
@@ -69,6 +71,8 @@ TEST_CASE("BidirectionalUdp", "Both directions")
     jewels::Uuid<common::EndpointClassId>::from_string("00000000-0000-0000-0000-000000000002");
   REQUIRE(subscriber_endpoint_class_id);
 
+  InMemoryChannel<Msg, num_slots, false> incoming_channel{memres};
+
   auto maybe_bidir = BidirectionalUdp<Msg>::try_make(
     memres,
     *publisher_endpoint_class_id,
@@ -82,7 +86,6 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   REQUIRE(local_addr);
   auto local_port = ::ntohs(local_addr->sin_port);
 
-  InMemoryChannel<Msg, num_slots, false> incoming_channel{memres};
   SECTION("Invalid publisher endpoint id")
   {
     auto incoming_publisher = incoming_channel.make_publisher(1UL);
@@ -95,20 +98,18 @@ TEST_CASE("BidirectionalUdp", "Both directions")
   auto incoming_subscriber = incoming_channel.make_subscriber();
 
   REQUIRE(bd_socket->connect_publisher(*publisher_endpoint_class_id, std::move(incoming_publisher)));
-  InMemoryChannel<Msg, num_slots, false> outgoing_channel{memres};
+  auto outgoing_channel = std::make_shared<InMemoryChannel<Msg, num_slots, false>>(memres);
 
   SECTION("Invalid subsciber endpoint id")
   {
-    auto outgoing_subscriber = outgoing_channel.make_subscriber();
     REQUIRE(
-      bd_socket->connect_subscriber({}, std::move(outgoing_subscriber)) ==
+      bd_socket->connect_subscriber({}, outgoing_channel) ==
       jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
   }
-  auto outgoing_publisher = outgoing_channel.make_publisher(0UL);
-  auto outgoing_subscriber = outgoing_channel.make_subscriber();
+  auto outgoing_publisher = outgoing_channel->make_publisher(0UL);
 
   //  The socket "subscribes" to this channel to send data
-  REQUIRE(bd_socket->connect_subscriber(*subscriber_endpoint_class_id, std::move(outgoing_subscriber)));
+  REQUIRE(bd_socket->connect_subscriber(*subscriber_endpoint_class_id, outgoing_channel));
 
   constexpr uint32_t ref_test_value = 123U;
 

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -42,20 +42,24 @@ public:
   /// Constructor
   /// @param[in] memory_resource Memory resource
   /// @param[in] log_path Log directory path
+  /// @param[in] buffered_reader Buffered reader
   /// @param[in] metadata_map_option Metadata map option
   Reader(
     jewels::memory::MemoryResource memory_resource,
     std::string_view log_path,
+    std::shared_ptr<BufferedReaderType> buffered_reader,
     MetadataMapOption metadata_map_option = MetadataMapOption::disable)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Constructor
   /// @param[in] memory_resource Memory resource
   /// @param[in] log_files Log files to be read
+  /// @param[in] buffered_reader Buffered reader
   /// @param[in] metadata_map_option Metadata map option
   Reader(
     jewels::memory::MemoryResource memory_resource,
-    const std::pmr::list<jewels::filesystem::Path>& log_files,
+    const std::pmr::list<std::pmr::string>& log_files,
+    std::shared_ptr<BufferedReaderType> buffered_reader,
     MetadataMapOption metadata_map_option = MetadataMapOption::disable)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
@@ -72,21 +76,16 @@ public:
   Reader(Reader&&) noexcept = default;
   Reader& operator=(Reader&&) noexcept = default;
 
-  /// List the log files under a log directory
-  /// @param[in] memory_resource Memory resource
-  /// @param[in] log_path Log directory path
-  /// @return List of log files sorted by file name or LogError on failure
-  [[nodiscard]] static LogExpected<std::pmr::list<jewels::filesystem::Path>>
-  list_log_files(jewels::memory::MemoryResource memory_resource, std::string_view log_path)
-    requires DiskBufferedReaderType<BufferedReaderType>;
-
   /// List the log files under a log directory that contains data for a log timestamp slice
   /// @param[in] memory_resource Memory resource
   /// @param[in] log_path Log directory path
   /// @param[in] log_interval Log timestamp interval to be read
   /// @return List of log files sorted by file nanme or LogError on failure
-  [[nodiscard]] static LogExpected<std::pmr::list<jewels::filesystem::Path>> list_log_files_for_interval(
-    jewels::memory::MemoryResource memory_resource, std::string_view log_path, LogInterval log_interval)
+  [[nodiscard]] static LogExpected<std::pmr::list<std::pmr::string>> list_log_files_for_interval(
+    jewels::memory::MemoryResource memory_resource,
+    std::string_view log_path,
+    LogInterval log_interval,
+    const std::shared_ptr<BufferedReaderType>& buffered_reader)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Open a log
@@ -152,7 +151,10 @@ public:
   /// @param[in] time_filter_option Time filter option
   /// @return File log time interval, empty_log_file if log file is empty, other LogError on failure
   [[nodiscard]] static LogExpected<LogInterval> get_file_log_interval(
-    jewels::memory::MemoryResource memory_resource, std::string_view file_name, TimeFilterOption time_filter_option)
+    jewels::memory::MemoryResource memory_resource,
+    std::string_view file_name,
+    TimeFilterOption time_filter_option,
+    const std::shared_ptr<BufferedReaderType>& buffered_reader)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Get the log time interval covered by a memory log
@@ -179,12 +181,13 @@ private:
   /// @param[in] log_files Files in the log
   /// @param[in] interval_results Results from getting the log file interval for each log file
   /// @return List of log files that contain messages for the interval
-  [[nodiscard]] static std::pmr::list<jewels::filesystem::Path> list_log_files_for_interval_no_fail(
+  [[nodiscard]] static std::pmr::list<std::pmr::string> list_log_files_for_interval_no_fail(
     jewels::memory::MemoryResource memory_resource,
     LogInterval log_interval,
     size_t first_index,
-    const std::pmr::vector<jewels::filesystem::Path>& log_files,
-    std::pmr::vector<LogExpected<LogInterval>>& interval_results)
+    const std::pmr::vector<std::pmr::string>& log_files,
+    std::pmr::vector<LogExpected<LogInterval>>& interval_results,
+    const std::shared_ptr<BufferedReaderType>& buffered_reader)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Get the index of the first log file to read for a log timestamp interval
@@ -196,8 +199,9 @@ private:
   [[nodiscard]] static LogExpected<size_t> locate_first_log_file_for_interval(
     jewels::memory::MemoryResource memory_resource,
     LogInterval log_interval,
-    const std::pmr::vector<jewels::filesystem::Path>& log_files,
-    std::pmr::vector<LogExpected<LogInterval>>& interval_results)
+    const std::pmr::vector<std::pmr::string>& log_files,
+    std::pmr::vector<LogExpected<LogInterval>>& interval_results,
+    const std::shared_ptr<BufferedReaderType>& buffered_reader)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Initialize the list of log all log files to be read
@@ -293,7 +297,10 @@ private:
   /// @param[in] time_filter_option Time filter option
   /// @return File log time interval, empty_log if log file is empty, other LogError on failure
   [[nodiscard]] static LogExpected<LogInterval> get_file_log_interval_from_log(
-    jewels::memory::MemoryResource memory_resource, std::string_view file_name, TimeFilterOption time_filter_option)
+    jewels::memory::MemoryResource memory_resource,
+    std::string_view file_name,
+    TimeFilterOption time_filter_option,
+    const std::shared_ptr<BufferedReaderType>& buffered_reader)
     requires DiskBufferedReaderType<BufferedReaderType>;
 
   /// Structure used to store persistent messages from the front of the first log file
@@ -370,13 +377,13 @@ private:
   std::optional<std::pmr::string> maybe_log_path_;
 
   /// List of all files to be read
-  std::pmr::list<jewels::filesystem::Path> all_log_files_;
+  std::pmr::list<std::pmr::string> all_log_files_;
 
   /// Metadata map option
   MetadataMapOption metadata_map_option_{MetadataMapOption::disable};
 
   /// Buffered reader
-  BufferedReaderType buffered_reader_;
+  std::shared_ptr<BufferedReaderType> buffered_reader_;
 
   /// Size of the current message record, used to persist the data from the last call to read
   std::optional<size_t> maybe_current_message_record_size_{};
@@ -388,7 +395,7 @@ private:
   std::pmr::vector<std::byte> data_buffer_;
 
   /// List of log file paths to be read
-  std::pmr::list<jewels::filesystem::Path> log_files_;
+  std::pmr::list<std::pmr::string> log_files_;
 
   /// Buffer used to read memory logs
   std::span<const std::byte> log_data_buffer_;

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -17,6 +17,9 @@ clk(
         "network_var_packet_clk_cc.cc",
         "network_var_packet_clk_cc.hh",
         "network_var_packet_clk_cc.inl",
+        "network_var_packet_clk_cc_types.cc",
+        "network_var_packet_clk_cc_types.hh",
+        "network_var_packet_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
@@ -29,6 +32,9 @@ clk(
         "var_packet_clk_cc.cc",
         "var_packet_clk_cc.hh",
         "var_packet_clk_cc.inl",
+        "var_packet_clk_cc_types.cc",
+        "var_packet_clk_cc_types.hh",
+        "var_packet_clk_cc_types.inl",
         "var_packet_clk_nb.cc",
         "var_packet_clk_nb.hh",
         "var_packet_clk_nb.inl",

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Wrappers for cc_* rules."""
@@ -134,7 +134,18 @@ _cc_binary_split_output = rule(
           runtime artifact while preserving full debugging capabilities when needed.""",
 )
 
-def cc_test(name, deps = None, **kwargs):
+def cc_test(name, deps = None, data = None, env = None, **kwargs):
+    """Repo-wide wrapper for cc_test.
+
+    Listed args are modified for our use. Others are passed through as-is.
+
+    Args:
+        name: Here to make lint happy.
+        deps: as cc_test.
+        data: as cc_test.
+        env: as cc_test.
+        **kwargs: passthrough to underlying cc_test.
+    """
     deps = (deps or [])
     if (
         # This is a macro, so deps may not be resolved to a list
@@ -150,8 +161,23 @@ def cc_test(name, deps = None, **kwargs):
         # actually be a list in the case that it's a select
         # expression.
         deps += [_stacktrace_label]  # buildifier: disable=list-append
+    data = (data or []) + ["@clang//:llvm_symbolizer"] + select({
+        "@@//tools/cc/sanitizer:aubsan": [
+            "@@//tools/cc/sanitizer:asan_test_suppressions.txt",
+            "@@//tools/cc/sanitizer:lsan_test_suppressions.txt",
+            "@@//tools/cc/sanitizer:ubsan_test_suppressions.txt",
+        ],
+        "@@//tools/cc/sanitizer:tsan": ["@@//tools/cc/sanitizer:tsan_test_suppressions.txt"],
+        "//conditions:default": [],
+    })
+    env = {
+        "ASAN_SYMBOLIZER_PATH": "$(location @clang//:llvm_symbolizer)",
+        "LSAN_SYMBOLIZER_PATH": "$(location @clang//:llvm_symbolizer)",
+        "TSAN_SYMBOLIZER_PATH": "$(location @clang//:llvm_symbolizer)",
+        "UBSAN_SYMBOLIZER_PATH": "$(location @clang//:llvm_symbolizer)",
+    } | (env or {})
 
-    _cc_test(name = name, deps = deps, **kwargs)
+    _cc_test(name = name, data = data, deps = deps, env = env, **kwargs)
 
 # Pass through to rules_cc.
 # keep-sorted start

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -49,6 +49,9 @@ clk(
         "channel_spy_config_clk_cc.cc",
         "channel_spy_config_clk_cc.hh",
         "channel_spy_config_clk_cc.inl",
+        "channel_spy_config_clk_cc_types.cc",
+        "channel_spy_config_clk_cc_types.hh",
+        "channel_spy_config_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/common:process_description_clk_cc"],
     generate = ["cpp"],
@@ -66,9 +69,15 @@ clk(
         "channel_spy_config_init_clk_cc.cc",
         "channel_spy_config_init_clk_cc.hh",
         "channel_spy_config_init_clk_cc.inl",
+        "channel_spy_config_init_clk_cc_cog.cc",
+        "channel_spy_config_init_clk_cc_cog.hh",
+        "channel_spy_config_init_clk_cc_cog.inl",
         "channel_spy_config_init_clk_cc_dial.cc",
         "channel_spy_config_init_clk_cc_dial.hh",
         "channel_spy_config_init_clk_cc_dial.inl",
+        "channel_spy_config_init_clk_cc_types.cc",
+        "channel_spy_config_init_clk_cc_types.hh",
+        "channel_spy_config_init_clk_cc_types.inl",
         "channel_spy_config_init_clk_exe.cc",
         "channel_spy_config_init_clk_exe.hh",
         "channel_spy_config_init_clk_exe.inl",
@@ -98,6 +107,7 @@ cc_library(
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "//jewels/uuid",
         "@fmt",
     ],
 )
@@ -113,13 +123,12 @@ cc_library(
     deps = [
         ":types",
         "//clockwork:repr_iface",
-        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:buffer_layout",
         "//clockwork/pinion:shm_channel",
         "//clockwork/pinion:shm_channel_factory",
-        "//clockwork/pinion:shm_subscriber",
         "//clockwork/pinion:slot",
         "//clockwork/pinion:slot_ref",
-        "//clockwork/pinion:subscriber_handle",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
@@ -136,8 +145,8 @@ py_cc_binding(
         ":channel_spy_config_clk_cc",
         ":types",
         "//clockwork/pinion:slot_ref",
+        "//jewels/container:compare",
         "@nanobind",
-        "@python_3_10//:python_headers",
     ],
 )
 

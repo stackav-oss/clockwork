@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -27,8 +27,9 @@ namespace clockwork_logging::offboard
 /// @param[in] memory_resource Memory resource
 /// @param[in] index_location Index chunk location
 /// @param[in] channel_info_map Map from channel ID to logged channel info
+/// @param[in] channel_ids_to_exclude Set of channel IDs to exclude
 /// @param[in] maybe_log_interval Optional interval to be read from the log
-/// @param[in] maybe_desired_channels Optional set of channels to be read from the log
+/// @param[in] desired_channels Set of channels to be read from the log
 /// @param[in] chunk_reader_ptr Chunk reader pointer
 /// @param[in] chunk_compressor_ptr Chunk compressor pointer
 /// @return List of message chunk handles or LogError on failure
@@ -36,8 +37,9 @@ namespace clockwork_logging::offboard
   jewels::memory::MemoryResource memory_resource,
   ChunkLocation index_location,
   const std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>& channel_info_map,
+  const std::pmr::unordered_set<uint16_t>& channel_ids_to_exclude,
   const std::optional<LogInterval>& maybe_log_interval,
-  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  const std::pmr::unordered_set<std::pmr::string>& desired_channels,
   const jewels::memory::NonNullSharedPtr<ChunkReader>& chunk_reader_ptr,
   const jewels::memory::NonNullSharedPtr<ChunkCompressor>& chunk_compressor_ptr);
 

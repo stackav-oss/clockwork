@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -33,6 +33,53 @@ from clockwork.dsl.ir.representation import RepresentationReference, ReprInstant
 @pytest.fixture()
 def fs_importer() -> FilesystemImporter:
     return FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+
+def _compile_seqno_metadata_cpp_target(
+    fs_importer: FilesystemImporter, *, module_name: str, emit_sequence_numbers: bool
+) -> cpp_target.CppTarget:
+    emit_sequence_numbers_text = "true" if emit_sequence_numbers else "false"
+    source = f"""\
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::testing)]
+
+use std::cog_metrics_policy::{{CogEventMetricsPolicy, CogTelemetryMetricsPolicy}};
+use clockwork::dsl::tests::support::clk_hellomsg::{{HelloMsg}};
+
+// Cog used to test sequence-number metadata include handling.
+cog SeqNoMetadataCog
+{{
+    inputs
+    {{
+        sensor: Tappy<HelloMsg>
+        {{
+            max_msgs: 5;
+            connect_optional: true;
+        }}
+    }}
+
+    execution
+    {{
+        condition new_data: new_message(sensor);
+        execute when: new_data;
+    }}
+}}
+
+policy CogEventMetricsPolicy for SeqNoMetadataCog
+{{
+    enabled = true;
+    emit_sequence_numbers = {emit_sequence_numbers_text};
+}}
+
+policy CogTelemetryMetricsPolicy for SeqNoMetadataCog
+{{
+    enabled = false;
+}}
+"""
+    module = compiler.compile_source_text(source, ModuleID(CLK_REPO, module_name), importer=fs_importer)
+    target = module.inner_scope.lookup(f"{module_name}_clk_cc", recursive=False)
+    assert isinstance(target, cpp_target.CppTarget)
+    return target
 
 
 def test_cpp_target(fs_importer: FilesystemImporter) -> None:  # noqa: PLR0915 (test code)
@@ -194,6 +241,34 @@ def test_clk_cpp_target_cogs(fs_importer: FilesystemImporter) -> None:
     assert cpp_target_ir.cogs[1].cog_ir is module.inner_scope.lookup("HelloCogWithMetrics")
     assert cpp_target_ir.cogs[2].cog_ir is module.inner_scope.lookup("HelloInit")
     assert cpp_target_ir.cogs[3].cog_ir is module.inner_scope.lookup("HelloInit2")
+
+
+def test_cpp_target_dial_includes_types_when_sequence_numbers_enabled(fs_importer: FilesystemImporter) -> None:
+    target = _compile_seqno_metadata_cpp_target(
+        fs_importer,
+        module_name="cpp_target_seqno_metadata_enabled",
+        emit_sequence_numbers=True,
+    )
+
+    dial_mod = target.render_cpp_dial()
+    assert dial_mod is not None
+    header = dial_mod.header_chunk.render_str(render_includes=True)
+
+    assert '#include "cpp_target_seqno_metadata_enabled_clk_cc_types.hh"' in header
+
+
+def test_cpp_target_dial_omits_types_when_sequence_numbers_disabled(fs_importer: FilesystemImporter) -> None:
+    target = _compile_seqno_metadata_cpp_target(
+        fs_importer,
+        module_name="cpp_target_seqno_metadata_disabled",
+        emit_sequence_numbers=False,
+    )
+
+    dial_mod = target.render_cpp_dial()
+    assert dial_mod is not None
+    header = dial_mod.header_chunk.render_str(render_includes=True)
+
+    assert '#include "cpp_target_seqno_metadata_disabled_clk_cc_types.hh"' not in header
 
 
 def test_cpp_target_converters(fs_importer: FilesystemImporter) -> None:
@@ -736,47 +811,38 @@ def test_target_outputs(fs_importer: FilesystemImporter) -> None:
 
     base_ir = module.inner_scope.lookup("base", recursive=False)
     assert isinstance(base_ir, cpp_target.CppTarget)
-    (base_target,) = base_ir.output_targets()
-    assert base_target == CcLibrary(
-        name="base",
-        hdrs=[Path("base.hh")],
-        srcs=[Path("base.inl"), Path("base.cc")],
+    base_targets = base_ir.output_targets()
+    # cpp_target emits an umbrella ``:base`` plus a ``:base_types``
+    # library carrying the actual schema content.
+    base_umbrella = next(t for t in base_targets if t.name == "base")
+    base_types_target = next(t for t in base_targets if t.name == "base_types")
+    assert {t.name for t in base_targets} == {"base", "base_types"}
+
+    assert base_types_target == CcLibrary(
+        name="base_types",
+        hdrs=[Path("base_types.hh")],
+        srcs=[Path("base_types.inl"), Path("base_types.cc")],
         deps=minimal_deps,
         data=[Label("//a/b/c:cc_target_test_clk")],
         testonly=False,
     )
 
-    remove_whitespace = str.maketrans("", "", " \t\n")
-    assert (
-        str(base_target).translate(remove_whitespace)
-        == """
-        cc_library(
-            name = 'base',
-            hdrs = ['base.hh'],
-            srcs = [
-                'base.inl',
-                'base.cc'
-            ],
-            deps = [
-                '//clockwork:repr_iface',
-                '//clockwork:tags',
-                '//jewels/meta:concepts',
-                '//jewels/uuid:uuid'
-            ],
-            data = [
-                '//a/b/c:cc_target_test_clk'
-            ],
-        )""".translate(remove_whitespace)
-    )
+    # Umbrella re-exports ``:base_types``; no schema content of its own.
+    assert base_umbrella.name == "base"
+    assert base_umbrella.hdrs == [Path("base.hh")]
+    assert sorted(base_umbrella.srcs) == sorted([Path("base.inl"), Path("base.cc")])
+    assert Label("//a/b/c:base_types") in base_umbrella.deps
 
     derived_ir = module.inner_scope.lookup("derived", recursive=False)
     assert isinstance(derived_ir, cpp_target.CppTarget)
 
-    (derived_target,) = derived_ir.output_targets()
-    assert derived_target == CcLibrary(
-        name="derived",
-        hdrs=[Path("derived.hh")],
-        srcs=[Path("derived.inl"), Path("derived.cc")],
+    derived_targets = derived_ir.output_targets()
+    derived_types_target = next(t for t in derived_targets if t.name == "derived_types")
+    assert {t.name for t in derived_targets} == {"derived", "derived_types"}
+    assert derived_types_target == CcLibrary(
+        name="derived_types",
+        hdrs=[Path("derived_types.hh")],
+        srcs=[Path("derived_types.inl"), Path("derived_types.cc")],
         deps=[Label("//a/b/c:base"), *minimal_deps],
         data=[Label("//a/b/c:cc_target_test_clk")],
         testonly=False,

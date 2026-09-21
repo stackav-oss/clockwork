@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Schema-related IR nodes."""
@@ -11,15 +11,17 @@ from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
     expr,
     extern_type,
     node,
+    primitive,
     statement,
     strongtypes,
+    tensor_builtins,
     typesys,
 )
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
@@ -34,7 +36,7 @@ _INVALID_FIELD_TYPES = (extern_type.ExternType,)
 
 
 @dataclass
-class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
+class ResolvedSchema(typesys.SchemaType, node.DocRequiredEntity, node.CstNode[cst.Schema]):
     """Fully resolved version of a Schema node."""
 
     inner_scope: node.Scope = dc_field(repr=False)
@@ -63,11 +65,16 @@ class ResolvedSchema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.S
         params = []
         for _, param in sorted(self.parameters.items()):
             assert isinstance(param.type_info, typesys.TypeVal)
+            optional = (
+                isinstance(param.type_info, typesys.Instantiation)
+                and param.type_info.instantiates is clkbuiltins.OPTIONAL
+            )
             params.append(
                 typesys.Parameter(
                     name=param.cur_name,
                     type_bound=param.type_info,
                     default=param.init_value,
+                    is_optional=optional,
                 )
             )
         return params
@@ -134,7 +141,7 @@ class SchemaHistory:
 
 
 @dataclass
-class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
+class Schema(typesys.SchemaType, node.DocRequiredEntity, node.CstNode[cst.Schema]):
     """IR Node representing a schema.
 
     Attributes:
@@ -404,7 +411,7 @@ class Schema(typesys.TypeDef, node.DocRequiredEntity, node.CstNode[cst.Schema]):
 
 
 @dataclass
-class InstantiatedSchema(typesys.TypeVal):
+class InstantiatedSchema(typesys.TypeVal, typesys.MembershipEntity):
     """A fully instantiated schema with all type substitutions resolved."""
 
     schema_name: str
@@ -454,6 +461,7 @@ class InstantiatedSchema(typesys.TypeVal):
         else:
             assert isinstance(typespec, Schema | ResolvedSchema)
             schema = typespec.get_resolved()
+            # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             args = {}
             result_args = None
 
@@ -502,6 +510,25 @@ class InstantiatedSchema(typesys.TypeVal):
     def cur_version(self) -> int:
         """Get the current version of the schema."""
         return self.history.version
+
+    @override
+    def attribute(self, name: str) -> typesys.Value | None:
+        """Look up a field by name and return a ``NamedValue`` with its type.
+
+        Args:
+            name: The field name to look up.
+
+        Returns:
+            A ``NamedValue`` wrapping the field's type, or ``None`` if not found.
+        """
+        for field_def in self.fields.values():
+            if field_def.cur_name == name:
+                return typesys.NamedValue(
+                    name=name,
+                    scope=self.schema.inner_scope,
+                    type_info=field_def.type_info,
+                )
+        return None
 
 
 @dataclass
@@ -683,6 +710,9 @@ def _finalize_type(typ: typesys.TypeVal) -> typesys.TypeVal:
     if isinstance(typ, typesys.Instantiation) and typ.instantiates is clkbuiltins.UUID:
         # Prevent recursion when a schema type is used as a tag type for UUIDs
         return typ
+    if isinstance(typ, statement.InstantiateStmt) and isinstance(typ.typespec, typesys.Instantiation):
+        # Let it fall through to the rest of the checks.
+        typ = typ.typespec
     if isinstance(typ, Schema | ResolvedSchema | typesys.Instantiation):
         try:
             return InstantiatedSchema.from_typespec(typ)
@@ -881,7 +911,11 @@ def retrieve_schema(value: typesys.Value | None) -> InstantiatedSchema | str:
 
     Return: A schema or an error message.
     """
-    if isinstance(value, InstantiateStmt):
+    if isinstance(value, statement.InstantiateStmt):
+        if not isinstance(value.typespec, typesys.Instantiation):
+            return "Value must be an instantiation."
+        if not isinstance(value.typespec.instantiates, Schema | ResolvedSchema):
+            return "Instantiation must be a Schema."
         value = value.typespec
     if not isinstance(value, Schema | typesys.Instantiation):
         return "Argument must be a Schema or Instantiated Schema."
@@ -903,7 +937,7 @@ class SchemaInstance(typesys.ObjectIdentityValue):
         cls: type[SchemaInstance],
         schema_ir: InstantiatedSchema,
         bindings: Iterable[statement.ImmutableBinding],
-        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        error_report_node: node.CstNodeProtocol | None,
         error_report_module: node.Module,
     ) -> SchemaInstance:
         """Create a SchemaInstance from a set of unresolved binding statements.
@@ -926,7 +960,7 @@ class SchemaInstance(typesys.ObjectIdentityValue):
         cls: type[SchemaInstance],
         schema_ir: InstantiatedSchema,
         args: Iterable[tuple[str, typesys.Value]],
-        error_report_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+        error_report_node: node.CstNodeProtocol | None,
         error_report_module: node.Module,
     ) -> SchemaInstance:
         """Create a SchemaInstance from a set of arguments."""
@@ -1048,9 +1082,23 @@ def make_schema_class(  # noqa: PLR0913 (see above)
     return InstantiatedSchema.from_typespec(schema)
 
 
+def _validate_bitset_size(
+    bitset: typesys.Instantiation,
+    cst_node: node.CstNodeProtocol | None,
+    module: node.Module,
+) -> None:
+    """Reject a zero-sized Bitset field type."""
+    bitset_size = bitset.arguments["size"]
+    if isinstance(bitset_size, statement.ImmutableBinding):
+        bitset_size = bitset_size.get_resolved()
+    if isinstance(bitset_size, primitive.DecimalValue) and primitive.unsigned_decimal_to_int(bitset_size) == 0:
+        msg = node.append_error_line(cst_node=cst_node, module=module, msg="Bitset size must be greater than zero")
+        raise ValueError(msg)
+
+
 def _resolve_field_type(
     type_info: typesys.TypeVal | ParameterRef | expr.TypeExpression | typesys.InferenceVar,
-    cst_node: node.CstNodeType,  # pyright: ignore[reportInvalidTypeVarUse] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy
+    cst_node: node.CstNodeProtocol | None,
     module: node.Module,
 ) -> typesys.TypeVal | ParameterRef:
     """Resolve a field type expression into a TypeVal or ParameterRef.
@@ -1094,6 +1142,13 @@ def _resolve_field_type(
             msg=f"Type {result.name} is not a valid field type.",
         )
         raise TypeError(msg)
+
+    if isinstance(result, typesys.Instantiation) and result.instantiates is tensor_builtins.TENSOR:
+        tensor_builtins.resolve_tensor_parameters(result)
+
+    if isinstance(result, typesys.Instantiation) and result.instantiates is clkbuiltins.BITSET:
+        _validate_bitset_size(result, cst_node, module)
+
     if isinstance(result, typesys.TypeVal) and result.generic_parameters() is not None:
         msg = node.append_error_line(
             cst_node=cst_node,
@@ -1335,75 +1390,3 @@ def _are_types_compatible(old_type: typesys.TypeVal, new_type: typesys.TypeVal) 
 
     # If none of the checks determined compatibility, types are incompatible
     return False
-
-
-@dataclass
-class InstantiateStmt(typesys.TypeDef, node.DocableEntity, node.CstNode[cst.InstantiateStmt]):
-    """IR Node representing an instantiate statement in low boilerplate clockwork files.
-
-    Attributes:
-        typespec: Instantiated schema
-        attributes: Outer attributes
-    """
-
-    typespec: expr.InstantiateExpr | typesys.Instantiation
-    attributes: node.ClkAttributes = dc_field(repr=False)
-
-    @classmethod
-    def from_cst(
-        cls: type[InstantiateStmt],
-        cst_node: cst.InstantiateStmt,
-        module: node.Module,
-    ) -> InstantiateStmt:
-        """Construct an IR node from a CST node."""
-        if module.terminals is None:
-            msg = "Cannot construct IR nodes from CST without a TerminalSource"
-            raise ValueError(msg)
-        attributes = module.handle_outer_attrs(cst_node.maybe_clk_outer_attrs())
-        assert attributes is not None
-        doc = node.Doc.maybe_from_cst(cst_node.maybe_doc(), module)
-        name = ""
-        if (cst_name := cst_node.maybe_name()) is not None:
-            name = get_span(cst_name.child_value(), module.terminals)
-        typespec = expr.Expr.from_cst(cst_node.child_typespec(), module)
-        if not isinstance(typespec, expr.InstantiateExpr):
-            msg = node.append_error_line(
-                cst_node.child_typespec(), module, "Instantiate statement expects a schema instantiation"
-            )
-            raise TypeError(msg)
-
-        return cls(
-            doc=doc,
-            module=module,
-            cst_node=cst_node,
-            type_info=clkbuiltins.TYPE_TYPE,
-            scope=module.inner_scope,
-            name=name,
-            typespec=typespec,
-            attributes=attributes,
-        )
-
-    def resolve(self) -> None:
-        """Perform finalization of the IR."""
-        if not isinstance(self.typespec, expr.InstantiateExpr):
-            msg = node.append_error_line(self, self.module, f"Attempt to resolve instantiate statement twice: {self}")
-            raise RuntimeError(msg)  # noqa: TRY004 (Resolving twice is a runtime error)
-
-        eval_result = self.typespec.evaluate()
-        if not isinstance(eval_result, typesys.Instantiation):
-            msg = node.append_error_line(
-                self.cst_node, self.module, "Error in type exression for instantiate statement"
-            )
-            raise TypeError(msg)
-        if not isinstance(eval_result.instantiates, Schema):
-            msg = node.append_error_line(
-                self.cst_node, self.module, "Instantiate statement expects a schema instantiation"
-            )
-            raise TypeError(msg)
-        self.typespec = eval_result
-
-    @override
-    def value_key(self) -> str:
-        """Generate a comparable, hashable, string representation of this value."""
-        assert isinstance(self.typespec, typesys.Instantiation)
-        return self.typespec.value_key()

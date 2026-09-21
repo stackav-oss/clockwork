@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -11,6 +11,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
@@ -196,8 +197,10 @@ public:
   /// Copy a file
   /// @param[in] old_path Old file path
   /// @param[in] new_path New file path
+  /// @param[in] block_size Block size to use when copying the file
   /// @return System error on failure
-  [[nodiscard]] jewels::expected<void, ErrorCode> copy_file(std::string_view old_path, std::string_view new_path);
+  [[nodiscard]] jewels::expected<void, ErrorCode>
+  copy_file(std::string_view old_path, std::string_view new_path, size_t block_size = SSIZE_MAX);
 
   /// Create a directory
   /// @param[in] path Directory path
@@ -218,6 +221,13 @@ public:
   /// @return Error condition on failure
   [[nodiscard]] jewels::expected<void, ErrorCode>
   create_symlink(std::string_view target_path, std::string_view link_path);
+
+  /// Create a hard link named link_path that contains the string target_path
+  /// @param[in] target_path Target path
+  /// @param[in] link_path Link path
+  /// @return Error condition on failure
+  [[nodiscard]] jewels::expected<void, ErrorCode>
+  create_hardlink(std::string_view target_path, std::string_view link_path);
 
   /// Read a symbolic link
   /// @param[in] link_path Symbolic link path
@@ -303,6 +313,11 @@ public:
   /// indicating the reason for failure.
   [[nodiscard]] jewels::expected<size_t, ErrorCode> remove_all(std::string_view path);
 
+  /// Search for an executable in the PATH environment variable
+  /// @param[in] binary_name Name of the binary to search for
+  /// @return Path to the first matching executable found, or ENOENT if not found
+  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> search_path(std::string_view binary_name);
+
   /// Inject an error in a future call to copy_file
   /// @param[in] error_code Error code to inject
   /// @param[in] skip_count Number of calls to skip before injecting the error
@@ -368,10 +383,10 @@ public:
   /// @param[in] skip_count Number of calls to skip before injecting the error
   void inject_mkdir_error(int32_t error_code, size_t skip_count = 0U);
 
-  /// Inject an error in a future call to symlink
+  /// Inject an error in a future call to create_symlink/create_hardlink
   /// @param[in] error_code Error code to inject
   /// @param[in] skip_count Number of calls to skip before injecting the error
-  void inject_symlink_error(int32_t error_code, size_t skip_count = 0U);
+  void inject_link_error(int32_t error_code, size_t skip_count = 0U);
 
   /// Inject an error in a future call to readlink
   /// @param[in] error_code Error code to inject
@@ -387,6 +402,15 @@ public:
   /// @param[in] error_code Error code to inject
   /// @param[in] skip_count Number of calls to skip before injecting the error
   void inject_remove_error(int32_t error_code, size_t skip_count = 0U);
+
+  /// Inject an error in a future call to search_path
+  /// @param[in] error_code Error code to inject
+  /// @param[in] skip_count Number of calls to skip before injecting the error
+  void inject_search_path_error(int32_t error_code, size_t skip_count = 0U);
+
+  /// Inject a successful result for search_path (bypasses actual search)
+  /// @param[in] path Path to return from search_path
+  void inject_search_path_result(const filesystem::Path& path);
 
 private:
   /// Test whether an error should be injected
@@ -442,7 +466,7 @@ private:
   std::optional<InjectedErrorState> maybe_inject_mkdir_error_state_;
 
   /// Error injection state for symlink
-  std::optional<InjectedErrorState> maybe_inject_symlink_error_state_;
+  std::optional<InjectedErrorState> maybe_inject_link_error_state_;
 
   /// Error injection state for readlink
   std::optional<InjectedErrorState> maybe_inject_readlink_error_state_;
@@ -452,6 +476,12 @@ private:
 
   /// Error injection state for remove/remove_all
   std::optional<InjectedErrorState> maybe_inject_remove_error_state_;
+
+  /// Error injection state for search_path
+  std::optional<InjectedErrorState> maybe_inject_search_path_error_state_;
+
+  /// Injected successful result for search_path (bypasses search)
+  std::optional<filesystem::Path> injected_search_path_result_;
 };
 
 } // namespace jewels::filesystem::testing

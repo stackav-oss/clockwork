@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -54,7 +54,6 @@ namespace clockwork_logging
     jewels::log_cerr_error("{}", exc.what());
     return jewels::unexpected(LogError::failed_to_load_metrics);
   }
-  __builtin_unreachable();
 }
 
 /// Print a string encoded schema definition
@@ -112,7 +111,7 @@ void print_metadata(const std::vector<TopicMetadata>& log_metadata, bool verbose
   fmt::print("\n");
   for (const auto& metadata : log_metadata)
   {
-    fmt::print("{}\n", metadata.name);
+    fmt::print("{}{}\n", metadata.name, metadata.is_amended ? " (AMENDED)" : "");
     fmt::print("    Type: {}\n", metadata.type);
     if (verbose)
     {

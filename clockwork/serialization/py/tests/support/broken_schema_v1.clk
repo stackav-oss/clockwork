@@ -84,6 +84,24 @@ schema BrokenRemovedV1
   }
 }
 
+// Broken schema version 1
+schema BrokenAddedV1
+{
+  uuid: f0ec9973-7ba2-4715-b160-18f8448ae630;
+  fields
+  {
+    // Integer field1
+    #1 integer_field1: Int64;
+
+    // Integer field2
+    #2 integer_field2: Int64;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
 // Strong type
 strong_type StrongTypeV1
 {
@@ -158,22 +176,13 @@ enum BrokenEnumRemovedTypeV1
   values
   {
     // Value 1
-    #1 value1 default
-    {
-      underlying_value: 0;
-    }
+    #1 value1 default { underlying_value: 0; }
 
     // Value 2
-    #2 value2
-    {
-      underlying_value: 1;
-    }
+    #2 value2 { underlying_value: 1; }
 
     // Value 3
-    #3 value3
-    {
-      underlying_value: 2;
-    }
+    #3 value3 { underlying_value: 2; }
   }
 }
 
@@ -185,5 +194,34 @@ schema BrokenEnumRemovedV1
   {
     // Enum field
     #1 enum_field: BrokenEnumRemovedTypeV1;
+  }
+}
+
+// Broken enum type
+enum BrokenEnumAddedTypeV1
+{
+  uuid: 7d24dbf9-850f-459c-be1d-892adfa398b7;
+  values
+  {
+    // Value 1
+    #1 value1 default { underlying_value: 0; }
+
+    // Value 2
+    #2 value2 { underlying_value: 1; }
+  }
+  history
+  {
+    version: 2;
+  }
+}
+
+// Broken schema version 1
+schema BrokenEnumAddedV1
+{
+  uuid: 27728d5c-6d00-41aa-9ef0-b23d22ef75ad;
+  fields
+  {
+    // Enum field
+    #1 enum_field: BrokenEnumAddedTypeV1;
   }
 }

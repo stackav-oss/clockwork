@@ -1,10 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/data_source_loader.hh"
@@ -30,11 +30,12 @@ namespace clockwork::scaffolding
 /// @param first_message_cache cache of first messages for data source restoration
 /// @return a set of publishers that back serializable state
 ///
-[[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::ShmPublisher>>, jewels::MonoError> setup_states(
+[[nodiscard]] jewels::expected<std::pmr::vector<std::shared_ptr<pinion::AbstractPublisher>>, jewels::MonoError>
+setup_states(
   std::span<const Tappy<common::StateInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   const MemResMap& memres_map,
-  pinion::ShmChannelFactory& factory,
+  pinion::AbstractChannelFactory& factory,
   AbstractCasing& casing,
   std::span<const Tappy<common::DataSource<>>> data_sources,
   const FirstMessageCache& first_message_cache);

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -15,6 +15,9 @@ clk(
         "metrics_channel_metadata_config_clk_cc.cc",
         "metrics_channel_metadata_config_clk_cc.hh",
         "metrics_channel_metadata_config_clk_cc.inl",
+        "metrics_channel_metadata_config_clk_cc_types.cc",
+        "metrics_channel_metadata_config_clk_cc_types.hh",
+        "metrics_channel_metadata_config_clk_cc_types.inl",
     ],
     cpp_deps = ["//clockwork/common:process_description_clk_cc"],
     generate = ["cpp"],
@@ -32,9 +35,15 @@ clk(
         "metrics_channel_metadata_init_clk_cc.cc",
         "metrics_channel_metadata_init_clk_cc.hh",
         "metrics_channel_metadata_init_clk_cc.inl",
+        "metrics_channel_metadata_init_clk_cc_cog.cc",
+        "metrics_channel_metadata_init_clk_cc_cog.hh",
+        "metrics_channel_metadata_init_clk_cc_cog.inl",
         "metrics_channel_metadata_init_clk_cc_dial.cc",
         "metrics_channel_metadata_init_clk_cc_dial.hh",
         "metrics_channel_metadata_init_clk_cc_dial.inl",
+        "metrics_channel_metadata_init_clk_cc_types.cc",
+        "metrics_channel_metadata_init_clk_cc_types.hh",
+        "metrics_channel_metadata_init_clk_cc_types.inl",
     ],
     cpp_deps = [":metrics_channel_metadata_config_clk_cc"],
     generate = [
@@ -50,7 +59,11 @@ cc_library(
     deps = [
         ":metrics_channel_metadata_config_clk_cc",
         ":metrics_channel_metadata_init_clk_cc_dial",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
+        "//jewels/container:compare",
         "//jewels/container/tap:var_array",
+        "//jewels/uuid",
     ],
 )

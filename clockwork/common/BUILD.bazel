@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -11,6 +11,7 @@ exports_files([
     "multi_subscriber_config.clk",
     "platform_diagnostics_config.clk",
     "signal_metadata_config.clk",
+    "simplelaunch_runner_config.clk",
 ])
 
 cc_library(
@@ -20,9 +21,13 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":abstract_cog_queue",
+        ":abstract_timer",
         ":cog_envelope",
         ":cog_execution_error_clk_cc",
         ":forward",
+        "//clockwork/pinion:observer",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/time:sync_time",
@@ -83,6 +88,9 @@ clk(
         "cog_execution_error_clk_cc.cc",
         "cog_execution_error_clk_cc.hh",
         "cog_execution_error_clk_cc.inl",
+        "cog_execution_error_clk_cc_types.cc",
+        "cog_execution_error_clk_cc_types.hh",
+        "cog_execution_error_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
@@ -95,6 +103,9 @@ clk(
         "cog_gpu_assignment_config_clk_cc.cc",
         "cog_gpu_assignment_config_clk_cc.hh",
         "cog_gpu_assignment_config_clk_cc.inl",
+        "cog_gpu_assignment_config_clk_cc_types.cc",
+        "cog_gpu_assignment_config_clk_cc_types.hh",
+        "cog_gpu_assignment_config_clk_cc_types.inl",
         "cog_gpu_assignment_config_clk_py.py",
     ],
     cpp_deps = [":process_description_clk_cc"],
@@ -115,8 +126,16 @@ clk(
         "constants_clk_cc.cc",
         "constants_clk_cc.hh",
         "constants_clk_cc.inl",
+        "constants_clk_cc_types.cc",
+        "constants_clk_cc_types.hh",
+        "constants_clk_cc_types.inl",
+        "constants_clk_py.py",
     ],
-    generate = ["cpp"],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -128,14 +147,20 @@ cc_library(
     hdrs = ["exec_tools.hh"],
     visibility = ["//visibility:public"],
     deps = [
-        "//clockwork/pinion:shm_channel",
-        "//clockwork/pinion:shm_channel_factory",
+        ":process_description_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:abstract_channel_factory",
+        "//clockwork/pinion:channel_config_clk_cc",
+        "//clockwork/pinion:meta_channel_factory",
         "//clockwork/runners:channel_publisher",
         "//clockwork/runners:deterministic_channel_handler",
+        "//jewels/container:compare",
         "//jewels/filesystem:error_code",
         "//jewels/filesystem:file",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/meta:concepts",
         "//jewels/std:expected",
@@ -159,6 +184,9 @@ clk(
         "multi_subscriber_config_clk_cc.cc",
         "multi_subscriber_config_clk_cc.hh",
         "multi_subscriber_config_clk_cc.inl",
+        "multi_subscriber_config_clk_cc_types.cc",
+        "multi_subscriber_config_clk_cc_types.hh",
+        "multi_subscriber_config_clk_cc_types.inl",
     ],
     cpp_deps = [":process_description_clk_cc"],
     generate = ["cpp"],
@@ -174,6 +202,9 @@ clk(
         "platform_diagnostics_config_clk_cc.cc",
         "platform_diagnostics_config_clk_cc.hh",
         "platform_diagnostics_config_clk_cc.inl",
+        "platform_diagnostics_config_clk_cc_types.cc",
+        "platform_diagnostics_config_clk_cc_types.hh",
+        "platform_diagnostics_config_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":process_description_clk_cc",
@@ -183,6 +214,7 @@ clk(
     minimize_builtin_deps = True,
     visibility = ["//visibility:public"],
     deps = [
+        ":constants_clk",
         ":process_description_clk",
         "//clockwork/diagnostics:report_clk",
     ],
@@ -195,14 +227,23 @@ clk(
         "process_description_clk_cc.cc",
         "process_description_clk_cc.hh",
         "process_description_clk_cc.inl",
+        "process_description_clk_cc_types.cc",
+        "process_description_clk_cc_types.hh",
+        "process_description_clk_cc_types.inl",
         "process_description_clk_py.py",
     ],
+    cpp_deps = ["//clockwork/pinion:channel_config_clk_cc"],
     generate = [
         "cpp",
         "py",
     ],
     minimize_builtin_deps = True,
+    py_deps = ["//clockwork/pinion:channel_config_clk_py"],
     visibility = ["//visibility:public"],
+    deps = [
+        ":constants_clk",
+        "//clockwork/pinion:channel_config_clk",
+    ],
 )
 
 clk(
@@ -212,6 +253,9 @@ clk(
         "signal_metadata_config_clk_cc.cc",
         "signal_metadata_config_clk_cc.hh",
         "signal_metadata_config_clk_cc.inl",
+        "signal_metadata_config_clk_cc_types.cc",
+        "signal_metadata_config_clk_cc_types.hh",
+        "signal_metadata_config_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":constants_clk_cc",
@@ -224,4 +268,49 @@ clk(
         ":constants_clk",
         ":process_description_clk",
     ],
+)
+
+clk(
+    name = "simplelaunch_runner_config_clk",
+    srcs = ["simplelaunch_runner_config.clk"],
+    outs = [
+        "simplelaunch_runner_config_clk_cc.cc",
+        "simplelaunch_runner_config_clk_cc.hh",
+        "simplelaunch_runner_config_clk_cc.inl",
+        "simplelaunch_runner_config_clk_cc_types.cc",
+        "simplelaunch_runner_config_clk_cc_types.hh",
+        "simplelaunch_runner_config_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":platform_diagnostics_config_clk_cc",
+        ":process_description_clk_cc",
+    ],
+    generate = ["cpp"],
+    minimize_builtin_deps = True,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":constants_clk",
+        ":platform_diagnostics_config_clk",
+        ":process_description_clk",
+    ],
+)
+
+clk(
+    name = "system_metadata_clk",
+    srcs = ["system_metadata.clk"],
+    outs = [
+        "system_metadata_clk_cc.cc",
+        "system_metadata_clk_cc.hh",
+        "system_metadata_clk_cc.inl",
+        "system_metadata_clk_cc_types.cc",
+        "system_metadata_clk_cc_types.hh",
+        "system_metadata_clk_cc_types.inl",
+        "system_metadata_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+    visibility = ["//visibility:public"],
 )

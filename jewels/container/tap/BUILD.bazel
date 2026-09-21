@@ -1,13 +1,24 @@
-load("//tools/rules:python.bzl", "py_library")
-
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
+load("//tools/rules:python.bzl", "py_library")
+
+cc_library(
+    name = "bitset",
+    srcs = ["bitset.inl"],
+    hdrs = ["bitset.hh"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+    ],
+)
 
 cc_library(
     name = "constants",
     hdrs = ["constants.hh"],
+    visibility = ["//jewels/container/tap/tests:__pkg__"],
 )
 
 cc_library(
@@ -17,6 +28,8 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":constants",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/memory:aligned_storage",
         "//jewels/meta:concepts",
         "//jewels/std:span",
@@ -65,7 +78,7 @@ cc_library(
     deps = [
         "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
-        "@boost//:iterator",
+        "@boost.iterator",
     ],
 )
 
@@ -87,6 +100,14 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "tensor",
+    srcs = ["tensor.inl"],
+    hdrs = ["tensor.hh"],
+    visibility = ["//visibility:public"],
+    deps = ["//jewels/meta:integer_sequence"],
+)
+
 py_library(
     name = "value_serdes",
     srcs = ["value_serdes.py"],
@@ -104,6 +125,8 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":constants",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/memory:aligned_storage",
         "//jewels/meta:concepts",
         "//jewels/std:expected",
@@ -116,5 +139,9 @@ cc_library(
     srcs = ["var_string.inl"],
     hdrs = ["var_string.hh"],
     visibility = ["//visibility:public"],
-    deps = [":var_array"],
+    deps = [
+        ":var_array",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+    ],
 )

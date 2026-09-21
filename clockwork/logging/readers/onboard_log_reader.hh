@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,8 +7,10 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
 #include "clockwork/logging/onboard/log_format.hh"
+#include "clockwork/logging/onboard/offboard_buffered_reader.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
@@ -28,41 +30,52 @@
 namespace clockwork_logging
 {
 
-/// Mcap reader implementation of the log reader interface
-class OnboardLogReader : public AbstractLogReader
+/// Onboard log reader policy
+struct OnboardLogReaderPolicy
 {
-  struct OnboardReaderPolicy
-  {
-    /// Filesystem library type
-    using FilesystemType = jewels::filesystem::Filesystem;
+  /// S3 utility library type
+  using S3UtilsType = offboard::S3Utils;
 
-    /// Read buffer size
-    static constexpr size_t read_buffer_size = 2U * jewels::math::constants::bytes_per_mib<size_t>;
+  /// Filesystem library type
+  using FilesystemType = jewels::filesystem::Filesystem;
 
-    /// Maximum read size
-    static constexpr size_t max_read_size = onboard::max_log_record_size;
+  /// Read buffer size
+  static constexpr size_t read_buffer_size = 2U * jewels::math::constants::bytes_per_mib<size_t>;
 
-    /// Minimum size of reads when recovering from I/O error
-    static constexpr size_t min_io_error_recover_read_size = 512U;
-  };
+  /// Maximum read size
+  static constexpr size_t max_read_size = onboard::max_log_record_size;
 
+  /// Minimum size of reads when recovering from I/O error
+  static constexpr size_t min_io_error_recover_read_size = 512U;
+};
+
+namespace detail
+{
+
+/// Offboard reader implementation of the log reader interface
+/// @tparam BufferedReaderType Buffered reader implementation type
+template <typename BufferedReaderType>
+class OnboardLogReaderImpl : public AbstractLogReader
+{
 public:
   /// Constructor
   /// @param[in] log_uri Log URI
   /// @param[in] maybe_log_interval The interval to read from the log
   /// @param[in] maybe_relative_interval The interval to read from the log relative to the sart of the log
   /// @param[in] decompress_option Option for whether to decompress lite-compressed messages found in the log
-  OnboardLogReader(
+  /// @param[in] buffered_reader Buffered reader used to read log files
+  OnboardLogReaderImpl(
     std::string_view log_uri,
     std::optional<LogInterval> maybe_log_interval,
     std::optional<RelativeInterval> maybe_relative_interval,
-    DecompressOption decompress_option);
+    DecompressOption decompress_option,
+    std::shared_ptr<BufferedReaderType> buffered_reader);
 
-  ~OnboardLogReader() override = default;
-  OnboardLogReader(const OnboardLogReader&) = delete;
-  OnboardLogReader& operator=(const OnboardLogReader&) = delete;
-  OnboardLogReader(OnboardLogReader&&) = delete;
-  OnboardLogReader& operator=(OnboardLogReader&&) = delete;
+  ~OnboardLogReaderImpl() override = default;
+  OnboardLogReaderImpl(const OnboardLogReaderImpl&) = delete;
+  OnboardLogReaderImpl& operator=(const OnboardLogReaderImpl&) = delete;
+  OnboardLogReaderImpl(OnboardLogReaderImpl&&) = delete;
+  OnboardLogReaderImpl& operator=(OnboardLogReaderImpl&&) = delete;
 
   /// Get the type of log reader
   /// @returns The log reader type
@@ -101,12 +114,12 @@ public:
   /// Read the next message out of the log.
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] std::optional<LoggedMessage> next_message() override;
+  [[nodiscard]] std::optional<LoggedMessage> next_message_impl() override;
 
   /// Read the next message out of the log with zero copy
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] std::optional<ZeroCopyLoggedMessage> zero_copy_next_message() override;
+  [[nodiscard]] std::optional<ZeroCopyLoggedMessage> zero_copy_next_message_impl() override;
 
 private:
   /// Read the log and load the topic metadata
@@ -116,7 +129,7 @@ private:
   jewels::memory::MemoryResource memory_resource_;
 
   /// Log reader
-  onboard::Reader<onboard::BufferedReader<OnboardReaderPolicy>> reader_;
+  onboard::Reader<BufferedReaderType> reader_;
 
   /// Topic metadata pointer
   std::unique_ptr<std::vector<TopicMetadata>> topic_metadata_ptr_;
@@ -138,6 +151,18 @@ private:
 
   /// Option for whether to decompress lite-compressed messages found in the log
   DecompressOption decompress_option_;
+
+  /// Buffered reader
+  std::shared_ptr<BufferedReaderType> buffered_reader_;
 };
 
+} // namespace detail
+
+using OnboardBufferedReader = onboard::BufferedReader<OnboardLogReaderPolicy>;
+using OnboardLogReader = detail::OnboardLogReaderImpl<OnboardBufferedReader>;
+using OffboardOnboardBufferedReader = onboard::OffboardBufferedReader<OnboardLogReaderPolicy>;
+using OffboardOnboardLogReader = detail::OnboardLogReaderImpl<OffboardOnboardBufferedReader>;
+
 } // namespace clockwork_logging
+
+#include "clockwork/logging/readers/onboard_log_reader.inl"

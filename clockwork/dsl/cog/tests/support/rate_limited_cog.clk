@@ -6,17 +6,39 @@ use clockwork::dsl::tests::support::clk_hellomsg;
 // Doc.
 cog RateLimitedCog
 {
-    outputs
+  outputs
+  {
+    output_a: Tappy<clk_hellomsg::HelloMsg>;
+    output_b: Tappy<clk_hellomsg::HelloMsg>;
+    output_c: Tappy<clk_hellomsg::HelloMsg>;
+  }
+  execution
+  {
+    rate limit output_a: 1 every 1s;
+    rate limit output_b: 3 every 15ms;
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
+}
+
+// Rate-limited Cog with legacy generated metrics enabled for schema/code-generation coverage.
+cog RateLimitedMetricsCog
+{
+  outputs
+  {
+    metered_output: Tappy<clk_hellomsg::HelloMsg>
     {
-        output_a: Tappy<clk_hellomsg::HelloMsg>;
-        output_b: Tappy<clk_hellomsg::HelloMsg>;
-        output_c: Tappy<clk_hellomsg::HelloMsg>;
+      connect_optional: true;
     }
-    execution
-    {
-        rate limit output_a: 1 every 1s;
-        rate limit output_b: 3 every 15ms;
-        condition periodic: time_since_last_exec(10ms);
-        execute when: periodic;
-    }
+  }
+  execution
+  {
+    rate limit metered_output: 2 every 1s;
+    condition periodic: time_since_last_exec(10ms);
+    execute when: periodic;
+  }
+  metrics_options
+  {
+    enabled: true;
+  }
 }

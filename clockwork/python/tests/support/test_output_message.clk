@@ -2,9 +2,9 @@
 #![cpp(namespace=clockwork::python::tests)]
 
 // Test Output Message
-schema TestOutputMessage {
+schema TestOutputMessage
+{
   uuid: 5853543d-f5c5-433d-9c87-e85b6cc5550f;
-
   fields
   {
     // Time of validity

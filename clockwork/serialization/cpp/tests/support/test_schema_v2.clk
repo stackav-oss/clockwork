@@ -19,6 +19,17 @@ schema SmokeTestSchemaV2
   }
 }
 
+// Test schema containing a non-byte-aligned Bitset.
+schema BitsetTestSchemaV2
+{
+  uuid: bc5ae0bd-3e6d-4ee4-84d5-08e6e3705193;
+  fields
+  {
+    // Sensor availability mask.
+    #1 sensor_present: Bitset<10>;
+  }
+}
+
 // Test schema version 2 (unchanged from version 1)
 schema ParameterizedSchemaV2
 {
@@ -37,7 +48,6 @@ schema ParameterizedSchemaV2
     #3 vararray_field: VarArray<value_type, max_size=max_size>;
   }
 }
-
 
 // Test schema version 2
 schema Int8UpgradeTestSchemaV2
@@ -81,7 +91,7 @@ schema Int8UpgradeTestSchemaV2
   history
   {
     version: 11;
-    legacy_became: [2->11, 3->12, 4->13, 5->14, 6->15, 7->16, 8->17, 9->18, 10->19];
+    legacy_became: [2 -> 11, 3 -> 12, 4 -> 13, 5 -> 14, 6 -> 15, 7 -> 16, 8 -> 17, 9 -> 18, 10 -> 19];
   }
 }
 
@@ -651,35 +661,45 @@ schema DurationUpgradeTestSchemaV2
 }
 
 // Test strong type
-#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int32)]
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh",
+type_namespace=clockwork::tests,
+type_factory=make_strong_int32)]
 strong_type StrongInt32
 {
   underlying_type: Int32;
 }
 
 // Test strong type
-#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_int64)]
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh",
+type_namespace=clockwork::tests,
+type_factory=make_strong_int64)]
 strong_type StrongInt64
 {
   underlying_type: Int64;
 }
 
 // Test strong type
-#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float32)]
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh",
+type_namespace=clockwork::tests,
+type_factory=make_strong_float32)]
 strong_type StrongFloat32
 {
   underlying_type: Float32;
 }
 
 // Test strong type
-#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_float64)]
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh",
+type_namespace=clockwork::tests,
+type_factory=make_strong_float64)]
 strong_type StrongFloat64
 {
   underlying_type: Float64;
 }
 
 // Test strong type
-#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh", type_namespace=clockwork::tests, type_factory=make_strong_byte)]
+#[cpp(type_header="clockwork/serialization/cpp/tests/support/strong_type_factory.hh",
+type_namespace=clockwork::tests,
+type_factory=make_strong_byte)]
 strong_type StrongByte
 {
   underlying_type: Byte;
@@ -966,39 +986,24 @@ enum Int8ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
-    {
-      underlying_value: 1;
-    }
+    #6 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #7 value1 default
-    {
-      underlying_value: 0;
-    }
+    #7 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #8 value3_1
-    {
-      underlying_value: 4;
-    }
+    #8 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #9 value5
-    {
-      underlying_value: 16;
-    }
+    #9 value5 { underlying_value: 16; }
   }
   history
   {
     version: 9;
-    legacy_became: [1->6, 2->7, 4->8];
+    legacy_became: [1 -> 6, 2 -> 7, 4 -> 8];
     removed: [3];
   }
 }
@@ -1057,34 +1062,19 @@ enum Int16ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1147,34 +1137,19 @@ enum Int32ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1237,34 +1212,19 @@ enum Int64ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1326,34 +1286,19 @@ enum UInt8ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1416,34 +1361,19 @@ enum UInt16ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1506,34 +1436,19 @@ enum UInt32ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1596,34 +1511,19 @@ enum UInt64ValueEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1686,39 +1586,24 @@ enum UInt8BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #6 value0
-    {
-      underlying_value: 1;
-    }
+    #6 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #7 value1 default
-    {
-      underlying_value: 0;
-    }
+    #7 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #8 value3_1
-    {
-      underlying_value: 4;
-    }
+    #8 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #9 value5
-    {
-      underlying_value: 16;
-    }
+    #9 value5 { underlying_value: 16; }
   }
   history
   {
     version: 9;
-    legacy_became: [1->6, 2->7, 4->8];
+    legacy_became: [1 -> 6, 2 -> 7, 4 -> 8];
     removed: [3];
   }
 }
@@ -1778,34 +1663,19 @@ enum UInt16BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1869,34 +1739,19 @@ enum UInt32BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -1960,34 +1815,19 @@ enum UInt64BitFlagEnumV2
   values
   {
     // Value is 1 in V2
-    #1 value0
-    {
-      underlying_value: 1;
-    }
+    #1 value0 { underlying_value: 1; }
 
     // Value is 0 in V2
-    #2 value1 default
-    {
-      underlying_value: 0;
-    }
+    #2 value1 default { underlying_value: 0; }
 
     // Name is value3_1 in V2
-    #4 value3_1
-    {
-      underlying_value: 4;
-    }
+    #4 value3_1 { underlying_value: 4; }
 
     // Value not changed in v2
-    #5 value4
-    {
-      underlying_value: 8;
-    }
+    #5 value4 { underlying_value: 8; }
 
     // Value added in V2
-    #6 value5
-    {
-      underlying_value: 16;
-    }
+    #6 value5 { underlying_value: 16; }
   }
   history
   {
@@ -2040,25 +1880,24 @@ schema UInt64BitFlagEnumUpgradeTestSchemaV2
 schema SoaElementSchemaV2
 {
   uuid: 8f2a4b91-3c5d-4e8f-9a1b-7d6e5c4f3a2b;
-  options { soa_enabled: true; constructor: source_code_order; }
+  options
+  {
+    soa_enabled: true;
+    constructor: source_code_order;
+  }
   fields
   {
     // ID field (unchanged from version 1)
     #1 id: Int32;
-
     // X coordinate (upgraded from Int32 to Int64)
     #2 x: Int64;
-
     // Y coordinate (upgraded from Float32 to Float64)
     #3 y: Float64;
-
     // W coordinate (new field in version 2 with default value)
     // Note: Z coordinate (#4) was removed in version 2
     #5 w: Float32 = 0.0;
-
     // Nested schema member (upgraded from V1 to V2)
     #6 nested: UpgradedMemberSchemaTypeV2;
-
     // VarArray of schema types (elements upgraded from V1 to V2)
     #7 items: VarArray<UpgradedMemberSchemaTypeV2, max_size=5>;
   }
@@ -2068,7 +1907,6 @@ schema SoaElementSchemaV2
     removed: [4];
   }
 }
-
 // Test schema version 2 with FixedSoa
 schema FixedSoaUpgradeTestSchemaV2
 {
@@ -2079,7 +1917,6 @@ schema FixedSoaUpgradeTestSchemaV2
     #1 soa_field: FixedSoa<SoaElementSchemaV2, size=5>;
   }
 }
-
 // Test schema version 2 with VarSoa
 schema VarSoaUpgradeTestSchemaV2
 {
@@ -2090,7 +1927,6 @@ schema VarSoaUpgradeTestSchemaV2
     #1 soa_field: VarSoa<SoaElementSchemaV2, max_size=10>;
   }
 }
-
 // Test schema for FixedSoa -> VarSoa conversion (version 2)
 schema FixedToVarSoaConversionTestSchemaV2
 {
@@ -2101,7 +1937,6 @@ schema FixedToVarSoaConversionTestSchemaV2
     #1 soa_field: VarSoa<SoaElementSchemaV2, max_size=10>;
   }
 }
-
 // Test schema for VarSoa -> FixedSoa conversion (version 2)
 schema VarToFixedSoaConversionTestSchemaV2
 {
@@ -2112,7 +1947,6 @@ schema VarToFixedSoaConversionTestSchemaV2
     #1 soa_field: FixedSoa<SoaElementSchemaV2, size=3>;
   }
 }
-
 // Test schema for FixedArray -> FixedSoa conversion (version 2)
 // Uses FixedSoa in V2 (converted from FixedArray in V1)
 schema FixedArrayToFixedSoaTestSchemaV2
@@ -2128,7 +1962,6 @@ schema FixedArrayToFixedSoaTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for VarArray -> VarSoa conversion (version 2)
 // Uses VarSoa in V2 (converted from VarArray in V1)
 schema VarArrayToVarSoaTestSchemaV2
@@ -2144,7 +1977,6 @@ schema VarArrayToVarSoaTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for FixedSoa -> FixedArray conversion (version 2)
 // Uses FixedArray in V2 (converted from FixedSoa in V1)
 schema FixedSoaToFixedArrayTestSchemaV2
@@ -2160,7 +1992,6 @@ schema FixedSoaToFixedArrayTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for VarSoa -> VarArray conversion (version 2)
 // Uses VarArray in V2 (converted from VarSoa in V1)
 schema VarSoaToVarArrayTestSchemaV2
@@ -2176,7 +2007,6 @@ schema VarSoaToVarArrayTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for Optional -> FixedSoa conversion (version 2)
 // Uses FixedSoa in V2 (converted from Optional in V1)
 schema OptionalToFixedSoaTestSchemaV2
@@ -2192,7 +2022,6 @@ schema OptionalToFixedSoaTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for Optional -> VarSoa conversion (version 2)
 // Uses VarSoa in V2 (converted from Optional in V1)
 schema OptionalToVarSoaTestSchemaV2
@@ -2208,7 +2037,6 @@ schema OptionalToVarSoaTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for FixedSoa -> Optional conversion (version 2)
 // Uses Optional in V2 (converted from FixedSoa in V1)
 schema FixedSoaToOptionalTestSchemaV2
@@ -2224,7 +2052,6 @@ schema FixedSoaToOptionalTestSchemaV2
     version: 2;
   }
 }
-
 // Test schema for VarSoa -> Optional conversion (version 2)
 // Uses Optional in V2 (converted from VarSoa in V1)
 schema VarSoaToOptionalTestSchemaV2
@@ -2242,3 +2069,95 @@ schema VarSoaToOptionalTestSchemaV2
 }
 instantiate ParameterizedSchemaV2_3: ParameterizedSchemaV2<SmokeTestSchemaV2, 3>;
 instantiate ParameterizedSchemaV2_4: ParameterizedSchemaV2<SmokeTestSchemaV2, 4>;
+// Test schema version 2 for UUID to VarString upgrade
+schema UuidToVarStringUpgradeTestSchemaV2
+{
+  uuid: adadf4aa-4dd2-4f86-84f6-645542ec71e5;
+  fields
+  {
+    // VarString field (upgraded from UUID in version 1)
+    #1 uuid_field: VarString<max_size=37>;
+    // Int32 field (unchanged)
+    #2 int32_field: Int32;
+  }
+  history
+  {
+    version: 3;
+  }
+}
+// First-Class Tensor Representation
+schema FixedArrayToTensorV2
+{
+  uuid: 398ec745-0359-4c90-884f-6a1834631138;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<Float32, [2, 3, 4]>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+// First-Class Tensor Representation
+schema BadTypeFixedArrayToTensorV2
+{
+  uuid: 398ec745-0359-4c90-884f-6a1834631138;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<UInt8, [2, 3, 4]>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+// First-Class Tensor Representation
+schema BadShapeFixedArrayToTensorV2
+{
+  uuid: 398ec745-0359-4c90-884f-6a1834631138;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<Int32, [2, 3, 5]>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+// Tensor Element Change
+schema TensorElementChangeV2
+{
+  uuid: 042abef0-26de-43fc-976f-ae48fb715169;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<Float32, [2, 3, 4]>;
+  }
+  history
+  {
+    version: 2;
+  }
+}
+// Tensor Shape Change w/o bumping version
+schema UnexpectedTensorShapeChangeV2
+{
+  uuid: 042abef0-26de-43fc-976f-ae48fb715169;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<Float32, [2, 3, 5]>;
+  }
+}
+// Tensor Element Change w/o bumping version
+schema UnexpectedTensorElementChangeV2
+{
+  uuid: 1c45b031-54fb-4b10-a3f1-fcfe2afa6dc1;
+  fields
+  {
+    // A tensor.
+    #1 tensor: Tensor<Int32, [2, 3, 4]>;
+  }
+}

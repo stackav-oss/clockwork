@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Utilities for dealing with the Clockwork CST (Concrete Syntax Tree)."""
@@ -8,14 +8,15 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from fltk.fegen.pyrt.terminalsrc import Span, TerminalSource
+from fltk.fegen.pyrt.span_protocol import SpanProtocol
 
 if TYPE_CHECKING:
-    from clockwork.dsl import clockwork_cst as cst
+    from clockwork.dsl import clockwork_cst_protocol as cst
     from clockwork.dsl.ir.module_id import ModuleID
+    from fltk.fegen.pyrt.terminalsrc import TerminalSource
 
 
-def get_span(span: Span, terminals: TerminalSource) -> str:
+def get_span(span: SpanProtocol, terminals: TerminalSource) -> str:
     """Retrieve a source span as a string.
 
     Args:
@@ -28,7 +29,7 @@ def get_span(span: Span, terminals: TerminalSource) -> str:
     return terminals.terminals[span.start : span.end]
 
 
-def span_for_node(node: Any) -> Span | None:  # noqa: ANN401 (Any required to break circular dependency on callers)
+def span_for_node(node: Any) -> SpanProtocol | None:  # noqa: ANN401 (Any required to break circular dependency on callers)
     """Attempt to get a Span for the given Node.
 
     Args:
@@ -37,17 +38,17 @@ def span_for_node(node: Any) -> Span | None:  # noqa: ANN401 (Any required to br
     Returns:
         The source span corresponding to that node if possible, else None.
     """
-    if isinstance(node, Span):
+    if isinstance(node, SpanProtocol):
         return node
     try:
-        if isinstance(node.span, Span):
+        if isinstance(node.span, SpanProtocol):
             return node.span
     except AttributeError:
         pass
     return None
 
 
-def format_line_with_error(span: Span, terminals: TerminalSource, module_id: ModuleID | None) -> str:
+def format_line_with_error(span: SpanProtocol, terminals: TerminalSource, module_id: ModuleID | None) -> str:
     """Format an error string highlighting the source line with the error.
 
     Args:

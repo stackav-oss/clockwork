@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -18,10 +18,10 @@ namespace clockwork::pinion
 {
 
 /// Interval for sending null headers while waiting for an acknowledgement
-static constexpr auto tcp_bridge_null_header_interval = std::chrono::milliseconds(2);
+static constexpr auto tcp_bridge_null_header_interval = std::chrono::milliseconds(20);
 
 /// Minimum interval between sends to keep the TCP connection alive
-static constexpr auto tcp_bridge_keep_alive_interval = std::chrono::milliseconds(200);
+static constexpr auto tcp_bridge_keep_alive_interval = std::chrono::milliseconds(1500);
 
 /// Minimum reportable bridge latency
 static constexpr auto min_reportable_bridge_latency = std::chrono::milliseconds(25);
@@ -33,7 +33,7 @@ static constexpr auto min_reportable_bridge_bulk_data_latency = std::chrono::mil
 constexpr auto max_bridge_bulk_data_transmit_delay = std::chrono::milliseconds(1900);
 
 /// Time to wait before closing and reopening a stuck TCP connection
-static constexpr auto tcp_bridge_reconnect_interval = tcp_bridge_keep_alive_interval * 10;
+static constexpr auto tcp_bridge_reconnect_interval = std::chrono::seconds(1);
 
 /// TCP bridge header magic number size
 static constexpr size_t tcp_message_header_magic_number_size = 7U;
@@ -113,6 +113,8 @@ struct TcpBridgeClientServerCounters
   std::chrono::nanoseconds max_transfer_time{};
   std::chrono::nanoseconds max_compression_time{};
   std::chrono::nanoseconds max_bridge_latency{};
+  uint64_t null_header_count{};
+  uint64_t keep_alive_count{};
 };
 
 /// Update the client or server counters
@@ -176,6 +178,11 @@ struct TcpBridgeDiagnosticsCounters
   /// Comparison operator
   auto operator<=>(const TcpBridgeDiagnosticsCounters&) const = default;
 };
+
+/// Combine counters from a diagnostics report into the counters for a bridge status report
+/// @param[in] source Source counters to combine from
+/// @param[in,out] dest Destination counters to combine into
+void combine_diagnostics_counters(const TcpBridgeDiagnosticsCounters& source, TcpBridgeDiagnosticsCounters& dest);
 
 /// Thread safe container for the counters reported in the TCP bridge diagnostics
 class TcpBridgeDiagnosticsState

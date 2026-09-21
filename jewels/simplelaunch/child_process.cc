@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/simplelaunch/child_process.hh"
@@ -11,7 +11,7 @@
 #include "jewels/memory/pointers.hh"
 #include "jewels/simplelaunch/config.hh"
 #include "jewels/simplelaunch/cpu_affinity.hh"
-#include "jewels/simplelaunch/service_definition.hh"
+#include "jewels/simplelaunch/simplelaunch_status_clk_cc.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 #include "jewels/utility/fix_clockwork_path.hh"
@@ -84,7 +84,7 @@ ChildProcessInfo::ChildProcessInfo(
   set_state(ProcessState::not_running, false, 0);
 }
 
-const ProcessInfo& ChildProcessInfo::get_process_info() const noexcept
+const ::jewels::simplelaunch::v1::ProcessInfo& ChildProcessInfo::get_process_info() const noexcept
 {
   return process_info_;
 }

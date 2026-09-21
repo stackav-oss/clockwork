@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """PythonCogDial-related IR nodes."""
@@ -9,10 +9,13 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Final
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.bazel.targets import Label, get_bazel_label_for_clk_label, get_bazel_label_for_python_type
+
+# pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 from clockwork.dsl.cog.cppcog import to_camel, to_dial_name
 from clockwork.dsl.ir import (
+    aligner,
     clkbuiltins,
     cog,
     expr,
@@ -30,7 +33,7 @@ from clockwork.dsl.python import py_context
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from clockwork.dsl import clockwork_cst as cst
+    from clockwork.dsl import clockwork_cst_protocol as cst
 
 PYTHON_STATE_NAME: Final = "python_state"
 
@@ -201,6 +204,7 @@ class PythonCogDial:
     input_types: dict[str, PythonDialType]
     output_types: dict[str, PythonDialType]
     mutable_states: set[str]
+    wrapper_type: node.PyCogWrapperType
 
     @classmethod
     def _dial_types_from_cst(
@@ -246,6 +250,7 @@ class PythonCogDial:
             input_types=input_types,
             output_types=output_types,
             mutable_states=set(),
+            wrapper_type=node.PyCogWrapperType.nanobind,
         )
 
     @classmethod
@@ -302,6 +307,7 @@ class PythonCogDial:
             input_types=input_types,
             output_types=output_types,
             mutable_states=mutable_states,
+            wrapper_type=wrapper_type,
         )
 
     def _resolve_dial_types(
@@ -361,10 +367,11 @@ class PythonCogDial:
         self.cog_ir = typespec
         self.dial_class_name = to_dial_name(self.cog_ir.name)
         self.cog_ir = typespec
-        config_repos = {
-            config_key: config_value.get_resolved().message_type.interface_ir.module.module_id.repo
-            for config_key, config_value in self.cog_ir.configs.items()
-        }
+        config_repos: dict[str, str] = {}
+        for config_key, config_value in self.cog_ir.configs.items():
+            message_type = config_value.get_resolved().message_type
+            if isinstance(message_type, schema_reg.InterfaceInfo):
+                config_repos[config_key] = message_type.interface_ir.module.module_id.repo
         self._resolve_dial_types("configs", self.config_types, config_repos)
         if PYTHON_STATE_NAME not in self.cog_ir.states:
             msg = self.cog_ir.append_error_line(f"Missing mandatory {PYTHON_STATE_NAME} in cog states")
@@ -592,25 +599,59 @@ class {input_class_name}:
             dial_type = self.input_types[input_name]
             assert isinstance(dial_type.python_type, str)
             python_chunks.append(self._render_input(input_name, dial_type.python_type))
+        # Aligned input groups expose one regular input wrapper per upstream aligner input.
+        for aligned_name, aligned_def in self.cog_ir.aligned_inputs.items():
+            aligned_input_members: list[str] = []
+            # Compiler validation resolves aligned inputs to aligners.
+            assert isinstance(aligned_def.aligned_type, aligner.Aligner)
+            for upstream_name, aligner_input in aligned_def.aligned_type.inputs.items():
+                input_name = f"{aligned_name}_{upstream_name}"
+                input_type = PythonDialType.from_interface_instantiation(
+                    aligner_input.get_interface_info().interface_ir,
+                    self.wrapper_type,
+                )
+                assert isinstance(input_type.python_type, str)
+                python_chunks.append(self._render_input(input_name, input_type.python_type))
+                aligned_input_members.append(upstream_name)
+            python_chunks.append(self._render_aligned_input(aligned_name, aligned_input_members))
         assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
 class {get_inputs_class_name(self.dial_class_name)}:
 """)
-        if not self.input_types:
+        if not self.input_types and not self.cog_ir.aligned_inputs:
             python_chunks.impl.append("    pass")
         for input_name in self.cog_ir.inputs:
             assert self.dial_class_name
             python_chunks.impl.append(f"    {input_name}: {get_input_class_name(self.dial_class_name, input_name)}")
+        for aligned_name in self.cog_ir.aligned_inputs:
+            python_chunks.impl.append(f"    {aligned_name}: {get_input_class_name(self.dial_class_name, aligned_name)}")
 
         return python_chunks
 
-    def _render_output(self, output_name: str, output_type: str) -> py_context.PythonChunks:
+    def _render_aligned_input(self, aligned_name: str, upstream_names: list[str]) -> py_context.PythonChunks:
+        """Render a nested aligned input group for the python dial inputs definition."""
+        python_chunks = py_context.PythonChunks()
+        python_chunks.system_imports.add("from dataclasses import dataclass")
+        assert self.dial_class_name
+        python_chunks.impl.append(f"""
+@dataclass
+class {get_input_class_name(self.dial_class_name, aligned_name)}:
+""")
+        if not upstream_names:
+            python_chunks.impl.append("    pass")
+        for upstream_name in upstream_names:
+            input_name = f"{aligned_name}_{upstream_name}"
+            python_chunks.impl.append(f"    {upstream_name}: {get_input_class_name(self.dial_class_name, input_name)}")
+        return python_chunks
+
+    def _render_output(self, output_name: str, output_type: str, max_msgs_per_exec: int) -> py_context.PythonChunks:
         """Render the definition of an output class.
 
         Arguments:
             output_name: Input name.
             output_type: Input python type.
+            max_msgs_per_exec: Maximum number of output messages to publish per execution.
 
         Returns:
             Python chunks with the output class definition.
@@ -619,6 +660,31 @@ class {get_inputs_class_name(self.dial_class_name)}:
         assert self.dial_class_name
         output_class_name = get_output_class_name(self.dial_class_name, output_name)
         python_chunks.imports.add(get_import_for_type(output_type))
+        if max_msgs_per_exec > 1:
+            python_chunks.impl.append(f"""class {output_class_name}:
+
+    def __init__(
+        self,
+        buffers: list[memoryview],
+    ) -> None:
+        self._buffers = buffers
+        self._publish_count = 0
+
+    @property
+    def messages(self) -> list[memoryview]:
+        return self._buffers
+
+    def publish(self, msg: {output_type}) -> None:
+        if self._publish_count >= len(self._buffers):
+            error_msg = "Cannot publish more than {max_msgs_per_exec} messages for output '{output_name}'"
+            raise IndexError(error_msg)
+        msg.serialize_tachyon(self._buffers[self._publish_count])
+        self._publish_count += 1
+
+    @property
+    def publish_count(self) -> int:
+        return self._publish_count""")
+            return python_chunks
         python_chunks.impl.append(f"""class {output_class_name}:
 
     def __init__(
@@ -647,9 +713,10 @@ class {get_inputs_class_name(self.dial_class_name)}:
         python_chunks.system_imports.add("from dataclasses import dataclass")
         assert isinstance(self.cog_ir, cog.Cog)
         for output_name in self.cog_ir.outputs:
+            output_def = self.cog_ir.outputs[output_name]
             dial_type = self.output_types[output_name]
             assert isinstance(dial_type.python_type, str)
-            python_chunks.append(self._render_output(output_name, dial_type.python_type))
+            python_chunks.append(self._render_output(output_name, dial_type.python_type, output_def.max_msgs_per_exec))
         assert self.dial_class_name
         python_chunks.impl.append(f"""
 @dataclass
@@ -701,4 +768,17 @@ class {self.dial_class_name}:
             label = py_type.get_bazel_label_for_type(self.module.module_id.repo)
             if label:
                 bazel_targets.append(label)
+        assert isinstance(self.cog_ir, cog.Cog)
+        # Aligned upstream inputs are inferred from the aligner, so include their wrapper deps here.
+        for aligned_def in self.cog_ir.aligned_inputs.values():
+            # Compiler validation resolves aligned inputs to aligners.
+            assert isinstance(aligned_def.aligned_type, aligner.Aligner)
+            for aligner_input in aligned_def.aligned_type.inputs.values():
+                py_type = PythonDialType.from_interface_instantiation(
+                    aligner_input.get_interface_info().interface_ir,
+                    self.wrapper_type,
+                )
+                label = py_type.get_bazel_label_for_type(self.module.module_id.repo)
+                if label:
+                    bazel_targets.append(label)
         return bazel_targets

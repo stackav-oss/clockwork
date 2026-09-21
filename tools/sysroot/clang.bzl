@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Macros to make Clang toolchains."""
@@ -12,7 +12,7 @@ X86_64 = "x86_64"
 AARCH64 = "aarch64"
 
 GCC_VERSION = 10
-CLANG_VERSION = 21
+CLANG_VERSION = 22
 
 def format_versions(input):
     """Format the input string or list with the GCC and Clang versions.
@@ -72,6 +72,17 @@ _INCLUDE_DIRS_AARCH64 = format_versions([
     "usr/aarch64-linux-gnu/include",
     "usr/include",
 ])
+
+def _include_dirs(arch):
+    if arch == X86_64:
+        return _INCLUDE_DIRS_X86_64
+    if arch == AARCH64:
+        return _INCLUDE_DIRS_AARCH64
+    fail("Unsupported architecture: {}".format(arch))
+
+def libstdcxx_include_dirs(arch):
+    """Return the libstdc++ include directories for an architecture."""
+    return _include_dirs(arch)[:2]
 
 # As above, but with:
 # # echo 'int main() { return 0; }' > test.cc && /usr/lib/llvm-19/bin/clang++ -fuse-ld=lld -fsanitize=address -Wl,--verbose test.cc
@@ -143,17 +154,29 @@ def _libclang_targets():
     )
 
 def _filegroups(arch, target_triple, CLANG_VERSION):
+    include_dirs = _include_dirs(arch)
+
+    native.filegroup(
+        name = "libstdcxx_headers_" + target_triple,
+        srcs = native.glob(
+            [path + "/**" for path in libstdcxx_include_dirs(arch)],
+            allow_empty = False,
+        ),
+        visibility = ["//visibility:public"],
+    )
+
     native.filegroup(
         name = "llvm_compiler_files_" + target_triple,
         srcs = native.glob(
-            [path + "/**" for path in (_INCLUDE_DIRS_X86_64 if arch == X86_64 else _INCLUDE_DIRS_AARCH64) + [
+            [path + "/**" for path in include_dirs[2:] + [
                 # Avoids the following build failure, see DX-2729:
                 # this rule is missing dependency declarations for the following files included by 'src/liblzma/common/lzip_decoder.c':
-                #  'external/clang+/usr/lib/llvm-21/lib/clang/21/share/asan_ignorelist.txt'
+                #  'external/clang+/usr/lib/llvm-21/lib/clang/22/share/asan_ignorelist.txt'
                 "usr/lib/llvm-{clang}/lib/clang/{clang}/share".format(clang = CLANG_VERSION),
             ]],
             allow_empty = False,
         ) + [
+            ":libstdcxx_headers_" + target_triple,
             "usr/lib/llvm-{}/bin/clang".format(CLANG_VERSION),
             "usr/lib/llvm-{}/bin/clang++".format(CLANG_VERSION),
             "usr/lib/llvm-{}/bin/clang-cpp".format(CLANG_VERSION),
@@ -196,6 +219,15 @@ def _filegroups(arch, target_triple, CLANG_VERSION):
     )
 
     native.filegroup(
+        name = "llvm_coverage_files_" + target_triple,
+        srcs = [
+            ":llvm_gcov_files_" + target_triple,
+            "usr/lib/llvm-{}/bin/llvm-profdata".format(CLANG_VERSION),
+            ":llvm_dependencies",
+        ],
+    )
+
+    native.filegroup(
         name = "llvm_linker_files_" + target_triple,
         srcs = native.glob(
             [path + "/**" for path in (_LINK_DIRS_X86_64 if arch == X86_64 else _LINK_DIRS_AARCH64)],
@@ -231,7 +263,7 @@ def _filegroups(arch, target_triple, CLANG_VERSION):
             ":llvm_as_files_" + target_triple,
             ":llvm_compiler_files_" + target_triple,
             ":llvm_dwp_files_" + target_triple,
-            ":llvm_gcov_files_" + target_triple,
+            ":llvm_coverage_files_" + target_triple,
             ":llvm_linker_files_" + target_triple,
             ":llvm_objcopy_files_" + target_triple,
             ":llvm_strip_files_" + target_triple,
@@ -240,6 +272,15 @@ def _filegroups(arch, target_triple, CLANG_VERSION):
     )
 
 def _clang_binary_targets():
+    native_binary(
+        name = "llvm_cxxfilt",
+        src = "usr/lib/llvm-{}/bin/llvm-cxxfilt".format(CLANG_VERSION),
+        data = [":llvm_runtime_dependencies"],
+        # Preserve the binary's location relative to usr/lib/llvm-*/lib because its RPATH is $ORIGIN/../lib.
+        out = "usr/lib/llvm-{}/bin/llvm-cxxfilt".format(CLANG_VERSION),
+        visibility = ["//visibility:public"],
+    )
+
     native.filegroup(
         name = "llvm_objcopy",
         srcs = ["usr/lib/llvm-{}/bin/llvm-objcopy".format(CLANG_VERSION)],
@@ -338,6 +379,7 @@ def make_clang_targets(name):
             ar_files = ":llvm_ar_files_" + target_triple,
             as_files = ":llvm_as_files_" + target_triple,
             compiler_files = ":llvm_compiler_files_" + target_triple,
+            coverage_files = ":llvm_coverage_files_" + target_triple,
             dwp_files = ":llvm_dwp_files_" + target_triple,
             linker_files = ":llvm_linker_files_" + target_triple,
             objcopy_files = ":llvm_objcopy_files_" + target_triple,

@@ -1,23 +1,30 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_state.hh"
 #include "clockwork/cog/cog_states.hh"
+#include "clockwork/cog/detail.hh"
 #include "clockwork/cog/tests/support/unit_test_states_clk_cc.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/error.hh"
+#include "clockwork/pinion/in_memory_channel.hh"
+#include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
 #include "clockwork/pinion/slot.hh"
+#include "clockwork/pinion/slot_ref.hh"
+#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
+#include "clockwork/serializable.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
+#include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -27,15 +34,37 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <memory_resource>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <vector>
+
+namespace clockwork
+{
+template <>
+struct Serializable<cogs::testing::CxxState>
+{
+  using SerializedType = Tappy<cogs::testing::ClkState>;
+
+  static jewels::BinaryOutcome serialize(jewels::Out<SerializedType> snapshot, const cogs::testing::CxxState& state)
+  {
+    if (state.value < 0)
+    {
+      return jewels::failure;
+    }
+    snapshot->set_value(state.value);
+    return jewels::success;
+  }
+};
+} // namespace clockwork
 
 namespace clockwork::cogs::testing
 {
@@ -70,6 +99,7 @@ struct CogStatesFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
   {
   }
 
+  std::vector<std::shared_ptr<pinion::AbstractChannel>> channels;
   jewels::memory::MemoryResource resource;
   TestCog cog;
   CogStates<Policies...> state;
@@ -87,6 +117,7 @@ struct StatePolicy1
 struct StatePolicy2
 {
   using StateType = Tappy<ClkState>;
+  using SerializedType = StateType;
   static constexpr auto endpoint_id =
     jewels::Uuid<common::EndpointClassId>::from_string("789e340c-556f-4cf0-a3b9-73632ba75a7c").value();
   static constexpr std::string_view name = "StatePolicy2";
@@ -94,6 +125,13 @@ struct StatePolicy2
 };
 
 using StatePolicyFixture = CogStatesFixture<StatePolicy1, StatePolicy2>;
+
+struct SerializableStatePolicy : StatePolicy1
+{
+  using SerializedType = Tappy<ClkState>;
+};
+
+using SerializableStatePolicyFixture = CogStatesFixture<SerializableStatePolicy>;
 
 TEST_CASE_METHOD(StatePolicyFixture, "basic operation", "[cog_states]")
 {
@@ -116,6 +154,7 @@ TEST_CASE_METHOD(StatePolicyFixture, "basic operation", "[cog_states]")
   REQUIRE(publisher);
   auto publisher_handle = publisher.value()->extract_publisher();
   REQUIRE(publisher_handle);
+  channels.emplace_back(*publisher);
 
   auto state_ptr1 = std::make_shared<CogStateDataImpl<CxxState>>(memres);
   state_ptr1->get_ptr()->value = 1;
@@ -174,15 +213,15 @@ TEST_CASE_METHOD(StatePolicyFixture, "basic operation", "[cog_states]")
 
   SECTION("unit test helpers")
   {
-    CogStates<StatePolicy1, StatePolicy2> state{memres};
-    REQUIRE_FALSE(state.is_state_set<0>());
-    REQUIRE_FALSE(state.is_state_set<1>());
-
     const auto channel_uuid2 = jewels::Uuid<void>::random_uuid().to_string();
     auto publisher2 = shm_channel_factory->open_publisher(channel_uuid2, "state_ptr2", layout, 1);
     REQUIRE(publisher2);
     auto publisher_handle2 = publisher2.value()->extract_publisher();
     REQUIRE(publisher_handle2);
+
+    CogStates<StatePolicy1, StatePolicy2> state{memres};
+    REQUIRE_FALSE(state.is_state_set<0>());
+    REQUIRE_FALSE(state.is_state_set<1>());
 
     REQUIRE(ok(state.initialize_state<0>()));
     REQUIRE(state.is_state_set<0>());
@@ -223,6 +262,67 @@ TEST_CASE_METHOD(StatePolicyFixture, "basic operation", "[cog_states]")
     REQUIRE(ok(state2.get_state<1>(Out{value4})));
     REQUIRE(*(state_ptr2->get_ptr()) == value4->get());
   }
+}
+
+TEST_CASE_METHOD(SerializableStatePolicyFixture, "publishes serialized external state", "[cog_states]")
+{
+  auto snapshot_channel = std::make_shared<InMemoryChannel<Tappy<ClkState>, 2, false>>(resource);
+  auto snapshot_subscriber = snapshot_channel->make_subscriber();
+  auto state_ptr = std::make_shared<CogStateDataImpl<CxxState>>(resource);
+  state_ptr->get_ptr()->value = 42;
+  auto cog_ptr = jewels::memory::make_non_null_from_ref(cog);
+
+  REQUIRE(state.set_handle(SerializableStatePolicy::endpoint_id, state_ptr, true, cog_ptr));
+  REQUIRE(ok(state.set_publisher_handle(SerializableStatePolicy::endpoint_id, snapshot_channel->make_publisher(1))));
+
+  Tappy<common::SnapshotConfig> snapshot_config;
+  snapshot_config.set_cycles(1);
+  REQUIRE(ok(state.set_snapshot_config(SerializableStatePolicy::endpoint_id, snapshot_config)));
+
+  const auto current_time = jewels::time::SyncTime(std::chrono::nanoseconds{42});
+  REQUIRE(ok(state.publish_snapshots(current_time)));
+  REQUIRE(snapshot_channel->get_publish_count() == 1);
+
+  auto available = snapshot_subscriber.available();
+  REQUIRE(available.begin() != available.end());
+  REQUIRE(available.begin()->header()->publish_timestamp == current_time.time_since_epoch().count());
+  auto messages = pinion::to_message_range<const Tappy<ClkState>>(available);
+  REQUIRE(messages);
+  const auto& message = *messages->begin();
+  REQUIRE(message.get_value() == 42);
+
+  state_ptr->get_ptr()->value = -1;
+  REQUIRE(jewels::fails(state.publish_snapshots(current_time)));
+  REQUIRE(snapshot_channel->get_publish_count() == 1);
+
+  state_ptr->get_ptr()->value = 43;
+  REQUIRE(ok(state.publish_snapshots(current_time)));
+  REQUIRE(snapshot_channel->get_publish_count() == 2);
+}
+
+TEST_CASE_METHOD(CogStatesFixture<StatePolicy2>, "publishes Tachyon state snapshots", "[cog_states]")
+{
+  auto state_channel = std::make_shared<InMemoryChannel<Tappy<ClkState>, 1, false>>(resource);
+  auto snapshot_channel = std::make_shared<InMemoryChannel<Tappy<ClkState>, 1, false>>(resource);
+  channels.emplace_back(state_channel);
+  channels.emplace_back(snapshot_channel);
+  auto snapshot_subscriber = snapshot_channel->make_subscriber();
+  auto state_ptr = std::make_shared<CogStateDataImpl<Tappy<ClkState>>>(state_channel->make_publisher(1));
+  state_ptr->get_ptr()->set_value(42);
+  auto cog_ptr = jewels::memory::make_non_null_from_ref(cog);
+
+  REQUIRE(state.set_handle(StatePolicy2::endpoint_id, state_ptr, true, cog_ptr));
+  REQUIRE(ok(state.set_publisher_handle(StatePolicy2::endpoint_id, snapshot_channel->make_publisher(1))));
+
+  Tappy<common::SnapshotConfig> snapshot_config;
+  snapshot_config.set_cycles(1);
+  REQUIRE(ok(state.set_snapshot_config(StatePolicy2::endpoint_id, snapshot_config)));
+  REQUIRE(ok(state.publish_snapshots(jewels::time::SyncTime(std::chrono::nanoseconds{42}))));
+
+  auto messages = pinion::to_message_range<const Tappy<ClkState>>(snapshot_subscriber.available());
+  REQUIRE(messages);
+  const auto& message = *messages->begin();
+  REQUIRE(message.get_value() == 42);
 }
 
 using ZeroStatesPolicyFixture = CogStatesFixture<>;

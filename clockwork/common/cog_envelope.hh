@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -20,6 +20,9 @@ struct CogEnvelope
   /// The timestamp that the cog became ready.
   ///
   jewels::time::SyncTime ready_time = {};
+
+  /// The earliest time at which publisher credit permits another preparation attempt.
+  jewels::time::SyncTime throttled_until = jewels::time::SyncTime::min();
 
   ///
   /// The cog.

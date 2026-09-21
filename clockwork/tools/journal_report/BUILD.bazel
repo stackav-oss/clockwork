@@ -1,0 +1,70 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//:__subpackages__"])
+
+py_binary(
+    name = "journal_report",
+    srcs = ["cli.py"],
+    main = "cli.py",
+    deps = [
+        ":reader",
+        ":renderer",
+        ":request",
+        ":server",
+        "@clockwork_pip//cyclopts",
+    ],
+)
+
+py_library(
+    name = "anomalies",
+    srcs = ["anomalies.py"],
+    deps = ["//clockwork/journal:journal_py_library"],
+)
+
+py_library(
+    name = "reader",
+    srcs = ["reader.py"],
+    deps = [
+        "//clockwork/journal:journal_py_library",
+        "@clockwork_pip//protobuf",
+    ],
+)
+
+py_library(
+    name = "renderer",
+    srcs = ["renderer.py"],
+    data = ["report.js"] + glob(["assets/*"]),
+    imports = ["../../.."],
+    deps = [
+        ":view_model",
+        "//clockwork/journal:journal_py_library",
+    ],
+)
+
+py_library(
+    name = "request",
+    srcs = ["request.py"],
+)
+
+py_library(
+    name = "server",
+    srcs = ["server.py"],
+    deps = [
+        ":renderer",
+        "//clockwork/journal:journal_py_library",
+        "//clockwork/logging/readers:py_log_reader",
+        "@clockwork_pip//typing_extensions",
+    ],
+)
+
+py_library(
+    name = "view_model",
+    srcs = ["view_model.py"],
+    deps = [
+        ":anomalies",
+        "//clockwork/journal:journal_py_library",
+    ],
+)

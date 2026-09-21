@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/testing/filesystem_wrapper.hh"
@@ -7,6 +7,7 @@
 #include "jewels/std/expected.hh"
 
 #include <cerrno>
+#include <cstdio>
 #include <memory_resource>
 #include <unistd.h>
 #include <utility>
@@ -240,12 +241,23 @@ FilesystemWrapper::create_directories(std::string_view path, uint32_t perms)
 [[nodiscard]] jewels::expected<void, ErrorCode>
 FilesystemWrapper::create_symlink(std::string_view target_path, std::string_view link_path)
 {
-  if (const auto inject_result = check_error_injection_state(maybe_inject_symlink_error_state_); !inject_result)
+  if (const auto inject_result = check_error_injection_state(maybe_inject_link_error_state_); !inject_result)
   {
     jewels::log_cerr_error("Injecting error in create_symlink: {}", inject_result.error().message());
     return inject_result;
   }
   return wrapped_.create_symlink(target_path, link_path);
+}
+
+[[nodiscard]] jewels::expected<void, ErrorCode>
+FilesystemWrapper::create_hardlink(std::string_view target_path, std::string_view link_path)
+{
+  if (const auto inject_result = check_error_injection_state(maybe_inject_link_error_state_); !inject_result)
+  {
+    jewels::log_cerr_error("Injecting error in create_hardlink: {}", inject_result.error().message());
+    return inject_result;
+  }
+  return wrapped_.create_hardlink(target_path, link_path);
 }
 
 [[nodiscard]] jewels::expected<std::pmr::string, ErrorCode> FilesystemWrapper::read_symlink(std::string_view link_path)
@@ -313,6 +325,11 @@ FilesystemWrapper::read_directories(std::string_view path, bool ignore_permissio
 [[nodiscard]] jewels::expected<Filesystem::SpaceInformation, ErrorCode>
 FilesystemWrapper::get_space_information(std::string_view path)
 {
+  if (const auto inject_result = check_error_injection_state(maybe_inject_stat_error_state_); !inject_result)
+  {
+    jewels::log_cerr_error("Injecting error in get_space_information: {}", inject_result.error().message());
+    return jewels::unexpected(inject_result.error());
+  }
   return wrapped_.get_space_information(path);
 }
 
@@ -334,6 +351,26 @@ FilesystemWrapper::get_space_information(std::string_view path)
     return jewels::unexpected(inject_result.error());
   }
   return wrapped_.remove_all(path);
+}
+
+[[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> FilesystemWrapper::search_path(std::string_view binary_name)
+{
+  // First check if a result was injected (for testing without real binaries)
+  if (injected_search_path_result_)
+  {
+    auto result = injected_search_path_result_.value();
+    injected_search_path_result_ = std::nullopt;
+    return result;
+  }
+
+  // Then check if an error should be injected
+  if (const auto inject_result = check_error_injection_state(maybe_inject_search_path_error_state_); !inject_result)
+  {
+    jewels::log_cerr_error("Injecting error in search_path: {}", inject_result.error().message());
+    return jewels::unexpected(inject_result.error());
+  }
+
+  return wrapped_.search_path(binary_name);
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode> FilesystemWrapper::touch(std::string_view file_path)
@@ -371,14 +408,14 @@ FilesystemWrapper::create_temporary_file(std::optional<filesystem::Path> parent_
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode>
-FilesystemWrapper::copy_file(std::string_view old_path, std::string_view new_path)
+FilesystemWrapper::copy_file(std::string_view old_path, std::string_view new_path, size_t block_size)
 {
   if (const auto inject_result = check_error_injection_state(maybe_inject_stat_error_state_); !inject_result)
   {
     jewels::log_cerr_error("Injecting error in copy_file: {}", inject_result.error().message());
     return jewels::unexpected(inject_result.error());
   }
-  return wrapped_.copy_file(old_path, new_path);
+  return wrapped_.copy_file(old_path, new_path, block_size);
 }
 
 void FilesystemWrapper::inject_touch_error(int32_t error_code, size_t skip_count)
@@ -446,10 +483,9 @@ void FilesystemWrapper::inject_mkdir_error(int32_t error_code, size_t skip_count
   maybe_inject_mkdir_error_state_ = InjectedErrorState{.error = make_error_code(error_code), .skip_count = skip_count};
 }
 
-void FilesystemWrapper::inject_symlink_error(int32_t error_code, size_t skip_count)
+void FilesystemWrapper::inject_link_error(int32_t error_code, size_t skip_count)
 {
-  maybe_inject_symlink_error_state_ =
-    InjectedErrorState{.error = make_error_code(error_code), .skip_count = skip_count};
+  maybe_inject_link_error_state_ = InjectedErrorState{.error = make_error_code(error_code), .skip_count = skip_count};
 }
 
 void FilesystemWrapper::inject_readlink_error(int32_t error_code, size_t skip_count)
@@ -467,6 +503,17 @@ void FilesystemWrapper::inject_readdir_error(int32_t error_code, size_t skip_cou
 void FilesystemWrapper::inject_remove_error(int32_t error_code, size_t skip_count)
 {
   maybe_inject_remove_error_state_ = InjectedErrorState{.error = make_error_code(error_code), .skip_count = skip_count};
+}
+
+void FilesystemWrapper::inject_search_path_error(int32_t error_code, size_t skip_count)
+{
+  maybe_inject_search_path_error_state_ =
+    InjectedErrorState{.error = make_error_code(error_code), .skip_count = skip_count};
+}
+
+void FilesystemWrapper::inject_search_path_result(const filesystem::Path& path)
+{
+  injected_search_path_result_ = path;
 }
 
 [[nodiscard]] jewels::expected<void, ErrorCode> FilesystemWrapper::check_error_injection_state(

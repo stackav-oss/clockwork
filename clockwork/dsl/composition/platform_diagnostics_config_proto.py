@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to Platform Diagnostics Configuration schema."""
@@ -16,8 +16,11 @@ if TYPE_CHECKING:
     from clockwork.dsl.composition import pdfproto
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class PlatformDiagnosticsConfig(Tachyon["PlatformDiagnosticsConfig"]):
+# fmt: on
     """Configuration for a diagnostics producer for a clockwork platform component."""
 
     reporter_id: UUID

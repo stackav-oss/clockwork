@@ -1,0 +1,23 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork_logging::onboard::tests)]
+
+// TestMessage
+schema TestMessage
+{
+  uuid: d7bd12e6-35a1-424a-acde-785281a45e63;
+  parameters
+  {
+    // Max data size
+    #1 max_size: UInt64;
+  }
+  fields
+  {
+    // Test data
+    #2 data: VarArray<Byte, max_size=max_size>;
+  }
+}
+
+instantiate TestMessage32: TestMessage<32>;
+instantiate TestMessage128: TestMessage<128>;
+instantiate TestMessage1384: TestMessage<1384>;
+instantiate TestMessage12280: TestMessage<12280>;

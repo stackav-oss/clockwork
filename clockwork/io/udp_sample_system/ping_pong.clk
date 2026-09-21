@@ -7,32 +7,32 @@ use clockwork::io::udp_sample_system::just_a_uint32;
 // Ping cog
 cog PingCog
 {
-    outputs
-    {
-        ping_var_packet: Tap<Tachyon<var_packet::VarPacket<4>>>;
-        ping_just_a_uint32: Tap<Tachyon<just_a_uint32::JustAUInt32>>;
-    }
+  outputs
+  {
+    ping_var_packet: Tap<Tachyon<var_packet::VarPacket<4>>>;
+    ping_just_a_uint32: Tap<Tachyon<just_a_uint32::JustAUInt32>>;
+  }
 
-    execution
-    {
-        condition periodic: time_since_last_exec(1000ms);
-        execute when: periodic;
-    }
+  execution
+  {
+    condition periodic: time_since_last_exec(1000ms);
+    execute when: periodic;
+  }
 }
 
 // Pong cog
 cog PongCog
 {
-    inputs
-    {
-        pong_var_packet: Tap<Tachyon<var_packet::VarPacket<4>>>;
-        pong_just_a_uint32: Tap<Tachyon<just_a_uint32::JustAUInt32>>;
-    }
+  inputs
+  {
+    pong_var_packet: Tap<Tachyon<var_packet::VarPacket<4>>>;
+    pong_just_a_uint32: Tap<Tachyon<just_a_uint32::JustAUInt32>>;
+  }
 
-    execution
-    {
-        condition new_var_packet: new_message(pong_var_packet);
-        condition new_just_a_uint32: new_message(pong_just_a_uint32);
-        execute when: new_var_packet or new_just_a_uint32;
-    }
+  execution
+  {
+    condition new_var_packet: new_message(pong_var_packet);
+    condition new_just_a_uint32: new_message(pong_just_a_uint32);
+    execute when: new_var_packet or new_just_a_uint32;
+  }
 }

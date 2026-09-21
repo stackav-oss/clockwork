@@ -1,0 +1,22 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::pinion::support)]
+
+// Bridge Test Message
+schema BridgeTestMessage
+{
+  uuid: 64ce5b66-4f54-435e-bbbe-ece82cf3c92d;
+  parameters
+  {
+    // Test data size
+    #1 data_size: UInt64;
+  }
+  fields
+  {
+    // Test data
+    #2 data: FixedArray<Byte, size=data_size>;
+  }
+}
+
+instantiate BridgeTestMessage1000: BridgeTestMessage<1000>;
+instantiate BridgeTestMessage1001: BridgeTestMessage<1001>;
+instantiate BridgeTestMessage32000000: BridgeTestMessage<32000000>;

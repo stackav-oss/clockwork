@@ -9,5 +9,5 @@ use clockwork::examples::demo_system::localization::localization_channels;
 // channel to the event log writer configuration. This demo only uses the telemetry writer configuration.
 policy ChannelLoggingPolicy for localization_channels::PoseChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }

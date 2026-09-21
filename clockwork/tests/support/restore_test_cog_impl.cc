@@ -1,13 +1,13 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-// Copyright 2025 Stack AV Co.
-// SPDX-License-Identifier: Apache-2.0
-
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
 #include "clockwork/tests/support/exec_time.hh"
 #include "clockwork/tests/support/restore_test_cog_dial.hh"
 #include "clockwork/tests/support/snapshot_test_messages.hh"
+#include "jewels/uuid/uuid.hh"
 
 namespace clockwork::testing
 {

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/tests/support/test_log_reader.hh"
@@ -110,6 +110,7 @@ std::vector<TopicMetadata> TestLogReader::get_metadata()
           std::string{
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.size()},
+        .is_amended = false,
       });
   }
   return topics;
@@ -133,6 +134,7 @@ LogExpected<TopicMetadata> TestLogReader::get_channel_metadata(std::string_view 
           std::string{
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.data(),
             clockwork::LoggingTraits<clockwork::Tappy<tests::TestMessage>>::schema_definition.size()},
+        .is_amended = false,
       };
     }
   }
@@ -149,7 +151,7 @@ LogExpected<LogTimestamp> TestLogReader::end_time()
   return log_start_time_;
 }
 
-std::optional<LoggedMessage> TestLogReader::next_message()
+std::optional<LoggedMessage> TestLogReader::next_message_impl()
 {
   REQUIRE(opened_);
   REQUIRE(!closed_);

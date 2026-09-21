@@ -1,73 +1,87 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 module(name = "clockwork")
-
-SINGLE_VERSION_OVERRIDE = "SINGLE_VERSION_OVERRIDE"
 
 LOCAL_PATH_OVERRIDE = "LOCAL_PATH_OVERRIDE"
 
 PATCH = True
 
-NO_PATCH = False
-
-PYTHON_VERSION = "3.10"
-
-dependencies = [
+raw_dependencies = [
     # keep-sorted start
-    ("abseil-cpp", SINGLE_VERSION_OVERRIDE, "20250814.2", PATCH),
-    ("aspect_rules_js", SINGLE_VERSION_OVERRIDE, "2.8.0", PATCH),
-    ("aspect_rules_py", SINGLE_VERSION_OVERRIDE, "1.1.0", PATCH),
-    ("aspect_rules_ts", SINGLE_VERSION_OVERRIDE, "3.8.5", NO_PATCH),
-    ("au", "https://github.com/aurora-opensource/au.git", "49e3e0e2b7cc67164379bce323761c260370f8f0", PATCH),  # main
-    ("aws_sdk_cpp", "https://github.com/aws/aws-sdk-cpp.git", "713aebfea4705e7437bb0874c47e44ddf13b9b31", PATCH),  # 1.11.185
-    ("bazel_lib", SINGLE_VERSION_OVERRIDE, "3.1.0", PATCH),
-    ("bazel_skylib", SINGLE_VERSION_OVERRIDE, "1.9.0", NO_PATCH),
-    ("bazel_skylib_gazelle_plugin", SINGLE_VERSION_OVERRIDE, "1.9.0", PATCH),
-    ("build_stack_rules_proto", "https://github.com/stackb/rules_proto.git", "a19d9eed24a7d86ea2730053c4c8406ea5b9f304", PATCH),  # v4.1.0
-    ("buildifier_prebuilt", SINGLE_VERSION_OVERRIDE, "8.2.1.2", None),
-    ("c-ares", SINGLE_VERSION_OVERRIDE, "1.34.6", NO_PATCH),
-    ("catch2", SINGLE_VERSION_OVERRIDE, "3.13.0", PATCH),
-    ("clang", "https://github.com/stackav-oss/clockwork/releases/download/sysroot/clang_sysroot_4.tar.zst", "sha256-OjeMjqEcjT8UuQYlLpQBJYjnZPssy+GVAVmBJrI8ftk=", NO_PATCH),
-    ("com_github_nanopb_nanopb", "https://github.com/nanopb/nanopb.git", "cad3c18ef15a663e30e3e43e3a752b66378adec1", PATCH),  # 0.4.9.1
-    ("curl", SINGLE_VERSION_OVERRIDE, "8.12.0", PATCH),
-    ("fltk", "https://github.com/rnortman/fltk.git", "0afecaf5fe40a374c4f7ab5ac3cb9fc8953e81f3", NO_PATCH),  # main
-    ("fmt", SINGLE_VERSION_OVERRIDE, "12.1.0", NO_PATCH),
-    ("gazelle", "https://github.com/bazelbuild/bazel-gazelle.git", "669939453cba5ac2874407245f02a0d281fd13fa", NO_PATCH),  # v0.42.0
-    ("grpc", SINGLE_VERSION_OVERRIDE, "1.76.0.bcr.1", NO_PATCH),
-    ("gsl", "https://github.com/microsoft/GSL.git", "caae4dd0f8343efb879369dcd08a2b18aae59f3b", PATCH),  # main
-    ("liburing", "https://github.com/axboe/liburing.git", "6b5f5bc9a2e43ad3ee330a093d53d7a81816f676", PATCH),  # liburing-2.4
-    ("lz4", SINGLE_VERSION_OVERRIDE, "1.10.0.bcr.1", NO_PATCH),
-    ("mcap", "https://github.com/foxglove/mcap.git", "fa382a06f852bd4b90046ab74b30c11b0a089d9b", PATCH),  # releases/mcap-cli/v0.0.61
-    ("nanobind", "https://github.com/wjakob/nanobind.git", "8894eb0116b38a4a1355b79d18c3a833ce3d9dff", PATCH),  # v2.2.0
-    ("openssl", SINGLE_VERSION_OVERRIDE, "3.3.1.bcr.9", None),
-    ("opentelemetry-cpp", SINGLE_VERSION_OVERRIDE, "1.24.0.bcr.1", PATCH),
-    ("platforms", SINGLE_VERSION_OVERRIDE, "1.0.0", NO_PATCH),
-    ("protobuf", SINGLE_VERSION_OVERRIDE, "33.5", PATCH),
-    ("protoc-gen-validate", SINGLE_VERSION_OVERRIDE, "1.3.0", NO_PATCH),  # indirect dependency from go's xds
-    ("re2", SINGLE_VERSION_OVERRIDE, "2021-09-01", NO_PATCH),
-    ("rules_boost", "https://github.com/nelhage/rules_boost.git", "2a7a2ad203e469276540cb7d260e8bd46f6cc030", PATCH),  # master
-    ("rules_cc", SINGLE_VERSION_OVERRIDE, "0.2.16", NO_PATCH),
-    ("rules_go", SINGLE_VERSION_OVERRIDE, "0.59.0", PATCH),
-    ("rules_java", SINGLE_VERSION_OVERRIDE, "8.15.2", NO_PATCH),
-    ("rules_multirun", SINGLE_VERSION_OVERRIDE, "0.13.0", NO_PATCH),
-    ("rules_proto", SINGLE_VERSION_OVERRIDE, "7.1.0", NO_PATCH),
-    ("rules_proto_grpc", SINGLE_VERSION_OVERRIDE, "5.3.0", NO_PATCH),
-    ("rules_proto_grpc_buf", SINGLE_VERSION_OVERRIDE, "5.8.0", NO_PATCH),
-    ("rules_python", SINGLE_VERSION_OVERRIDE, "1.5.4", PATCH),
-    ("rules_python_gazelle_plugin", SINGLE_VERSION_OVERRIDE, "1.5.3", PATCH),
-    ("rules_shell", SINGLE_VERSION_OVERRIDE, "0.6.1", NO_PATCH),
-    ("sha1", "https://github.com/vog/sha1.git", "76953a8057515a3d29f7f593efe789a2d1122a34", PATCH),  # 1.4
-    ("stardoc", SINGLE_VERSION_OVERRIDE, "0.8.1", NO_PATCH),
-    ("tclap", "https://github.com/mirror/tclap.git", "61cfae16ceba4cadc3d74439fa1e9fd4fce16bc9", PATCH),  # 1.4
-    ("tl_expected", "https://github.com/TartanLlama/expected.git", "1770e3559f2f6ea4a5fb4f577ad22aeb30fbd8e4", PATCH),  # v1.3.1
-    ("trompeloeil", "https://github.com/rollbear/trompeloeil.git", "eaeb89c1ce9d354b0ba7eb921fd5712cdbd78adf", PATCH),  # v49
-    ("upb", SINGLE_VERSION_OVERRIDE, "0.0.0-20230907-e7430e6", NO_PATCH),
-    ("wise_enum", "https://github.com/quicknir/wise_enum.git", "34ac79f7ea2658a148359ce82508cc9301e31dd3", PATCH),  # 3.1.0
-    ("xxhash", "https://github.com/Cyan4973/xxHash.git", "e626a72bc2321cd320e953a0ccf1584cad60f363", PATCH),  # v0.8.3
-    ("zstd", SINGLE_VERSION_OVERRIDE, "1.5.7.bcr.1", NO_PATCH),
+    ("abseil-cpp", "20250814.2", PATCH),
+    ("aspect_rules_js", "3.1.2", PATCH),
+    ("aspect_rules_py", "1.1.0", PATCH),
+    ("aspect_rules_ts", "3.8.6"),
+    ("au", "https://github.com/aurora-opensource/au/archive/49e3e0e2b7cc67164379bce323761c260370f8f0.tar.gz", "sha256-OIW0rORwFwatWLVryCfPQNXRcwWvXzw3s70jF4zHDlk=", PATCH),  # main
+    ("aws_sdk", "1.11.758", PATCH),
+    ("bazel_lib", "3.3.1", PATCH),
+    ("bazel_skylib", "1.9.0"),
+    ("bazel_skylib_gazelle_plugin", "1.9.0", PATCH),
+    ("boost.accumulators", "https://github.com/boostorg/accumulators/archive/boost-1.90.0.tar.gz", "sha256-nVjWvGu8ET0O1PREGvYo5GWRlHGX3N9Nx7/pl1od6Zg=", PATCH),
+    ("boost.asio", "1.90.0.bcr.1"),
+    ("boost.beast", "1.90.0.bcr.1"),
+    ("boost.container", "1.90.0.bcr.1"),
+    ("boost.container_hash", "1.90.0.bcr.1"),
+    ("boost.core", "1.90.0.bcr.1"),
+    ("boost.fusion", "1.90.0.bcr.1"),
+    ("boost.iterator", "1.90.0.bcr.1"),
+    ("boost.json", "1.90.0.bcr.1"),
+    ("boost.lexical_cast", "1.90.0.bcr.1"),
+    ("boost.lockfree", "1.90.0.bcr.1"),
+    ("boost.process", "1.90.0.bcr.1"),
+    ("boost.system", "1.90.0.bcr.1"),
+    ("build_stack_rules_proto", "https://github.com/stackb/rules_proto/archive/a19d9eed24a7d86ea2730053c4c8406ea5b9f304.tar.gz", "sha256-R1VtZ7mtU7ceWMoRkhi9/L0T0DfqY0lymJNi7wTs2DY=", PATCH),  # v4.1.0
+    ("buildifier_prebuilt", "8.5.1.2"),
+    ("c-ares", "1.34.6"),
+    ("catch2", "3.13.0", PATCH),
+    ("clang", "https://github.com/stackav-oss/clockwork/releases/download/sysroot/clang_sysroot_5.tar.zst", "sha256-yM+5lByHZz8XE13oCfOnNqci3OPA5xHiM5XZGVJ/dAM="),
+    ("com_github_nanopb_nanopb", "https://github.com/nanopb/nanopb/archive/cad3c18ef15a663e30e3e43e3a752b66378adec1.tar.gz", "sha256-EOXwFOkaVAlZzbgs5IaiX7mjacq++uEo2b2kzLNZjjA=", PATCH),  # 0.4.9.1
+    ("cpptrace", "https://github.com/jeremy-rifkin/cpptrace/archive/3db8da80111171c219ab5839905771386bee06b3.tar.gz", "sha256-d9aJ/XlW/4A1Ggedg+hqA4Zdu+JDO0VZzGzqUL7Xc5A=", PATCH),  # v1.0.4
+    ("curl", "8.12.0.bcr.1", PATCH),
+    ("fltk", "https://github.com/rnortman/fltk/archive/8fd5ecf90cf94d2ae059c604b508f5b1fd32b359.tar.gz", "sha256-m/bmnztewWXOMoH8jLmIJre5GaAgTSefuzZhpYUzpm4=", PATCH),  # main
+    ("fmt", "12.1.0"),
+    ("gazelle", "https://github.com/bazelbuild/bazel-gazelle/archive/b13c1573c378bb3dd9b9de1397db89d0392f8e72.tar.gz", "sha256-A9e1HrLDyVGTynKxrkgxx6qVUJ5hFv2HeUO4qHZsdJQ="),  # v0.47.0
+    ("grpc", "1.82.1", PATCH),
+    ("gsl", "https://github.com/microsoft/GSL/archive/caae4dd0f8343efb879369dcd08a2b18aae59f3b.tar.gz", "sha256-kC9qoNWR45WpjXt2EIW89slBCOwyx7VpddBZAYPp4FQ=", PATCH),  # main
+    ("liburing", "https://github.com/axboe/liburing/archive/298c083d75ecde5a8833366167b3b6abff0c8d39.tar.gz", "sha256-n+yjnxXRqt4CYyOiPbQIXBN36tqYJTE1lErqk+B7DO8=", PATCH),  # liburing-2.4
+    ("lz4", "1.10.0.bcr.1"),
+    ("mcap", "https://github.com/foxglove/mcap/archive/fa382a06f852bd4b90046ab74b30c11b0a089d9b.tar.gz", "sha256-UTtv2orRxfqtxV3C3/E9ipCanyhfUhlIK0EA1B6sq0E=", PATCH),  # releases/mcap-cli/v0.0.61
+    ("nanobind", "https://github.com/wjakob/nanobind/archive/784efa2a0358a4dc5432c74f5685ee026e20f2b6.tar.gz", "sha256-LzMYkZxpueCDxOVXcUQXMAQk1gJaN68A2La5yI3TZLM=", PATCH),  # v2.2.0
+    ("openssl", "3.5.5.bcr.4"),
+    ("opentelemetry-cpp", "1.24.0.bcr.1", PATCH),
+    ("platforms", "1.1.0"),
+    ("protobuf", "35.1", PATCH),
+    ("protoc-gen-validate", "1.3.0"),  # indirect dependency from go's xds
+    ("re2", "2021-09-01"),
+    ("robin-map", "1.4.0"),
+    ("rules_appimage", "1.20.0", PATCH),
+    ("rules_cc", "0.2.18"),
+    ("rules_go", "0.59.0", PATCH),
+    ("rules_java", "8.15.2"),
+    ("rules_multirun", "0.13.0"),
+    ("rules_proto", "7.1.0"),
+    ("rules_proto_grpc", "5.8.0"),
+    ("rules_proto_grpc_buf", "5.8.0"),
+    ("rules_python", "2.2.0", PATCH),
+    ("rules_python_gazelle_plugin", "2.2.0", PATCH),
+    ("rules_shell", "0.8.0"),
+    ("sha1", "https://github.com/vog/sha1/archive/3f8a4aa032d144309d00dbfe972906a49b3631b9.tar.gz", "sha256-SZA0GY0s3X34GXZqXJ42vXGBeOKykKr3N9sf/kIPsQs=", PATCH),  # 1.4
+    ("stardoc", "0.8.1"),
+    ("tclap", "https://github.com/mirror/tclap/archive/61cfae16ceba4cadc3d74439fa1e9fd4fce16bc9.tar.gz", "sha256-BQK+wLqeEmXzBdHEEdvzBK9fqftcwRH353sWjIC5TRk=", PATCH),  # 1.4
+    ("tl_expected", "https://github.com/TartanLlama/expected/archive/1770e3559f2f6ea4a5fb4f577ad22aeb30fbd8e4.tar.gz", "sha256-jmZVvmFauN06UnRdVMjogljlilwO/kxBMwcqvoJBSIU=", PATCH),  # v1.3.1
+    ("trompeloeil", "https://github.com/rollbear/trompeloeil/archive/eaeb89c1ce9d354b0ba7eb921fd5712cdbd78adf.tar.gz", "sha256-1q26K1wajMl25h8frjR7lFoz11KtJE3Gp34YH4u7JI0=", PATCH),  # v49
+    ("upb", "0.0.0-20230907-e7430e6"),
+    ("wise_enum", "https://github.com/quicknir/wise_enum/archive/34ac79f7ea2658a148359ce82508cc9301e31dd3.tar.gz", "sha256-cd3/QX7qdk2Rpsc4BPgk9zQ2BWjoO+8xn6lb+VIdi94=", PATCH),  # 3.1.0
+    ("xxhash", "https://github.com/Cyan4973/xxHash/archive/e626a72bc2321cd320e953a0ccf1584cad60f363.tar.gz", "sha256-NOccCFY2+8FyZIKZbZJxnQoW5qYJeXDs8pkKJ7OCEWI=", PATCH),  # v0.8.3
+    ("zstd", "1.5.7.bcr.1"),
     # keep-sorted end
 ]
+
+# Stretch everything out to be the same length so we can use list comprehensions normally.
+DEPENDENCIES_NUM_FIELDS = 4
+
+dependencies = [d + ((None,) * (DEPENDENCIES_NUM_FIELDS - len(d))) for d in raw_dependencies]
 
 patch_strip = {
     # keep-sorted start
@@ -78,27 +92,30 @@ patch_strip = {
 
 patch_cmds = {
     # keep-sorted start block=yes
-    "clang": ["ln -sf ../../x86_64-linux-gnu/libedit.so.2 usr/lib/llvm-21/lib/libedit.so.2"],
     "protobuf": ["""find . -name *.h -print0 | xargs -0 sed -i'' -e '1 i\\\n#pragma GCC system_header'"""],
+    "wise_enum": [
+        # The docs say that we can have 256 enum items but we can only actually have 128.
+        # We need more than that in some places, so regenarate the header.
+        """python3 create_generated.py 256 wise_enum_generated.h""",
+    ],
     # keep-sorted end
 }
 
-# Git repositories that require submodules to be checked out
-has_submodules = ["aws_sdk_cpp"]
-
 [bazel_dep(name = name) for name, _, _, _ in dependencies]
 
-[git_override(
+[archive_override(
     module_name = name,
-    commit = commit,
+    integrity = integrity,
     patch_cmds = patch_cmds.get(name, []),
     patches = ["//third_party/patches:" + name + ".patch"] if should_patch else [],
-    recursive_init_submodules = name in has_submodules,
-    remote = remote,
-) for name, remote, commit, should_patch in dependencies if remote.endswith(".git")]
+    # GitHub tarballs have a top-level dir named after the repo and hash.
+    strip_prefix = url[len("https://github.com/"):-len(".tar.gz")].split(
+        "/",
+        maxsplit = 1,
+    )[1].replace("/archive/", "-"),
+    urls = [url],
+) for name, url, integrity, should_patch in dependencies if (url.startswith("https://github.com/") and "/archive/" in url)]
 
-# In bazel 7 we will be able to call http_archive from MODULE.bazel, which is preferred for some use-cases.
-# In the meanwhile use archive_override.
 [archive_override(
     module_name = name,
     # How could anyone have guessed this: https://github.com/bazelbuild/bazel/issues/17803
@@ -107,7 +124,12 @@ has_submodules = ["aws_sdk_cpp"]
     patch_cmds = patch_cmds.get(name, []),
     patches = ["//third_party/patches:" + name + ".patch"] if should_patch else [],
     urls = [url],
-) for name, url, integrity, should_patch in dependencies if url.endswith((".tar.gz", ".tar.zst", ".tar.xz"))]
+) for name, url, integrity, should_patch in dependencies if url.endswith((".tar.gz", ".tar.zst", ".tar.xz")) and not (url.startswith("https://github.com/") and "/archive/" in url)]
+
+[local_path_override(
+    module_name = lib,
+    path = ("third_party/" + lib) if custom_path == None else custom_path,
+) for lib, remote, custom_path, _ in dependencies if remote == LOCAL_PATH_OVERRIDE]
 
 [single_version_override(
     module_name = name,
@@ -115,15 +137,7 @@ has_submodules = ["aws_sdk_cpp"]
     patch_strip = patch_strip.get(name, 0),
     patches = ["//third_party/patches:" + name + ".patch"] if should_patch else [],
     version = version,
-) for name, remote, version, should_patch in dependencies if remote == SINGLE_VERSION_OVERRIDE]
-
-[local_path_override(
-    module_name = lib,
-    path = ("third_party/" + lib) if custom_path == None else custom_path,
-) for lib, remote, custom_path, _ in dependencies if remote == LOCAL_PATH_OVERRIDE]
-
-non_module_boost_repositories = use_extension("@rules_boost//:boost/repositories.bzl", "non_module_dependencies")
-use_repo(non_module_boost_repositories, "boost")
+) for name, version, should_patch, _ in dependencies if not version.endswith((".git", ".tar.gz", ".tar.zst", ".tar.xz", LOCAL_PATH_OVERRIDE))]
 
 register_toolchains(
     "@clang//:clang-aarch64-gnu-linux",
@@ -132,12 +146,19 @@ register_toolchains(
 )
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.defaults(python_version = "3.12")
 python.toolchain(
     configure_coverage_tool = True,
     ignore_root_user_error = True,
     python_version = "3.10",
 )
+python.toolchain(
+    configure_coverage_tool = True,
+    ignore_root_user_error = True,
+    python_version = "3.12",
+)
 use_repo(python, "python_3_10")
+use_repo(python, "python_3_12")
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.whl_mods(
@@ -153,29 +174,64 @@ filegroup(
     whl_name = "uv",
 )
 use_repo(pip, "clockwork_whl_mods_hub")
-pip.parse(
-    # The default conversion of native namespace packages into pkg-util namespace packages by automatically generating
-    # __init__.py files in every directory breaks pyright's import resolution for type-checking, so we override it here
-    enable_implicit_namespace_pkgs = True,
-    extra_hub_aliases = {"uv": ["bin_uv"]},
-    hub_name = "clockwork_pip",
-    python_version = PYTHON_VERSION,
-    requirements_lock = "//tools/language_support:requirements.txt",
-    whl_modifications = {
-        # keep-sorted start
-        "@clockwork_whl_mods_hub//:uv.json": "uv",
-        # keep-sorted end
+
+# Shared configuration for the dual-parsed `@clockwork_pip` hub (3.10 + 3.12).
+CLOCKWORK_PIP_HUB_ALIASES = {"uv": ["bin_uv"]}
+
+CLOCKWORK_PIP_WHL_MODIFICATIONS = {
+    # keep-sorted start
+    "@clockwork_whl_mods_hub//:uv.json": "uv",
+    # keep-sorted end
+}
+
+# Target platforms for cross-platform wheel resolution under rules_python 2.0.
+# Applied uniformly to every `pip.parse()` invocation below.
+CLOCKWORK_PIP_TARGET_PLATFORMS = [
+    "linux_x86_64",
+    "linux_aarch64",
+]
+
+# The default conversion of native namespace packages into pkg-util namespace packages by automatically generating
+# __init__.py files in every directory breaks pyrefly's import resolution for type-checking, so we set
+# enable_implicit_namespace_pkgs = True on all pip.parse calls.
+#
+# After the 3.10->3.12 flip, `requirements_3_12.txt` is the primary lock.
+# TODO(DX-29): Once py_3_10_* consumers are removed, drop the 3.10 compat entry below.
+CLOCKWORK_PIP_HUBS = [
+    {
+        "extra_hub_aliases": CLOCKWORK_PIP_HUB_ALIASES,
+        "hub_name": "clockwork_pip",
+        "python_version": "3.12",
+        "requirements_lock": "//tools/language_support:requirements_3_12.txt",
+        "whl_modifications": CLOCKWORK_PIP_WHL_MODIFICATIONS,
     },
-)
-use_repo(pip, "clockwork_pip")
-pip.parse(
-    # The default conversion of native namespace packages into pkg-util namespace packages by automatically generating
-    # __init__.py files in every directory breaks pyright's import resolution for type-checking, so we override it here
+    # Compatibility parse for py_3_10_* transitions.
+    # TODO(DX-29): retire once all py_3_10_* consumers are migrated away.
+    {
+        "extra_hub_aliases": CLOCKWORK_PIP_HUB_ALIASES,
+        "hub_name": "clockwork_pip",
+        "python_version": "3.10",
+        "requirements_lock": "//tools/language_support:requirements_3_10.txt",
+        "whl_modifications": CLOCKWORK_PIP_WHL_MODIFICATIONS,
+    },
+    {
+        "hub_name": "clockwork_pip310",
+        "python_version": "3.10",
+        "requirements_lock": "//tools/language_support:requirements_pip310.txt",
+    },
+]
+
+[pip.parse(
     enable_implicit_namespace_pkgs = True,
-    hub_name = "clockwork_pip310",
-    python_version = "3.10",
-    requirements_lock = "//tools/language_support:requirements_310.txt",
-)
+    extra_hub_aliases = hub.get("extra_hub_aliases", {}),
+    hub_name = hub["hub_name"],
+    python_version = hub["python_version"],
+    requirements_lock = hub["requirements_lock"],
+    target_platforms = CLOCKWORK_PIP_TARGET_PLATFORMS,
+    whl_modifications = hub.get("whl_modifications", {}),
+) for hub in CLOCKWORK_PIP_HUBS]
+
+use_repo(pip, "clockwork_pip")
 use_repo(pip, "clockwork_pip310")
 
 ## Protobuf
@@ -203,7 +259,7 @@ use_repo(
 go_deps_dev = use_extension("@gazelle//:extensions.bzl", "go_deps", dev_dependency = True)
 go_deps_dev.module_override(
     patches = ["third_party/patches/go_tree_sitter.patch"],
-    path = "github.com/dougthor42/go-tree-sitter",
+    path = "github.com/smacker/go-tree-sitter",
 )
 
 root_repo = use_extension("//tools/repo:root_repo.bzl", "root_repo")

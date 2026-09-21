@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,7 @@
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
+#include "clockwork/scaffolding/cog.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
@@ -26,6 +27,9 @@ using TimerMap = std::pmr::unordered_map<
   jewels::Uuid<common::EndpointInstanceId>,
   std::shared_ptr<AbstractTimer>,
   jewels::UuidHasher<common::EndpointInstanceId>>;
+
+/// Private publisher-throttle timers owned by rate-limited Cogs and runner infrastructure.
+using PublisherThrottleTimerVector = std::pmr::vector<std::shared_ptr<AbstractTimer>>;
 
 ///
 /// Instantiate the requested timers
@@ -46,6 +50,20 @@ using TimerMap = std::pmr::unordered_map<
   std::span<const Tappy<common::TimerInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys);
 
+/// Instantiate and install private online publisher-throttle timers.
+/// @param cogs Cogs to inspect for rate-limited publishers.
+/// @param memres_sys Memory resource used for the returned vector.
+/// @return The installed timer instances on success.
+[[nodiscard]] jewels::expected<PublisherThrottleTimerVector, jewels::MonoError>
+setup_publisher_throttle_timers(const CogMap& cogs, jewels::memory::MemoryResource memres_sys);
+
+/// Instantiate and install private deterministic publisher-throttle timers.
+/// @param cogs Cogs to inspect for rate-limited publishers.
+/// @param memres_sys Memory resource used for the returned vector.
+/// @return The installed timer instances on success.
+[[nodiscard]] jewels::expected<PublisherThrottleTimerVector, jewels::MonoError>
+setup_deterministic_publisher_throttle_timers(const CogMap& cogs, jewels::memory::MemoryResource memres_sys);
+
 ///
 /// Instantiate the requested timers
 /// @param descs the timer descriptions
@@ -65,5 +83,11 @@ using TimerMap = std::pmr::unordered_map<
 /// @throw RuntimeError if sanity checks fail
 ///
 void bind_timers_to_epoll(const TimerMap& timers, AbstractEPollManager& epoll);
+
+/// Add private publisher-throttle timers to an epoll manager.
+/// @param timers Timers to add.
+/// @param epoll Manager to receive timer callbacks.
+/// @throw RuntimeError if a timer cannot be added.
+void bind_timers_to_epoll(const PublisherThrottleTimerVector& timers, AbstractEPollManager& epoll);
 
 } // namespace clockwork::scaffolding

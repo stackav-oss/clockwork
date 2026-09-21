@@ -1,0 +1,92 @@
+load("@build_stack_rules_proto//rules/go:proto_go_library.bzl", "proto_go_library")
+load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
+
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("@build_stack_rules_proto//rules:proto_compile.bzl", "proto_compile")
+load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_proto_grpc_buf//:defs.bzl", "buf_proto_lint_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["realtime_playback_converter_manifest.proto"])
+
+buf_proto_lint_test(
+    name = "realtime_playback_converter_manifest_buf_lint",
+    protos = [":realtime_playback_converter_manifest_proto"],
+    use_rules = [
+        "DEFAULT",
+        "COMMENTS",
+    ],
+)
+
+proto_cc_library(
+    name = "realtime_playback_converter_manifest_cc_library",
+    srcs = ["realtime_playback_converter_manifest.pb.cc"],
+    hdrs = ["realtime_playback_converter_manifest.pb.h"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf"],
+)
+
+proto_compile(
+    name = "realtime_playback_converter_manifest_cpp_compile",
+    outputs = [
+        "realtime_playback_converter_manifest.pb.cc",
+        "realtime_playback_converter_manifest.pb.h",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:cpp",
+        "@clockwork//tools/gazelle:protoc-gen-nolint",
+    ],
+    proto = "realtime_playback_converter_manifest_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_compile(
+    name = "realtime_playback_converter_manifest_go_compile",
+    output_mappings = ["realtime_playback_converter_manifest.pb.go=github.com/stack-av/clockwork/logging/realtime_playback/v1/realtime_playback_converter_manifest.pb.go"],
+    outputs = ["realtime_playback_converter_manifest.pb.go"],
+    plugins = ["@build_stack_rules_proto//plugin/golang/protobuf:protoc-gen-go"],
+    proto = "realtime_playback_converter_manifest_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_go_library(
+    name = "realtime_playback_converter_manifest_go_proto",
+    srcs = ["realtime_playback_converter_manifest.pb.go"],
+    importpath = "github.com/stackav-oss/clockwork/clockwork/logging/realtime_playback/v1/realtime_playback_converter_manifest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)
+
+proto_library(
+    name = "realtime_playback_converter_manifest_proto",
+    srcs = ["realtime_playback_converter_manifest.proto"],
+)
+
+proto_compile(
+    name = "realtime_playback_converter_manifest_py_compile",
+    outputs = [
+        "realtime_playback_converter_manifest_pb2.py",
+        "realtime_playback_converter_manifest_pb2.pyi",
+    ],
+    plugins = [
+        "@build_stack_rules_proto//plugin/builtin:python",
+        "@build_stack_rules_proto//plugin/builtin:pyi",
+    ],
+    proto = "realtime_playback_converter_manifest_proto",
+    visibility = ["//visibility:public"],
+)
+
+proto_py_library(
+    name = "realtime_playback_converter_manifest_py_library",
+    srcs = ["realtime_playback_converter_manifest_pb2.py"],
+    data = ["realtime_playback_converter_manifest_pb2.pyi"],
+    visibility = ["//visibility:public"],
+    deps = ["@protobuf//:protobuf_python"],
+)

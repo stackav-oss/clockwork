@@ -1,14 +1,15 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/dsl/ir/tests/support/report_group_defs_dial.hh"
-#include "jewels/time/sync_time.hh"
+#include "clockwork/dial/include_common.hh"
+#include "clockwork/dsl/ir/tests/support/report_group_defs_clk_cc_dial.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <concepts>
 #include <cstdint>
+#include <span>
 
 namespace clockwork::dsl::tests::support
 {
@@ -130,7 +131,7 @@ TEST_CASE("Batched report group outer schema exists and has expected structure",
 // Test that the batched inner SoA schema has correct fields
 TEST_CASE("Batched report group inner SoA schema fields exist", "[report_group][batched]")
 {
-  using TapType = ::clockwork::Tap<::clockwork::Tachyon<batched_group_Signal>>;
+  using TapType = ::clockwork::Tap<::clockwork::Tachyon<BatchedCog_batched_group_Signal>>;
 
   // basic_batched with default pre-aggregation (value)
   STATIC_REQUIRE(HasFieldGetter<TapType, uint64_t, &TapType::get_basic_batched_value>);

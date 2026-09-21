@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Cog-related schema generation functions."""
@@ -15,11 +15,15 @@ from clockwork.dsl.ir import (
     node,
     primitive,
     schema,
+    statement,
+    strongtypes,
     typesys,
 )
 
 if TYPE_CHECKING:
-    from clockwork.dsl.ir.cog_components import ConditionDef, InputDef, OutputDef
+    from collections.abc import Sequence
+
+    from clockwork.dsl.ir.cog_components import ConditionDef, OutputDef
 
 DEFAULT_METRICS_BATCH_SIZE = 10
 
@@ -111,6 +115,7 @@ def generate_conditions_mask_enum(
 
     value_defs_map[default_value_def.field_num] = default_value_def
     for idx, cond_def in enumerate(conditions.values()):
+        # fmt: off
         val_def = clkenum.ValueDef(
             doc=node.Doc(module=module, cst_node=None, value=f"Condition {cond_def.name} is active."),
             module=module,
@@ -120,9 +125,11 @@ def generate_conditions_mask_enum(
             enum=temp_enum_ref_for_valuedefs,
             field_num=idx + 1,
             is_default=False,
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             integer_value=int(1 << idx),
             resolved=None,
         )
+        # fmt: on
         val_def.resolved = clkenum.ResolvedValueDef(
             doc=val_def.doc,
             module=module,
@@ -190,10 +197,11 @@ def generate_conditions_mask_enum(
     return final_enum
 
 
-def generate_telemetry_metrics_schema(
+def generate_telemetry_metrics_schema(  # noqa: PLR0913 All inputs needed to create metrics schema
     cog_name: str,
-    inputs: dict[str, InputDef],
+    input_names: Sequence[str],
     outputs: dict[str, OutputDef],
+    rate_limited_outputs: set[str],
     conditions: dict[str, ConditionDef],
     module: node.Module,
 ) -> schema.InstantiatedSchema:
@@ -204,8 +212,8 @@ def generate_telemetry_metrics_schema(
     input_telemtry_metrics = get_instantiated_schema_from_schema(module, "InputChannelTelemetryMetrics")
     min_max_uint16 = get_instantiated_schema_from_instantiation(module, "MinMaxMean16")
 
-    for input_channel in inputs.values():
-        fields.append(schema.make_field(module, field_num_counter, input_channel.name, input_telemtry_metrics))
+    for name in input_names:
+        fields.append(schema.make_field(module, field_num_counter, name, input_telemtry_metrics))
         field_num_counter += 1
 
     for output_channel in outputs.values():
@@ -213,11 +221,26 @@ def generate_telemetry_metrics_schema(
             schema.make_field(module, field_num_counter, output_channel.name + "_num_messages", min_max_uint16)
         )
         field_num_counter += 1
+        if output_channel.name in rate_limited_outputs:
+            fields.append(
+                schema.make_field(
+                    module, field_num_counter, output_channel.name + "_throttle_count", clkbuiltins.UINT64
+                )
+            )
+            field_num_counter += 1
 
     for condition in conditions.values():
         fields.append(
             schema.make_field(module, field_num_counter, f"{condition.name}_trigger_vals", clkbuiltins.UINT16)
         )
+        field_num_counter += 1
+    if rate_limited_outputs:
+        min_max_10ns = get_instantiated_schema_from_instantiation(module, "MinMaxMean10ns")
+        fields.append(schema.make_field(module, field_num_counter, "throttled_execution_count", clkbuiltins.UINT64))
+        field_num_counter += 1
+        fields.append(schema.make_field(module, field_num_counter, "publisher_throttle_wait_duration", min_max_10ns))
+        field_num_counter += 1
+        fields.append(schema.make_field(module, field_num_counter, "post_throttle_exec_latency", min_max_10ns))
         field_num_counter += 1
     common_telemetry_metrics = get_instantiated_schema_from_schema(module, "CogTelemetryMetrics")
     fields.append(schema.make_field(module, field_num_counter, "common_telemetry_metrics", common_telemetry_metrics))
@@ -232,8 +255,9 @@ def generate_telemetry_metrics_schema(
 def generate_event_metrics_schema(  # noqa: PLR0913 All inputs needed to create metrics schema
     cog_name: str,
     batch_size: int,
-    inputs: dict[str, InputDef],
+    input_names: Sequence[str],
     outputs: dict[str, OutputDef],
+    rate_limited_outputs: set[str],
     conditions: dict[str, ConditionDef],
     module: node.Module,
 ) -> tuple[schema.InstantiatedSchema, list[schema.InstantiatedSchema], list[clkenum.ClkEnum]]:
@@ -242,13 +266,35 @@ def generate_event_metrics_schema(  # noqa: PLR0913 All inputs needed to create 
     fields: list[schema.FieldDef] = []
 
     input_event_metrics = get_instantiated_schema_from_schema(module, "InputChannelEventMetrics")
-    for input_channel in inputs.values():
-        fields.append(schema.make_field(module, field_num_counter, input_channel.name, input_event_metrics))
+    for name in input_names:
+        fields.append(schema.make_field(module, field_num_counter, name, input_event_metrics))
         field_num_counter += 1
     for output_channel in outputs.values():
         fields.append(
             schema.make_field(module, field_num_counter, output_channel.name + "_num_messages", clkbuiltins.UINT16)
         )
+        field_num_counter += 1
+        if output_channel.name in rate_limited_outputs:
+            fields.append(
+                schema.make_field(
+                    module, field_num_counter, output_channel.name + "_throttle_count", clkbuiltins.UINT16
+                )
+            )
+            field_num_counter += 1
+
+    if rate_limited_outputs:
+        if module.inner_scope.parent is None:
+            msg = "Module's inner scope must have a parent to define metrics outputs. Has the module been resolved?"
+            raise ValueError(msg)
+        ten_nanoseconds = module.inner_scope.parent.lookup("TenNanoseconds")
+        if not isinstance(ten_nanoseconds, strongtypes.StrongType):
+            msg = f"Expected TenNanoseconds to be a strong type got {ten_nanoseconds}"
+            raise TypeError(msg)
+        fields.append(schema.make_field(module, field_num_counter, "publisher_throttle_wait_duration", ten_nanoseconds))
+        field_num_counter += 1
+        fields.append(schema.make_field(module, field_num_counter, "post_throttle_exec_latency", ten_nanoseconds))
+        field_num_counter += 1
+        fields.append(schema.make_field(module, field_num_counter, "last_throttled_until", clkbuiltins.INT64))
         field_num_counter += 1
 
     conditions_mask_enum = generate_conditions_mask_enum(cog_name, conditions, module)
@@ -316,7 +362,7 @@ def get_instantiated_schema_from_instantiation(module: node.Module, name: str) -
         msg = "Module's inner scope must have a parent to define metrics outputs. Has the module been resolved?"
         raise ValueError(msg)
     instantiation = module.inner_scope.parent.lookup(name)
-    if not isinstance(instantiation, schema.InstantiateStmt):
+    if not isinstance(instantiation, statement.InstantiateStmt):
         msg = f"Expected {name} to be an instantiate statement got {instantiation}"
         raise TypeError(msg)
     assert isinstance(instantiation.typespec, typesys.Instantiation)

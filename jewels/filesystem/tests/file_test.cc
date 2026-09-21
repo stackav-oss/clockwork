@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/error_code.hh"
@@ -21,6 +21,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <unistd.h>
 #include <utility>
 #include <vector>
@@ -109,6 +110,17 @@ TEST_CASE("file_test | make directory")
   CHECK(Directory::create_open(Directory::at_cwd, tmpdir_obj.get_path().c_str(), "x", "y", "z"));
   // Check that the directory exists in the tmpdir
   CHECK(Directory::open(tmpdir->descriptor(), "x/y/z"));
+
+  SECTION("accepts non null terminated string_view names")
+  {
+    const std::string backed_name = "view_name trailing bytes";
+    const std::string_view name{backed_name.data(), std::string_view{"view_name"}.size()};
+
+    auto created_dir = Directory::create_open(tmpdir->descriptor(), name);
+    REQUIRE(created_dir);
+    CHECK(Directory::open(tmpdir->descriptor(), "view_name"));
+    CHECK(!Directory::open(tmpdir->descriptor(), backed_name));
+  }
 }
 
 TEST_CASE("file_test | file reading")

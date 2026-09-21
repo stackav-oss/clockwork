@@ -1,0 +1,35 @@
+#![generate(cpp, cpp_cog, cpp_exe)]
+#![cpp(namespace=clockwork::dsl::tests::support)]
+
+// Doc
+cog ParametrizedCog
+{
+  parameters
+  {
+    string_param: String;
+    int_param: UInt64;
+  }
+  execution
+  {
+    condition periodic: time_since_last_exec(1s);
+    execute when: periodic;
+  }
+}
+
+instantiate ParametrizedCog<string_param="world", int_param=42>;
+
+// Doc
+box ParametrizedBox
+{
+  parameters
+  {
+    string_param: String;
+  }
+  new runner_cog: ParametrizedCog<string_param=string_param, int_param=42>;
+}
+
+// A box that contains the ParametrizedBox and its states.
+box OuterBox
+{
+  new inner_box: ParametrizedBox<string_param="world">;
+}

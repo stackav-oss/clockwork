@@ -1,0 +1,31 @@
+#![generate(cpp, nanobind)]
+#![cpp(namespace=clockwork::journal::replay)]
+
+// Statistics collected while replaying the executions in a journal.
+schema ExecutionStats
+{
+  uuid: 7629c9b2-e0cc-41e6-8b58-54299014dac3;
+
+  options
+  {
+    constructor: source_code_order;
+  }
+
+  fields
+  {
+    // Executions discarded before the first complete execution.
+    #0 dropped_at_start: UInt64;
+
+    // Executions discarded between complete executions.
+    #1 dropped_in_middle: UInt64;
+
+    // Executions discarded during finalization after the first complete execution.
+    #2 dropped_at_end: UInt64;
+
+    // Complete executions returned to the caller.
+    #3 completed: UInt64;
+
+    // Total executions described by the journal.
+    #4 total: UInt64;
+  }
+}

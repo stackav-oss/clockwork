@@ -1,0 +1,26 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::journal::replay::tests)]
+
+// Integral message type used by execution queue tests
+schema IntegralTestMessage
+{
+  uuid: a145c4a4-e3ac-42ae-9f45-778b11cf50ae;
+
+  fields
+  {
+    // Test payload value
+    #0 value: UInt64;
+  }
+}
+
+// String message type used by execution queue tests
+schema StringTestMessage
+{
+  uuid: a37cbe12-0d1a-4ab1-8b1e-48f864fe00bd;
+
+  fields
+  {
+    // Test payload value
+    #0 value: VarString<32>;
+  }
+}

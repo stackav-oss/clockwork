@@ -7,6 +7,7 @@
 #include "clockwork/logging/channel_type_clk_cc.hh"
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/lite_compressor.hh"
+#include "clockwork/logging/lite_compressor_interface.hh"
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
@@ -20,9 +21,11 @@
 #include "clockwork/logging/zstd_helper.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
+#include "clockwork/serialization/cpp/tachyon_lite_compressor.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -42,12 +45,12 @@
 #include <cstring>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <memory_resource>
 #include <mutex>
 #include <numeric>
 #include <optional>
 #include <ranges>
-#include <regex>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -89,7 +92,8 @@ Writer<Policy>::Writer(
     schema_map_(runtime_memory_resource_),
     channel_map_(runtime_memory_resource_),
     persistent_channel_message_map_(runtime_memory_resource_),
-    compressor_(runtime_memory_resource_),
+    default_compressor_(
+      jewels::memory::make_pmr_shared<LiteCompressor>(init_memory_resource, runtime_memory_resource_)),
     writer_environment_(writer_environment),
     max_pending_message_data_bytes_(
       (write_buffer_pool_ptr_->get_capacity() - calculate_schema_reserve_buffers()) * BufferPoolType::buffer_size)
@@ -114,7 +118,8 @@ Writer<Policy>::Writer(
     schema_map_(runtime_memory_resource_),
     channel_map_(runtime_memory_resource_),
     persistent_channel_message_map_(runtime_memory_resource_),
-    compressor_(runtime_memory_resource_),
+    default_compressor_(
+      jewels::memory::make_pmr_shared<LiteCompressor>(init_memory_resource, runtime_memory_resource_)),
     writer_environment_(writer_environment),
     max_pending_message_data_bytes_(
       (write_buffer_pool_ptr_->get_capacity() - calculate_schema_reserve_buffers()) * BufferPoolType::buffer_size)
@@ -135,6 +140,10 @@ Writer<Policy>::~Writer() noexcept
   if (async_request_handle_.is_valid() && async_request_handle_->get_write_size() != 0U)
   {
     jewels::log_cerr_error("Closing writer with unflushed data");
+  }
+  if (const auto drain_result = drain_async_operations(); !drain_result)
+  {
+    jewels::log_cerr_error("Failed to drain async operations in destructor: {}", drain_result.error());
   }
 }
 
@@ -281,9 +290,22 @@ template <typename Policy>
   }
   auto schema_encoding = channel_metadata.schema_encoding;
   auto schema_definition = channel_metadata.schema_definition;
+  std::shared_ptr<LiteCompressorInterface> compressor;
   LogExpected<std::pmr::vector<std::byte>> compress_result;
   if (schema_encoding == SchemaEncoding::clockwork_tachyon)
   {
+    try
+    {
+      compressor = clockwork::serialization::TachyonLiteCompressor::make_compressor(
+        runtime_memory_resource_,
+        channel_metadata.channel_name,
+        std::as_bytes(std::span{schema_definition.data(), schema_definition.size()}));
+    }
+    catch (const std::runtime_error& exc)
+    {
+      jewels::log_cerr_warn("Failed to make compressor for {}, using default", channel_metadata.channel_name);
+      compressor = default_compressor_;
+    }
     compress_result = zstd_compress(
       std::as_bytes(std::span{schema_definition.data(), schema_definition.size()}), runtime_memory_resource_);
     if (!compress_result)
@@ -299,6 +321,10 @@ template <typename Policy>
     }
     schema_definition = nolint_helper::byte_span_to_string_view(compress_result.value()),
     schema_encoding = SchemaEncoding::clockwork_tachyon_zstd;
+  }
+  else
+  {
+    compressor = default_compressor_;
   }
   LogExpected<void> add_result{};
   uint16_t schema_id{0U};
@@ -328,7 +354,8 @@ template <typename Policy>
     channel_metadata.compression_type,
     channel_metadata.message_encoding,
     channel_metadata.channel_type,
-    schema_id);
+    schema_id,
+    jewels::memory::NonNullSharedPtr<LiteCompressorInterface>(std::move(compressor)));
   if (get_state() == WriterState::logging || get_state() == WriterState::degraded)
   {
     if (const auto write_result = write_channel_metadata(*channel_ptr, current_steady_time);
@@ -384,6 +411,18 @@ template <typename Policy>
 {
   return (async_request_handle_.is_valid() ? async_request_handle_->get_message_data_size() : 0U) +
          async_writer_.get_pending_message_data_bytes();
+}
+
+template <typename Policy>
+[[nodiscard]] jewels::memory::NonNullSharedPtr<LiteCompressorInterface>
+Writer<Policy>::get_channel_compressor(std::string_view channel_name) const
+{
+  const auto channel_map_iter = channel_map_.find(channel_name);
+  if (channel_map_iter == channel_map_.end())
+  {
+    return default_compressor_;
+  }
+  return channel_map_iter->second->compressor;
 }
 
 template <typename Policy>
@@ -504,7 +543,16 @@ template <typename Policy>
   auto slot = message_handle.slot();
   auto header_ptr = slot.header();
   const std::span<const std::byte> message = slot.message();
-  auto data = compressor_.compress(message);
+  const auto channel_map_iter = channel_map_.find(channel_name);
+  if (channel_map_iter == channel_map_.end())
+  {
+    std::pmr::string status_string{runtime_memory_resource_};
+    fmt::format_to(std::back_inserter(status_string), "Channel metadata for {} is not configured", channel_name);
+    jewels::log_cerr_error("{}", status_string);
+    return jewels::unexpected(set_writer_error(LogError::missing_channel_metadata, std::move(status_string)));
+  }
+  const auto& channel_metadata = *(channel_map_iter->second);
+  auto data = channel_metadata.compressor->compress(message);
   auto compressed_data_size =
     std::accumulate(data.begin(), data.end(), size_t{0U}, [](size_t lhs, auto& rhs) { return lhs + rhs.size(); });
   const bool is_lite_compressed = compressed_data_size < message.size();
@@ -840,7 +888,16 @@ template <typename Policy>
   auto slot = message_handle.slot();
   auto header_ptr = slot.header();
   const std::span<const std::byte> message = slot.message();
-  auto data = compressor_.compress(message);
+  const auto channel_map_iter = channel_map_.find(channel_name);
+  if (channel_map_iter == channel_map_.end())
+  {
+    std::pmr::string status_string{runtime_memory_resource_};
+    fmt::format_to(std::back_inserter(status_string), "Channel metadata for {} is not configured", channel_name);
+    jewels::log_cerr_error("{}", status_string);
+    return jewels::unexpected(set_writer_error(LogError::missing_channel_metadata, std::move(status_string)));
+  }
+  const auto& channel_metadata = *(channel_map_iter->second);
+  auto data = channel_metadata.compressor->compress(message);
   auto compressed_data_size =
     std::accumulate(data.begin(), data.end(), size_t{0U}, [](size_t lhs, auto& rhs) { return lhs + rhs.size(); });
   const auto is_lite_compressed = compressed_data_size < message.size();
@@ -1278,7 +1335,8 @@ Writer<Policy>::add_channel_metadata(
   CompressionType compression_type,
   MessageEncoding message_encoding,
   ChannelType channel_type,
-  uint16_t schema_id)
+  uint16_t schema_id,
+  jewels::memory::NonNullSharedPtr<LiteCompressorInterface> compressor)
 {
   if (const auto map_iter = channel_map_.find(channel_name); map_iter != channel_map_.end())
   {
@@ -1292,7 +1350,8 @@ Writer<Policy>::add_channel_metadata(
       std::pmr::string{channel_name, runtime_memory_resource_},
       compression_type,
       message_encoding,
-      channel_type});
+      channel_type,
+      std::move(compressor)});
   const auto channel_ptr = jewels::memory::make_non_null_from_ref(channel_metadata);
   channel_map_.emplace(channel_ptr->channel_name, channel_ptr);
   return channel_ptr;

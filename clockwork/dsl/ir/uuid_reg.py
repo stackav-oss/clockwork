@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Global registry for entity UUIDs."""
@@ -155,7 +155,8 @@ def lookup_uuid(compiler_context: CompilerContext, entity: Value | str) -> UUID:
     registry = compiler_context[UUID_REGISTRY_KEY]
     key = entity.value_key() if isinstance(entity, Value) else entity
     if key not in registry.key_to_uuid:
-        raise RuntimeError("Entity with key '" + key + "' does not exist in the registry.")
+        msg = f"Entity with key '{key}' does not exist in the registry."
+        raise RuntimeError(msg)
     return registry.key_to_uuid[key]
 
 

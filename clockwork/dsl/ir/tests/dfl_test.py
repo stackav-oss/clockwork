@@ -1,22 +1,35 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
 """Unit tests for DFL IR module."""
 
+import decimal
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
 import pytest
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl import clockwork_parser as parser
 from clockwork.dsl import compiler_context
-from clockwork.dsl.ir import clkbuiltins, clkenum, compiler, dfl, dfl_types, node, primitive, typesys
+from clockwork.dsl.ir import (
+    clkbuiltins,
+    clkenum,
+    compiler,
+    dfl,
+    dfl_types,
+    node,
+    parse,
+    primitive,
+    schema,
+    typesys,
+    units,
+)
 from clockwork.dsl.ir.importer import FilesystemImporter
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.tests.support.py_test_utils import fix_clockwork_path
-from fltk.fegen.pyrt import errors, terminalsrc
+from fltk.fegen.pyrt import terminalsrc
 from typing_extensions import override
 
 # ---------------------------------------------------------------------------
@@ -61,8 +74,7 @@ def _parse(source: str, rule_name: str, cst_type: type[CstType]) -> tuple[CstTyp
     """
     terminals = terminalsrc.TerminalSource(source)
     clk_parser = parser.Parser(terminalsrc=terminals)
-    parse_method = getattr(clk_parser, f"apply__parse_{rule_name}")
-    result = parse_method(0)
+    result = parse.parse_rule(clk_parser, rule_name, cst_type)
 
     expected_length = len(source)
     if not result or result.pos != expected_length:
@@ -73,14 +85,9 @@ def _parse(source: str, rule_name: str, cst_type: type[CstType]) -> tuple[CstTyp
         msg += f"Parsed up to position: {result.pos if result else 0} of {expected_length}\n"
         msg += f"Longest parse reached: {longest_pos}\n"
         msg += f"Text at longest parse: {terminals.terminals[longest_pos : longest_pos + 20]!r}\n"
-        msg += errors.format_error_message(
-            clk_parser.error_tracker,
-            terminals,
-            lambda rule_id: clk_parser.rule_names[rule_id],
-        )
+        msg += parse.format_parse_error(clk_parser, terminals)
         raise AssertionError(msg)
 
-    assert isinstance(result.result, cst_type), f"Expected CST type {cst_type}, got {type(result.result)}"
     return result.result, terminals
 
 
@@ -131,6 +138,11 @@ def test_parse_identifier() -> None:
     assert isinstance(expr, dfl.Ref)
     assert expr.path == ("foo",)
     assert not expr.is_namespaced
+
+    expr = _parse_and_convert("foo::bar")
+    assert isinstance(expr, dfl.Ref)
+    assert expr.path == ("foo", "bar")
+    assert expr.is_namespaced
 
 
 def test_ref_namespaced_identifier() -> None:
@@ -307,6 +319,18 @@ class _NamedTestEntity(typesys.NamedValue):
         return "test"
 
 
+@dataclass
+class _TestBinding(node.NamedBinding[typesys.Value]):
+    """Just like statement.ImutableBinding, but without all the CST members."""
+
+    value: typesys.Value
+
+    @override
+    def bound_value(self) -> typesys.Value:
+        """Get the bound value."""
+        return self.value
+
+
 def test_validate_names_defined() -> None:
     """Test validate_names passes when all names are defined."""
     scope = node.Scope(parent=None, uniq_path="test", module_id_for_errors=None)
@@ -381,7 +405,7 @@ def _type_check(expr_str: str, registry: dfl_types.TraitRegistry) -> typesys.Typ
         ("i + j", clkbuiltins.INT64),
         ("i - j", clkbuiltins.INT64),
         ("i * j", clkbuiltins.INT64),
-        ("i / j", clkbuiltins.INT64),
+        ("i / j", clkbuiltins.FLOAT64),
         ("-i", clkbuiltins.INT64),
         ("|i|", clkbuiltins.INT64),
         # Float operations
@@ -473,6 +497,69 @@ def test_type_check_conditional_errors(std_traits_registry: dfl_types.TraitRegis
     # Mismatched body types in cond
     expr = _parse_and_convert("cond { b => i, else => f }", scope)
     with pytest.raises(dfl.TypeCheckError, match="Type mismatch"):
+        dfl.type_check_expr(expr, std_traits_registry)
+
+
+def test_type_check_nested_member_access(std_traits_registry: dfl_types.TraitRegistry) -> None:
+    """Test type checking nested member access (e.g. outer.inner.leaf).
+
+    Verifies _check_member_access falls back to base_type when base_entity
+    is not a MembershipEntity, which is the case for nested Member nodes.
+    """
+    schema_source = """\
+// Inner schema with a leaf field
+schema Inner {
+    uuid: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa;
+    fields {
+        // A leaf Int64 field
+        #0 leaf: Int64;
+    }
+}
+
+// Middle schema containing an inner schema
+schema Middle {
+    uuid: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb;
+    fields {
+        // Nested inner schema
+        #0 inner: Inner;
+    }
+}
+
+// Outer schema containing a middle schema
+schema Outer {
+    uuid: cccccccc-cccc-cccc-cccc-cccccccccccc;
+    fields {
+        // Nested middle schema
+        #0 middle: Middle;
+    }
+}
+"""
+    fs_importer = FilesystemImporter(compile_fn=compiler.compile_source_file)
+    module = compiler.compile_source_text(schema_source, ModuleID(CLK_REPO, "test_nested_member"), fs_importer)
+
+    outer_schema = module.inner_scope.lookup("Outer")
+    assert isinstance(outer_schema, schema.Schema | schema.ResolvedSchema)
+    instantiated_outer = schema.InstantiatedSchema.from_typespec(outer_schema)
+
+    scope = node.Scope(parent=dfl.BUILTINS_SCOPE, uniq_path="test", module_id_for_errors=None)
+    scope.names["outer"] = _NamedTestEntity("outer", scope, instantiated_outer)
+
+    expr = _parse_and_convert("outer.middle", scope)
+    typed_expr = dfl.type_check_expr(expr, std_traits_registry)
+    assert isinstance(typed_expr.type_info, schema.InstantiatedSchema)
+    assert typed_expr.type_info.schema_name == "Middle"
+
+    expr = _parse_and_convert("outer.middle.inner", scope)
+    typed_expr = dfl.type_check_expr(expr, std_traits_registry)
+    assert isinstance(typed_expr.type_info, schema.InstantiatedSchema)
+    assert typed_expr.type_info.schema_name == "Inner"
+
+    expr = _parse_and_convert("outer.middle.inner.leaf", scope)
+    typed_expr = dfl.type_check_expr(expr, std_traits_registry)
+    assert typed_expr.type_info is clkbuiltins.INT64
+
+    expr = _parse_and_convert("outer.middle.nonexistent", scope)
+    with pytest.raises(dfl.TypeCheckError, match="has no field 'nonexistent'"):
         dfl.type_check_expr(expr, std_traits_registry)
 
 
@@ -2127,3 +2214,536 @@ class TestDflLambdas:
         for i, elem in enumerate(expanded.elements):
             assert isinstance(elem, dfl.Binary), f"Element {i} should be Binary(MUL) but got {type(elem)}"
             assert elem.op == dfl.BinaryOp.MUL
+
+
+class TestDflValues:
+    """Tests for DFL operations on Values."""
+
+    def test_map_expr_value(self) -> None:
+        """Test map_expr handles Value correctly."""
+
+        def not_called(e: dfl.Expr) -> dfl.Expr:
+            pytest.fail("should not be called")
+            return e
+
+        expr = primitive.DecimalValue(value=decimal.Decimal(1), type_info=clkbuiltins.UINT64)
+        mapped = dfl.map_expr(not_called, expr)
+        assert mapped is expr
+
+    def test_fold_expr_value(self) -> None:
+        """Test fold_expr handles Value correctly."""
+
+        def to_py(e: dfl.Expr, children: list[int]) -> int:
+            assert len(children) == 0
+            assert isinstance(e, primitive.DecimalValue)
+            return int(e.value)
+
+        expr = primitive.DecimalValue(value=decimal.Decimal(123), type_info=clkbuiltins.UINT64)
+        assert dfl.fold_expr(to_py, expr) == 123
+
+    def test_type_check_value(self, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test type_check_expr handles Value correctly."""
+        expr = primitive.DecimalValue(value=decimal.Decimal(1), type_info=clkbuiltins.UINT64)
+        typed = dfl.type_check_expr(expr, std_traits_registry)
+        assert typed.expr is expr
+        assert typed.type_info is clkbuiltins.UINT64
+
+
+class TestConstantFolding:
+    """Tests for DFL constant folding."""
+
+    @pytest.fixture(scope="class")
+    def test_scope(self) -> node.Scope:
+        """Builtins scope with some extra variables."""
+        scope = node.Scope(parent=dfl.BUILTINS_SCOPE, uniq_path="test", module_id_for_errors=None)
+        scope.names["a"] = _TestBinding(
+            name="a", scope=scope, value=primitive.DecimalValue(value=decimal.Decimal(2), type_info=clkbuiltins.INT64)
+        )
+        scope.names["b"] = _TestBinding(
+            name="b", scope=scope, value=primitive.DecimalValue(value=decimal.Decimal(3), type_info=clkbuiltins.INT64)
+        )
+        return scope
+
+    def test_const_fold_value_expr(self, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold handles Value correctly."""
+        expr = primitive.DecimalValue(value=decimal.Decimal(1), type_info=clkbuiltins.UINT64)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is expr
+
+    def test_const_fold_ref_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold correctly handles bindings."""
+        expr = _parse_and_convert("a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 2
+
+        expr = _parse_and_convert("b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 3
+
+    def test_const_fold_binary_expr_arithmetic(
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test const_fold can perform arithmetic correctly."""
+        # Addition
+        expr = _parse_and_convert("a + b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 5
+        expr = _parse_and_convert("1s + 5ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.UnitValue)
+        assert folded.value == 1005
+        assert folded.unit is units.MILLISECONDS
+
+        # Subtraction
+        expr = _parse_and_convert("a - b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == -1
+        expr = _parse_and_convert("1s - 5ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.UnitValue)
+        assert folded.value == 995
+        assert folded.unit is units.MILLISECONDS
+
+        # Multiplation
+        expr = _parse_and_convert("a * b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 6
+        expr = _parse_and_convert("5ms * 1s", test_scope)
+        with pytest.raises(dfl.TypeCheckError, match="No implementation of Mul for ::Duration and ::Duration"):
+            dfl.const_fold(expr, std_traits_registry)
+
+        # Division
+        expr = _parse_and_convert("a / b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == decimal.Decimal(2) / decimal.Decimal(3)
+        assert folded.type_info is clkbuiltins.FLOAT64
+        expr = _parse_and_convert("1s / 5ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.UnitValue)
+        assert folded.value == 200
+        assert folded.unit is units.MILLISECONDS
+        assert folded.type_info is clkbuiltins.FLOAT64
+
+        # Mod
+        expr = _parse_and_convert("b % a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 1
+        expr = _parse_and_convert("1s % 200ms", test_scope)
+        with pytest.raises(dfl.TypeCheckError, match="No implementation of Rem for ::Duration and ::Duration"):
+            dfl.const_fold(expr, std_traits_registry)
+
+    def test_const_fold_binary_expr_comparison(  # noqa: PLR0915 # Lots of cases to cover here
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test const_fold can perform comparison operations."""
+        # Equal
+        expr = _parse_and_convert("b == a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("b == 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("a == a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("a == 2", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("1s == 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("1s == 999ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+
+        # Not Equal
+        expr = _parse_and_convert("b != a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("b != 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("a != a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("a != 2", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("1s != 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("1s != 999ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+        # Less Than (or Equal)
+        expr = _parse_and_convert("b < a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("a < 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("a <= b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("b <= 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("1s < 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("1s <= 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+        # Greater Than (or Equal)
+        expr = _parse_and_convert("b > a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("a > 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("a >= b", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("b >= 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("1s > 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("1s >= 1000ms", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+    def test_const_fold_binary_expr_logical(
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test const_fold can perform binary logic."""
+        # And
+        expr = _parse_and_convert("b == a and a == a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.FALSE_VALUE
+        expr = _parse_and_convert("b == 3 and a == 2", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+        # Or
+        expr = _parse_and_convert("b == a or a == a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+        expr = _parse_and_convert("b == 3 or a == 1", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+    def test_const_fold_unary_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold can perform unary operations."""
+        # Negative
+        expr = _parse_and_convert("-a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == -2
+
+        # Identity
+        expr = _parse_and_convert("+a", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 2
+
+        # Absolute Value
+        expr = _parse_and_convert("|b|", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 3
+
+        # Logical Not
+        expr = _parse_and_convert("not |b| == 2", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert folded is clkbuiltins.TRUE_VALUE
+
+    def test_const_fold_if_else_expr(
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test const_fold can evaluate if-else expressions."""
+        expr = _parse_and_convert('if b % 2 == 0 then "foo" else "bar"', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "bar"
+
+        expr = _parse_and_convert('if b % 2 > 0 then "foo" else "bar"', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "foo"
+
+    def test_const_fold_cond_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold can evaluate cond expressions."""
+        expr = _parse_and_convert('cond { a < 0 => "foo", b > 1 => "bar", else => "baz" }', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "bar"
+
+        expr = _parse_and_convert('cond { a < 0 => "foo", b < 1 => "bar", else => "baz" }', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "baz"
+
+    def test_const_fold_expr_tuple(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold works on tuples."""
+        expr = _parse_and_convert("[a+b, a*b,]", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.ExprTuple)
+        assert isinstance(folded.elements[0], primitive.DecimalValue)
+        assert folded.elements[0].value == 5
+        assert isinstance(folded.elements[1], primitive.DecimalValue)
+        assert folded.elements[1].value == 6
+
+    def test_const_fold_call_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold works on function call arguments."""
+        expr = _parse_and_convert("max(a, b)", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.Call)
+        assert len(folded.args) == 2
+        assert isinstance(folded.args[0].expr, primitive.DecimalValue)
+        assert folded.args[0].expr.value == 2
+        assert isinstance(folded.args[1].expr, primitive.DecimalValue)
+        assert folded.args[1].expr.value == 3
+
+    def test_const_fold_lambda_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold works on lambdas."""
+        expr = _parse_and_convert("map(fn(x) x * 2, [a, b])", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.ExprTuple)
+        assert isinstance(folded.elements[0], primitive.DecimalValue)
+        assert folded.elements[0].value == 4
+        assert isinstance(folded.elements[1], primitive.DecimalValue)
+        assert folded.elements[1].value == 6
+
+    def test_const_fold_error(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test that const_fold propagates errors."""
+        expr = _parse_and_convert("1s / 0s")
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.Invalid)
+        assert folded.expr == expr
+        assert isinstance(folded.error, ZeroDivisionError)
+
+        expr = _parse_and_convert("cond { a < 0 => 1.0, b < 1 => 0.1, else => 1ms / 0s }", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.Invalid)
+        assert isinstance(folded.expr, dfl.Binary)
+        assert isinstance(folded.error, ZeroDivisionError)
+
+        expr = _parse_and_convert("if a > 0 then b / 0 else a / 2", test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.Invalid)
+        assert isinstance(folded.expr, dfl.Binary)
+        assert isinstance(folded.error, ZeroDivisionError)
+
+    def test_const_fold_match_expr_enum(self, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold works on match expressions with enum patterns."""
+        cst_node, terminals = _parse_dfl_expr("match val { TestEnum::foo => 1, TestEnum::bar => 2, else => 3}")
+        module = _make_test_module(terminals)
+
+        enum_source = """
+        // Simple enum
+        enum TestEnum
+        {
+            values
+            {
+                // Foo
+                #0 foo default;
+                // Bar
+                #1 bar;
+                // Baz
+                #2 baz;
+            }
+        }
+        """
+        fs_importer = FilesystemImporter(compile_fn=compiler.compile_source_file)
+        enum_module = compiler.compile_source_text(enum_source, ModuleID(CLK_REPO, "enum_test_module"), fs_importer)
+
+        test_enum = enum_module.inner_scope.lookup("TestEnum")
+        assert isinstance(test_enum, clkenum.ClkEnum)
+        module.inner_scope.define("TestEnum", test_enum, terminals)
+        ctx = dfl.Context(scope=module.inner_scope, terminals=terminals, module_id=module.module_id)
+
+        bar_ref = test_enum.lookup("bar")
+        assert bar_ref is not None
+        module.inner_scope.names["val"] = bar_ref
+        expr = dfl.expr_from_cst(cst_node, ctx, module)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 2
+
+        # else branch
+        baz_ref = test_enum.lookup("baz")
+        assert baz_ref is not None
+        module.inner_scope.names["val"] = baz_ref
+        expr = dfl.expr_from_cst(cst_node, ctx, module)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.DecimalValue)
+        assert folded.value == 3
+
+    def test_const_fold_match_expr(self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test const_fold works on match expressions."""
+        expr = _parse_and_convert('match a { 5 | 2 => "foo", 3..4 => "bar", 7 => "baz", else => "bingo" }', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "foo"
+
+        test_scope.names["a"] = _TestBinding(
+            name="a",
+            scope=test_scope,
+            value=primitive.DecimalValue(value=decimal.Decimal(3), type_info=clkbuiltins.INT64),
+        )
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "bar"
+
+        test_scope.names["a"] = _TestBinding(
+            name="a",
+            scope=test_scope,
+            value=primitive.DecimalValue(value=decimal.Decimal(7), type_info=clkbuiltins.INT64),
+        )
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "baz"
+
+        test_scope.names["a"] = _TestBinding(
+            name="a",
+            scope=test_scope,
+            value=primitive.DecimalValue(value=decimal.Decimal(99), type_info=clkbuiltins.INT64),
+        )
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "bingo"
+
+    def test_const_fold_match_expr_units(
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test pattern matching comparisons work with compatible unit types."""
+        expr = _parse_and_convert('match 1s { 5s => "foo", 1000ms => "bar" }', test_scope)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, primitive.StringValue)
+        assert folded.value == "bar"
+
+    def test_const_fold_match_expr_error(
+        self, test_scope: node.Scope, std_traits_registry: dfl_types.TraitRegistry
+    ) -> None:
+        """Test that pattern matching misses are caught."""
+        expr = _parse_and_convert('match a { 5 | 2 => "foo", 3..4 => "bar" }', test_scope)
+        test_scope.names["a"] = _TestBinding(
+            name="a",
+            scope=test_scope,
+            value=primitive.DecimalValue(value=decimal.Decimal(7), type_info=clkbuiltins.INT64),
+        )
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, dfl.Invalid)
+        assert isinstance(folded.error, dfl.PatternMatchError)
+
+    def test_const_fold_instantiation_expr(self, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test that we can construct a sensible typesys.Instantiation from a dfl.Instantiation."""
+        expr = _parse_and_convert("FixedArray<UInt64, size=64>")
+        assert isinstance(expr, dfl.Instantiation)
+        folded = dfl.const_fold(expr, std_traits_registry)
+        assert isinstance(folded, typesys.Instantiation)
+        assert folded.instantiates is clkbuiltins.FIXED_ARRAY
+        assert folded.arguments["type"] is clkbuiltins.UINT64
+        assert isinstance(folded.arguments["size"], primitive.DecimalValue)
+        assert folded.arguments["size"].value == 64
+
+
+class TestInstantiationExpression:
+    """Tests for instantiation expressions."""
+
+    def test_parse(self) -> None:
+        """Test that the target type and arguments are correctly parsed from instantiation expressions."""
+        expr = _parse_and_convert("Foo<Bar, 1, baz=2>")
+        assert isinstance(expr, dfl.Instantiation)
+        assert isinstance(expr.instantiates, dfl.Ref)
+        assert expr.instantiates.path == ("Foo",)
+        assert len(expr.args) == 3
+        assert isinstance(expr.args[0].expr, dfl.Ref)
+        assert expr.args[0].expr.path == ("Bar",)
+        assert isinstance(expr.args[1].expr, primitive.DecimalLiteral)
+        assert primitive.decimal_to_int(expr.args[1].expr) == 1
+        assert isinstance(expr.args[2].expr, primitive.DecimalLiteral)
+        assert expr.args[2].name == "baz"
+        assert primitive.decimal_to_int(expr.args[2].expr) == 2
+
+    def test_type_check_failure(self, std_traits_registry: dfl_types.TraitRegistry) -> None:
+        """Test that type checking fails if a parameter has the wrong type."""
+        expr = _parse_and_convert('FixedArray<UInt64, size="wrong">')
+        assert isinstance(expr, dfl.Instantiation)
+        with pytest.raises(dfl.TypeCheckError, match="Type mismatch"):
+            dfl.const_fold(expr, std_traits_registry)
+
+        expr = _parse_and_convert("FixedArray<123, size=64>")
+        assert isinstance(expr, dfl.Instantiation)
+        with pytest.raises(dfl.TypeCheckError, match="Type mismatch"):
+            dfl.const_fold(expr, std_traits_registry)
+
+
+def test_parse_block() -> None:
+    """Test parsing blocks in various contexts."""
+    block_source = """{
+      foo: Tappy<MySchema> {
+        max_msgs: 1;
+      }
+    }
+    """
+    expr = _parse_and_convert(block_source)
+    assert isinstance(expr, dfl.Block)
+
+    block_source = """cond {
+      a == 1 => {
+          foo: Tappy<MySchema> {
+            max_msgs: 1;
+          }
+      },
+    }
+    """
+    expr = _parse_and_convert(block_source)
+    assert isinstance(expr, dfl.CondExpr)
+    assert len(expr.arms) == 1
+    assert isinstance(expr.arms[0].body, dfl.Block)
+    body = expr.arms[0].body
+    assert isinstance(body, dfl.Block)
+    assert len(body.statements) == 1
+    assert isinstance(body.statements[0], dfl.Definition)
+    assert body.statements[0].name == "foo"
+    options_block = body.statements[0].options
+    assert options_block is not None
+    assert len(options_block.statements) == 1
+    assert isinstance(options_block.statements[0], dfl.Definition)
+    assert options_block.statements[0].options is None
+    assert options_block.statements[0].name == "max_msgs"
+
+    block_source = """match a {
+      1 => {
+          foo: Tappy<MySchema> {
+            max_msgs: 1;
+          }
+      }
+    }
+    """
+    expr = _parse_and_convert(block_source)
+    assert isinstance(expr, dfl.Match)
+    assert len(expr.arms) == 1
+    body = expr.arms[0].body
+    assert isinstance(body, dfl.Block)
+    assert len(body.statements) == 1
+    assert isinstance(body.statements[0], dfl.Definition)
+    assert body.statements[0].name == "foo"
+    options_block = body.statements[0].options
+    assert options_block is not None
+    assert len(options_block.statements) == 1
+    assert isinstance(options_block.statements[0], dfl.Definition)
+    assert options_block.statements[0].options is None
+    assert options_block.statements[0].name == "max_msgs"

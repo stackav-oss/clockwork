@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Protoc generator to add NOLINTs to generated cpp files."""

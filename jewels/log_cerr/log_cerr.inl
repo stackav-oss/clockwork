@@ -147,7 +147,8 @@ void log_message_to_cerr(
   fmt::format_args args)
 {
   // ensure that the log threshold is met
-  if (log_level < get_log_threshold())
+  const auto log_threshold = get_log_threshold();
+  if (log_level < log_threshold)
   {
     return;
   }

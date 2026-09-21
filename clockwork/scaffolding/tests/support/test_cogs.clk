@@ -1,5 +1,6 @@
 use clockwork::scaffolding::tests::support::test_msgs;
 use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
 
 //
 extern_type MyCxxFibState;
@@ -7,120 +8,135 @@ extern_type MyCxxFibState;
 //
 cog InitCog1
 {
-    configs
-    {
-        config: Tappy<test_msgs::InitConfig>;
-    }
+  configs
+  {
+    config: Tappy<test_msgs::InitConfig>;
+  }
 
-    states
+  states
+  {
+    state: Tappy<test_msgs::State>
     {
-        state: Tappy<test_msgs::State>
-        {
-            mutable: true;
-        }
-        fib: MyCxxFibState
-        {
-            mutable: true;
-        }
+      mutable: true;
     }
+    fib: MyCxxFibState
+    {
+      mutable: true;
+    }
+  }
 
-    execution
-    {
-        execute when: init;
-    }
-    metrics_options
-    {
-        enabled: false;
-    }
+  execution
+  {
+    execute when: init;
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
 }
 
 //
 cog TestCog1
 {
-    resources
-    {
-        memory1: persistent;
-        memory2: persistent;
-    }
+  resources
+  {
+    memory1: persistent;
+    memory2: persistent;
+  }
 
-    configs
-    {
-        cfg_a: Tappy<test_msgs::Config>;
-    }
+  configs
+  {
+    cfg_a: Tappy<test_msgs::Config>;
+  }
 
-    states
+  states
+  {
+    state_a: Tappy<test_msgs::State>
     {
-        state_a: Tappy<test_msgs::State>
-        {
-            mutable: true;
-        }
+      mutable: true;
     }
+  }
 
-    outputs
-    {
-        out_a: Tappy<test_msgs::Message1>;
-    }
+  outputs
+  {
+    out_a: Tappy<test_msgs::Message1>;
+  }
 
-    execution
-    {
-        condition periodic: time_since_last_exec(200ms);
-        execute when: periodic;
-    }
+  execution
+  {
+    condition periodic: time_since_last_exec(200ms);
+    execute when: periodic;
+  }
 
-    diagnostics
-    {
-        group_id: "fault_injector_a";
-    }
-    metrics_options
-    {
-        enabled: false;
-    }
+  diagnostics
+  {
+    group_id: "fault_injector_a";
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
 }
 
 //
 cog TestCog2
 {
-    resources
-    {
-        memory: persistent;
-    }
+  resources
+  {
+    memory: persistent;
+  }
 
-    states
+  states
+  {
+    state_a: Tappy<test_msgs::State>;
+    fib: MyCxxFibState
     {
-        state_a: Tappy<test_msgs::State>;
-        fib: MyCxxFibState
-        {
-            mutable: true;
-        }
+      mutable: true;
     }
+  }
 
-    inputs
-    {
-        in_a: Tappy<test_msgs::Message1>;
-    }
+  inputs
+  {
+    in_a: Tappy<test_msgs::Message1>;
+  }
 
-    outputs
-    {
-        out_a: Tappy<test_msgs::Message2>;
-    }
+  outputs
+  {
+    out_a: Tappy<test_msgs::Message2>;
+  }
 
-    execution
-    {
-        condition new_msg: new_message(max=2, input=in_a);
-        execute when: new_msg;
-    }
+  execution
+  {
+    condition new_msg: new_message(max=2, input=in_a);
+    execute when: new_msg;
+  }
 
-    diagnostics
-    {
-        group_id: "fault_injector_b";
-        instance_id: "a";
-    }
-    metrics_options
-    {
-        enabled: false;
-    }
+  diagnostics
+  {
+    group_id: "fault_injector_b";
+    instance_id: "a";
+  }
+  metrics_options
+  {
+    enabled: false;
+  }
 }
-
+policy CogEventMetricsPolicy for TestCog1
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for TestCog1
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for TestCog2
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for TestCog2
+{
+  enabled = false;
+}
 cpp_target test_cogs
 {
   options
@@ -133,10 +149,9 @@ cpp_target test_cogs
     namespace: clockwork::testing;
     type
     {
-        name: MyCxxFibState;
+      name: MyCxxFibState;
     }
   }
-
   cog InitCog1;
   cog TestCog1;
   cog TestCog2;

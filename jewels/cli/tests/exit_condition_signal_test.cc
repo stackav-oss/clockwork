@@ -1,9 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/cli/exit_condition_signal.hh"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -37,12 +38,14 @@ namespace
 
 TEST_CASE("main")
 {
+  const auto signal = GENERATE(SIGINT, SIGTERM);
+
   SignalExitCondition condition1;
   CHECK(!condition1.check());
   {
     SignalExitCondition condition2;
     CHECK(!condition2.check());
-    CHECK(std::raise(SIGINT) == 0);
+    CHECK(std::raise(signal) == 0);
     CHECK(condition2.check());
     CHECK(condition2.check());
     CHECK(condition2.check());
@@ -50,10 +53,10 @@ TEST_CASE("main")
   }
   CHECK(!condition1.check());
   std::thread sigthread(
-    []()
+    [signal]()
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      std::ignore = std::raise(SIGINT);
+      std::ignore = std::raise(signal);
     });
   condition1.wait();
   CHECK(condition1.check());

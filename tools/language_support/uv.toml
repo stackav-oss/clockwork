@@ -1,7 +1,8 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 no-cache = true
+system-certs = true
 
 [pip]
 python-version = "3.10"

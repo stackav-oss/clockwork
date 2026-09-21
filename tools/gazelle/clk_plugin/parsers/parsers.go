@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 // Package parsers defines parsers to extract the generated targets and dependencies from clockwork files.
@@ -73,8 +73,7 @@ func ParseClkFile(source string, inClockworkRepo bool) common.ImportsParsedFromR
 	cppExeImports := map[string]bool{}
 	goProtoImportPath := ""
 
-	lines := strings.Split(source, "\n")
-	for _, line := range lines {
+	for _, line := range clkStatements(source) {
 		match := textBeforeCommentRegecx.FindStringSubmatch(line)
 		if len(match) != 0 {
 			line = match[1]
@@ -155,6 +154,48 @@ func ParseClkFile(source string, inClockworkRepo bool) common.ImportsParsedFromR
 		common.SortedClkImportsFromStringSet(cppExeImports),
 		goProtoImportPath,
 	)
+}
+
+func clkStatements(source string) []string {
+	var statements []string
+	var current strings.Builder
+	statementTerminator := ""
+
+	flushCurrent := func() {
+		if current.Len() == 0 {
+			return
+		}
+		statements = append(statements, current.String())
+		current.Reset()
+		statementTerminator = ""
+	}
+
+	for _, line := range strings.Split(source, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if statementTerminator == "" {
+			if strings.HasPrefix(trimmed, "#![") || strings.HasPrefix(trimmed, "#[") {
+				current.WriteString(trimmed)
+				statementTerminator = "]"
+			} else {
+				statements = append(statements, trimmed)
+				continue
+			}
+		} else {
+			current.WriteString(" ")
+			current.WriteString(trimmed)
+		}
+
+		if strings.Contains(trimmed, statementTerminator) {
+			flushCurrent()
+		}
+	}
+
+	flushCurrent()
+	return statements
 }
 
 func parseGenerateLine(line string) (map[string]bool, map[string]bool) {

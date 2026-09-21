@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -25,6 +25,9 @@ clk(
         "database_config_clk_cc.cc",
         "database_config_clk_cc.hh",
         "database_config_clk_cc.inl",
+        "database_config_clk_cc_types.cc",
+        "database_config_clk_cc_types.hh",
+        "database_config_clk_cc_types.inl",
     ],
     cpp_deps = [":report_clk_cc"],
     generate = ["cpp"],
@@ -39,6 +42,9 @@ clk(
         "report_clk_cc.cc",
         "report_clk_cc.hh",
         "report_clk_cc.inl",
+        "report_clk_cc_types.cc",
+        "report_clk_cc_types.hh",
+        "report_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
@@ -47,7 +53,10 @@ clk(
 cc_library(
     name = "report_definitions",
     hdrs = ["report_definitions.hh"],
-    deps = ["@wise_enum"],
+    deps = [
+        "//jewels/utility:string_param",
+        "@wise_enum",
+    ],
 )
 
 cc_library(

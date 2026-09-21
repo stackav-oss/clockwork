@@ -1,20 +1,23 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 
-#include <__stddef_offsetof.h>
 #include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <iterator>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <sys/types.h>
@@ -568,6 +571,63 @@ TEST_CASE("Test var array")
     REQUIRE(var_array.at(1UL).size() == 1UL);
     REQUIRE(var_array.at(1UL).at(0UL) == 3);
   }
+}
+
+TEST_CASE("VarArray callsig operations")
+{
+  VarArray<uint32_t, 2UL> array{};
+
+  uint32_t* value{nullptr};
+  REQUIRE(jewels::fails(array.at(jewels::Out{value}, 0UL)));
+  REQUIRE(value == nullptr);
+
+  REQUIRE(jewels::ok(array.try_reserve(2UL)));
+  REQUIRE(jewels::fails(array.try_reserve(3UL)));
+  REQUIRE(jewels::fails(array.try_resize(3UL)));
+  REQUIRE(array.empty());
+
+  REQUIRE(jewels::ok(array.try_resize(1UL, 7U)));
+  REQUIRE(array.size() == 1UL);
+  REQUIRE(jewels::ok(array.at(jewels::Out{value}, 0UL)));
+  REQUIRE(*value == 7U);
+
+  uint32_t* inserted{nullptr};
+  REQUIRE(jewels::ok(array.try_emplace_back(jewels::OptionalOut{inserted}, 9U)));
+  REQUIRE(inserted == &array[1]);
+  REQUIRE(*inserted == 9U);
+  REQUIRE(jewels::fails(array.try_emplace_back(jewels::OptionalOut<uint32_t*>{std::nullopt}, 11U)));
+  REQUIRE(array.size() == 2UL);
+
+  REQUIRE(jewels::ok(array.try_pop_back(callsig)));
+  REQUIRE(jewels::ok(array.try_pop_back(callsig)));
+  REQUIRE(jewels::fails(array.try_pop_back(callsig)));
+
+  std::array values{1U, 2U};
+  REQUIRE(jewels::ok(array.try_set(values, callsig)));
+  REQUIRE(jewels::fails(array.try_set(std::array<uint32_t, 3UL>{1U, 2U, 3U}, callsig)));
+  REQUIRE(array.size() == 2UL);
+
+  REQUIRE(jewels::ok(array.try_resize(1UL)));
+  VarArray<uint32_t, 2UL>::iterator position{array.begin()};
+  REQUIRE(jewels::ok(array.try_insert(jewels::Out{position}, array.begin(), 3U)));
+  REQUIRE(position == array.begin());
+  REQUIRE(array[0] == 3U);
+  REQUIRE(jewels::fails(array.try_insert(jewels::Out{position}, array.begin(), 4U)));
+
+  array.clear();
+  REQUIRE(jewels::ok(array.try_emplace_back(jewels::OptionalOut<uint32_t*>{std::nullopt}, 1U)));
+  std::array additional_values{2U};
+  REQUIRE(
+    jewels::ok(
+      array.try_insert(jewels::Out{position}, array.end(), additional_values.begin(), additional_values.end())));
+  REQUIRE(position == std::prev(array.end()));
+  REQUIRE(array[1] == 2U);
+
+  const auto unchanged_position = position;
+  REQUIRE(
+    jewels::fails(
+      array.try_insert(jewels::Out{position}, array.end(), additional_values.begin(), additional_values.end())));
+  REQUIRE(position == unchanged_position);
 }
 
 // Use both VarArray and std::vector to make sure we comply with the

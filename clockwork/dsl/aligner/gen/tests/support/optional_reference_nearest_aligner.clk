@@ -1,0 +1,55 @@
+#![generate(cpp, cpp_aligner, cpp_test_cog)]
+#![cpp(namespace=clockwork::aligner_csr_test)]
+
+use clockwork::dsl::aligner::gen::tests::support::aligner_test_msgs::{TestSensorMsg};
+
+// Aligner that searches for the target message nearest to an available optional anchor.
+aligner OptionalReferenceNearestAligner
+{
+  inputs
+  {
+    // Required tick input that triggers alignment.
+    tick: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      arbitrary_selection: true;
+    }
+
+    // Optional primary anchor input used as the first NEAREST reference.
+    anchor: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      optional: true;
+      timeout: 0ms;
+      arbitrary_selection: true;
+    }
+
+    // Optional fallback anchor input used as the next NEAREST reference.
+    fallback_anchor: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      optional: true;
+      timeout: 0ms;
+      arbitrary_selection: true;
+    }
+
+    // Optional target input selected by closest distance when the anchor is present.
+    target: Tappy<TestSensorMsg>
+    {
+      max_msgs: 10;
+      optional: true;
+      timeout: 0ms;
+    }
+  }
+
+  assume(is_strictly_increasing(tick.observation_time));
+  assume(is_strictly_increasing(anchor.observation_time));
+  assume(is_strictly_increasing(fallback_anchor.observation_time));
+  assume(is_strictly_increasing(target.observation_time));
+  require(anchor.observation_time == tick.observation_time);
+  require(fallback_anchor.observation_time == tick.observation_time);
+  require(|target.observation_time - anchor.observation_time| <= 100ms);
+  require(|target.observation_time - fallback_anchor.observation_time| <= 100ms);
+  minimize(|target.observation_time - anchor.observation_time|);
+  minimize(|target.observation_time - fallback_anchor.observation_time|);
+}

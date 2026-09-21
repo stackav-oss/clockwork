@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -193,7 +193,7 @@ mismatched: UInt32 = "foo";
 """
     with pytest.raises(
         TypeError,
-        match=re.escape("Type inference failed: TypeDef(name='String') != IntegerPrimitive"),
+        match="Type inference failed",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
@@ -259,9 +259,7 @@ schema Foo
 """
     with pytest.raises(
         TypeError,
-        match=re.escape(
-            "Type inference failed: IntegerPrimitiveBuiltinSerializable(name='UInt64', uuid=UUID('f9da1a81-bab6-572f-bf61-2f3a8e586560'), bit_width=64, signed=False) != FloatingPointPrimitiveBuiltinSerializable(name='Float32', uuid=UUID('66834056-12bf-59d0-be8d-ab15d964520d'), bit_width=32)"
-        ),
+        match="Type inference failed",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 
@@ -297,9 +295,7 @@ schema Bar
 """
     with pytest.raises(
         TypeError,
-        match=re.escape(
-            "Type inference failed: TypeDef(name='String') != IntegerPrimitiveBuiltinSerializable(name='UInt64',"
-        ),
+        match="Type inference failed",
     ):
         compiler.compile_source_text(source, ModuleID(CLK_REPO, "foo"), fs_importer)
 

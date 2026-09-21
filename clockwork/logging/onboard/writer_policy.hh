@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,7 @@
 #include "jewels/shared_pool/shared_buffer_pool.hh"
 #include "jewels/shared_pool/shared_object_pool.hh"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -55,7 +56,7 @@ struct WriterPolicy
   static constexpr size_t max_message_handles = max_write_size / min_zero_copy_message_size;
 
   /// Maximum number of buffers per write request
-  static constexpr size_t max_buffers = max_write_size / buffer_size;
+  static constexpr size_t max_buffers = std::max((max_write_size + buffer_size - 1U) / buffer_size, size_t{2U});
 
   /// I/O ring size
   static constexpr uint32_t io_ring_size = 512U;

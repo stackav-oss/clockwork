@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -47,6 +47,10 @@ public:
 
   ///
   /// Set the observer to notify on events.
+  /// Timer implementations must only notify after the requested trigger time
+  /// has been reached. The observer event's current_time must be the time used
+  /// to determine that the timer is due, and must be greater than or equal to
+  /// the requested trigger time.
   ///
   virtual void set_observer(pinion::Observer* observer) = 0;
 

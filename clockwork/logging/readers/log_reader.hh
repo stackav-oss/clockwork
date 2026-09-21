@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,7 @@
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 
+#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -37,11 +38,11 @@ public:
 
     /// Constructor
     Iterator();
-    explicit Iterator(AbstractLogReader* reader);
+    explicit Iterator(LogReader* reader);
     /// Constructor
     /// @param[in] reader The log reader
     /// @param[in] msg Logged message instance
-    Iterator(AbstractLogReader* reader, std::optional<LoggedMessage> msg);
+    Iterator(LogReader* reader, std::optional<LoggedMessage> msg);
 
     /// Dereference
     /// @pre Iterator is not end iterator
@@ -66,8 +67,8 @@ public:
     friend bool operator!=(const Iterator& lhs, const Iterator& rhs) = default;
 
   private:
-    /// Pointer to the actual log reader
-    AbstractLogReader* reader_ = nullptr;
+    /// Pointer to the outer log reader
+    LogReader* reader_ = nullptr;
     /// Pointer to the actual log reader
     std::optional<LoggedMessage> msg_ = {};
   };
@@ -129,8 +130,11 @@ public:
   /// Open the log.
   /// @param[in] topic_filter Optional topic filter, return false if the topic should be ignored.
   ///                          if not set then all topics will be read.
+  /// @param[in] sequence_number_filter Optional channel and sequence number filter. Return false to skip a message.
   /// @returns expected with error set if there was an issue opening the log
-  [[nodiscard]] LogExpected<void> open(const std::function<bool(std::string_view)>& topic_filter);
+  [[nodiscard]] LogExpected<void> open(
+    const std::function<bool(std::string_view)>& topic_filter,
+    const std::function<bool(std::string_view, uint32_t)>& sequence_number_filter = {});
 
   /// The begin message iterator.
   /// @throws runtime_error if the log has not been opened
@@ -139,6 +143,9 @@ public:
   [[nodiscard]] iterator end();
 
 private:
+  /// Read the next message and populate its encoding metadata.
+  [[nodiscard]] std::optional<LoggedMessage> next_message();
+
   /// The underlying log reader.
   std::unique_ptr<AbstractLogReader> reader_;
   /// Flag indicating if the reader has been opened successfully.

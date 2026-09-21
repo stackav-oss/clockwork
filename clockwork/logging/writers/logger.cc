@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/writers/logger.hh"
@@ -114,6 +114,11 @@ void Logger::clear_message_counts()
   message_writer_.clear_message_counts();
 }
 
+[[nodiscard]] std::size_t Logger::get_num_pending_subscriptions() const
+{
+  return message_writer_.get_num_pending_subscriptions();
+}
+
 void Logger::writer_thread_main()
 {
   if (const auto start_result = message_writer_.start_logging(log_directory_name_); !start_result)
@@ -124,6 +129,11 @@ void Logger::writer_thread_main()
   while (!stop_requested_.load(std::memory_order_acquire))
   {
     message_writer_.run_for(writer_run_interval);
+  }
+  if (const auto stop_result = message_writer_.stop_logging();
+      !stop_result && stop_result.error() != clockwork_logging::LogError::not_open)
+  {
+    jewels::log_cerr_error("Failed to stop logging on shutdown: {}", stop_result.error());
   }
 }
 

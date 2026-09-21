@@ -1,13 +1,9 @@
-#pragma once
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
-
-#include "jewels/time/sync_time.hh"
+#pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <utility>
 
 namespace jewels
 {

@@ -1,11 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/runners/channel_publisher.hh"
 
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
 #include "clockwork/pinion/error.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
 
@@ -13,6 +14,7 @@
 
 #include <cstring>
 #include <memory_resource>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <unordered_set>
@@ -98,8 +100,8 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::publish_next_message
       jewels::log_cerr_error("Failed to reserve a slot for {}", next_message_->channel);
       return jewels::unexpected(jewels::MonoError{});
     }
-    auto& reserved_slot = reserve_result.value();
-    auto slot = reserved_slot.slot();
+    auto& reservation = reserve_result.value();
+    auto slot = reservation.slots().front();
     const auto& msg_data = next_message_->msgs.front();
     if (slot.message().size() != msg_data.size())
     {
@@ -131,7 +133,7 @@ jewels::expected<void, jewels::MonoError> ChannelPublisher::publish_next_message
       return {};
     }
     std::memcpy(slot.message().data(), msg_data.data(), slot.message().size());
-    if (const auto result = reserved_slot.commit(next_message_->time_to_publish); !result)
+    if (const auto result = reservation.commit(next_message_->time_to_publish); !result)
     {
       jewels::log_cerr_error("Failed to commit slot for {}: {}", next_message_->channel, result.error());
       return jewels::unexpected(jewels::MonoError{});

@@ -1,0 +1,17 @@
+// Copyright 2025-2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.logging.offboard.v1;
+
+import "clockwork/logging/offboard/v1/log_metadata.proto";
+
+// Log amendment
+message LogAmendment {
+  // Amendment metadata
+  LogMetadata amendment_metadata = 1;
+
+  // Amended log path
+  LogPath amended_log_path = 2;
+}

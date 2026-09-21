@@ -9,6 +9,12 @@ from collections.abc import Callable, Iterator
 
 import clockwork.logging.readers.nb_types
 
+def log_file_exists(uri: str) -> bool:
+    """Return whether a local or S3 log file exists."""  # noqa: PYI021 (Nanobind stubs need docstrings)
+
+def read_log_file(uri: str) -> bytes:
+    """Read an opaque file from a local or S3 log URI."""  # noqa: PYI021 (Nanobind stubs need docstrings)
+
 class LogReader:
     def __init__(
         self,
@@ -19,7 +25,9 @@ class LogReader:
         """Constructor."""  # noqa: PYI021 (Nanobind stubs need docstrings)
 
     def raw_messages(
-        self, topic_filter: Callable[[str], bool] | None = None
+        self,
+        topic_filter: Callable[[str], bool] | None = None,
+        sequence_number_filter: Callable[[str, int], bool] | None = None,
     ) -> Iterator[clockwork.logging.readers.nb_types.LoggedMessage]:
         """Logged message iterator."""  # noqa: PYI021 (Nanobind stubs need docstrings)
 

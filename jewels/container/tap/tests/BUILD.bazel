@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -13,10 +13,24 @@ py_pytest_main(
 )
 
 cc_test(
+    name = "bitset_test",
+    srcs = ["bitset_test.cc"],
+    deps = [
+        "//jewels/container/tap:bitset",
+        "//jewels/meta:concepts",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "optional_test",
     srcs = ["optional_test.cc"],
     deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container/tap:constants",
         "//jewels/container/tap:optional",
+        "//jewels/memory:aligned_storage",
         "//jewels/std:span",
         "@catch2//:catch2_main",
     ],
@@ -80,6 +94,15 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "tensor_test",
+    srcs = ["tensor_test.cc"],
+    deps = [
+        "//jewels/container/tap:tensor",
+        "@catch2//:catch2_main",
+    ],
+)
+
 py_test(
     name = "value_serdes_test",
     srcs = [
@@ -98,6 +121,8 @@ cc_test(
     name = "var_array_test",
     srcs = ["var_array_test.cc"],
     deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
         "//jewels/container/tap:var_array",
         "//jewels/memory:aligned_storage",
         "//jewels/std:expected",
@@ -110,6 +135,7 @@ cc_test(
     name = "var_string_test",
     srcs = ["var_string_test.cc"],
     deps = [
+        "//jewels/callsig:outcome",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
         "//jewels/memory:aligned_storage",

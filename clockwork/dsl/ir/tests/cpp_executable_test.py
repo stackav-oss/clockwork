@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -53,3 +53,23 @@ cpp_executable output_targets_exe
             data=[],
         )
     ]
+
+
+def test_cpp_executable_instantiated_cog_output_targets(fs_importer: FilesystemImporter) -> None:
+    """Regression test: CppInstantiatedCog entries from boxes are included in binary deps.
+
+    When a cpp_executable casing contains boxes with generic cog instantiations, the resulting
+    CppInstantiatedCog entries must be included when collecting C++ types for the binary.
+    Previously, output_targets() would omit those entries and produce incomplete dependencies.
+    """
+    module = compiler.compile_source_file(
+        ModuleID.from_path(CLK_REPO, Path("clockwork/dsl/ir/tests/support/clk_parametrized_box.clk")),
+        fs_importer,
+    )
+
+    cpp_exe_ir = module.inner_scope.lookup("clk_parametrized_box_clk_exe", recursive=False)
+    assert isinstance(cpp_exe_ir, cpp_executable.CppExecutable)
+
+    targets = cpp_exe_ir.output_targets()
+    assert len(targets) == 1
+    assert isinstance(targets[0], CcBinary)

@@ -1,12 +1,29 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "time_bucket",
+    srcs = ["time_bucket.cc"],
+    hdrs = ["time_bucket.hh"],
+    deps = [
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/time:sync_time",
+    ],
+)
 
 cc_library(
     name = "token_bucket",
     srcs = ["token_bucket.cc"],
     hdrs = ["token_bucket.hh"],
-    visibility = ["//visibility:public"],
-    deps = ["//jewels/time:sync_time"],
+    deps = [
+        ":time_bucket",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/time:sync_time",
+    ],
 )

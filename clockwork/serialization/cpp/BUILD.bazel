@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
@@ -6,13 +6,6 @@ load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 load("//tools/rules:python.bzl", "py_cc_binding")
 
 package(default_visibility = ["//visibility:public"])
-
-exports_files([
-    # keep-sorted start
-    # Export often-modified Clockwork source file for clangd indexing test
-    "clk_type.cc",
-    # keep-sorted end
-])
 
 cc_library(
     name = "clk_builtin_type",
@@ -25,8 +18,9 @@ cc_library(
         "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
         "//jewels/memory:bits",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
-        "//jewels/uuid",
         "@fmt",
         "@protobuf",
     ],
@@ -38,8 +32,11 @@ cc_library(
     hdrs = ["clk_enum_type.hh"],
     deps = [
         ":clk_type",
+        ":metadata_versions",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
         "//jewels/memory:bits",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/uuid",
         "@fmt",
@@ -66,9 +63,12 @@ cc_library(
     hdrs = ["clk_schema_type_lib.hh"],
     deps = [
         ":clk_type",
+        ":metadata_versions",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
         "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/uuid",
         "@fmt",
@@ -81,12 +81,23 @@ cc_library(
     srcs = ["clk_type.cc"],
     hdrs = ["clk_type.hh"],
     deps = [
+        "//clockwork/logging:nolint_helper",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/aligner",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "//jewels/uuid",
         "@fmt",
         "@wise_enum",
     ],
+)
+
+cc_library(
+    name = "metadata_versions",
+    hdrs = ["metadata_versions.hh"],
 )
 
 py_cc_binding(
@@ -107,6 +118,29 @@ py_cc_binding(
 )
 
 cc_library(
+    name = "tachyon_lite_compressor",
+    srcs = [
+        "tachyon_lite_compressor.cc",
+        "tachyon_lite_compressor.inl",
+    ],
+    hdrs = ["tachyon_lite_compressor.hh"],
+    deps = [
+        ":clk_type",
+        ":tachyon_model",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:lite_compressor_interface",
+        "//clockwork/logging:xxh3_checksum",
+        "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "@fmt",
+    ],
+)
+
+cc_library(
     name = "tachyon_model",
     srcs = [
         "tachyon_model.cc",
@@ -118,12 +152,15 @@ cc_library(
         ":clk_enum_type",
         ":clk_schema_type",
         ":clk_type",
+        ":metadata_versions",
         "//clockwork:repr_iface",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
         "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
         "//jewels/hash:md5",
         "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/memory:pointers",
         "@fmt",
         "@protobuf",
@@ -145,6 +182,7 @@ cc_library(
         "//clockwork/python:gil_lock_guard",
         "//clockwork/python:python_object",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/memory:memory_resource",
         "@wise_enum",
     ],
 )
@@ -161,6 +199,7 @@ cc_library(
         ":tachyon_model",
         "//clockwork:repr_iface",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
+        "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "@fmt",
         "@wise_enum",

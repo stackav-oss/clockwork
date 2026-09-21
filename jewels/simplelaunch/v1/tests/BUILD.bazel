@@ -1,0 +1,17 @@
+# Copyright 2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:cc.bzl", "cc_test")
+
+package(default_testonly = True)
+
+cc_test(
+    name = "service_proto_test",
+    srcs = ["service_proto_test.cc"],
+    deps = [
+        "//jewels/simplelaunch:simplelaunch_status_clk_cc",
+        "//jewels/simplelaunch/v1:service_cc_library",
+        "//jewels/testing:wise_enum_proto_sync",
+        "@catch2//:catch2_main",
+    ],
+)

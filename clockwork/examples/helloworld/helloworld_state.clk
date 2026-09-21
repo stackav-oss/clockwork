@@ -8,8 +8,7 @@ schema ProducerState
 
   options
   {
-  constructor:
-    source_code_order;
+    constructor: source_code_order;
   }
 
   fields

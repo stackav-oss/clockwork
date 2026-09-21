@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package language
@@ -117,6 +117,11 @@ func findEmptyRules(prevRules []*rule.Rule, newRules []*rule.Rule) []*rule.Rule 
 	for _, r := range prevRules {
 		if outs := r.AttrStrings("outs"); outs != nil {
 			allOuts = append(allOuts, outs...)
+		}
+		// Also collect singular "out" attrs (e.g. from copy_file rules) so that clk() rules
+		// whose source is produced by copy_file are not incorrectly marked as empty.
+		if out := r.AttrString("out"); out != "" {
+			allOuts = append(allOuts, out)
 		}
 	}
 

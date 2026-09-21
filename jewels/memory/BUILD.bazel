@@ -1,29 +1,33 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
 load("//tools/rules:python.bzl", "py_library")
 
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "aligned_storage",
     srcs = ["aligned_storage.inl"],
     hdrs = ["aligned_storage.hh"],
-    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "allocator_deleter",
+    srcs = ["allocator_deleter.inl"],
+    hdrs = ["allocator_deleter.hh"],
 )
 
 cc_library(
     name = "bits",
     srcs = ["bits.inl"],
     hdrs = ["bits.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "default_memory_resource",
-    testonly = True,
     srcs = ["default_memory_resource.cc"],
     hdrs = ["default_memory_resource.hh"],
-    visibility = ["//visibility:public"],
     deps = [":memory_resource"],
 )
 
@@ -31,20 +35,28 @@ cc_library(
     name = "error",
     srcs = ["error.cc"],
     hdrs = ["error.hh"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "fields",
     srcs = ["fields.inl"],
     hdrs = ["fields.hh"],
-    visibility = ["//visibility:public"],
     deps = [
         ":bits",
         "//jewels/meta:concepts",
         "//jewels/meta:types",
         "//jewels/std:functional",
-        "@boost//:iterator",
+        "@boost.iterator",
+    ],
+)
+
+cc_library(
+    name = "instrumented_pmr_resource",
+    srcs = ["instrumented_pmr_resource.cc"],
+    hdrs = ["instrumented_pmr_resource.hh"],
+    deps = [
+        "//jewels/callsig:outparam",
+        "//jewels/container:bounded_string",
     ],
 )
 
@@ -52,18 +64,23 @@ cc_library(
     name = "memory_resource",
     srcs = ["memory_resource.inl"],
     hdrs = ["memory_resource.hh"],
-    visibility = ["//visibility:public"],
-    deps = [":pointers"],
+    deps = [
+        ":instrumented_pmr_resource",
+        ":pointers",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+    ],
 )
 
 cc_library(
-    name = "monitor_resource",
-    srcs = ["monitor_resource.cc"],
-    hdrs = ["monitor_resource.hh"],
-    visibility = ["//visibility:public"],
+    name = "new_delete_memory_resource",
+    srcs = ["new_delete_memory_resource.cc"],
+    hdrs = ["new_delete_memory_resource.hh"],
     deps = [
-        "//jewels/container:bounded_string",
+        ":instrumented_pmr_resource",
+        "//jewels/callsig:outparam",
         "//jewels/log_cerr",
+        "//jewels/std:atomic",
     ],
 )
 
@@ -71,7 +88,6 @@ cc_library(
     name = "pmr_shared_ptr",
     srcs = ["pmr_shared_ptr.inl"],
     hdrs = ["pmr_shared_ptr.hh"],
-    visibility = ["//visibility:public"],
     deps = [":memory_resource"],
 )
 
@@ -79,17 +95,16 @@ cc_library(
     name = "pmr_unique_ptr",
     srcs = ["pmr_unique_ptr.inl"],
     hdrs = ["pmr_unique_ptr.hh"],
-    visibility = ["//visibility:public"],
-    deps = [":memory_resource"],
+    deps = [":allocator_deleter"],
 )
 
 cc_library(
     name = "pointers",
     srcs = ["pointers.inl"],
     hdrs = ["pointers.hh"],
-    visibility = ["//visibility:public"],
     deps = [
         ":error",
+        ":pmr_unique_ptr",
         "//jewels/std:expected",
         "@gsl//:pointers",
     ],
@@ -99,14 +114,12 @@ py_library(
     name = "py_bytes",
     srcs = ["py_bytes.py"],
     imports = ["../.."],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "unique_object",
     srcs = ["unique_object.inl"],
     hdrs = ["unique_object.hh"],
-    visibility = ["//visibility:public"],
     deps = [
         "//jewels/meta:call",
         "//jewels/meta:type_traits",

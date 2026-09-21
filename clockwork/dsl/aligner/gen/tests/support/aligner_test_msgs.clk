@@ -1,0 +1,14 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::aligner_csr_test)]
+
+// A simulated sensor reading with an observation timestamp
+schema TestSensorMsg
+{
+  uuid: 69948a19-0ea4-49b7-91cb-ce44c4be9193;
+
+  fields
+  {
+    // Observation timestamp of the sensor reading
+    #0 observation_time: SyncTime;
+  }
+}

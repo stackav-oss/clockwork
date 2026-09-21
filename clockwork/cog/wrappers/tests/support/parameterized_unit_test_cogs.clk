@@ -1,0 +1,441 @@
+#![generate(cpp, cpp_cog, cpp_test_cog)]
+#![cpp(namespace=clockwork::cogs::params_testing)]
+use clockwork::cog::wrappers::tests::support::unit_test_configs;
+use clockwork::cog::tests::support::unit_test_states;
+use clockwork::cog::wrappers::tests::support::unit_test_messages;
+use clockwork::diagnostics::report::{Report as DiagnosticsReport};
+use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupPolicyConfig, ReportGroupLogType};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+use clockwork::cog::wrappers::tests::support::test_policy::{TestPolicySchema, TestCogPolicy};
+
+// Resource test cog
+cog ResourceCog
+{
+  parameters
+  {
+    tag_type: Type;
+  }
+  resources
+  {
+    memres1: persistent;
+    memres2: persistent;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+instantiate ResourceCog<tag_type=Bool>;
+
+// Configuration test cog
+cog ConfigCog
+{
+  parameters
+  {
+    config1_type: Type;
+    config2_type: Type;
+  }
+  configs
+  {
+    config1: Tappy<config1_type>;
+    config2: Tappy<config2_type>;
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+instantiate ConfigCog<config1_type=unit_test_configs::Config1, config2_type=unit_test_configs::Config2>;
+
+// State test cog
+cog StateInitCog
+{
+  parameters
+  {
+    clk_state_type: Type;
+    cxx_state_type: Type;
+  }
+  states
+  {
+    clk_state: clk_state_type
+    {
+      mutable: true;
+    }
+    cxx_state: cxx_state_type
+    {
+      mutable: true;
+    }
+  }
+  execution
+  {
+    execute when: init;
+  }
+}
+
+instantiate StateInitCog<clk_state_type=Tappy<unit_test_states::ClkState>, cxx_state_type=unit_test_states::CxxState>;
+
+// State test cog
+cog StatePeriodicCog
+{
+  parameters
+  {
+    clk_state_type: Type;
+    cxx_state_type: Type;
+  }
+  states
+  {
+    clk_state: clk_state_type
+    {
+      mutable: true;
+    }
+    cxx_state: cxx_state_type
+    {
+      mutable: true;
+    }
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+instantiate StatePeriodicCog<
+  clk_state_type=Tappy<unit_test_states::ClkState>,
+  cxx_state_type=unit_test_states::CxxState,
+>;
+
+// Input test cog
+cog InputCog
+{
+  parameters
+  {
+    input1_type: Type;
+    input2_type: Type;
+    input3_type: Type;
+  }
+  states
+  {
+    state: Tappy<unit_test_states::InputCogState>
+    {
+      mutable: true;
+    }
+  }
+  inputs
+  {
+    input1: Tappy<input1_type>;
+    input2: Tappy<input2_type>;
+    input3: Tappy<input3_type>
+    {
+      max_msgs: 3;
+    }
+  }
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=2);
+    condition new_input3: new_message(input3, max=3);
+    execute when: new_input1 or new_input2 or new_input3;
+  }
+}
+instantiate InputCog<
+  input1_type=unit_test_messages::Message1,
+  input2_type=unit_test_messages::Message2,
+  input3_type=unit_test_messages::Message3,
+>;
+
+// Output test cog
+cog OutputCog
+{
+  parameters
+  {
+    output1_type: Type;
+    output2_type: Type;
+  }
+  states
+  {
+    state: Tappy<unit_test_states::OutputCogState>
+    {
+      mutable: true;
+    }
+  }
+  outputs
+  {
+    output1: Tappy<output1_type>;
+    output2: Tappy<output2_type>;
+  }
+  execution
+  {
+    rate limit output1: 1 every 1s;
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+instantiate OutputCog<output1_type=unit_test_messages::Message1, output2_type=unit_test_messages::Message2>;
+
+// Multi connect input test cog
+cog MultiConnectInputCog
+{
+  parameters
+  {
+    input1_type: Type;
+    input2_type: Type;
+  }
+  inputs
+  {
+    input1: Tappy<input1_type>
+    {
+      multi_connect: 2;
+    }
+    input2: Tappy<input2_type>
+    {
+      multi_connect: 3;
+      max_msgs: 3;
+    }
+  }
+  outputs
+  {
+    output1_0: Tappy<input1_type>;
+    output1_1: Tappy<input1_type>;
+    output2_0: Tappy<input2_type>;
+    output2_1: Tappy<input2_type>;
+    output2_2: Tappy<input2_type>;
+  }
+  execution
+  {
+    condition new_input1: new_message(input1, max=1);
+    condition new_input2: new_message(input2, max=3);
+    execute when: new_input1 or new_input2;
+  }
+}
+
+instantiate MultiConnectInputCog<input1_type=unit_test_messages::Message1, input2_type=unit_test_messages::Message2>;
+
+// Diagnostics test cog
+cog DiagnosticsCog
+{
+  parameters
+  {
+    group_id: String;
+    instance_id: String;
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  diagnostics
+  {
+    group_id: group_id;
+    instance_id: instance_id;
+  }
+}
+
+instantiate DiagnosticsCog<group_id="fault_injector_b", instance_id="a">;
+
+// Diagnostics test cog
+cog DiagnosticsCog2
+{
+  parameters
+  {
+    group_id1: String;
+    group_id2: String;
+    instance_id2: String;
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+  diagnostics
+  {
+    diag1
+    {
+      group_id: group_id1;
+    }
+    diag2
+    {
+      group_id: group_id2;
+      instance_id: instance_id2;
+    }
+  }
+}
+
+instantiate DiagnosticsCog2<group_id1="fault_injector_a", group_id2="fault_injector_b", instance_id2="a">;
+
+// Signals test cog
+cog SignalsCog
+{
+  parameters
+  {
+    state_type: Type;
+  }
+  states
+  {
+    state: Tappy<state_type>
+    {
+      mutable: true;
+    }
+  }
+
+  signalsgroup
+  {
+    // Doc
+    value: signal Int64
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+  }
+
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+instantiate SignalsCog<state_type=unit_test_states::SignalsCogState>;
+
+policy ReportGroupPolicy for SignalsCog.group
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::none;
+  max_observations = 2;
+}
+
+// Signals test cog
+cog SignalsCog2
+{
+  parameters
+  {
+    state_type: Type;
+  }
+  states
+  {
+    state: Tappy<unit_test_states::SignalsCogState>
+    {
+      mutable: true;
+    }
+  }
+
+  signalsgroup1
+  {
+    // Doc
+    value1: signal Int64
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+
+    // Doc
+    value2: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+      post_aggregation: ["mean", "max"];
+      multi_instance: true;
+    }
+  }
+
+  signalsgroup2
+  {
+    // Doc
+    value3: signal Int64
+    {
+      pre_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+
+    // Doc
+    value4: signal UInt32
+    {
+      pre_aggregation: ["sum"];
+      multi_instance: true;
+    }
+  }
+
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
+}
+
+instantiate SignalsCog2<state_type=unit_test_states::SignalsCogState>;
+
+policy ReportGroupPolicy for SignalsCog2.group1
+{
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::none;
+  max_observations = 2;
+}
+
+policy ReportGroupPolicy for SignalsCog2.group2
+{
+  reporting_strategy = ReportingStrategy::batched;
+  log_type = ReportGroupLogType::none;
+  max_observations = 3;
+}
+
+policy TestCogPolicy for SignalsCog2
+{
+  test_bool = false;
+}
+policy CogEventMetricsPolicy for StatePeriodicCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for StatePeriodicCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for InputCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for InputCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for OutputCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for OutputCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for DiagnosticsCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for DiagnosticsCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for DiagnosticsCog2
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for DiagnosticsCog2
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for SignalsCog
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for SignalsCog
+{
+  enabled = false;
+}
+policy CogEventMetricsPolicy for SignalsCog2
+{
+  enabled = false;
+}
+policy CogTelemetryMetricsPolicy for SignalsCog2
+{
+  enabled = false;
+}

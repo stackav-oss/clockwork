@@ -1,82 +1,86 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "jewels/memory/memory_resource.hh"
+#include "jewels/memory/allocator_deleter.hh"
 
-#include <cstddef>
 #include <memory>
 #include <memory_resource>
-#include <optional>
-#include <type_traits>
 
 namespace jewels::memory
 {
-namespace detail
-{
-template <typename T, bool supports_polymorphic_deletion>
-struct PolymorphicDeleterFields
-{
-};
-template <typename T>
-struct PolymorphicDeleterFields<T, true>
-{
-  size_t allocation_size_{sizeof(T)};
-  size_t alignment_{alignof(T)};
-};
 
-template <typename T, bool supports_polymorphic_deletion = false>
-class PmrDeleter final : private PolymorphicDeleterFields<T, supports_polymorphic_deletion>
-{
-  using AllocType = std::pmr::polymorphic_allocator<T>;
-  using AllocTraits = std::allocator_traits<AllocType>;
+/// A unique pointer.
+/// @tparam T Object type associated with the unique pointer.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+/// @tparam Alloc Allocator type
+template <typename T, bool enable_polymorphic_deletion = false, typename Alloc = std::allocator<void>>
+using unique_ptr = std::unique_ptr<T, AllocatorDeleter<T, enable_polymorphic_deletion, Alloc>>;
 
-public:
-  PmrDeleter() = default;
-  explicit PmrDeleter(jewels::memory::MemoryResource memres);
+/// A pmr unique pointer.
+/// @tparam T Object type associated with the unique pointer.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+template <typename T, bool enable_polymorphic_deletion = false>
+using pmr_unique_ptr = unique_ptr<T, enable_polymorphic_deletion, std::pmr::polymorphic_allocator<void>>;
 
-  /// Allow converting deleters for different, but compatible types, e.g., for polymorphic unique_ptr use
-  template <typename U>
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  PmrDeleter(const PmrDeleter<U, true>& other)
-    requires supports_polymorphic_deletion && std::is_base_of_v<T, U> && std::has_virtual_destructor_v<T>;
+/// Make a non-null unique pointer via allocate_unique using std::allocator<T>.
+/// @tparam T The type of the `object`.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+/// @tparam Args Constructor arguments deduced from `args`.
+/// @param[in] args Constructor arguments.
+/// @return Non-null unique pointer to allocated instance.
+/// @throws Any exceptions thrown by the allocator or constructor.
+template <typename T, bool enable_polymorphic_deletion = false, typename... Args>
+[[nodiscard]] unique_ptr<T, enable_polymorphic_deletion> make_unique(Args&&... args);
 
-  void operator()(typename AllocTraits::pointer object);
+/// Allocate a non-null unique pointer.
+/// @tparam T The type of the `object`.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+/// @tparam Alloc Allocator type deduced from `alloc`.
+/// @tparam Args Constructor arguments deduced from `args`.
+/// @param[in] alloc Memory allocator.
+/// @param[in] args Constructor arguments.
+/// @return Non-null unique pointer to allocated instance.
+/// @throws Any exceptions thrown by the allocator or constructor.
+template <typename T, bool enable_polymorphic_deletion = false, typename Alloc, typename... Args>
+[[nodiscard]] unique_ptr<T, enable_polymorphic_deletion, Alloc> allocate_unique(const Alloc& alloc, Args&&... args);
 
-  template <typename U, bool inner_supports_polymorphic_deletion>
-  friend class PmrDeleter;
+/// Allocate a non-null pmr unique pointer.
+/// @tparam T The type of the `object`.
+/// @tparam enable_polymorphic_deletion True enables polymorphic deletion behavior.
+/// @tparam Args Constructor arguments deduced from `args`.
+/// @param[in] alloc Memory allocator.
+/// @param[in] args Constructor arguments.
+/// @return Non-null unique pointer to allocated instance.
+/// @throws Any exceptions thrown by the allocator or constructor.
+template <typename T, bool enable_polymorphic_deletion = false, typename... Args>
+[[nodiscard]] pmr_unique_ptr<T, enable_polymorphic_deletion>
+make_pmr_unique(const std::pmr::polymorphic_allocator<T>& alloc, Args&&... args);
 
-private:
-  std::optional<jewels::memory::MemoryResource> memres_;
-};
-} // namespace detail
-
-///
-/// Alias for a unique_ptr using a pmr-aware deleter.
-/// Construct using `make_pmr_unique()`
-/// @tparam supports_polymorphic_deletion If true, the deleter can be converted to compatible types to support
-/// polymorphic deletion.
-///
-template <typename T, bool supports_polymorphic_deletion = false>
-using pmr_unique_ptr = std::unique_ptr<T, detail::PmrDeleter<T, supports_polymorphic_deletion>>;
-
-///
-/// Creates an object much like `std::make_unique` but uses the provided memory resource for the heap storage.
-/// @param memres The memory resource that should be used for allocation and (later) deallocation
-/// @param args A pack of args used to construct the new element.
-/// @tparam supports_polymorphic_deletion If true, the deleter can be converted to compatible types to support
-/// polymorphic deletion.
-///
-template <typename T, bool supports_polymorphic_deletion = false, typename... Args>
-auto make_pmr_unique(jewels::memory::MemoryResource memres, Args&&... args);
-
-///
 /// Convenience wrapper around make_pmr_unique with polymorphic deletion support enabled, which allows for safe
 /// polymorphic use cases where derived types may be deleted through base pointers.
-///
+/// @tparam T The type of the `object`.
+/// @tparam Args Constructor arguments deduced from `args`.
+/// @param[in] alloc Memory allocator.
+/// @param[in] args Constructor arguments.
+/// @return Non-null unique pointer to allocated instance.
+/// @throws Any exceptions thrown by the allocator or constructor.
 template <typename T, typename... Args>
-auto make_polymorphic_pmr_unique(jewels::memory::MemoryResource memres, Args&&... args);
+[[nodiscard]] pmr_unique_ptr<T, true>
+make_polymorphic_pmr_unique(const std::pmr::polymorphic_allocator<T>& alloc, Args&&... args);
+
+/// Converts a unique pointer from monomorphic to polymorphic deletion semantics.
+///
+/// This helper provides the intentional conversion path when the deleter conversion is
+/// explicit, avoiding accidental implicit conversion in generic `std::unique_ptr` code.
+/// @tparam T Object type managed by the pointer deduced from `ptr`.
+/// @tparam Alloc Allocator type associated with the deleter deduced from `ptr`.
+/// @param[in] ptr Source pointer with monomorphic deleter.
+/// @return Pointer to the same object, now using a polymorphic deleter.
+template <typename T, typename Alloc>
+[[nodiscard]] std::unique_ptr<T, PolymorphicDeleter<Alloc>>
+to_polymorphic(std::unique_ptr<T, MonomorphicDeleter<Alloc>>&& mono_ptr);
 
 } // namespace jewels::memory
 

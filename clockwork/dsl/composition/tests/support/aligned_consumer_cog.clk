@@ -1,0 +1,36 @@
+#![generate(cpp, cpp_cog, cpp_test_cog, cpp_combo_test)]
+#![cpp(namespace=clockwork::testing::aligned_consumer)]
+
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner::{SimpleAligner, TestMsg, ConsumerEchoMsg};
+
+// A cog that consumes aligned data and echoes what it resolved
+cog ConsumerCog
+{
+  inputs
+  {
+    raw_data: Tappy<TestMsg>;
+  }
+  aligned_inputs
+  {
+    aligned: SimpleAligner
+    {
+      sensor
+      {
+        max_msgs: 20;
+      }
+    }
+  }
+  outputs
+  {
+    echo: Tappy<ConsumerEchoMsg>;
+  }
+  execution
+  {
+    condition new_alignment: new_message(aligned);
+    execute when: new_alignment;
+  }
+  metrics_options
+  {
+    enabled: true;
+  }
+}

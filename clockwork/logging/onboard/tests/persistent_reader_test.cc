@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -7,10 +7,13 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
+#include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
 #include "clockwork/logging/onboard/log_format.hh"
+#include "clockwork/logging/onboard/offboard_buffered_reader.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_message_handle.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
@@ -18,6 +21,7 @@
 #include "clockwork/logging/onboard/writer.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
 #include "jewels/container/circular_buffer.hh"
+#include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -31,6 +35,7 @@
 #include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/time/sync_time.hh"
 
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
@@ -38,9 +43,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <list>
 #include <memory_resource>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -123,6 +126,9 @@ struct TestWriterPolicy
 
 struct TestReaderPolicy
 {
+  /// S3 utility library type
+  using S3UtilsType = offboard::S3Utils;
+
   /// Filesystem library type
   using FilesystemType = jewels::filesystem::testing::FilesystemWrapper;
 
@@ -136,8 +142,11 @@ struct TestReaderPolicy
   static constexpr size_t min_io_error_recover_read_size = 512U;
 };
 
-TEST_CASE("Log persistent messages")
+TEMPLATE_TEST_CASE(
+  "Log persistent messages", "", BufferedReader<TestReaderPolicy>, OffboardBufferedReader<TestReaderPolicy>)
 {
+  using BufferedReaderType = TestType;
+
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   static constexpr size_t header_size = 29U;
   static constexpr size_t max_write_mib_per_sec = 100U;
@@ -394,10 +403,11 @@ TEST_CASE("Log persistent messages")
   REQUIRE(writer.close_log(time1));
   REQUIRE(writer.drain_async_operations());
 
+  const auto buffered_reader = tests::make_buffered_reader<BufferedReaderType>();
+
   SECTION("List log files")
   {
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+    const auto list_result = buffered_reader->list_log_files(log_dir.string());
     REQUIRE(list_result);
     REQUIRE(list_result->size() == 3U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});
@@ -406,44 +416,44 @@ TEST_CASE("Log persistent messages")
 
   SECTION("Get file log interval")
   {
-    auto interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time);
+    auto interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time1);
     REQUIRE(interval_result->get_end_timestamp() == log_time3);
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time1);
     REQUIRE(interval_result->get_end_timestamp() == message_time3);
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::log_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time5);
     REQUIRE(interval_result->get_end_timestamp() == log_time6);
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time5);
     REQUIRE(interval_result->get_end_timestamp() == message_time6);
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time8);
     REQUIRE(interval_result->get_end_timestamp() == log_time8);
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time8);
     REQUIRE(interval_result->get_end_timestamp() == message_time8);
     REQUIRE_FALSE(
-      Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-        memory_resource, (log_dir / "log_file_000003.olog").string(), TimeFilterOption::log_time));
+      Reader<BufferedReaderType>::get_file_log_interval(
+        memory_resource, (log_dir / "log_file_000003.olog").string(), TimeFilterOption::log_time, buffered_reader));
   }
 
   SECTION("Read all messages")
   {
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open());
 
     auto read_result = reader.read_next();
@@ -532,10 +542,10 @@ TEST_CASE("Log persistent messages")
   SECTION("Read with log interval, first message is regular")
   {
     constexpr LogInterval log_interval{log_time3, log_time5};
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+    const auto list_result = buffered_reader->list_log_files(log_dir.string());
     REQUIRE(list_result);
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, list_result.value(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{
+      memory_resource, list_result.value(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open(log_interval));
 
     auto read_result = reader.read_next();
@@ -574,10 +584,10 @@ TEST_CASE("Log persistent messages")
   SECTION("Read with log interval, first message is persistent")
   {
     constexpr LogInterval log_interval{log_time5, log_time7};
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+    const auto list_result = buffered_reader->list_log_files(log_dir.string());
     REQUIRE(list_result);
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, list_result.value(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{
+      memory_resource, list_result.value(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open(log_interval));
 
     auto read_result = reader.read_next();

@@ -12,7 +12,7 @@ index b98441a..0113773 100644
 +load("@build_stack_rules_proto//rules/cc:proto_cc_library.bzl", "proto_cc_library")
 +load("@build_stack_rules_proto//rules/go:proto_go_library.bzl", "proto_go_library")
 +load("@build_stack_rules_proto//rules/py:proto_py_library.bzl", "proto_py_library")
-+load("@rules_cc//cc:defs.bzl", "cc_library")
++load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
  load("@rules_proto//proto:defs.bzl", "proto_library")
  load("@rules_proto_grpc//:defs.bzl", "proto_plugin")
 +load("@rules_python//python:defs.bzl", "py_binary")
@@ -165,7 +165,19 @@ diff --git extra/bazel/nanopb_cc_proto_library.bzl extra/bazel/nanopb_cc_proto_l
 index aae5965..9286edc 100644
 --- extra/bazel/nanopb_cc_proto_library.bzl
 +++ extra/bazel/nanopb_cc_proto_library.bzl
-@@ -39,7 +39,7 @@ cc_nanopb_proto_compile = rule(
+@@ -3,10 +3,11 @@
+ 
+ load("@rules_proto_grpc//internal:filter_files.bzl", "filter_files")
+ load("@rules_cc//cc:defs.bzl", "cc_library")
+ load(
+     "@rules_proto_grpc//:defs.bzl",
+     "ProtoPluginInfo",
++    "proto_compile_toolchains",
+     "proto_compile_attrs",
+     "proto_compile",
+ )
+ 
+@@ -39,7 +40,7 @@ cc_nanopb_proto_compile = rule(
          _plugins = attr.label_list(
              providers = [ProtoPluginInfo],
              default = [
@@ -174,7 +186,14 @@ index aae5965..9286edc 100644
              ],
              doc = "List of protoc plugins to apply",
          ),
-@@ -94,5 +94,5 @@ def cc_nanopb_proto_library(name, **kwargs):  # buildifier: disable=function-doc
+@@ -45,5 +46,5 @@ cc_nanopb_proto_compile = rule(
+         ),
+     ),
+-    toolchains = [str(Label("@rules_proto//proto:toolchain_type"))],
++    toolchains = proto_compile_toolchains,
+ )
+ 
+@@ -94,5 +95,5 @@ def cc_nanopb_proto_library(name, **kwargs):  # buildifier: disable=function-doc
      )
  
  PROTO_DEPS = [

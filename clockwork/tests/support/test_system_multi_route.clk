@@ -1,92 +1,98 @@
 use clockwork::tests::support::test_messages_multi_node::{MultiNodeMessage};
 
 // Source cog for multi-route test
-cog MultiRouteSourceCog {
-    outputs {
-        message_output: Tappy<MultiNodeMessage>;
-    }
-    execution {
-        condition periodic_100ms: time_since_last_exec(100ms);
-        execute when: periodic_100ms;
-    }
+cog MultiRouteSourceCog
+{
+  outputs
+  {
+    message_output: Tappy<MultiNodeMessage>;
+  }
+  execution
+  {
+    condition periodic_100ms: time_since_last_exec(100ms);
+    execute when: periodic_100ms;
+  }
 }
-
 // Sink cog for multi-route test
-cog MultiRouteSinkCog {
-    inputs {
-        message_input: Tappy<MultiNodeMessage>;
-    }
-    execution {
-        condition new_msg: new_message(message_input);
-        execute when: new_msg;
-    }
+cog MultiRouteSinkCog
+{
+  inputs
+  {
+    message_input: Tappy<MultiNodeMessage>;
+  }
+  execution
+  {
+    condition new_msg: new_message(message_input);
+    execute when: new_msg;
+  }
 }
-
-cpp_target test_system_multi_route_cogs {
-    options {
-        namespace clockwork::tests;
-    }
-    cog MultiRouteSourceCog;
-    cog MultiRouteSinkCog;
+cpp_target test_system_multi_route_cogs
+{
+  options
+  {
+    namespace clockwork::tests;
+  }
+  cog MultiRouteSourceCog;
+  cog MultiRouteSinkCog;
 }
-
 // Multi route channel
 channel MultiRouteChan
 {
-    message_type: Tachyon<MultiNodeMessage>;
-    max_num_messages: 8;
+  message_type: Tachyon<MultiNodeMessage>;
+  max_num_messages: 8;
 }
-
-box MultiRouteSourceBox {
-    new source_cog: MultiRouteSourceCog;
-    connect source_cog.message_output to MultiRouteChan;
+box MultiRouteSourceBox
+{
+  new source_cog: MultiRouteSourceCog;
+  connect source_cog.message_output to MultiRouteChan;
 }
-
-box MultiRouteSinkBox {
-    new sink_cog: MultiRouteSinkCog;
-    connect MultiRouteChan to sink_cog.message_input;
+box MultiRouteSinkBox
+{
+  new sink_cog: MultiRouteSinkCog;
+  connect MultiRouteChan to sink_cog.message_input;
 }
-
 cpu_domain MultiRouteCpu1;
 cpu_domain MultiRouteCpu2;
 cpu_domain MultiRouteCpu3;
-
-ethernet MultiRouteNetwork {
-    ipv4_address 10.0.0.1: MultiRouteCpu1 {
-        bridge_ports: 2000-2100;
-    }
-    ipv4_address 10.0.0.2: MultiRouteCpu2 {
-        bridge_ports: 2000-2100;
-    }
-    ipv4_address 10.0.0.3: MultiRouteCpu3 {
-        bridge_ports: 2000-2100;
-    }
+ethernet MultiRouteNetwork
+{
+  ipv4_address 10.0.0.1: MultiRouteCpu1
+  {
+    bridge_ports: 2000 - 2100;
+  }
+  ipv4_address 10.0.0.2: MultiRouteCpu2
+  {
+    bridge_ports: 2000 - 2100;
+  }
+  ipv4_address 10.0.0.3: MultiRouteCpu3
+  {
+    bridge_ports: 2000 - 2100;
+  }
 }
-
-box MultiRouteSystemBox {
-    new source_box: MultiRouteSourceBox;
-    new source_process: Process(executable=test_system_multi_route_exe);
-    apply HostProcess(process=source_process) in source_box;
-    apply HostCpuDomain(cpu_domain=MultiRouteCpu1) to source_process;
-
-    new sink_box_1: MultiRouteSinkBox;
-    new sink_process_1: Process(executable=test_system_multi_route_exe);
-    apply HostProcess(process=sink_process_1) in sink_box_1;
-    apply HostCpuDomain(cpu_domain=MultiRouteCpu2) to sink_process_1;
-
-    new sink_box_2: MultiRouteSinkBox;
-    new sink_process_2: Process(executable=test_system_multi_route_exe);
-    apply HostProcess(process=sink_process_2) in sink_box_2;
-    apply HostCpuDomain(cpu_domain=MultiRouteCpu3) to sink_process_2;
+box MultiRouteSystemBox
+{
+  new source_box: MultiRouteSourceBox;
+  new source_process: Process(executable=test_system_multi_route_exe);
+  apply HostProcess(process=source_process) in source_box;
+  apply HostCpuDomain(cpu_domain=MultiRouteCpu1) to source_process;
+  new sink_box_1: MultiRouteSinkBox;
+  new sink_process_1: Process(executable=test_system_multi_route_exe);
+  apply HostProcess(process=sink_process_1) in sink_box_1;
+  apply HostCpuDomain(cpu_domain=MultiRouteCpu2) to sink_process_1;
+  new sink_box_2: MultiRouteSinkBox;
+  new sink_process_2: Process(executable=test_system_multi_route_exe);
+  apply HostProcess(process=sink_process_2) in sink_box_2;
+  apply HostCpuDomain(cpu_domain=MultiRouteCpu3) to sink_process_2;
 }
-
-cpp_executable test_system_multi_route_exe {
-    casing {
-        box MultiRouteSourceBox;
-        box MultiRouteSinkBox;
-    }
+cpp_executable test_system_multi_route_exe
+{
+  casing
+  {
+    box MultiRouteSourceBox;
+    box MultiRouteSinkBox;
+  }
 }
-
-system_target test_system_multi_route {
-    box: MultiRouteSystemBox;
+system_target test_system_multi_route
+{
+  box: MultiRouteSystemBox;
 }

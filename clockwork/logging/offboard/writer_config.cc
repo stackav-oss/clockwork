@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/writer_config.hh"
@@ -63,7 +63,7 @@ WriterConfig::WriterConfig(jewels::memory::MemoryResource memory_resource)
   clockwork::logging::offboard::v1::WriterConfig config_proto;
   if (!google::protobuf::TextFormat::ParseFromString(proto_str, &config_proto))
   {
-    return jewels::unexpected(LogError::invalid_protobuf_file);
+    return jewels::unexpected(LogError::invalid_log_file);
   }
   rules_.clear();
   rules_.reserve(static_cast<size_t>(config_proto.rule().size()));

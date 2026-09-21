@@ -1,6 +1,7 @@
 #![generate(cpp)]
 #![cpp(namespace=clockwork_logging)]
 
+use[] clockwork::common::constants;
 use clockwork::logging::log_uuid_tag::{LogUuidTag};
 use clockwork::logging::writers::log_writer_state::{LogWriterState};
 
@@ -35,6 +36,11 @@ schema LoggerStatus
     #7 num_low_rate_channels: UInt64;
 
     // Name of a channel with a low message rate
-    #8 low_rate_channel_name: VarString<max_size=300>;
+    #8 low_rate_channel_name: VarString<max_size=constants::MAX_CHANNEL_NAME_SIZE>;
+  }
+
+  history
+  {
+    version: 9;
   }
 }

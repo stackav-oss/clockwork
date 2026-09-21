@@ -19,5 +19,14 @@ enum AlignmentType
 
     // Timeout was reached, the current best set is returned and state updated.
     #3 partial;
+
+    // Timeout was reached, some channels were empty (i.e. cursor==end) preventing a partial alignment,
+    // the current best alignment of the non-empty subset of channels is returned.
+    #4 incomplete;
+  }
+
+  history
+  {
+    version: 4;
   }
 }

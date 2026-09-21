@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -256,6 +256,7 @@ def test_invalid_optional_mutation() -> None:
     foo.optional_msg = SubMessage(22)
     sub_message = foo.optional_msg
     foo.optional_msg = None
+    # pyrefly: ignore[missing-attribute] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     sub_message.int_field = 42
     assert foo.optional_msg is None
 

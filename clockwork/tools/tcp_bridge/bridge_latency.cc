@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_interval.hh"
@@ -41,7 +41,7 @@ namespace
 {
 
 /// Latency counter types
-WISE_ENUM_CLASS((LatencyType, uint8_t), recv, xfer, comprs, bridge, rates)
+WISE_ENUM_CLASS((LatencyType, uint8_t), recv, xfer, comprs, bridge, rates, hdrs)
 
 /// Bridge status channel name
 constexpr auto bridge_status_channel = "/tcp_bridge_status";
@@ -132,6 +132,28 @@ void print_rates_line(
     compressed_data_rate_bps / jewels::math::constants::bytes_per_kb<float>);
 }
 
+/// Print a line of null headers output
+/// @param[in] channel_name Channel name
+/// @param[in] prefix Client or server prefix string
+/// @param[in] latency_type Latency type (hdrs)
+/// @param[in] null_header_rate_hz Rate of null headers sent to avoid lost tails
+/// @param[in] keep_alive_rate_hz Rate of null headers sent as keep-alives
+void print_null_headers_line(
+  std::string_view channel_name,
+  std::string_view prefix,
+  LatencyType latency_type,
+  float null_header_rate_hz,
+  float keep_alive_rate_hz)
+{
+  fmt::println(
+    "  {} {} {:6s} null-hdr: {:.3f}hz keep-alive: {:.3f}hz",
+    channel_name,
+    prefix,
+    wise_enum::to_string(latency_type),
+    null_header_rate_hz,
+    keep_alive_rate_hz);
+}
+
 /// Print a line of latency output
 /// @param[in] channel_name Channel name
 /// @param[in] prefix Client or server prefix string
@@ -172,6 +194,15 @@ void print_bridge_status_counters(
       LatencyType::rates,
       counters.get_message_rate_hz(),
       counters.get_compressed_data_rate_bps());
+  }
+  if (latency_types.contains(LatencyType::hdrs))
+  {
+    print_null_headers_line(
+      counters.get_channel_name(),
+      prefix,
+      LatencyType::hdrs,
+      counters.get_null_header_rate_hz(),
+      counters.get_keep_alive_rate_hz());
   }
   if (latency_types.contains(LatencyType::recv))
   {

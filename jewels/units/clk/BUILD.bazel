@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -10,6 +10,9 @@ clk(
         "au_clk_cc.cc",
         "au_clk_cc.hh",
         "au_clk_cc.inl",
+        "au_clk_cc_types.cc",
+        "au_clk_cc_types.hh",
+        "au_clk_cc_types.inl",
     ],
     cpp_deps = [
         "//jewels/units:degrees",

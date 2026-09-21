@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -20,12 +20,15 @@ merge_simplelaunch_config(
         "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
     ],
     data = [
-        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.proc.tachyon",
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.standalone_logger.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_allocations.csv",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_journal_topology.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_signal_metadata_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_simplelaunch_runner_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_system_metadata.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.diagnostics_database_config.tachyon",
         ":standalone_logger_clk_exe",
@@ -80,17 +83,24 @@ clk(
     name = "standalone_logger_sys_clk",
     srcs = ["standalone_logger_sys.clk"],
     outs = [
-        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.proc.tachyon",
+        "clockwork.clockwork.logging.writers.standalone_logger.standalone_logger_sys.standalone_logger_sys.standalone_logger.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_allocations.csv",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_channel_spy_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_event_logger_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_journal_topology.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_signal_metadata_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_simplelaunch_config.textproto",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_simplelaunch_runner_config.tachyon",
+        "standalone_logger_sys.standalone_logger_sys.LocalHost_system_metadata.tachyon",
         "standalone_logger_sys.standalone_logger_sys.LocalHost_telemetry_logger_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.diagnostics_database_config.tachyon",
         "standalone_logger_sys.standalone_logger_sys.logged_channel_metadata.pbbin",
     ],
     visibility = ["//visibility:public"],
-    deps = [":standalone_logger_clk"],
+    deps = [
+        ":standalone_logger_clk",
+        "//jewels/simplelaunch:simplelaunch_channel_policies_clk",
+        "//jewels/simplelaunch:simplelaunch_channels_clk",
+    ],
 )

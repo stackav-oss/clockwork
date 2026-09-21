@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/offboard/chunk_reader.hh"
 #include "clockwork/logging/offboard/chunk_writer.hh"
+#include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/s3_utils.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -60,35 +61,56 @@ public:
   S3ChunkReaderWriterFactory& operator=(S3ChunkReaderWriterFactory&&) noexcept = default;
 
   /// Create a shared pointer to a file chunk reader
-  /// @param[in] file_uri Log URI
+  /// @param[in] s3_uri Log URI
   /// Pointer to the file chunk reader or LogError on failure
-  [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkReader>> make_chunk_reader(const LogUri& file_uri);
+  [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkReader>> make_chunk_reader(const LogUri& s3_uri);
 
   /// Create a shared pointer to a file chunk writer
-  /// @param[in] file_uri Log URI
+  /// @param[in] s3_uri Log URI
   /// Pointer to the file chunk reader or LogError on failure
-  [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkWriter>> make_chunk_writer(const LogUri& file_uri);
+  [[nodiscard]] LogExpected<jewels::memory::NonNullSharedPtr<ChunkWriter>> make_chunk_writer(const LogUri& s3_uri);
 
   /// Test whether a file exists
-  /// @param[in] file_uri Log file URI
+  /// @param[in] s3_uri Log file URI
   /// @return True iff an object exists at the log URI or LogError on failure
-  [[nodiscard]] LogExpected<bool> exists(const LogUri& file_uri);
+  [[nodiscard]] LogExpected<bool> exists(const LogUri& s3_uri);
+
+  /// Get the size of a file in bytes
+  /// @param[in] s3_uri Log file URI
+  /// @return FIle size in bytes or LogError on failure
+  [[nodiscard]] LogExpected<size_t> get_size(const LogUri& s3_uri);
 
   /// Get the log files found under a log URI
   /// @param[in] uri_str Log URI
+  /// @param[in] suffix Log file suffix
   /// @return Vector of log file paths or LogError on failure
-  [[nodiscard]] LogExpected<std::pmr::vector<std::pmr::string>> list_log_files(const LogUri& file_uri);
+  [[nodiscard]] LogExpected<std::pmr::vector<LogUri>>
+  list_log_files(const LogUri& s3_uri, std::string_view suffix = log_file_suffix);
+
+  /// Get the subdirectories found under a log URI
+  /// @param[in] uri_str Log URI
+  /// @param[in] suffix Log file suffix
+  /// @return Vector of log file paths or LogError on failure
+  [[nodiscard]] LogExpected<std::pmr::vector<LogUri>> list_subdirs(const LogUri& s3_uri);
 
   /// Write a file to a log
-  /// @param[in] file_uri Log file URI
+  /// @param[in] s3_uri Log file URI
   /// @param[in] data Data to write
   /// @return LogError on failure
-  [[nodiscard]] LogExpected<void> write_log_file(const LogUri& file_uri, std::span<const std::byte> data);
+  [[nodiscard]] LogExpected<void> write_log_file(const LogUri& s3_uri, std::span<const std::byte> data);
 
   /// Read a file from a log
-  /// @param[in] file_uri Log file URI
+  /// @param[in] s3_uri Log file URI
   /// @return File data or LogError on failure
-  [[nodiscard]] LogExpected<std::pmr::vector<std::byte>> read_log_file(const LogUri& file_uri);
+  [[nodiscard]] LogExpected<std::pmr::vector<std::byte>> read_log_file(const LogUri& s3_uri);
+
+  /// Read a file from a log
+  /// @param[in] s3_uri Log file URI
+  /// @param[in] offset File offset
+  /// @param[in] buffer_span Buffer used to read the data
+  /// @return File data span or LogError on failure
+  [[nodiscard]] LogExpected<std::span<std::byte>>
+  read_log_file(const LogUri& s3_uri, size_t offset, std::span<std::byte> buffer_span);
 
 private:
   /// Get the S3 client pointer

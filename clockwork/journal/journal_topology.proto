@@ -1,0 +1,48 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+package clockwork.journal;
+
+// Resolved system topology required for offline journal generation.
+message JournalTopology {
+  // Semantic version of this file format.
+  uint32 format_version = 1;
+
+  // Fully qualified resolved system target name.
+  string system_target_name = 2;
+
+  // Runtime cog instances in deterministic path order.
+  repeated CogTopology cogs = 3;
+}
+
+// Journal-relevant topology for one runtime cog instance.
+message CogTopology {
+  // Fully qualified runtime cog instance path.
+  string cog_instance_path = 1;
+
+  // Input member-to-channel mappings, sorted by channel_name then member_name.
+  // Consumers must match entries by name rather than relying on positional order.
+  repeated CogChannel input_channels = 2;
+
+  // Output member-to-channel mappings, sorted by channel_name then member_name.
+  // Consumers must match entries by name rather than relying on positional order.
+  repeated CogChannel output_channels = 3;
+
+  // True when the cog has at least one Clockwork state endpoint.
+  bool has_clockwork_state = 4;
+
+  // State member-to-snapshot-channel mappings, sorted by channel_name then member_name.
+  // Consumers must match entries by name rather than relying on positional order.
+  repeated CogChannel snapshot_channels = 5;
+}
+
+// A cog member and its concrete deployed channel.
+message CogChannel {
+  // Cog input, output, or state member name.
+  string member_name = 1;
+
+  // Concrete Clockwork channel name.
+  string channel_name = 2;
+}

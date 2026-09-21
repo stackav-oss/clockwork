@@ -6,12 +6,11 @@
 #include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/io/network_var_packet_clk_cc.hh"      // IWYU pragma: keep
 #include "clockwork/io/var_packet_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/incoming_udp.hh"
 #include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/outgoing_udp.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/sock_opt.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -31,6 +30,7 @@
 #include <netinet/in.h>
 #include <string>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -160,7 +160,7 @@ void BidirectionalUdp<Tachyon<Schema>>::write()
 template <class Schema>
 [[nodiscard]] jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, IoConnection::Error>
 BidirectionalUdp<Tachyon<Schema>>::connect_subscriber(
-  jewels::Uuid<common::EndpointClassId> endpoint_id, pinion::SubscriberHandle subscriber)
+  jewels::Uuid<common::EndpointClassId> endpoint_id, std::shared_ptr<pinion::AbstractChannel> subscriber)
 {
   if (auto res = this->connect_subscriber_impl(endpoint_id, subscriber); !res)
   {

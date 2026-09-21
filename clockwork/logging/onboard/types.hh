@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -39,6 +39,26 @@ struct IsDiskBufferedReader : public std::false_type
 /// Concept to identify buffered reader types that read from disk
 template <typename T>
 concept DiskBufferedReaderType = IsDiskBufferedReader<T>::value;
+
+/// Trait to identify onboard buffered readers
+template <typename T>
+struct IsOnboardBufferedReader : public std::false_type
+{
+};
+
+/// Concept to identify onboard buffered readers
+template <typename T>
+concept OnboardBufferedReaderType = IsOnboardBufferedReader<T>::value;
+
+/// Trait to identify offboard buffered readers
+template <typename T>
+struct IsOffboardBufferedReader : public std::false_type
+{
+};
+
+/// Concept to identify offboard buffered readers
+template <typename T>
+concept OffboardBufferedReaderType = IsOffboardBufferedReader<T>::value;
 
 /// Structure to contain the metadata for a logged channel
 struct LoggedChannelMetadata

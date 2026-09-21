@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to report group policy configurations.
@@ -14,16 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, final
 
+from clockwork.dsl.cog.metrics_policy_loader import extract_policy_class, load_policy_module
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
-from clockwork.dsl.ir import importer_registry, policy
-from clockwork.dsl.ir.importer import FilesystemImporter
-from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 from clockwork.serialization.py import tachyon_dyn
 from typing_extensions import override
 
 if TYPE_CHECKING:
     from clockwork.dsl.cog import report_group_policy_proto
-    from clockwork.dsl.ir import node
+    from clockwork.dsl.ir import policy
 
 
 @dataclass
@@ -59,29 +57,17 @@ class Registry(Context):
 
 def _load_all_entities(compiler_context: CompilerContext) -> Entities:
     """Load all report group policy config entities by compiling the necessary modules."""
-    importer_reg = compiler_context[importer_registry.IMPORTER_REGISTRY_KEY]
-    if importer_reg.importer is None:
-        msg = "No importer registered in compiler context"
-        raise RuntimeError(msg)
+    module = load_policy_module(compiler_context, Path("std/signals.clk"))
+    policy_context = module.context
 
-    importer = importer_reg.importer
-    if not isinstance(importer, FilesystemImporter):
-        msg = f"Expected FilesystemImporter, got {type(importer).__name__}"
-        raise TypeError(msg)
-
-    module_id = ModuleID.from_path(CLK_REPO, Path("std/signals.clk"))
-    # We do not import and use the compiler directly to avoid circular dependencies.
-    module = importer.compile_fn(module_id, importer)
-    compiler_context.import_from(module.context)
-
-    reporting_strategy = tachyon_dyn.get_enum(compiler_context, module, "ReportingStrategy")[0]
-    report_group_log_type = tachyon_dyn.get_enum(compiler_context, module, "ReportGroupLogType")[0]
+    reporting_strategy = tachyon_dyn.get_enum(policy_context, module, "ReportingStrategy")[0]
+    report_group_log_type = tachyon_dyn.get_enum(policy_context, module, "ReportGroupLogType")[0]
     report_group_policy_config = tachyon_dyn.get_instantiation_dataclass(
-        compiler_context,
+        policy_context,
         module,
         "ReportGroupPolicyConfig",
     )[0]
-    report_group_policy = _extract_policy(module, "ReportGroupPolicy")
+    report_group_policy = extract_policy_class(module, "ReportGroupPolicy")
 
     return Entities(
         reporting_strategy=reporting_strategy,
@@ -89,18 +75,6 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         report_group_policy_config=report_group_policy_config,
         report_group_policy=report_group_policy,
     )
-
-
-def _extract_policy(module: node.Module, policy_name: str) -> policy.PolicyClass:
-    """Extract a policy definition from a module."""
-    policy_def = module.inner_scope.lookup(policy_name)
-    if policy_def is None:
-        msg = f"Report group policy '{policy_name}' not found in module {module.module_id}"
-        raise RuntimeError(msg)
-    if not isinstance(policy_def, policy.PolicyDef):
-        msg = f"Entity '{policy_name}' in module {module.module_id} is not a PolicyDef"
-        raise RuntimeError(msg)  # noqa: TRY004 (RuntimeError is correct for a compiler internal error)
-    return policy_def.get_resolved()
 
 
 class RegistryKey(ContextKey[Registry]):

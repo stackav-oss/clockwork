@@ -1,11 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/shm_publisher.hh"
@@ -20,8 +20,9 @@
 #include "clockwork/scaffolding/channels.hh"
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
 #include "jewels/container/compare.hh"
+#include "jewels/memory/default_memory_resource.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
@@ -99,7 +100,7 @@ TEST_CASE("setup_channels")
   const auto channel_1_sub2_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto channel_2_sub1_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "channels_test_memres");
   jewels::memory::MemoryResource memres{memory};
 
   std::vector<Tappy<common::PublishEndpoint<>>> endpoints;
@@ -259,7 +260,7 @@ TEST_CASE("setup deterministic channels")
   const auto channel_1_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto channel_2_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "channels_test_memres");
   const jewels::memory::MemoryResource memres{memory};
 
   std::vector<Tappy<common::PublishEndpoint<>>> endpoints;
@@ -297,7 +298,7 @@ TEST_CASE("bind_channels_to_epoll")
   using testing::publish;
   using testing::TestObserver;
 
-  const jewels::memory::MemoryResource memres{std::pmr::get_default_resource()};
+  const auto memres{jewels::memory::get_default_memory_resource()};
 
   const pinion::support::TmpShmNamespace tmp_namespace;
   auto channel_factory = tmp_namespace.make_factory();
@@ -341,7 +342,7 @@ TEST_CASE("setup_non_connected_channels")
   const auto publisher_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
   const auto subscriber_id = jewels::Uuid<common::EndpointInstanceId>::random_uuid();
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "channels_test_memres");
   const jewels::memory::MemoryResource memres{memory};
 
   std::vector<Tappy<common::NotConnectedEndpoint>> endpoints;
@@ -389,7 +390,7 @@ TEST_CASE("setup_non_connected_channels error cases")
   const pinion::support::TmpShmNamespace tmp_namespace;
   auto channel_factory = tmp_namespace.make_factory();
 
-  jewels::memory::MonitorResource memory;
+  jewels::memory::NewDeleteMemoryResource memory(0, "channels_test_memres");
   const jewels::memory::MemoryResource memres{memory};
 
   SECTION("subscriber set_subscriber fails")

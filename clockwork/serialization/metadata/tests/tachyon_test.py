@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -23,6 +23,25 @@ from google.protobuf import json_format
 @pytest.fixture()
 def fs_importer() -> FilesystemImporter:
     return FilesystemImporter(compile_fn=compiler.compile_source_file)
+
+
+def test_bitset_size_change_is_rejected() -> None:
+    bitset_10 = model.BuiltInType(
+        fqn=clkbuiltins.BITSET.fqn,
+        uuid=clkbuiltins.BITSET.uuid,
+        size=2,
+        alignment=1,
+        arguments=["10"],
+    )
+    bitset_11 = model.BuiltInType(
+        fqn=clkbuiltins.BITSET.fqn,
+        uuid=clkbuiltins.BITSET.uuid,
+        size=2,
+        alignment=1,
+        arguments=["11"],
+    )
+    with pytest.raises(ValueError, match="Unsupported Bitset size change"):
+        bitset_11.check_for_unexpected_schema_changes([], bitset_10, [], 4, allow_changes=True)
 
 
 def test_metadata(fs_importer: FilesystemImporter) -> None:
@@ -736,7 +755,7 @@ def test_metadata(fs_importer: FilesystemImporter) -> None:
       }}
     }}
   ],
-  "version": 3
+  "version": 4
 }}"""
     expected = json_format.Parse(expected_json, model_pb2.TachyonMetadata())
     assert json_format.MessageToJson(expected) == json_format.MessageToJson(pb_meta2)

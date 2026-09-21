@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,24 +6,16 @@
 #include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/dial/approx_aligner_policies.hh"
 #include "clockwork/dial/msg_input.hh"
-#include "jewels/container/circular_buffer.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pointers.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
-#include <catch2/catch_test_macros.hpp>
 
 #include <array>
-#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <iterator>
 #include <memory_resource>
-#include <optional>
-#include <span>
 #include <sys/types.h>
 #include <tuple>
-#include <utility>
+#include <variant>
 #include <vector>
 
 namespace clockwork
@@ -116,7 +108,7 @@ public:
   static constexpr auto max_msgs = InputPolicy::max_msgs;
   static constexpr auto min_msgs = InputPolicy::min_msgs;
   static constexpr auto min_new_msgs = InputPolicy::min_new_msgs;
-  using InputType = MessageInputDialWithCursorControl<MsgType, max_msgs, min_msgs, min_new_msgs>;
+  using InputType = MessageInputDial<MsgType, max_msgs, min_msgs, min_new_msgs, true>;
 
   MsgDialInputMaker()
     : MsgDialInputMaker({})
@@ -124,29 +116,28 @@ public:
   }
 
   MsgDialInputMaker(std::initializer_list<MsgType> msgs)
-    : msgs_(msgs.begin(), msgs.end()), buffer_{std::in_place, std::span(storage_)}
+    : msgs_(msgs.begin(), msgs.end())
   {
-    for (const auto& msg : msgs_)
+    for (size_t i = 0; i < msgs_.size(); ++i)
     {
-      buffer_.force_emplace_back(&msg);
+      storage_[i].message = &msgs_[i];
     }
+    count_ = msgs_.size();
   }
 
   auto make_input()
   {
-    const ViewType view{buffer_};
+    const ViewType view{storage_.data(), count_};
     auto begin = view.begin();
     return InputType(view, begin, begin);
   }
 
 private:
-  using CircularBuffer =
-    jewels::container::CircularBuffer<detail::MsgPolicy<MsgType>, std::span<const MsgType*, max_msgs>>;
   using ViewType = typename InputType::ViewType;
 
   std::vector<MsgType> msgs_;
-  std::array<const MsgType*, max_msgs> storage_;
-  CircularBuffer buffer_;
+  std::array<typename InputType::ViewItem, max_msgs> storage_{};
+  size_t count_{0};
 };
 
 template <typename AlignerType, typename... InputPolicies>
@@ -198,11 +189,12 @@ struct TestAlignerPolicy
   using ValuePtrArray = std::array<const ValueType*, input_count>;
   using ValueVector = std::pmr::vector<ValueType>;
   template <typename InputPolicy>
-  using InputType = MessageInputDialWithCursorControl<
+  using InputType = MessageInputDial<
     typename InputPolicy::MsgType,
     InputPolicy::max_msgs,
     InputPolicy::min_msgs,
-    InputPolicy::min_new_msgs>;
+    InputPolicy::min_new_msgs,
+    true>;
   using InputTuple = std::tuple<InputType<InputPolicies>&...>;
   using InputItTuple = std::tuple<typename InputType<InputPolicies>::IteratorType...>;
   using IndexArray = std::array<ssize_t, input_count>;

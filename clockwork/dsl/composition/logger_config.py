@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to logger configurations.
@@ -111,7 +111,7 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         "LoggedChannelConfig",
         max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_schema_name_size=511,
-        max_schema_definition_size=30000,
+        max_schema_definition_size=constants.MAX_SCHEMA_DEFINITION_SIZE,
     )[0]
 
     log_writer_config = tachyon_dyn.get_instantiation_dataclass(
@@ -120,7 +120,7 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         "LogWriterConfig",
         max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
         max_schema_name_size=511,
-        max_schema_definition_size=30000,
+        max_schema_definition_size=constants.MAX_SCHEMA_DEFINITION_SIZE,
         max_num_channels=2046,
     )[0]
 

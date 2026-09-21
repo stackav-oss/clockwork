@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -6,8 +6,9 @@
 
 from textwrap import dedent
 
+import pytest
 from clockwork.dsl.cpp import context, typereg, types
-from clockwork.dsl.ir import cog, compiler, cpp_extern, cpp_target, extern_type, importer
+from clockwork.dsl.ir import clkbuiltins, cog, compiler, cpp_extern, cpp_target, extern_type, importer, schema, typesys
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
 
 
@@ -15,8 +16,27 @@ def test_extern_state() -> None:
     """Test ExternState."""
     source = dedent(
         """
+        // Snapshot schema
+        schema Snapshot
+        {
+            fields
+            {
+                // Snapshot value
+                #0 value: UInt16;
+            }
+        }
+
         // Doc
-        extern_type CxxState;
+        extern_type CxxState
+        {
+            serialized_form
+            {
+                representation: Tachyon<Snapshot>;
+            }
+        }
+
+        // No serialized form
+        extern_type CxxStateWithoutSerialization;
 
         //
         cog TestCog
@@ -60,6 +80,14 @@ def test_extern_state() -> None:
     cxx_state_ir = module.inner_scope.lookup("CxxState")
     assert isinstance(cxx_state_ir, extern_type.ExternType)
     assert cxx_state_ir.fqn == f"@{CLK_REPO}::test_extern_state.CxxState"
+    assert isinstance(cxx_state_ir.serialized_form, typesys.Instantiation)
+    assert cxx_state_ir.serialized_form.instantiates is clkbuiltins.TACHYON
+    schema_arg = cxx_state_ir.serialized_form.arguments["schema"]
+    assert isinstance(schema_arg, schema.Schema)
+    assert schema_arg.name == "Snapshot"
+    cxx_state_without_serialization = module.inner_scope.lookup("CxxStateWithoutSerialization")
+    assert isinstance(cxx_state_without_serialization, extern_type.ExternType)
+    assert cxx_state_without_serialization.serialized_form is None
     test_target_ir = module.inner_scope.lookup("test_target")
     assert isinstance(test_target_ir, cpp_target.CppTarget)
     cpp_extern_ir = test_target_ir.externs[0]
@@ -72,3 +100,33 @@ def test_extern_state() -> None:
     cog_ir = module.inner_scope.lookup("TestCog")
     assert isinstance(cog_ir, cog.Cog)
     assert isinstance(cog_ir.states["state_hello"].message_type, extern_type.ExternType)
+
+
+@pytest.mark.parametrize("serialized_form", ["Tappy<Snapshot>", "Tachyon<UInt16>"])
+def test_extern_state_rejects_invalid_serialized_form(serialized_form: str) -> None:
+    """Test that serialized forms are concrete Tachyon schemas."""
+    source = dedent(
+        f"""
+        // Snapshot schema
+        schema Snapshot
+        {{
+            fields
+            {{
+                // Snapshot value
+                #0 value: UInt16;
+            }}
+        }}
+
+        // Doc
+        extern_type CxxState
+        {{
+            serialized_form
+            {{
+                representation: {serialized_form};
+            }}
+        }}
+        """
+    )
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    with pytest.raises(TypeError, match="concrete Tachyon<Schema>"):
+        compiler.compile_source_text(source, ModuleID(CLK_REPO, "test_invalid_extern_state"), fs_importer)

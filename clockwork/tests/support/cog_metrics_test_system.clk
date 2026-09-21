@@ -1,0 +1,6 @@
+use clockwork::tests::support::cog_metrics_test_box;
+
+system_target cog_metrics_test_system
+{
+  box: cog_metrics_test_box::CogMetricsTestSystem;
+}

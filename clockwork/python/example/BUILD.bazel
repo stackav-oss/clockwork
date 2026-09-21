@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -112,12 +112,18 @@ clk(
         "example_cog_clk_cc.cc",
         "example_cog_clk_cc.hh",
         "example_cog_clk_cc.inl",
+        "example_cog_clk_cc_cog.cc",
+        "example_cog_clk_cc_cog.hh",
+        "example_cog_clk_cc_cog.inl",
         "example_cog_clk_cc_dial.cc",
         "example_cog_clk_cc_dial.hh",
         "example_cog_clk_cc_dial.inl",
         "example_cog_clk_cc_impl.cc",
         "example_cog_clk_cc_impl.hh",
         "example_cog_clk_cc_impl.inl",
+        "example_cog_clk_cc_types.cc",
+        "example_cog_clk_cc_types.hh",
+        "example_cog_clk_cc_types.inl",
         "example_cog_clk_py_dial.py",
     ],
     cpp_deps = [
@@ -166,9 +172,11 @@ clk(
         "example_sys.example_sys.LocalHost_channel_allocations.csv",
         "example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
         "example_sys.example_sys.LocalHost_event_logger_config.tachyon",
+        "example_sys.example_sys.LocalHost_journal_topology.tachyon",
         "example_sys.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "example_sys.example_sys.LocalHost_signal_metadata_config.tachyon",
         "example_sys.example_sys.LocalHost_simplelaunch_config.textproto",
+        "example_sys.example_sys.LocalHost_system_metadata.tachyon",
         "example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
         "example_sys.example_sys.diagnostics_database_config.tachyon",
         "example_sys.example_sys.logged_channel_metadata.pbbin",
@@ -187,8 +195,10 @@ merge_simplelaunch_config(
         "example_sys.example_sys.LocalHost_channel_allocations.csv",
         "example_sys.example_sys.LocalHost_channel_spy_config.tachyon",
         "example_sys.example_sys.LocalHost_event_logger_config.tachyon",
+        "example_sys.example_sys.LocalHost_journal_topology.tachyon",
         "example_sys.example_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "example_sys.example_sys.LocalHost_signal_metadata_config.tachyon",
+        "example_sys.example_sys.LocalHost_system_metadata.tachyon",
         "example_sys.example_sys.LocalHost_telemetry_logger_config.tachyon",
         "example_sys.example_sys.diagnostics_database_config.tachyon",
         ":example_clk_exe",

@@ -1,9 +1,8 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/pinion/buffer_index.hh"
 #include "jewels/time/sync_time.hh"
 
 namespace clockwork::pinion
@@ -17,14 +16,6 @@ public:
   /// Struct for passing parameters into the `notify()` call
   struct Event
   {
-    /// The index of the oldest valid message at the time of the notification
-    /// @note This is not necessarily synchronous with channel writes
-    /// so this index may no longer be valid when the Observer
-    /// processes the notification
-    BufferIndex tail{};
-    /// The index of the newest valid message at the time of the notification
-    BufferIndex head{};
-
     // Time of the notification
     jewels::time::SyncTime current_time;
   };

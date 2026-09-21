@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -60,13 +60,7 @@ cc_library(
     ],
     hdrs = ["test_message.hh"],
     data = [":test_message_clk"],
-    deps = [
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
-        "//jewels/container/tap:var_string",
-        "//jewels/meta:concepts",
-        "//jewels/uuid",
-    ],
+    deps = [":test_message_types"],
 )
 
 clk(
@@ -80,6 +74,9 @@ clk(
         "test_message_clk_nb.cc",
         "test_message_clk_nb.hh",
         "test_message_clk_nb.inl",
+        "test_message_types.cc",
+        "test_message_types.hh",
+        "test_message_types.inl",
     ],
 )
 
@@ -99,17 +96,36 @@ py_cc_binding(
 )
 
 cc_library(
+    name = "test_message_types",
+    srcs = [
+        "test_message_types.cc",
+        "test_message_types.inl",
+    ],
+    hdrs = ["test_message_types.hh"],
+    data = [":test_message_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_string",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
     name = "test_publisher",
     srcs = ["test_publisher.inl"],
     hdrs = ["test_publisher.hh"],
     deps = [
         "//clockwork:repr_iface",
-        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:buffer_layout",
         "//clockwork/pinion:error",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publisher_slot_ref",
         "//clockwork/pinion:shm_channel",
         "//clockwork/pinion:shm_channel_factory",
         "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:slot",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",

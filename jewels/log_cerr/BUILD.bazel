@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -16,6 +16,9 @@ cc_library(
         ":detect_log_threshold",
         ":log_level",
         ":log_time",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/rate_limiter:time_bucket",
         "//jewels/time:sync_time",
         "@fmt",
     ],
@@ -50,5 +53,4 @@ cc_library(
     name = "log_time",
     hdrs = ["log_time.hh"],
     visibility = ["//visibility:public"],
-    deps = ["//jewels/time:sync_time"],
 )

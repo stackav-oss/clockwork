@@ -1,8 +1,9 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//clockwork:rules.bzl", "clk")
+load("//clockwork/tools/topology:rules.bzl", "topology_summary")
 load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config", "simplelaunch_runner")
 
 package(
@@ -37,15 +38,18 @@ clk(
         "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_journal_topology.tachyon",
         "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_signal_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_simplelaunch_config.textproto",
+        "demo_system.demo_system_sys.LocalHost_system_metadata.tachyon",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
         "demo_system.demo_system_sys.diagnostics_database_config.tachyon",
         "demo_system.demo_system_sys.logged_channel_metadata.pbbin",
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":logger_channel_policies_clk",
         ":logger_clk",
         ":spy_clk",
         "//clockwork/examples/demo_system/camera:camera_clk",
@@ -62,6 +66,11 @@ clk(
         "//clockwork/examples/demo_system/perception:perception_clk",
         "//clockwork/logging/writers:logger_channel_policies_clk",
     ],
+)
+
+topology_summary(
+    name = "demo_system_topology_summary",
+    system_target = ":demo_system_clk",
 )
 
 merge_simplelaunch_config(
@@ -82,8 +91,10 @@ merge_simplelaunch_config(
         "demo_system.demo_system_sys.LocalHost_channel_allocations.csv",
         "demo_system.demo_system_sys.LocalHost_channel_spy_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_event_logger_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_journal_topology.tachyon",
         "demo_system.demo_system_sys.LocalHost_metrics_channel_metadata_config.tachyon",
         "demo_system.demo_system_sys.LocalHost_signal_metadata_config.tachyon",
+        "demo_system.demo_system_sys.LocalHost_system_metadata.tachyon",
         "demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon",
         "demo_system.demo_system_sys.diagnostics_database_config.tachyon",
         ":logger_clk_exe",
@@ -99,6 +110,24 @@ merge_simplelaunch_config(
 )
 
 clk(
+    name = "logger_channel_policies_clk",
+    srcs = ["logger_channel_policies.clk"],
+    generate = ["none"],
+    deps = [
+        ":logger_channels_clk",
+        "//clockwork/logging:channel_policy_clk",
+        "//clockwork/logging:channel_type_clk",
+    ],
+)
+
+clk(
+    name = "logger_channels_clk",
+    srcs = ["logger_channels.clk"],
+    generate = ["none"],
+    deps = ["//clockwork/common:signal_metadata_config_clk"],
+)
+
+clk(
     name = "logger_clk",
     srcs = ["logger.clk"],
     outs = [
@@ -107,6 +136,7 @@ clk(
         "logger_clk_exe.inl",
     ],
     cpp_deps = [
+        "//clockwork/common:signal_metadata_config_clk_cc",
         "//clockwork/logging:log_writer_config_clk_cc",
         "//clockwork/logging/writers:channel_message_rates_config_clk_cc",
         "//clockwork/logging/writers:channel_message_rates_config_clk_proto_conv",
@@ -114,6 +144,7 @@ clk(
         "//clockwork/logging/writers:logger_config_clk_cc",
         "//clockwork/logging/writers:logger_config_clk_proto_conv",
         "//clockwork/logging/writers:logger_status_clk_cc",
+        "//clockwork/tools/signal_metadata:signal_metadata_init_clk_cc",
     ],
     cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
     data = [
@@ -128,12 +159,15 @@ clk(
     visibility = ["//visibility:public"],
     deps = [
         ":cpu_domain_clk",
+        ":logger_channels_clk",
+        "//clockwork/common:signal_metadata_config_clk",
         "//clockwork/logging:log_writer_config_clk",
         "//clockwork/logging/writers:channel_message_rates_config_clk",
         "//clockwork/logging/writers:logger_channels_clk",
         "//clockwork/logging/writers:logger_clk",
         "//clockwork/logging/writers:logger_config_clk",
         "//clockwork/logging/writers:logger_status_clk",
+        "//clockwork/tools/signal_metadata:signal_metadata_init_clk",
     ],
 )
 

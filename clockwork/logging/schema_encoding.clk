@@ -13,39 +13,21 @@ enum SchemaEncoding
   values
   {
     // No encoding defined, opaque bytes
-    #0 unspecified default
-    {
-      underlying_value: 0;
-    }
+    #0 unspecified default { underlying_value: 0; }
 
     // No encoding defined, opaque bytes
-    #1 undefined
-    {
-      underlying_value: 1;
-    }
+    #1 undefined { underlying_value: 1; }
 
     // ROS2 message
-    #2 ros2msg
-    {
-      underlying_value: 2;
-    }
+    #2 ros2msg { underlying_value: 2; }
 
     // ROS2 IDL
-    #3 ros2idl
-    {
-      underlying_value: 3;
-    }
+    #3 ros2idl { underlying_value: 3; }
 
     // Clockwork with tachyon representation
-    #4 clockwork_tachyon
-    {
-      underlying_value: 4;
-    }
+    #4 clockwork_tachyon { underlying_value: 4; }
 
     // Clockwork with tachyon representation with ZSTD compression
-    #5 clockwork_tachyon_zstd
-    {
-      underlying_value: 5;
-    }
+    #5 clockwork_tachyon_zstd { underlying_value: 5; }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/memory.hh"
@@ -6,7 +6,7 @@
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/monitor_resource.hh"
+#include "jewels/memory/new_delete_memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 
@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <memory>
+#include <memory_resource>
 #include <utility>
 
 namespace clockwork::scaffolding
@@ -32,12 +33,13 @@ jewels::expected<MemResMap, jewels::MonoError> setup_memory_resources(
     switch (desc.get_resource_type())
     {
     case common::MemoryResourceType::new_delete:
-      resources[desc.get_memory_resource_id()] = jewels::memory::make_pmr_shared<jewels::memory::MonitorResource>(
-        memres_meta, desc.get_resource_max_size(), desc.get_instance_path_name());
+      resources[desc.get_memory_resource_id()] =
+        jewels::memory::make_pmr_shared<jewels::memory::NewDeleteMemoryResource>(
+          memres_meta, desc.get_resource_max_size(), desc.get_instance_path_name());
       break;
     }
   }
-  return std::move(resources);
+  return resources;
 }
 
 [[nodiscard]] jewels::expected<void, jewels::MonoError> connect_memory_resources(

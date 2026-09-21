@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -7,6 +7,8 @@
 #include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "jewels/memory/memory_resource.hh"
 
+#include <aws/core/client/AWSClient.h>          // IWYU pragma: keep
+#include <aws/core/client/AWSErrorMarshaller.h> // IWYU pragma: keep
 #include <aws/core/client/CoreErrors.h>
 #include <aws/s3/S3Client.h>
 
@@ -65,6 +67,10 @@ public:
   /// @see S3UtilsInterface:get_object
   [[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
   get_object(const LogUri& s3_uri, size_t offset, size_t length) const override;
+
+  /// @see S3UtilsInterface:get_object
+  [[nodiscard]] LogExpected<std::span<std::byte>>
+  get_object(const LogUri& s3_uri, size_t offset, std::span<std::byte> buffer_span) const override;
 
   /// @see S3UtilsInterface:delete_object
   [[nodiscard]] LogExpected<void> delete_object(const LogUri& s3_uri) const override;

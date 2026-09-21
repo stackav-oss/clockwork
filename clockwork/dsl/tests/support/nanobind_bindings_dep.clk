@@ -48,11 +48,10 @@ cpp_target nanobind_test_msg_dependency
   interface Tappy<Bar>;
 }
 
-
 nanobind_target nanobind_test_msg_dependency1_clk_nb
 {
   binding OtherEnum;
-  constant some_number;
+  constantsome_number;
 }
 
 nanobind_target nanobind_test_msg_dependency2_clk_nb

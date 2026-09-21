@@ -1,11 +1,15 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/examples/log_runner/example_cogs_clk_cc_dial.hh"
 #include "clockwork/examples/log_runner/test_message_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/log_cerr/log_cerr.hh"
+#include "jewels/memory/aligned_storage.hh"
+#include "jewels/uuid/uuid.hh"
 
 #include <chrono>
 

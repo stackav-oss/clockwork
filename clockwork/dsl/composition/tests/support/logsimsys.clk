@@ -6,110 +6,108 @@ use clockwork::diagnostics::channels::{DiagnosticsChannel};
 // Channel for HelloMsg messages
 channel Chan1
 {
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 10;
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 10;
 }
 
 // Another channel for HelloMsg messages
 channel Chan2
 {
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 101;
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 101;
 }
-
 
 // A channel that comes straight from LogProducer to LogConsumer
 channel Chan3
 {
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 101;
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 101;
 }
 
 // A multi-publisher channel for HelloMsg messages
 channel MultiChan1
 {
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 11;
-    publishers: multiple;
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 11;
+  publishers: multiple;
 }
 
 // Another multi-publisher channel for HelloMsg messages
 channel MultiChan2
 {
-    message_type: Tachyon<hellomsg::HelloMsg>;
-    max_num_messages: 22;
-    publishers: multiple;
+  message_type: Tachyon<hellomsg::HelloMsg>;
+  max_num_messages: 22;
+  publishers: multiple;
 }
 
 policy ChannelLoggingPolicy for Chan1
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 policy ChannelLoggingPolicy for Chan2
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 policy ChannelLoggingPolicy for Chan3
 {
-    log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
 policy ChannelLoggingPolicy for MultiChan1
 {
-    log_type = LogType::event;
+  log_type = LogType::event;
 }
 
 policy ChannelLoggingPolicy for MultiChan2
 {
-    log_type = LogType::event;
+  log_type = LogType::event;
 }
 
 policy LogReaderPolicy for Chan2
 {
-    source_name = 'source2';
+  source_name = 'source2';
 }
 
 policy LogReaderPolicy for Chan3
 {
-    source_name = 'source3';
+  source_name = 'source3';
 }
-
-policy LogReaderPolicy for MultiChan2 {}
+policy LogReaderPolicy for MultiChan2
+{}
 
 box Box1
 {
-    new cog1: hellocog::HelloCog;
-    connect cog1.out_world to Chan1;
-    connect cog1.out_multi1 to MultiChan1;
-    connect cog1.out_multi2 to MultiChan1;
-    connect Chan2 to cog1.history_of_hellos;
-    connect MultiChan2 to cog1.multi_publisher_hello;
-    connect cog1.diagnostics to DiagnosticsChannel;
+  new cog1: hellocog::HelloCog;
+  connect cog1.out_world to Chan1;
+  connect cog1.out_multi1 to MultiChan1;
+  connect cog1.out_multi2 to MultiChan1;
+  connect Chan2 to cog1.history_of_hellos;
+  connect MultiChan2 to cog1.multi_publisher_hello;
+  connect cog1.diagnostics to DiagnosticsChannel;
 }
 
 cpu_domain LogSimCpu;
 
 box System1
 {
-    new box1: Box1;
+  new box1: Box1;
 
-    new proc1: Process(executable=logsim_exe);
+  new proc1: Process(executable=logsim_exe);
 
-    apply HostProcess(process=proc1) in box1;
+  apply HostProcess(process=proc1) in box1;
 
-    apply HostCpuDomain(cpu_domain=LogSimCpu) to proc1;
+  apply HostCpuDomain(cpu_domain=LogSimCpu) to proc1;
 }
 
 cpp_executable logsim_exe
 {
-    casing
-    {
-    }
+  casing
+  {}
 }
 
 system_target logsim_system1
 {
-    box: System1;
+  box: System1;
 }

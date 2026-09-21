@@ -1,11 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/state.hh"
 
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/data_source_loader.hh"
 #include "jewels/callsig/outcome.hh"
@@ -54,9 +53,9 @@ get_memory_resource(const Tappy<common::StateInstanceDescription<>>& desc, const
 }
 
 // Helper function to create publisher for a state description
-jewels::expected<std::shared_ptr<pinion::ShmPublisher>, jewels::MonoError> create_publisher(
+jewels::expected<std::shared_ptr<pinion::AbstractPublisher>, jewels::MonoError> create_publisher(
   const Tappy<common::StateInstanceDescription<>>& desc,
-  pinion::ShmChannelFactory& factory,
+  pinion::AbstractChannelFactory& factory,
   jewels::memory::MemoryResource memres_sys)
 {
   if (!desc.has_maybe_buffer_layout())
@@ -102,93 +101,152 @@ jewels::expected<DataSourceLoadResult, jewels::MonoError> load_initial_data(
   return load_result;
 }
 
-// Helper function to instantiate a state
-jewels::expected<void, jewels::MonoError> instantiate_state(
+// Helper function to restore a state from snapshot data
+jewels::expected<void, jewels::MonoError> instantiate_state_from_snapshot(
   const Tappy<common::StateInstanceDescription<>>& desc,
-  const std::shared_ptr<pinion::ShmPublisher>& publisher,
   std::optional<jewels::memory::MemoryResource> memres,
   const DataSourceLoadResult& load_result,
   AbstractCasing& casing)
 {
-  if (!load_result.should_default_construct)
+  if (!desc.has_snapshot_representation_id())
   {
-    if (!publisher)
-    {
-      jewels::log_cerr_error("State '{}' has init data source but no buffer layout", desc.get_instance_path_name());
-      return jewels::unexpected(jewels::MonoError());
-    }
-
-    auto data = load_result.data;
-    if (load_result.representation_id != desc.get_representation_id())
-    {
-      // Need to deserialize via the casing
-      std::pmr::vector<std::byte> deserialized_data{data.get_allocator()};
-      deserialized_data.resize(publisher->publisher().layout().message_size);
-      if (const auto outcome =
-            casing.try_deserialize_data(load_result.representation_id, load_result.data, deserialized_data);
-          jewels::fails(outcome))
-      {
-        jewels::log_cerr_error(
-          "error deserializing data for state '{}' with representation {}: {}",
-          desc.get_instance_path_name(),
-          load_result.representation_id,
-          wise_enum::to_string(outcome.get()));
-        return jewels::unexpected(jewels::MonoError());
-      }
-      data = std::move(deserialized_data);
-    }
-
-    const auto outcome = casing.try_instantiate_state(
-      desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value(), data);
-    if (jewels::fails(outcome))
-    {
-      jewels::log_cerr_error(
-        "error creating state '{}' with data: {}", desc.get_instance_path_name(), wise_enum::to_string(outcome.get()));
-      return jewels::unexpected(jewels::MonoError());
-    }
+    jewels::log_cerr_error("State '{}' has init data source but no buffer layout", desc.get_instance_path_name());
+    return jewels::unexpected(jewels::MonoError());
   }
-  else
+  if (!memres.has_value())
   {
-    // Default construction
-    jewels::expected<void, AbstractCasing::Error> result;
-    if (publisher && memres.has_value())
-    {
-      result = casing.try_instantiate_state(
-        desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value(), *memres);
-    }
-    else if (publisher)
-    {
-      result = casing.try_instantiate_state(
-        desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value());
-    }
-    else if (memres.has_value())
-    {
-      result = casing.try_instantiate_state(desc.get_state_instance_id(), desc.get_representation_id(), *memres);
-    }
-    else
-    {
-      jewels::log_cerr_error("state '{}' lacks both a buffer and memory config", desc.get_instance_path_name());
-      return jewels::unexpected(jewels::MonoError());
-    }
-    if (!result)
-    {
-      jewels::log_cerr_error("error creating state '{}': {}", desc.get_instance_path_name(), result.error());
-      return jewels::unexpected(jewels::MonoError());
-    }
+    jewels::log_cerr_error("State '{}' has snapshot data but no memory resource", desc.get_instance_path_name());
+    return jewels::unexpected(jewels::MonoError());
+  }
+
+  const auto snapshot_representation_id = desc.value_snapshot_representation_id();
+  if (load_result.representation_id != snapshot_representation_id)
+  {
+    jewels::log_cerr_error(
+      "State '{}' snapshot representation {} does not match description {}",
+      desc.get_instance_path_name(),
+      load_result.representation_id,
+      snapshot_representation_id);
+    return jewels::unexpected(jewels::MonoError());
+  }
+
+  const auto outcome = casing.try_instantiate_state_from_snapshot(
+    desc.get_state_instance_id(), desc.get_representation_id(), snapshot_representation_id, *memres, load_result.data);
+  if (jewels::fails(outcome))
+  {
+    jewels::log_cerr_error(
+      "error restoring state '{}' with state representation {} and snapshot representation {}: {}",
+      desc.get_instance_path_name(),
+      desc.get_representation_id(),
+      snapshot_representation_id,
+      wise_enum::to_string(outcome.get()));
+    return jewels::unexpected(jewels::MonoError());
   }
   return {};
 }
 
-jewels::expected<std::pmr::vector<std::shared_ptr<pinion::ShmPublisher>>, jewels::MonoError> setup_states(
+// Helper function to instantiate a state with initial data
+jewels::expected<void, jewels::MonoError> instantiate_state_with_initial_data(
+  const Tappy<common::StateInstanceDescription<>>& desc,
+  const std::shared_ptr<pinion::AbstractPublisher>& publisher,
+  const DataSourceLoadResult& load_result,
+  AbstractCasing& casing)
+{
+  auto data = load_result.data;
+  if (load_result.representation_id != desc.get_representation_id())
+  {
+    // Need to deserialize via the casing
+    std::pmr::vector<std::byte> deserialized_data{data.get_allocator()};
+    deserialized_data.resize(publisher->publisher().layout().message_size);
+    if (const auto outcome =
+          casing.try_deserialize_data(load_result.representation_id, load_result.data, deserialized_data);
+        jewels::fails(outcome))
+    {
+      jewels::log_cerr_error(
+        "error deserializing data for state '{}' with representation {}: {}",
+        desc.get_instance_path_name(),
+        load_result.representation_id,
+        wise_enum::to_string(outcome.get()));
+      return jewels::unexpected(jewels::MonoError());
+    }
+    data = std::move(deserialized_data);
+  }
+
+  const auto outcome = casing.try_instantiate_state(
+    desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value(), data);
+  if (jewels::fails(outcome))
+  {
+    jewels::log_cerr_error(
+      "error creating state '{}' with data: {}", desc.get_instance_path_name(), wise_enum::to_string(outcome.get()));
+    return jewels::unexpected(jewels::MonoError());
+  }
+  return {};
+}
+
+// Helper function to default-construct a state
+jewels::expected<void, jewels::MonoError> instantiate_default_state(
+  const Tappy<common::StateInstanceDescription<>>& desc,
+  const std::shared_ptr<pinion::AbstractPublisher>& publisher,
+  std::optional<jewels::memory::MemoryResource> memres,
+  AbstractCasing& casing)
+{
+  jewels::expected<void, AbstractCasing::Error> result;
+  if (publisher && memres.has_value())
+  {
+    result = casing.try_instantiate_state(
+      desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value(), *memres);
+  }
+  else if (publisher)
+  {
+    result = casing.try_instantiate_state(
+      desc.get_state_instance_id(), desc.get_representation_id(), publisher->extract_publisher().value());
+  }
+  else if (memres.has_value())
+  {
+    result = casing.try_instantiate_state(desc.get_state_instance_id(), desc.get_representation_id(), *memres);
+  }
+  else
+  {
+    jewels::log_cerr_error("state '{}' lacks both a buffer and memory config", desc.get_instance_path_name());
+    return jewels::unexpected(jewels::MonoError());
+  }
+  if (!result)
+  {
+    jewels::log_cerr_error("error creating state '{}': {}", desc.get_instance_path_name(), result.error());
+    return jewels::unexpected(jewels::MonoError());
+  }
+  return {};
+}
+
+// Helper function to instantiate a state
+jewels::expected<void, jewels::MonoError> instantiate_state(
+  const Tappy<common::StateInstanceDescription<>>& desc,
+  const std::shared_ptr<pinion::AbstractPublisher>& publisher,
+  std::optional<jewels::memory::MemoryResource> memres,
+  const DataSourceLoadResult& load_result,
+  AbstractCasing& casing)
+{
+  if (load_result.should_default_construct)
+  {
+    return instantiate_default_state(desc, publisher, memres, casing);
+  }
+  if (!publisher)
+  {
+    return instantiate_state_from_snapshot(desc, memres, load_result, casing);
+  }
+  return instantiate_state_with_initial_data(desc, publisher, load_result, casing);
+}
+
+jewels::expected<std::pmr::vector<std::shared_ptr<pinion::AbstractPublisher>>, jewels::MonoError> setup_states(
   std::span<const Tappy<common::StateInstanceDescription<>>> descs,
   jewels::memory::MemoryResource memres_sys,
   const MemResMap& memres_map,
-  pinion::ShmChannelFactory& factory,
+  pinion::AbstractChannelFactory& factory,
   AbstractCasing& casing,
   std::span<const Tappy<common::DataSource<>>> data_sources,
   const FirstMessageCache& first_message_cache)
 {
-  std::pmr::vector<std::shared_ptr<pinion::ShmPublisher>> publishers(memres_sys);
+  std::pmr::vector<std::shared_ptr<pinion::AbstractPublisher>> publishers(memres_sys);
   for (const auto& desc : descs)
   {
     auto memres_result = get_memory_resource(desc, memres_map);

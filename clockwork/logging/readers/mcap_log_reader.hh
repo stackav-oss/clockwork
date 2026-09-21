@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -85,7 +85,7 @@ public:
   /// Read the next message out of the log.
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] std::optional<LoggedMessage> next_message() override;
+  [[nodiscard]] std::optional<LoggedMessage> next_message_impl() override;
 
 private:
   /// Open the MCAP log reader.

@@ -5,74 +5,80 @@ use clockwork::diagnostics::channels::{DiagnosticsChannel};
 // Channel for cog1->cog2
 channel Chan1
 {
-    message_type: Tachyon<test_msgs::Message1>;
-    max_num_messages: 10;
+  message_type: Tachyon<test_msgs::Message1>;
+  max_num_messages: 10;
 }
 
 // cog2 output, for unit test
 channel Chan2
 {
-    message_type: Tachyon<test_msgs::Message2>;
-    max_num_messages: 11;
+  message_type: Tachyon<test_msgs::Message2>;
+  max_num_messages: 11;
 }
 
 box TestSystemProc1Box
 {
-    new cog1: test_cogs::TestCog1;
-    new cog2: test_cogs::TestCog2;
-    new cog3: test_cogs::InitCog1;
-    connect Chan1 to cog2.in_a;
-    connect cog1.out_a to Chan1;
-    connect cog2.out_a to Chan2;
-    new mem_cog1_1: HeapMemory(max_size=1'000'000);
-    new mem_cog1_2: HeapMemory(max_size=1'000'000);
-    new mem_cog2: HeapMemory(max_size=1'000'000);
-    connect mem_cog1_1 to cog1.memory1;
-    connect mem_cog1_2 to cog1.memory2;
-    connect mem_cog2 to cog2.memory;
-    new initcfg: SerializedDataFile(representation=Tachyon<test_msgs::InitConfig>, path="clockwork/tests/resources/test_system_init_config.tachyon");
-    connect initcfg to cog3.config;
-    new config: SerializedDataFile(representation=Protobuf<test_msgs::Config>, path="clockwork/tests/resources/test_system_config.textproto");
-    connect config to cog1.cfg_a;
-    new state: State(representation=Tachyon<test_msgs::State>, init=cog3.state);
-    connect state to cog1.state_a;
-    connect state to cog2.state_a;
-    connect state to cog3.state;
-    new mem_fib: HeapMemory(max_size=1'000'000);
-    new fib: State(representation=test_cogs::MyCxxFibState, memory_resource=mem_fib, init=cog3.fib);
-    connect fib to cog2.fib;
-    connect fib to cog3.fib;
-    connect cog1.diagnostics to DiagnosticsChannel;
-    connect cog2.diagnostics to DiagnosticsChannel;
+  new cog1: test_cogs::TestCog1;
+  new cog2: test_cogs::TestCog2;
+  new cog3: test_cogs::InitCog1;
+  connect Chan1 to cog2.in_a;
+  connect cog1.out_a to Chan1;
+  connect cog2.out_a to Chan2;
+  new mem_cog1_1: HeapMemory(max_size=1'000'000);
+  new mem_cog1_2: HeapMemory(max_size=1'000'000);
+  new mem_cog2: HeapMemory(max_size=1'000'000);
+  connect mem_cog1_1 to cog1.memory1;
+  connect mem_cog1_2 to cog1.memory2;
+  connect mem_cog2 to cog2.memory;
+  new initcfg: SerializedDataFile(
+    representation=Tachyon<test_msgs::InitConfig>,
+    path="clockwork/tests/resources/test_system_init_config.tachyon",
+  );
+  connect initcfg to cog3.config;
+  new config: SerializedDataFile(
+    representation=Protobuf<test_msgs::Config>,
+    path="clockwork/tests/resources/test_system_config.textproto",
+  );
+  connect config to cog1.cfg_a;
+  new state: State(representation=Tachyon<test_msgs::State>, init=cog3.state);
+  connect state to cog1.state_a;
+  connect state to cog2.state_a;
+  connect state to cog3.state;
+  new mem_fib: HeapMemory(max_size=1'000'000);
+  new fib: State(representation=test_cogs::MyCxxFibState, memory_resource=mem_fib, init=cog3.fib);
+  connect fib to cog2.fib;
+  connect fib to cog3.fib;
+  connect cog1.diagnostics to DiagnosticsChannel;
+  connect cog2.diagnostics to DiagnosticsChannel;
 }
 
 cpu_domain TestCpu;
 
 box TestSystem
 {
-    new box: TestSystemProc1Box;
-    new proc: Process(executable=test_system_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+  new box: TestSystemProc1Box;
+  new proc: Process(executable=test_system_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
 }
 
 cpp_executable test_system_exe
 {
-    casing
-    {
-        extern test_cogs::MyCxxFibState;
-        representation Protobuf<test_msgs::Config>;
-        interface Tap<Tachyon<test_msgs::InitConfig>>;
-        interface Tap<Tachyon<test_msgs::State>>;
-        interface Tap<Tachyon<test_msgs::Message1>>;
-        interface Tap<Tachyon<test_msgs::Message2>>;
-        cog test_cogs::TestCog1;
-        cog test_cogs::TestCog2;
-        cog test_cogs::InitCog1;
-    }
+  casing
+  {
+    extern test_cogs::MyCxxFibState;
+    representation Protobuf<test_msgs::Config>;
+    interface Tap<Tachyon<test_msgs::InitConfig>>;
+    interface Tap<Tachyon<test_msgs::State>>;
+    interface Tap<Tachyon<test_msgs::Message1>>;
+    interface Tap<Tachyon<test_msgs::Message2>>;
+    cog test_cogs::TestCog1;
+    cog test_cogs::TestCog2;
+    cog test_cogs::InitCog1;
+  }
 }
 
 system_target test_system
 {
-    box: TestSystem;
+  box: TestSystem;
 }

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,8 @@
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
@@ -54,7 +56,7 @@ public:
   template <typename CogType>
   [[nodiscard]] jewels::expected<std::shared_ptr<pinion::Observer>, jewels::MonoError> set_handle(
     jewels::Uuid<common::EndpointClassId> endpoint_id,
-    pinion::SubscriberHandle handle,
+    std::shared_ptr<pinion::AbstractChannel> channel,
     jewels::memory::ObjectPtr<CogType> cog);
 
   /// Set up an input endpoint without a subscriber handle for non-connected endpoints
@@ -106,6 +108,42 @@ public:
   /// @return The tuple of subscribers.
   [[nodiscard]] SubscribersTuple& subscribers();
 
+  /// Narrow the InputView at the given index to a single message identified by sequence number.
+  /// Used by generated alignment resolution code.
+  /// @tparam index Index into the subscribers tuple.
+  /// @param dial_out Output: the narrowed dial, populated on success.
+  /// @param target_seqno The sequence number to resolve.
+  /// @return AlignedLookupOutcome: resolved, stale, or pending.
+  template <size_t index>
+  [[nodiscard]] auto prepare_aligned_input(
+    jewels::Out<typename std::tuple_element_t<index, SubscribersTuple>::element_type::InputDialType> dial_out,
+    uint64_t target_seqno);
+
+  /// Narrow the InputView at the given index to a range of messages identified by closed seqno range.
+  /// @tparam index Index into the subscribers tuple.
+  /// @param dial_out Output: the narrowed dial, populated on success.
+  /// @param begin_seq The first sequence number in the batch (inclusive).
+  /// @param end_seq The last sequence number in the batch (inclusive).
+  /// @return AlignedLookupOutcome: resolved, stale, or pending.
+  template <size_t index>
+  [[nodiscard]] auto prepare_aligned_input_range(
+    jewels::Out<typename std::tuple_element_t<index, SubscribersTuple>::element_type::InputDialType> dial_out,
+    uint64_t begin_seq,
+    uint64_t end_seq);
+
+  /// Clear the InputView at the given index so it contains no messages.
+  /// Returns a dial with an empty view for assignment into the InputDialTuple.
+  /// @tparam index Index into the subscribers tuple.
+  template <size_t index>
+  [[nodiscard]] auto prepare_empty_aligned_input();
+
+  /// Advance the aligned cursor for the InputView at the given index.
+  /// Called after successful cog execution for aligned upstream inputs.
+  /// @tparam index Index into the subscribers tuple.
+  /// @param seqno The sequence number to advance the cursor to.
+  template <size_t index>
+  void advance_aligned_cursor(uint64_t seqno);
+
   /// Set the input subscriber handle at the specified index
   ///
   /// Used by unit test cogs to initialize the unit test input channels
@@ -115,7 +153,7 @@ public:
   /// @param[in] handle Subscriber handle
   /// @param[in] cog Cog pointer
   template <size_t index, typename CogType>
-  void set_unit_test_input(pinion::SubscriberHandle handle);
+  void set_unit_test_input(std::shared_ptr<pinion::AbstractChannel> channel);
 
   /// Get the default number of slots in the pinion buffer for a unit test input channel
   ///
@@ -124,6 +162,25 @@ public:
   /// @tparam ConditionsType Cog input conditions
   template <typename ConditionsType>
   [[nodiscard]] static constexpr std::array<uint32_t, policy_count> get_default_unit_test_slot_counts();
+
+  /// Commit only the input at the given index. Returns the {endpoint_id, last_viewed} tuple
+  /// for passing to CogConditions::commit().
+  /// Used for selective commit on alignment miss (advance past stale alignment messages
+  /// without consuming other triggers).
+  template <size_t index>
+  [[nodiscard]] auto commit_single(const InputDialTuple& inputs);
+
+  /// Commit only the input at the given runtime index.
+  /// @param commit_result_out Output: the {endpoint_id, last_viewed} tuple for the committed input.
+  /// @param inputs The dial inputs returned by the last call to make_dial_inputs().
+  /// @param index Index into the subscribers tuple.
+  /// @return Success if the index identifies an input, or failure otherwise.
+  [[nodiscard]] jewels::BinaryOutcome
+  commit_single(jewels::Out<LastViewedTuple> commit_result_out, const InputDialTuple& inputs, size_t index);
+
+  /// Clear saved_begin_/saved_end_ on all input views without advancing last_viewed_.
+  /// Used after an alignment miss to undo the side effects of make_dial_inputs().
+  void reset_saved_state();
 
 private:
   /// Memory resource

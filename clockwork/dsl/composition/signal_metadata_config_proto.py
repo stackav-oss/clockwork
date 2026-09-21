@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Protocol stubs for signal metadata configuration types.
@@ -10,7 +10,6 @@ signal_metadata_config.py.
 
 from dataclasses import dataclass
 from typing import Protocol
-from uuid import UUID
 
 from clockwork.serialization.py.protocol import Tachyon
 
@@ -45,7 +44,7 @@ class LogTypeEnum(Protocol):
 
     none: LogType
     event: LogType
-    telemetry: LogType
+    non_redundant_telemetry: LogType
 
 
 class ReportGroupType(Protocol):
@@ -61,8 +60,26 @@ class ReportGroupTypeEnum(Protocol):
     Aggregated: ReportGroupType
 
 
+class SignalValiditySource(Protocol):
+    """Fake enum type for values of SignalValiditySource."""
+
+    _please_never_define_a_class_with_this_attribute_signal_validity_source: None
+    value: int
+
+
+class SignalValiditySourceEnum(Protocol):
+    """Source used to determine whether a report-group signal is present."""
+
+    legacy_assume_present: SignalValiditySource
+    count_field: SignalValiditySource
+    presence_bit: SignalValiditySource
+
+
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class SignalMetadata(Tachyon["SignalMetadata"]):
+# fmt: on
     """Signal definition with pre-aggregation configuration."""
 
     name: str
@@ -71,17 +88,25 @@ class SignalMetadata(Tachyon["SignalMetadata"]):
     signal_instance_indexes: list[int]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ReportGroupSignalMetadata(Tachyon["ReportGroupSignalMetadata"]):
+# fmt: on
     """Signal entry within a report group."""
 
     signal_index: int
     post_aggregation_types: list[AggregationType]
     alias: str | None
+    validity_source: SignalValiditySource
+    validity_index: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ReportGroupMetadata(Tachyon["ReportGroupMetadata"]):
+# fmt: on
     """Report group configuration."""
 
     name: str
@@ -93,24 +118,33 @@ class ReportGroupMetadata(Tachyon["ReportGroupMetadata"]):
     signals: list[ReportGroupSignalMetadata]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class CogReportGroupsMetadata(Tachyon["CogReportGroupsMetadata"]):
+# fmt: on
     """Cog class with all its report groups."""
 
-    cog_class_id: UUID
     report_groups: list[ReportGroupMetadata]
+    cog_path: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class SignalInstanceMetadata(Tachyon["SignalInstanceMetadata"]):
+# fmt: on
     """Signal instance metadata."""
 
     signal_index: int
     signal_instance_index: int
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ReportGroupInstanceMetadata(Tachyon["ReportGroupInstanceMetadata"]):
+# fmt: on
     """Report group instance metadata."""
 
     report_group_index: int
@@ -118,27 +152,37 @@ class ReportGroupInstanceMetadata(Tachyon["ReportGroupInstanceMetadata"]):
     signal_instances: list[SignalInstanceMetadata]
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class CogInstanceMetadata(Tachyon["CogInstanceMetadata"]):
+# fmt: on
     """Cog instance with report group instances."""
 
-    cog_class_id: UUID
-    cog_instance_id: UUID
     report_group_instances: list[ReportGroupInstanceMetadata]
+    cog_path: str
+    cog_instance_path: str
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class ReportGroupChannelMetadata(Tachyon["ReportGroupChannelMetadata"]):
+# fmt: on
     """Channel mapping for report groups."""
 
     channel_name: str
-    cog_class_id: UUID
-    cog_instance_id: UUID
     report_group_index: int
+    cog_path: str
+    cog_instance_path: str
+    is_cog_metrics_channel: bool
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class SignalMetadataConfig(Tachyon["SignalMetadataConfig"]):
+# fmt: on
     """Top-level signal metadata configuration."""
 
     signal_instance_names: list[str]

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/channel_type_clk_cc.hh"
@@ -7,10 +7,13 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/message_encoding_clk_cc.hh"
+#include "clockwork/logging/offboard/s3_utils.hh"
+#include "clockwork/logging/offboard/s3_utils_interface.hh"
 #include "clockwork/logging/onboard/async_write_request.hh"
 #include "clockwork/logging/onboard/async_writer.hh"
 #include "clockwork/logging/onboard/buffered_reader.hh"
 #include "clockwork/logging/onboard/log_format.hh"
+#include "clockwork/logging/onboard/offboard_buffered_reader.hh"
 #include "clockwork/logging/onboard/reader.hh"
 #include "clockwork/logging/onboard/tests/support/test_message_handle.hh"
 #include "clockwork/logging/onboard/tests/support/test_support.hh"
@@ -20,6 +23,7 @@
 #include "jewels/aligner/aligner.hh"
 #include "jewels/container/circular_buffer.hh"
 #include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/filesystem/path.hh"
 #include "jewels/math/constants.hh"
@@ -35,6 +39,7 @@
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_message.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <fmt/format.h>
@@ -45,15 +50,11 @@
 #include <compare>
 #include <cstdint>
 #include <cstring>
-#include <functional>
-#include <list>
 #include <memory_resource>
-#include <optional>
 #include <ratio>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -134,6 +135,9 @@ struct TestWriterPolicy
 
 struct TestReaderPolicy
 {
+  /// S3 utilities library type
+  using S3UtilsType = offboard::S3Utils;
+
   /// Filesystem library type
   using FilesystemType = jewels::filesystem::testing::FilesystemWrapper;
 
@@ -147,8 +151,10 @@ struct TestReaderPolicy
   static constexpr size_t min_io_error_recover_read_size = 512U;
 };
 
-TEST_CASE("Read metadata")
+TEMPLATE_TEST_CASE("Read metadata", "", BufferedReader<TestReaderPolicy>, OffboardBufferedReader<TestReaderPolicy>)
 {
+  using BufferedReaderType = TestType;
+
   const auto metadata_map_option = GENERATE(MetadataMapOption::enable, MetadataMapOption::disable);
   CAPTURE(metadata_map_option);
 
@@ -269,9 +275,11 @@ TEST_CASE("Read metadata")
   REQUIRE(writer.close_log(time1));
   REQUIRE(writer.drain_async_operations());
 
+  const auto buffered_reader = tests::make_buffered_reader<BufferedReaderType>();
+
   SECTION("Get logged metadata")
   {
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), metadata_map_option};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, metadata_map_option};
     REQUIRE_FALSE(reader);
     REQUIRE(reader.open());
 
@@ -342,7 +350,7 @@ TEST_CASE("Read metadata")
 
   SECTION("Get logged metadata map")
   {
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), metadata_map_option};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, metadata_map_option};
     REQUIRE_FALSE(reader);
     REQUIRE(reader.open());
 
@@ -400,7 +408,7 @@ TEST_CASE("Read metadata")
   SECTION("Corrupted log header")
   {
     REQUIRE(corrupt_log_file((log_dir / "log_file_000000.olog").string(), 0U, "X"));
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), metadata_map_option};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, metadata_map_option};
     REQUIRE(reader.open());
 
     const auto read_result = reader.read_next();
@@ -428,7 +436,7 @@ TEST_CASE("Read metadata")
   {
     REQUIRE(
       corrupt_log_file((log_dir / "log_file_000000.olog").string(), log_header_size + schema_record_header_size, "X"));
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), metadata_map_option};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, metadata_map_option};
     REQUIRE(reader.open());
 
     const auto read_result = reader.read_next();
@@ -473,7 +481,7 @@ TEST_CASE("Read metadata")
   {
     REQUIRE(corrupt_log_file(
       (log_dir / "log_file_000000.olog").string(), *channel2_offset_result + channel_record_header_size, "X"));
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), metadata_map_option};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, metadata_map_option};
     REQUIRE(reader.open());
 
     const auto read_result = reader.read_next();
@@ -514,8 +522,10 @@ TEST_CASE("Read metadata")
   }
 }
 
-TEST_CASE("Log messages")
+TEMPLATE_TEST_CASE("Log messages", "", BufferedReader<TestReaderPolicy>, OffboardBufferedReader<TestReaderPolicy>)
 {
+  using BufferedReaderType = TestType;
+
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   static constexpr size_t header_size = 29U;
   static constexpr size_t max_write_mib_per_sec = 100U;
@@ -621,10 +631,11 @@ TEST_CASE("Log messages")
   REQUIRE(writer.close_log(time1));
   REQUIRE(writer.drain_async_operations());
 
+  const auto buffered_reader = tests::make_buffered_reader<BufferedReaderType>();
+
   SECTION("List log files")
   {
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+    const auto list_result = buffered_reader->list_log_files(log_dir.string());
     REQUIRE(list_result);
     REQUIRE(list_result->size() == 2U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});
@@ -641,42 +652,42 @@ TEST_CASE("Log messages")
 
   SECTION("Get file log interval")
   {
-    auto interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time);
+    auto interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time1);
     REQUIRE(interval_result->get_end_timestamp() == log_time1 + (message_interval * messages_per_file));
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time1);
     REQUIRE(interval_result->get_end_timestamp() == message_time1 + (message_interval * messages_per_file));
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::log_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time1 + (message_interval * (messages_per_file + 1U)));
     REQUIRE(interval_result->get_end_timestamp() == log_time1 + (message_interval * ((messages_per_file * 2U) - 1U)));
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000001.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time1 + (message_interval * (messages_per_file + 1U)));
     REQUIRE(
       interval_result->get_end_timestamp() == message_time1 + (message_interval * ((messages_per_file * 2U) - 1U)));
     REQUIRE_FALSE(
-      Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-        memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time));
+      Reader<BufferedReaderType>::get_file_log_interval(
+        memory_resource, (log_dir / "log_file_000002.olog").string(), TimeFilterOption::log_time, buffered_reader));
   }
 
   SECTION("Get file log interval, no end log record")
   {
     REQUIRE(corrupt_log_file((log_dir / "log_file_000000.olog").string(), file_size1 - 2U, "X"));
-    auto interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time);
+    auto interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::log_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == log_time1);
     REQUIRE(interval_result->get_end_timestamp() == log_time1 + (message_interval * messages_per_file));
-    interval_result = Reader<BufferedReader<TestReaderPolicy>>::get_file_log_interval(
-      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time);
+    interval_result = Reader<BufferedReaderType>::get_file_log_interval(
+      memory_resource, (log_dir / "log_file_000000.olog").string(), TimeFilterOption::message_time, buffered_reader);
     REQUIRE(interval_result);
     REQUIRE(interval_result->get_start_timestamp() == message_time1);
     REQUIRE(interval_result->get_end_timestamp() == message_time1 + (message_interval * messages_per_file));
@@ -684,7 +695,7 @@ TEST_CASE("Log messages")
 
   SECTION("Read logged messages")
   {
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, MetadataMapOption::disable};
     const auto start_time = jewels::time::SteadyClock::now();
     REQUIRE(reader.open());
 
@@ -754,10 +765,10 @@ TEST_CASE("Log messages")
     constexpr LogInterval log_interval{
       {log_time1 + (message_interval * messages_to_skip)},
       {log_time1 + (message_interval * (messages_to_skip + messages_per_file - 1U))}};
-    const auto list_result =
-      Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+    const auto list_result = buffered_reader->list_log_files(log_dir.string());
     REQUIRE(list_result);
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, list_result.value(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{
+      memory_resource, list_result.value(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open(log_interval));
 
     log_time = log_time1 + (message_interval * messages_to_skip);
@@ -820,7 +831,7 @@ TEST_CASE("Log messages")
   {
     REQUIRE(
       corrupt_log_file((log_dir / "log_file_000000.olog").string(), message1_offset + message_record_header_size, "X"));
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open());
 
     log_time = log_time1;
@@ -880,7 +891,7 @@ TEST_CASE("Log messages")
   SECTION("Corrupted channel record recovered by redundant metadata")
   {
     REQUIRE(corrupt_log_file((log_dir / "log_file_000000.olog").string(), *channel2_offset_result, "X"));
-    Reader<BufferedReader<TestReaderPolicy>> reader{memory_resource, log_dir.string(), MetadataMapOption::disable};
+    Reader<BufferedReaderType> reader{memory_resource, log_dir.string(), buffered_reader, MetadataMapOption::disable};
     REQUIRE(reader.open());
 
     log_time = log_time1;
@@ -911,8 +922,11 @@ TEST_CASE("Log messages")
   }
 }
 
-TEST_CASE("List log files for interval")
+TEMPLATE_TEST_CASE(
+  "List log files for interval", "", BufferedReader<TestReaderPolicy>, OffboardBufferedReader<TestReaderPolicy>)
 {
+  using BufferedReaderType = TestType;
+
   const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
   static constexpr size_t max_write_mib_per_sec = 100U;
   static constexpr auto max_log_file_duration = std::chrono::seconds{0};
@@ -947,6 +961,8 @@ TEST_CASE("List log files for interval")
   constexpr LogTimestamp log_time0{std::chrono::seconds(1000)};
   constexpr LogTimestamp message_time0{std::chrono::seconds(100000)};
   constexpr auto message_interval = std::chrono::seconds(10);
+
+  const auto buffered_reader = tests::make_buffered_reader<BufferedReaderType>();
 
   SECTION("Bisect to find log files to read")
   {
@@ -998,142 +1014,148 @@ TEST_CASE("List log files for interval")
 
     SECTION("List log files")
     {
-      const auto list_result =
-        Reader<BufferedReader<TestReaderPolicy>>::list_log_files(memory_resource, log_dir.string());
+      const auto list_result = buffered_reader->list_log_files(log_dir.string());
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files + (last_file_is_empty ? 1U : 0U));
       size_t file_index = 0U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that barely covers entire log")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
-        LogInterval{log_time0 + message_interval, log_time0 + (message_interval * ((num_log_files * 2) - 2))});
+        LogInterval{log_time0 + message_interval, log_time0 + (message_interval * ((num_log_files * 2) - 2))},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files);
       size_t file_index = 0U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that barely covers all but first and last files")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
-        LogInterval{log_time0 + (message_interval * 3), log_time0 + (message_interval * ((num_log_files * 2) - 4))});
+        LogInterval{log_time0 + (message_interval * 3), log_time0 + (message_interval * ((num_log_files * 2) - 4))},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files - 2U);
       size_t file_index = 1U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that just misses the first and last two log files")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
         LogInterval{
           log_time0 + (message_interval * 3) + std::chrono::nanoseconds(1),
-          log_time0 + (message_interval * ((num_log_files * 2) - 4)) - std::chrono::nanoseconds(1)});
+          log_time0 + (message_interval * ((num_log_files * 2) - 4)) - std::chrono::nanoseconds(1)},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files - 4U);
       size_t file_index = 2U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that barely covers the first half of the log")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
-        LogInterval{log_time0 + message_interval, log_time0 + (message_interval * (num_log_files - 2))});
+        LogInterval{log_time0 + message_interval, log_time0 + (message_interval * (num_log_files - 2))},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files / 2U);
       size_t file_index = 0U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that just misses the first half of the log")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
         LogInterval{
           log_time0 + message_interval + std::chrono::nanoseconds(1),
-          log_time0 + (message_interval * (num_log_files - 2)) - std::chrono::nanoseconds(1)});
+          log_time0 + (message_interval * (num_log_files - 2)) - std::chrono::nanoseconds(1)},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == (num_log_files / 2U) - 2U);
       size_t file_index = 1U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that barely covers the second half of the log")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
         LogInterval{
           log_time0 + (message_interval * (num_log_files + 1)),
-          log_time0 + (message_interval * ((num_log_files * 2) - 2))});
+          log_time0 + (message_interval * ((num_log_files * 2) - 2))},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == num_log_files / 2U);
       size_t file_index = num_log_files / 2U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
 
     SECTION("List log files for interval that just misses the second half of the log")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
         LogInterval{
           log_time0 + (message_interval * (num_log_files + 1)) + std::chrono::nanoseconds(1),
-          log_time0 + (message_interval * ((num_log_files * 2) - 2)) - std::chrono::nanoseconds(1)});
+          log_time0 + (message_interval * ((num_log_files * 2) - 2)) - std::chrono::nanoseconds(1)},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == (num_log_files / 2U) - 2U);
       size_t file_index = (num_log_files / 2U) + 1U;
       for (const auto& log_file : list_result.value())
       {
         const auto file_name = fmt::format("{}{:06d}.olog", log_file_prefix, file_index);
-        REQUIRE(log_file.string_view() == (log_dir / file_name).string());
+        REQUIRE(log_file == (log_dir / file_name).string());
         ++file_index;
       }
     }
@@ -1171,10 +1193,11 @@ TEST_CASE("List log files for interval")
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
 
-    const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+    const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
       memory_resource,
       log_dir.string(),
-      LogInterval{log_time0 - std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)});
+      LogInterval{log_time0 - std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)},
+      buffered_reader);
     REQUIRE(list_result);
     REQUIRE(list_result->size() == 1U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});
@@ -1216,8 +1239,8 @@ TEST_CASE("List log files for interval")
 
     SECTION("First file overlaps interval")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
-        memory_resource, log_dir.string(), LogInterval{log_time0, log_time0});
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
+        memory_resource, log_dir.string(), LogInterval{log_time0, log_time0}, buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->size() == 1U);
       REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});
@@ -1225,10 +1248,11 @@ TEST_CASE("List log files for interval")
 
     SECTION("First file doesn't overlap interval")
     {
-      const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
+      const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
         memory_resource,
         log_dir.string(),
-        LogInterval{log_time0 + std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)});
+        LogInterval{log_time0 + std::chrono::nanoseconds(1), log_time0 + std::chrono::nanoseconds(1)},
+        buffered_reader);
       REQUIRE(list_result);
       REQUIRE(list_result->empty());
     }
@@ -1267,8 +1291,8 @@ TEST_CASE("List log files for interval")
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
 
-    const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
-      memory_resource, log_dir.string(), LogInterval{log_time0, log_time0});
+    const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
+      memory_resource, log_dir.string(), LogInterval{log_time0, log_time0}, buffered_reader);
     REQUIRE(list_result->size() == 1U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000001.olog").string()});
   }
@@ -1308,8 +1332,8 @@ TEST_CASE("List log files for interval")
     REQUIRE(writer.close_log(time1));
     REQUIRE(writer.drain_async_operations());
 
-    const auto list_result = Reader<BufferedReader<TestReaderPolicy>>::list_log_files_for_interval(
-      memory_resource, log_dir.string(), LogInterval{log_time0, log_time0});
+    const auto list_result = Reader<BufferedReaderType>::list_log_files_for_interval(
+      memory_resource, log_dir.string(), LogInterval{log_time0, log_time0}, buffered_reader);
     REQUIRE(list_result->size() == 1U);
     REQUIRE(list_result->front() == std::string_view{(log_dir / "log_file_000000.olog").string()});
   }

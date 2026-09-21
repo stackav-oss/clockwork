@@ -1,0 +1,70 @@
+#![generate(cpp_exe)]
+
+use clockwork::dsl::aligner::gen::tests::support::test_aligner::{TestAligner, TestAlignerAlignmentMsg};
+use clockwork::dsl::aligner::gen::tests::support::aligner_test_msgs::{TestSensorMsg};
+use std::aligners::state::{AlignerState};
+
+// Input channel for tick
+channel TickChannel
+{
+  message_type: Tachyon<TestSensorMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for camera
+channel CameraChannel
+{
+  message_type: Tachyon<TestSensorMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for lidar
+channel LidarChannel
+{
+  message_type: Tachyon<TestSensorMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for radar (optional)
+channel RadarChannel
+{
+  message_type: Tachyon<TestSensorMsg>;
+  max_num_messages: 20;
+}
+
+// Input channel for pose (batch)
+channel PoseChannel
+{
+  message_type: Tachyon<TestSensorMsg>;
+  max_num_messages: 40;
+}
+
+// Channel for the aligner's alignment output
+channel AlignmentOutputChannel
+{
+  message_type: Tachyon<TestAlignerAlignmentMsg>;
+  max_num_messages: 10;
+}
+
+box TestAlignerBox
+{
+  new aligner: TestAligner;
+  new aligner_state: State(representation=Tachyon<AlignerState>);
+  connect TickChannel to aligner.tick;
+  connect CameraChannel to aligner.camera;
+  connect LidarChannel to aligner.lidar;
+  connect RadarChannel to aligner.radar;
+  connect PoseChannel to aligner.pose;
+  connect aligner.alignment to AlignmentOutputChannel;
+  connect aligner_state to aligner.aligner_state;
+}
+
+cpu_domain TestCpu;
+
+box TestAlignerSystem
+{
+  new box: TestAlignerBox;
+  new proc: Process(executable=test_system_boxes_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+}

@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/copy_log.hh"
 
 #include "clockwork/logging/log_error.hh"
 #include "jewels/filesystem/error_code.hh"
+#include "jewels/filesystem/file_descriptor.hh"
 #include "jewels/filesystem/filesystem.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"

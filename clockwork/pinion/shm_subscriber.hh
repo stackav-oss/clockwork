@@ -1,10 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/abstract_epoll_manager.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/unix_socket.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/shm_channel.hh"
@@ -28,7 +29,8 @@ namespace clockwork::pinion
 ///
 /// Class for a shared memory backed subscriber-only channel
 ///
-class ShmSubscriber : public ShmChannel
+// NOLINTNEXTLINE(fuchsia-multiple-inheritance) shared_from_this is non-interface multi-inherited but done via diamond
+class ShmSubscriber : public ShmChannel, public AbstractSubscriber
 {
 public:
   /// Retry interval for reconnecting to the publisher
@@ -97,7 +99,10 @@ public:
 
   /// Test whether the channel is connected to the publisher
   /// @return True if the channel is publisher or is connected to the publisher
-  [[nodiscard]] bool is_connected() const noexcept;
+  [[nodiscard]] bool is_connected() const noexcept override;
+
+  /// Disconnect the notification socket
+  void disable_notifications() override;
 
   /// Reconnect the channel to the publisher
   /// @return True if the channel was reconnected

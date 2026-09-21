@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/compression_type.hh"
@@ -6,6 +6,7 @@
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/offboard/chunk_compressor.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/file_chunk_reader.hh"
 #include "clockwork/logging/offboard/file_chunk_writer.hh"
 #include "clockwork/logging/offboard/log_format.hh"
@@ -67,6 +68,12 @@ TEST_CASE("Metrics chunk reader/writer")
       .compression_type = CompressionType::none,
       .channel_name = "channel2",
     });
+  channel_info_map.emplace(
+    4U,
+    reader::LoggedChannelInfo{
+      .compression_type = CompressionType::none,
+      .channel_name = "channel4",
+    });
 
   SECTION("Empty metrics")
   {
@@ -76,7 +83,7 @@ TEST_CASE("Metrics chunk reader/writer")
     REQUIRE(file_writer.close());
     REQUIRE(file_reader.open());
     const auto read_result =
-      read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, file_reader, compressor);
+      read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, {}, file_reader, compressor);
     REQUIRE(read_result);
     const auto& log_metrics = read_result.value();
     REQUIRE(log_metrics.message_count == 0U);
@@ -97,8 +104,10 @@ TEST_CASE("Metrics chunk reader/writer")
     metrics_writer.count_message(2U, time20, 20U);
     constexpr LogTimestamp time100{std::chrono::seconds(100)};
     constexpr LogTimestamp time200{std::chrono::seconds(200)};
+    constexpr LogTimestamp time400{std::chrono::seconds(400)};
     metrics_writer.count_message(1U, time100, 100U);
     metrics_writer.count_message(2U, time200, 200U);
+    metrics_writer.count_message(4U, time400, 400U);
     REQUIRE(file_writer.open());
     const auto write_result = metrics_writer.write_chunk(compressor, file_writer);
     REQUIRE(write_result);
@@ -106,7 +115,7 @@ TEST_CASE("Metrics chunk reader/writer")
     REQUIRE(file_reader.open());
 
     const auto read_result =
-      read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, file_reader, compressor);
+      read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, {4U}, file_reader, compressor);
     REQUIRE(read_result);
     const auto& log_metrics = read_result.value();
     REQUIRE(log_metrics.message_count == 6U);
@@ -144,7 +153,7 @@ TEST_CASE("Metrics chunk reader/writer")
       REQUIRE(write_result);
       REQUIRE(file_writer.close());
       REQUIRE(
-        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, file_reader, compressor) ==
+        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, {}, file_reader, compressor) ==
         jewels::unexpected(LogError::not_open));
     }
 
@@ -157,7 +166,7 @@ TEST_CASE("Metrics chunk reader/writer")
       REQUIRE(file_reader.open());
       file_reader.filesystem().inject_read_error(EIO);
       REQUIRE(
-        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, file_reader, compressor) ==
+        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, {}, file_reader, compressor) ==
         jewels::unexpected(LogError::io_error));
     }
 
@@ -170,7 +179,7 @@ TEST_CASE("Metrics chunk reader/writer")
       REQUIRE(onboard::tests::corrupt_log_file(test_file_path.string(), 10U, "XXX"));
       REQUIRE(file_reader.open());
       REQUIRE(
-        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, file_reader, compressor) ==
+        read_metrics_chunk(memory_resource, write_result.value(), channel_info_map, {}, file_reader, compressor) ==
         jewels::unexpected(LogError::decompression_failure));
     }
   }

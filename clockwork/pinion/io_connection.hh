@@ -1,12 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/process_description_clk_cc.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/uuid/uuid.hh"
@@ -14,6 +13,7 @@
 #include <wise_enum.h>
 
 #include <cstdint>
+#include <memory>
 
 namespace clockwork::pinion
 {
@@ -37,8 +37,8 @@ public:
 
   /// Try to connect a subscriber.
   /// @param subscriber A subscriber handle.
-  [[nodiscard]] virtual jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, Error>
-    connect_subscriber(jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, pinion::SubscriberHandle /*subscriber*/);
+  [[nodiscard]] virtual jewels::expected<jewels::memory::NonNullSharedPtr<pinion::Observer>, Error> connect_subscriber(
+    jewels::Uuid<common::EndpointClassId> /*endpoint_id*/, std::shared_ptr<pinion::AbstractChannel> /*subscriber*/);
 
   /// Try to connect a publisher.
   /// @param publisher A publisher handle.

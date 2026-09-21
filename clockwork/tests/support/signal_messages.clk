@@ -4,24 +4,24 @@
 // Message used to trigger the signal cog
 schema TriggerMessage
 {
-    uuid: e6126508-9031-47f9-a321-3b459e87ccb8;
-    fields
-    {
-        // A value to accumulate in signals
-        #0 value: Int64;
+  uuid: e6126508-9031-47f9-a321-3b459e87ccb8;
+  fields
+  {
+    // A value to accumulate in signals
+    #0 value: Int64;
 
-        // A secondary value for multi-signal testing
-        #1 secondary_value: UInt32;
-    }
+    // A secondary value for multi-signal testing
+    #1 secondary_value: UInt32;
+  }
 }
 
 // Acknowledgment message from the signal cog
 schema AckMessage
 {
-    uuid: 78cd8b97-fac2-4d7d-a40a-5abf70ecd0e2;
-    fields
-    {
-        // Number of executions so far
-        #0 execution_count: UInt32;
-    }
+  uuid: 78cd8b97-fac2-4d7d-a40a-5abf70ecd0e2;
+  fields
+  {
+    // Number of executions so far
+    #0 execution_count: UInt32;
+  }
 }

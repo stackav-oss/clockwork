@@ -1,0 +1,46 @@
+#![generate()]
+use clockwork::dsl::aligner::gen::tests::support::test_system_boxes::{
+  TickChannel,
+  CameraChannel,
+  LidarChannel,
+  RadarChannel,
+  PoseChannel,
+  AlignmentOutputChannel,
+};
+use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType, LogReaderPolicy};
+
+// Enable message injection on input channels
+policy LogReaderPolicy for TickChannel
+{
+  source_name = 'TickChannel';
+}
+
+// Enable message injection on camera channel
+policy LogReaderPolicy for CameraChannel
+{
+  source_name = 'CameraChannel';
+}
+
+// Enable message injection on lidar channel
+policy LogReaderPolicy for LidarChannel
+{
+  source_name = 'LidarChannel';
+}
+
+// Enable message injection on radar channel
+policy LogReaderPolicy for RadarChannel
+{
+  source_name = 'RadarChannel';
+}
+
+// Enable message injection on pose channel (batch input)
+policy LogReaderPolicy for PoseChannel
+{
+  source_name = 'PoseChannel';
+}
+
+// Enable output capture for the alignment channel
+policy ChannelLoggingPolicy for AlignmentOutputChannel
+{
+  log_type = LogType::non_redundant_telemetry;
+}

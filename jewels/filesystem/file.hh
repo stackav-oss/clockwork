@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 /// @file Lightweight file / directory access tools.  Originally intended for sysfs monitoring where heavier weight

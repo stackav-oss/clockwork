@@ -8,10 +8,10 @@
 // This is just for the Hello, World! tutorial.
 schema SimpleSchema
 {
-    uuid: 07cf9e12-e3a2-4999-ab2e-774faf6e38db;
-    fields
-    {
-        // A scalar field.
-        #0 a_field: Int64;
-    }
+  uuid: 07cf9e12-e3a2-4999-ab2e-774faf6e38db;
+  fields
+  {
+    // A scalar field.
+    #0 a_field: Int64;
+  }
 }

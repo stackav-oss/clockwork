@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Enum-related IR nodes.
@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, expr, node, primitive, typesys
 from clockwork.dsl.ir.cst_util import get_span, int_from_cst
 from typing_extensions import override
@@ -488,10 +488,12 @@ class ValueDef(node.NamedEntity, node.CstNode[cst.EnumValue], node.DocRequiredEn
         doc = node.Doc.from_cst(cst_node.child_doc(), module)
         field_num = int_from_cst(cst_node.child_value_num(), module.terminals)
         name = get_span(cst_node.child_name().child_value(), module.terminals)
-        is_default = cst_node.maybe_default() is not None
+        is_default = cst_node.maybe_enum_value_default() is not None
         # If there's still a -1 here, it will be filled in automatically by ClkEnum later
         underlying_value: expr.Expr | int = -1
-        for detail in cst_node.children_enum_value_detail():
+        details_block = cst_node.maybe_enum_value_details_block()
+        details = details_block.children_enum_value_detail() if details_block is not None else ()
+        for detail in details:
             detail.child_underlying_value_tag()  # This is a sanity check and future-proofing
             if isinstance(underlying_value, expr.Expr):
                 msg = node.append_error_line(detail, module, "underlying_value may only be specified once")
@@ -516,6 +518,7 @@ class ValueDef(node.NamedEntity, node.CstNode[cst.EnumValue], node.DocRequiredEn
         Because we hold a recursive reference back to our parent, we need to
         prevent node.resolve_names from recursing on this object.
         """
+        # pyrefly: ignore[implicit-any-empty-container] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         return []
 
     def get_resolved(self) -> ResolvedValueDef:

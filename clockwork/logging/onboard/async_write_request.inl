@@ -14,6 +14,7 @@
 #include <exception>
 #include <optional>
 #include <span>
+#include <sys/types.h>
 #include <sys/uio.h>
 
 namespace clockwork_logging::onboard

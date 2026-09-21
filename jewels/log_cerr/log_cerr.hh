@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -25,14 +25,20 @@ namespace impl
 /// Log message buffer size in bytes
 static constexpr size_t log_message_buffer_size = 1024U;
 
+/// @return True if log messages should print in color
 bool should_print_in_color();
 
+/// @return Current log threshold
 LogLevel get_log_threshold();
 
+/// @return Current log time as epoch time
 EpochTime get_log_time();
 
 /// Configure the log message to use an external clock object for timestamps.
 void set_log_time_clock(const ::jewels::LogClockPtr& log_clock);
+
+/// @return True if the an external clock object is used for timestamps
+bool is_log_time_clock_set();
 
 /// Convert a log level to a string view for message formatting (converts to upper case)
 constexpr std::string_view log_level_name(LogLevel log_level) noexcept;

@@ -10,64 +10,64 @@ tag GroupId;
 // Config used to initialize the state
 schema InitConfig
 {
-    uuid: 9bc6c12b-d8d3-4708-87e5-7644093ecb69;
-    fields
-    {
-        // Id to identify this group
-        #1 group_id: Uuid<GroupId>;
-    }
+  uuid: 9bc6c12b-d8d3-4708-87e5-7644093ecb69;
+  fields
+  {
+    // Id to identify this group
+    #1 group_id: Uuid<GroupId>;
+  }
 }
 
 // Basic config
 schema Config
 {
-    uuid: 283f89e9-0262-4c77-ac29-5d9bf4d7db8b;
-    fields
-    {
-        // Blob
-        #1 id: Uuid<ConfigId>;
-    }
+  uuid: 283f89e9-0262-4c77-ac29-5d9bf4d7db8b;
+  fields
+  {
+    // Blob
+    #1 id: Uuid<ConfigId>;
+  }
 }
 
 // Test state
 schema State
 {
-    uuid: 620533ae-f43f-4fbb-9210-eeac94f2bfd2;
-    fields
-    {
-        // This cycle
-        #1 cycle: UInt64;
-        // Id to identify this group
-        #2 group_id: Uuid<GroupId>;
-    }
+  uuid: 620533ae-f43f-4fbb-9210-eeac94f2bfd2;
+  fields
+  {
+    // This cycle
+    #1 cycle: UInt64;
+    // Id to identify this group
+    #2 group_id: Uuid<GroupId>;
+  }
 }
 
 // Message published from cog1 to cog2
 schema Message1
 {
-    uuid: b22ac2fe-2aeb-47ac-ab7d-9d8fcb1c02b0;
-    fields
-    {
-        // This cycle
-        #1 cycle: UInt64;
-        // The configured id config
-        #2 config: Uuid<ConfigId>;
-    }
+  uuid: b22ac2fe-2aeb-47ac-ab7d-9d8fcb1c02b0;
+  fields
+  {
+    // This cycle
+    #1 cycle: UInt64;
+    // The configured id config
+    #2 config: Uuid<ConfigId>;
+  }
 }
 
 // Message published from cog2 to test monitor
 schema Message2
 {
-    uuid: df8d681c-a39e-4a0e-82fc-2cf9d407649a;
-    fields
-    {
-        // The cycle from the upstream cog
-        #1 cycle: UInt64;
-        // The config from the upstream cog
-        #2 echo_config: Uuid<ConfigId>;
-        // Id of the group
-        #3 group_id: Uuid<GroupId>;
-        // The calculation result
-        #4 result: UInt64;
-    }
+  uuid: df8d681c-a39e-4a0e-82fc-2cf9d407649a;
+  fields
+  {
+    // The cycle from the upstream cog
+    #1 cycle: UInt64;
+    // The config from the upstream cog
+    #2 echo_config: Uuid<ConfigId>;
+    // Id of the group
+    #3 group_id: Uuid<GroupId>;
+    // The calculation result
+    #4 result: UInt64;
+  }
 }

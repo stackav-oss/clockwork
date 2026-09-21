@@ -52,6 +52,30 @@ Assuming `Type` is `FixedArray<type=ValueType, size=N>`, the following APIs are 
 | `get_mutable_field` | `std::span<ValueType, N>`       | None                            | Gets a fixed-size mutable span to the elements. | None         |
 | `set_field`         | None                            | `std::span<const ValueType, N>` | Sets values from a fixed-size const span.       | None         |
 
+### `Tensor`
+
+`Tensor` is a multi-dimensional array.
+Assuming `Type` is `Tensor<ValueType, shape=[x, y, z], layout=[a, b, c]>`, the number of dimensions is `N`, and the product of the elements of `shape` is `P`, the following APIs are provided.
+
+| Method name         | Return type                                                            | Arguments                       | Description                               | Side Effects |
+| ------------------- | ---------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | ------------ |
+| `get_field`         | `const jewels::tap::Tensor<ValueType, Sizes<x, y,z>, Sizes<a, b, c>>&` | None                            | Gets an immutable handle to the tensor.   | None         |
+| `get_mutable_field` | `jewels::tap::Tensor<ValueType, Sizes<x, y,z>, Sizes<a, b, c>>&`       | None                            | Gets a mutable handle to the tensor.      | None         |
+| `set_field`         | None                                                                   | `std::span<const ValueType, P>` | Sets values from a fixed-size const span. | None         |
+
+`jewels::tap::Tensor` wraps the underlying buffer for the tensor and all of the type information necessary to construct a richer interface over the buffer before doing useful work with it.
+Its API is described in the table below.
+
+| Method name      | Return type                     | Arguments | Description                                                    | Side Effects |
+| ---------------- | ------------------------------- | --------- | -------------------------------------------------------------- | ------------ |
+| `storage`        | `std::span<ValueType, P>`       | None      | Gets a flat mutable span over this tensor's backing storage.   | None         |
+| `storage`        | `std::span<const ValueType, P>` | None      | Gets a flat immutable span over this tensor's backing storage. | None         |
+| `num_dimensions` | `size_t`                        | None      | Gets the number of dimensions comprised by the tensor.         | None         |
+| `shape`          | `std::array<size_t, N>`         | None      | Gets the array of dimension sizes for the tensor.              | None         |
+| `layout`         | `std::array<size_t, N>`         | None      | Gets the array of per-dimension strides for the tensor.        | None         |
+
+For more details, see `jewels/tap/tensor.hh`.
+
 ### `VarArray`
 
 `VarArray` is a fixed capacity array.

@@ -1,11 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/process_description_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/io/network_var_packet_clk_cc.hh"      // IWYU pragma: keep
 #include "clockwork/io/var_packet_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/io_connection.hh"
@@ -72,28 +72,23 @@ TEMPLATE_TEST_CASE("OutgoingUdp", "[VarPacket, Not VarPacket]", io::VarPacket<si
 
   SECTION("Mismatched message sizes")
   {
-    auto channel = std::make_unique<InMemoryChannel<bool, num_slots, false>>(memres);
-    auto subscriber = channel->make_subscriber();
+    auto channel = std::make_shared<InMemoryChannel<bool, num_slots, false>>(memres);
 
     // Size of message slot and size of UDP packet are not the same.
     REQUIRE(
-      outgoing_udp->connect_subscriber({}, std::move(subscriber)) ==
-      jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
+      outgoing_udp->connect_subscriber({}, channel) == jewels::unexpected{IoConnection::Error::invalid_buffer_layout});
   }
 
-  InMemoryChannel<Msg, num_slots, false> channel{memres};
+  auto channel = std::make_shared<InMemoryChannel<Msg, num_slots, false>>(memres);
 
   SECTION("Mismatched endpoint id")
   {
-    auto subscriber = channel.make_subscriber();
     REQUIRE(
-      outgoing_udp->connect_subscriber({}, std::move(subscriber)) ==
-      jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
+      outgoing_udp->connect_subscriber({}, channel) == jewels::unexpected{IoConnection::Error::unexpected_endpoint_id});
   }
 
-  auto publisher = channel.make_publisher(0UL);
-  auto subscriber = channel.make_subscriber();
-  REQUIRE(outgoing_udp->connect_subscriber(*endpoint_class_id, std::move(subscriber)));
+  auto publisher = channel->make_publisher(0UL);
+  REQUIRE(outgoing_udp->connect_subscriber(*endpoint_class_id, channel));
 
   SECTION("No packets to write ")
   {

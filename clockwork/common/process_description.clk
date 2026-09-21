@@ -1,25 +1,28 @@
 #![generate(cpp, py)]
 #![cpp(namespace=clockwork::common)]
 
-MAX_CHANNEL_NAME_SIZE: UInt64 = 300;
+use[] clockwork::common::constants;
+use clockwork::pinion::channel_config::{ChannelType};
+
 MAX_INSTANCE_PATH_SIZE: UInt64 = 512;
-MAX_COG_INSTANCES: UInt64 = 501;
-MAX_ENDPOINTS_PER_COG: UInt64 = 86;
-MAX_STATE_INSTANCES: UInt64 = 267;
-MAX_STATE_CONNECTIONS: UInt64 = 612;
-MAX_CONFIG_INSTANCES: UInt64 = 334;
-MAX_CONFIG_CONNECTIONS: UInt64 = 304;
+MAX_COG_INSTANCES: UInt64 = 551;
+// When updating this, search for all other MAX_ENDPOINTS_PER_COG and change those too
+MAX_ENDPOINTS_PER_COG: UInt64 = 113;
+MAX_STATE_INSTANCES: UInt64 = 391;
+MAX_STATE_CONNECTIONS: UInt64 = 831;
+MAX_CONFIG_INSTANCES: UInt64 = 357;
+MAX_CONFIG_CONNECTIONS: UInt64 = 401;
 MAX_FILE_PATH_SIZE: UInt64 = 4096;
-MAX_INIT_COGS: UInt64 = 202;
+MAX_INIT_COGS: UInt64 = 262;
 MAX_PUBLISHERS: UInt64 = 2048;
-MAX_PUBSUB_CONNECTIONS: UInt64 = 920;
-MAX_MEMORY_RESOURCES: UInt64 = 504;
-MAX_MEMORY_RESOURCE_CONNECTIONS: UInt64 = 488;
-MAX_TIMERS: UInt64 = 45;
+MAX_PUBSUB_CONNECTIONS: UInt64 = 1871;
+MAX_MEMORY_RESOURCES: UInt64 = 724;
+MAX_MEMORY_RESOURCE_CONNECTIONS: UInt64 = 725;
+MAX_TIMERS: UInt64 = 64;
 MAX_IO_CONNECTIONS: UInt64 = 32;
 MAX_NOT_CONNECTED_ENDPOINTS: UInt64 = 1024;
 MAX_SNAPSHOT_CONFIGS: UInt64 = 512;
-MAX_DATA_SOURCES: UInt64 = 256;
+MAX_DATA_SOURCES: UInt64 = 512;
 
 // Id for a cog type
 tag CogClassId;
@@ -147,7 +150,7 @@ schema ProcessDescription
     #23 max_io_connections: UInt64 = MAX_IO_CONNECTIONS;
 
     // Maximum channel name length
-    #27 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
+    #27 max_channel_name_len: UInt64 = constants::MAX_CHANNEL_NAME_SIZE;
 
     // Maximum number of not connected endpoints
     #28 max_not_connected_endpoints: UInt64 = MAX_NOT_CONNECTED_ENDPOINTS;
@@ -215,7 +218,7 @@ schema PubSubGraph
     // Maximum number of channel connections
     #2 max_pubsub_connections: UInt64 = MAX_PUBSUB_CONNECTIONS;
     // Maximum channel name length
-    #5 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
+    #5 max_channel_name_len: UInt64 = constants::MAX_CHANNEL_NAME_SIZE;
   }
 
   fields
@@ -288,7 +291,7 @@ schema PublishEndpoint
   parameters
   {
     // Maximum channel name length
-    #5 max_channel_name_len: UInt64 = MAX_CHANNEL_NAME_SIZE;
+    #5 max_channel_name_len: UInt64 = constants::MAX_CHANNEL_NAME_SIZE;
   }
 
   fields
@@ -311,6 +314,9 @@ schema PublishEndpoint
 
     // Does the channel contain bulk data?
     #7 is_bulk_data: Bool;
+
+    // The type of the channel
+    #8 channel_type: ChannelType;
   }
 }
 
@@ -351,6 +357,8 @@ schema PinionBufferLayout
     #2 message_size: UInt64;
     // True if the buffer is only published once
     #3 is_published_once: Bool;
+    // Maximum number of messages that may be committed in a single execution cycle
+    #4 max_msgs_per_exec: UInt64 = 1;
   }
 }
 
@@ -366,6 +374,10 @@ schema PubSubConnection
     #2 subscriber_id: Uuid<EndpointInstanceId>;
     // ID of publisher; if local this matches something in a CogInstanceDescription
     #3 publisher_id: Uuid<EndpointInstanceId>;
+    // Used for certain channel types with type-dependent meaning, but generally names a global resource
+    #4 subscriber_key: VarString<64>;
+    // Used for certain channel types with type-dependent meaning, but generally names a global resource
+    #5 publisher_key: VarString<64>;
   }
 }
 
@@ -416,6 +428,9 @@ schema StateInstanceDescription
 
     // Human-readable name for this state instance.
     #4 instance_path_name: VarString<max_size=max_instance_path_size>;
+
+    // Tachyon representation used for serializing external state snapshots.
+    #5 snapshot_representation_id: Optional<Uuid<RepresentationTag>>;
 
     // Only serializable states are backed by a Pinion buffer.  This flag
     // indicates if a buffer is needed and if so the layout for the that

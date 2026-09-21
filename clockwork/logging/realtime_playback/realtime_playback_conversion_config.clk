@@ -1,0 +1,99 @@
+#![generate(cpp, py)]
+#![cpp(namespace=clockwork_logging::realtime_playback)]
+
+use clockwork::common::constants::{MAX_CHANNEL_NAME_SIZE};
+use clockwork::common::process_description::{ProcessInstanceId};
+use clockwork::logging::channel_publisher_config::{ChannelPublisherConfig};
+use clockwork::logging::realtime_playback::realtime_playback_stream_kind::{RealtimePlaybackStreamKind};
+
+MAX_CPU_DOMAINS: UInt64 = 16;
+MAX_CHANNEL_ASSIGNMENTS_PER_DOMAIN: UInt64 = 555;
+MAX_INITIALIZATION_REQUIREMENTS: UInt64 = 8192;
+MAX_PLATFORM_ID_SIZE: UInt64 = 512;
+MAX_CPU_DOMAIN_NAME_SIZE: UInt64 = 128;
+MAX_SIMPLELAUNCH_NODE_NAME_SIZE: UInt64 = 128;
+
+// Records the routing decision for one replayed channel.
+schema PlaybackChannelAssignment
+{
+  uuid: e0d33be6-38d9-4d63-80c9-1b3456d513bc;
+
+  fields
+  {
+    // Channel name read from the source log.
+    #0 source_channel_name: VarString<max_size=MAX_CHANNEL_NAME_SIZE>;
+
+    // Channel name published into the target composition.
+    #1 destination_channel_name: VarString<max_size=MAX_CHANNEL_NAME_SIZE>;
+
+    // Node-local stream receiving the converted messages.
+    #2 stream_kind: RealtimePlaybackStreamKind;
+
+  }
+}
+
+// Describes regular and camera conversion for one CPU domain.
+schema PlaybackCpuDomainPlan
+{
+  uuid: ff0be535-bf28-4112-a8e2-d4c94a2a3d72;
+
+  fields
+  {
+    // Human-readable CPU domain name used in bundle paths and diagnostics.
+    #0 cpu_domain_name: VarString<max_size=MAX_CPU_DOMAIN_NAME_SIZE>;
+
+    // Explicit SimpleLaunch node name from the CPU domain, such as c1.
+    #1 simplelaunch_node_name: VarString<max_size=MAX_SIMPLELAUNCH_NODE_NAME_SIZE>;
+
+    // Routing decisions for all channels owned by this domain.
+    #2 assignments: VarArray<PlaybackChannelAssignment, max_size=MAX_CHANNEL_ASSIGNMENTS_PER_DOMAIN>;
+  }
+}
+
+// Describes one state or configuration initialization input required by a process.
+schema InitializationRequirement
+{
+  uuid: 5216d2f9-3aa5-41ce-94c3-2ef3e23273d4;
+
+  fields
+  {
+    // Process that owns the target state or configuration instance.
+    #0 process_uuid: Uuid<ProcessInstanceId>;
+
+    // Source channel used to select logged initialization data.
+    #1 source_channel_name: VarString<max_size=MAX_CHANNEL_NAME_SIZE>;
+
+    // CPU domain that hosts the process.
+    #2 cpu_domain_name: VarString<max_size=MAX_CPU_DOMAIN_NAME_SIZE>;
+
+    // Whether conversion may use the process-description fallback when the log has no value.
+    #3 allow_missing: Bool;
+  }
+}
+
+// Complete immutable input generated for one target physical composition.
+schema RealtimePlaybackConversionConfig
+{
+  uuid: ce94c31a-af4e-43b6-9ccd-2de431818f63;
+
+  fields
+  {
+    // Configuration schema version used for compatibility checks.
+    #0 format_version: UInt16 = 1;
+
+    // Stable identity of the target BLiP physical platform.
+    #1 platform_id: VarString<max_size=MAX_PLATFORM_ID_SIZE>;
+
+    // XXH3-64 checksum of the canonical generated platform inputs.
+    #2 platform_config_xxh3: UInt64;
+
+    // Target publisher metadata shared by replay and initialization conversion.
+    #3 publishers: ChannelPublisherConfig<>;
+
+    // Conversion plans keyed by CPU domain.
+    #4 cpu_domains: VarArray<PlaybackCpuDomainPlan, max_size=MAX_CPU_DOMAINS>;
+
+    // State and configuration initialization requirements for all processes.
+    #5 initialization_requirements: VarArray<InitializationRequirement, max_size=MAX_INITIALIZATION_REQUIREMENTS>;
+  }
+}

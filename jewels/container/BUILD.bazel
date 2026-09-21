@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -31,7 +31,7 @@ cc_library(
         "//jewels/meta:call",
         "//jewels/meta:type_traits",
         "//jewels/std:expected",
-        "@boost//:iterator",
+        "@boost.iterator",
         "@wise_enum",
     ],
 )
@@ -43,6 +43,9 @@ clk(
         "circular_buffer_state_clk_cc.cc",
         "circular_buffer_state_clk_cc.hh",
         "circular_buffer_state_clk_cc.inl",
+        "circular_buffer_state_clk_cc_types.cc",
+        "circular_buffer_state_clk_cc_types.hh",
+        "circular_buffer_state_clk_cc_types.inl",
         "circular_buffer_state_clk_nb.cc",
         "circular_buffer_state_clk_nb.hh",
         "circular_buffer_state_clk_nb.inl",

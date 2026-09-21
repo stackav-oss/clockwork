@@ -9,6 +9,7 @@
 #include "jewels/time/sync_time.hh"
 
 #include <memory>
+#include <memory_resource>
 #include <string_view>
 #include <vector>
 

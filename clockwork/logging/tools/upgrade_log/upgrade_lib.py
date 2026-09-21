@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Library for upgrading log files by migrating schemas."""
@@ -16,6 +16,8 @@ from clockwork.logging.readers.nb_types import LoggedMessage, TopicMetadata
 from clockwork.serialization.metadata import tachyon as tachyon_meta
 from clockwork.serialization.metadata import tachyon_model
 from clockwork.serialization.py import protocol, tachyon_dyn
+
+# pyrefly: ignore[implicit-reexport] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 from clockwork.serialization.py.compatibility import validate_tachyon_types_compatibility
 from clockwork.serialization.py.tachyon_dyn_from_metadata import py_type_from_metadata
 from typing_extensions import override

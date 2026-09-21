@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/deterministic_logging_config.hh"
@@ -10,6 +10,8 @@
 #include "clockwork/logging/log_writer_config_clk_cc.hh"
 #include "clockwork/logging/readers/log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/std/expected.hh"
@@ -18,55 +20,86 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace clockwork
 {
-jewels::expected<DeterministicLoggingConfig, jewels::MonoError>
-get_deterministic_logging_config(const ExecutionParams& execution_params)
+
+namespace
+{
+
+template <typename T>
+jewels::BinaryOutcome load_tachyon_config(jewels::Out<std::shared_ptr<const Tappy<T>>> out, const std::string& path)
+{
+  auto status = read_tachyon_config_to_heap<Tappy<T>>(path);
+  if (!status)
+  {
+    return jewels::failure;
+  }
+  *out = *status;
+  return jewels::success;
+}
+
+template <typename T>
+jewels::BinaryOutcome
+load_tachyon_if_path(jewels::Out<std::shared_ptr<const Tappy<T>>> out, const std::optional<std::string>& path)
+{
+  if (!path)
+  {
+    return jewels::success;
+  }
+  std::shared_ptr<const Tappy<T>> temp;
+  if (jewels::fails(load_tachyon_config<T>(jewels::Out{temp}, *path)))
+  {
+    return jewels::failure;
+  }
+  *out = std::move(temp);
+  return jewels::success;
+}
+
+} // namespace
+
+jewels::BinaryOutcome get_deterministic_logging_config(
+  jewels::Out<DeterministicLoggingConfig> logging_config_out, const ExecutionParams& execution_params)
 {
   if (execution_params.execution_mode == ExecutionMode::online)
   {
-    return DeterministicLoggingConfig{};
+    *logging_config_out = DeterministicLoggingConfig{};
+    return jewels::success;
   }
   DeterministicLoggingConfig logging_config;
-  if (execution_params.log_writer_config_path)
+  if (jewels::fails(
+        load_tachyon_if_path<clockwork_logging::LogWriterConfig<>>(
+          jewels::Out{logging_config.log_writer_config}, execution_params.log_writer_config_path)))
   {
-    auto log_writer_config_status = read_tachyon_config_to_heap<Tappy<clockwork_logging::LogWriterConfig<>>>(
-      *execution_params.log_writer_config_path);
-    if (!log_writer_config_status)
-    {
-      return jewels::unexpected(jewels::MonoError{});
-    }
-    logging_config.log_writer_config = *log_writer_config_status;
+    return jewels::failure;
   }
-  if (execution_params.channel_publisher_config_path)
+  if (jewels::fails(
+        load_tachyon_if_path<clockwork_logging::ChannelPublisherConfig<>>(
+          jewels::Out{logging_config.channel_publisher_config}, execution_params.channel_publisher_config_path)))
   {
-    auto channel_publisher_config_status =
-      read_tachyon_config_to_heap<Tappy<clockwork_logging::ChannelPublisherConfig<>>>(
-        *execution_params.channel_publisher_config_path);
-    if (!channel_publisher_config_status)
-    {
-      return jewels::unexpected(jewels::MonoError{});
-    }
-    logging_config.channel_publisher_config = *channel_publisher_config_status;
+    return jewels::failure;
   }
-  if (execution_params.metrics_channel_metadata_config_path)
+  if (jewels::fails(
+        load_tachyon_if_path<clockwork::tools::MetricsChannelMetadataConfig<>>(
+          jewels::Out{logging_config.metrics_channel_metadata_config},
+          execution_params.metrics_channel_metadata_config_path)))
   {
-    auto metrics_channel_metadata_config_status =
-      read_tachyon_config_to_heap<Tappy<clockwork::tools::MetricsChannelMetadataConfig<>>>(
-        *execution_params.metrics_channel_metadata_config_path);
-    if (!metrics_channel_metadata_config_status)
-    {
-      return jewels::unexpected(jewels::MonoError{});
-    }
-    logging_config.metrics_channel_metadata_config = *metrics_channel_metadata_config_status;
+    return jewels::failure;
+  }
+  if (jewels::fails(
+        load_tachyon_if_path<clockwork::common::SignalMetadataConfig<>>(
+          jewels::Out{logging_config.signal_metadata_config}, execution_params.signal_metadata_config_path)))
+  {
+    return jewels::failure;
   }
 
   if (execution_params.suppress_schema_mismatch_errors)
   {
     logging_config.suppress_schema_mismatch_errors = *execution_params.suppress_schema_mismatch_errors;
   }
-  return logging_config;
+  *logging_config_out = std::move(logging_config);
+  return jewels::success;
 }
 
 [[nodiscard]] jewels::expected<DeterministicRunnerTimeRange, jewels::MonoError>

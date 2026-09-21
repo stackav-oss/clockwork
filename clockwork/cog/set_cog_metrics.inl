@@ -79,6 +79,7 @@ void set_common_event_metrics(const std::pmr::vector<EventMetrics>& event_metric
   {
     auto& target_metric = target.get_underlying_event_metrics().emplace_back().get_mutable_common_event_metrics();
     target_metric.set_exec_start_time(metric.execution_start_time);
+    target_metric.set_dial_start_time(metric.dial_start_time);
     target_metric.set_exec_duration(metric.execution_duration);
     target_metric.set_ready_to_exec_latency(metric.latency_first_ready_to_execution);
     target_metric.set_attempt_to_exec_latency(metric.latency_first_attempt_to_execution);

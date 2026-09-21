@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/examples/log_runner/test_message_clk_cc.hh"
@@ -9,11 +9,13 @@
 #include "clockwork/logging/log_playback/log_message_fetcher.hh"
 #include "clockwork/logging/log_timestamp.hh"
 #include "clockwork/logging/nolint_helper.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
+#include "clockwork/logging/offboard/chunk_writer.hh"
 #include "clockwork/logging/offboard/types.hh"
 #include "clockwork/logging/offboard/writer.hh"
 #include "clockwork/logging/readers/offboard_log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
-#include "clockwork/logging/writers/deterministic_log_writer.hh"
+#include "clockwork/logging/writers/persistent_log_entry.hh"
 #include "clockwork/repr_iface.hh"
 #include "clockwork/test_tools/clockwork_system_runner.hh"
 #include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
@@ -37,6 +39,7 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <span>
@@ -124,8 +127,11 @@ jewels::expected<void, jewels::MonoError> write_log(std::string_view log_directo
 
 void validate_log(std::string_view log_uri)
 {
-
-  clockwork_logging::OffboardLogReader log_reader(log_uri, {}, {}, clockwork_logging::DecompressOption::decompress);
+  const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+  const auto chunk_reader_factory =
+    std::make_shared<clockwork_logging::offboard::ChunkReaderWriterFactory<>>(memory_resource);
+  clockwork_logging::OffboardLogReader log_reader(
+    log_uri, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
   REQUIRE(log_reader.open([](auto channel_name) { return channel_name == "Chan2" || channel_name == "Chan3"; }));
   clockwork_logging::LogTimestamp last_real_publish_time;
   for (int i = 0; i < num_log_messages; ++i)
@@ -145,7 +151,7 @@ void validate_log(std::string_view log_uri)
   // timestamp as the last real message so the eol may or may not end up in the log file before the true last message.
   // However, in a non-test scenario the eol message doesn't get logged.
   clockwork_logging::OffboardLogReader end_of_log_reader(
-    log_uri, {}, {}, clockwork_logging::DecompressOption::decompress);
+    log_uri, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
   REQUIRE(end_of_log_reader.open([](auto channel_name)
                                  { return channel_name == clockwork_logging::end_of_log_channel_name; }));
   auto end_of_log_message = end_of_log_reader.next_message();
@@ -159,7 +165,7 @@ void validate_log(std::string_view log_uri)
   REQUIRE(end_of_log_reader.close());
 
   clockwork_logging::OffboardLogReader metrics_metadata_log_reader(
-    log_uri, {}, {}, clockwork_logging::DecompressOption::decompress);
+    log_uri, {}, {}, clockwork_logging::DecompressOption::decompress, chunk_reader_factory);
   REQUIRE(metrics_metadata_log_reader.open(
     [](auto channel_name) { return channel_name == clockwork_logging::metrics_channel_metadata_channel_name; }));
   auto logged_metrics_metadata_report = metrics_metadata_log_reader.next_message();
@@ -170,7 +176,7 @@ void validate_log(std::string_view log_uri)
       logged_metrics_metadata_report->data);
   REQUIRE(metrics_channel_metadata);
   const auto* metrics_channel_metadata_ptr = metrics_channel_metadata.value();
-  // Two cogs two metrics channels on each
+  // Two cogs, two signal-based report group channels each (legacy metrics disabled by default)
   REQUIRE(metrics_channel_metadata_ptr->get_underlying_metrics_channels().size() == 4U);
 }
 

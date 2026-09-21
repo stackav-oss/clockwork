@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Test file demonstrating user-defined strong types with trait implementations.
@@ -8,13 +8,23 @@
 use std::traits::{Add, Sub, Neg, Ord, Eq};
 
 // A user-defined strong type for temperature
-strong_type Celsius {
-    underlying_type: Float64;
+strong_type Celsius
+{
+  underlying_type: Float64;
 }
 
 // Implement arithmetic traits for Celsius
-impl Add for Celsius { type Output = Celsius; }
-impl Sub for Celsius { type Output = Celsius; }
-impl Neg for Celsius { type Output = Celsius; }
+impl Add for Celsius
+{
+  type Output = Celsius;
+}
+impl Sub for Celsius
+{
+  type Output = Celsius;
+}
+impl Neg for Celsius
+{
+  type Output = Celsius;
+}
 impl Ord for Celsius;
 impl Eq for Celsius;

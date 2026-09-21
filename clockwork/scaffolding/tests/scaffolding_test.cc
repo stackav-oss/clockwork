@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/abstract_cog.hh"
@@ -13,12 +13,13 @@
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh" // IWYU pragma: keep
 #include "clockwork/logging/log_writer_config_clk_cc.hh"        // IWYU pragma: keep
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/detail/socket_payload.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/incoming_udp.hh"
+#include "clockwork/pinion/io_connection.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/outgoing_udp.hh"
-#include "clockwork/pinion/publisher_handle.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/sock_opt.hh"
@@ -33,6 +34,7 @@
 #include "clockwork/scaffolding/tests/support/mock_casing.hh"
 #include "clockwork/scaffolding/tests/support/runtime_tools.hh"
 #include "clockwork/tags.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
@@ -43,6 +45,7 @@
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
+#include "jewels/scope_guard/scope_guard.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
 #include "jewels/testing/tmp_directory_guard.hh"
@@ -118,9 +121,10 @@ public:
     }
     return jewels::unexpected{jewels::MonoError{}};
   }
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
-    return {};
+    return CogPrepareResult::ready;
   }
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
   {
@@ -156,16 +160,17 @@ public:
   {
     return {};
   }
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
-    return {};
+    return CogPrepareResult::ready;
   }
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
   {
     const std::unique_lock lock{mutex};
     const std::unique_lock catch_lock{catch_mutex};
     REQUIRE(subscriber);
-    CHECK(testing::dump<uint32_t>(*subscriber) == std::vector<uint32_t>({1}));
+    CHECK(testing::dump<uint32_t>(subscriber) == std::vector<uint32_t>({1}));
     run_count++;
     return {};
   }
@@ -174,7 +179,7 @@ public:
     add_to_ready_queue({});
   }
   std::mutex mutex;
-  std::optional<pinion::SubscriberHandle> subscriber;
+  std::shared_ptr<pinion::AbstractChannel> subscriber;
   std::atomic<uint32_t> run_count{0};
 };
 
@@ -214,9 +219,10 @@ public:
   {
     return {};
   }
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
-    return {};
+    return CogPrepareResult::ready;
   }
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
   {
@@ -367,7 +373,7 @@ TEST_CASE("scaffolding_run")
   auto do_run = [&init_mutex, &cog2, &init_lock, &desc, &casing, &channel_factory](bool deterministic)
   {
     testing::RunStopper exec(
-      [&init_mutex, &cog2, &exec]()
+      [&init_mutex, &cog2](auto& exec)
       {
         const std::unique_lock lock(init_mutex);
         if (cog2->run_count >= timer_cycles)
@@ -376,13 +382,13 @@ TEST_CASE("scaffolding_run")
         }
       });
 
-    const gsl::final_action ud_cleanup{[&init_lock]
-                                       {
-                                         if (init_lock)
-                                         {
-                                           init_lock.unlock();
-                                         }
-                                       }};
+    const jewels::ScopeGuard ud_cleanup{[&init_lock]
+                                        {
+                                          if (init_lock)
+                                          {
+                                            init_lock.unlock();
+                                          }
+                                        }};
 
     if (!deterministic)
     {
@@ -486,10 +492,18 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   const std::pmr::string host{"127.0.0.1"};
   const uint16_t dynamic_port{0U};
   const auto batch_size{1UL};
-  auto maybe_incoming_udp = pinion::IncomingUdp<Msg>::try_make(
-    memres, *incoming_udp_endpoint_class, {.host = host, .port = dynamic_port}, batch_size);
-  REQUIRE(maybe_incoming_udp);
-  auto incoming_udp = *std::move(maybe_incoming_udp);
+
+  // the use of NonNullSharedPtr prevents safe teardown of the system because these become entangled with the channels,
+  // which only live during `run()`.  Thus we must copy them into normal shared_ptr and destruct the NonNullSharedPtr
+  // so that these can be safely deleted.
+
+  std::shared_ptr<pinion::IncomingUdp<Msg>> incoming_udp;
+  {
+    auto maybe_incoming_udp = pinion::IncomingUdp<Msg>::try_make(
+      memres, *incoming_udp_endpoint_class, {.host = host, .port = dynamic_port}, batch_size);
+    REQUIRE(maybe_incoming_udp);
+    incoming_udp = *std::move(maybe_incoming_udp);
+  }
 
   auto assigned_addr = support::get_assigned_addr(incoming_udp->fd());
   REQUIRE(assigned_addr);
@@ -497,12 +511,15 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   auto receiver = support::Receiver::try_make(std::string{host}, dynamic_port);
   REQUIRE(receiver);
 
-  auto receiver_port = receiver->port();
-  REQUIRE(receiver_port);
-  auto maybe_outgoing_udp =
-    pinion::OutgoingUdp<Msg>::try_make(memres, *outgoing_udp_endpoint_class, {.host = host, .port = *receiver_port});
-  REQUIRE(maybe_outgoing_udp);
-  auto outgoing_udp = *std::move(maybe_outgoing_udp);
+  std::shared_ptr<pinion::OutgoingUdp<Msg>> outgoing_udp;
+  {
+    auto receiver_port = receiver->port();
+    REQUIRE(receiver_port);
+    auto maybe_outgoing_udp =
+      pinion::OutgoingUdp<Msg>::try_make(memres, *outgoing_udp_endpoint_class, {.host = host, .port = *receiver_port});
+    REQUIRE(maybe_outgoing_udp);
+    outgoing_udp = *std::move(maybe_outgoing_udp);
+  }
 
   using RetT = jewels::expected<void, AbstractCasing::Error>;
   using SubRetT = jewels::expected<std::shared_ptr<pinion::Observer>, AbstractCasing::Error>;
@@ -512,7 +529,7 @@ TEST_CASE("Testing IO connections using round-trip UDP")
     casing,
     try_instantiate_io_connection(
       *incoming_udp_class, *incoming_udp_inst, jewels::as_single_item_span(incoming_udp_endpoint), std::nullopt))
-    .LR_RETURN(IoConnRetT{std::shared_ptr<EPollable>{incoming_udp.get()}});
+    .LR_RETURN(IoConnRetT{std::shared_ptr<EPollable>{incoming_udp}});
   REQUIRE_CALL(
     casing,
     try_instantiate_io_connection(
@@ -520,12 +537,12 @@ TEST_CASE("Testing IO connections using round-trip UDP")
     .LR_RETURN(IoConnRetT{std::shared_ptr<EPollable>{}});
   REQUIRE_CALL(casing, try_connect_subscriber(*outgoing_udp_endpoint_instance, ::trompeloeil::_))
     .LR_SIDE_EFFECT(std::ignore = outgoing_udp->connect_subscriber(*outgoing_udp_endpoint_class, std::move(_2)))
-    .LR_RETURN(SubRetT{outgoing_udp.get()});
+    .LR_RETURN(SubRetT{outgoing_udp});
   REQUIRE_CALL(casing, try_connect_publisher(*incoming_udp_endpoint_instance, ::trompeloeil::_))
     .LR_SIDE_EFFECT(std::ignore = incoming_udp->connect_publisher(*incoming_udp_endpoint_class, std::move(_2)))
     .RETURN(RetT{});
   REQUIRE_CALL(casing, finalize()).RETURN(ValidRetT{});
-  REQUIRE_CALL(casing, shutdown());
+  REQUIRE_CALL(casing, shutdown()).LR_SIDE_EFFECT(incoming_udp.reset()).LR_SIDE_EFFECT(outgoing_udp.reset());
 
   constexpr uint32_t payload{123};
   REQUIRE(support::send_to(as_bytes(jewels::as_single_item_span(payload)), incoming_udp->fd(), *assigned_addr));
@@ -533,7 +550,7 @@ TEST_CASE("Testing IO connections using round-trip UDP")
   uint32_t read_payload{0};
   REQUIRE(read_payload != payload);
 
-  testing::RunStopper exec{[&receiver, &read_payload, &exec]()
+  testing::RunStopper exec{[&receiver, &read_payload](auto& exec)
                            {
                              const auto read_bytes = receiver->read<sizeof(payload)>();
                              if (read_bytes)

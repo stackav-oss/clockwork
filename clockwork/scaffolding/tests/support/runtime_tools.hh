@@ -1,42 +1,34 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "clockwork/common/abstract_cog.hh"
-#include "clockwork/common/exec_tools.hh"
-#include "clockwork/common/forward.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/common/tests/support/fake_cog.hh"
-#include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
-#include "clockwork/scaffolding/abstract_casing.hh"
-#include "clockwork/scaffolding/scaffolding.hh"
-#include "clockwork/scaffolding/tests/support/mock_casing.hh"
+#include "clockwork/pinion/abstract_channel.hh"
+#include "clockwork/pinion/abstract_channel_factory.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/repr_iface.hh"
+#include "jewels/cli/exit_condition.hh"
 #include "jewels/cli/tests/support/simple_exit_condition.hh"
-#include "jewels/container/tap/var_array.hh"
-#include "jewels/container/tap/var_string.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/filesystem/file.hh"
 #include "jewels/filesystem/path.hh"
-#include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pointers.hh"
-#include "jewels/std/expected.hh"
 #include "jewels/std/span.hh"
-#include "jewels/testing/tmp_directory_guard.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <catch2/catch_test_macros.hpp>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>
 
 #include <chrono>
-#include <cstdlib>
 #include <fcntl.h>
 #include <fstream>
 #include <memory>
-#include <memory_resource>
 #include <span>
+#include <sys/types.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 
 namespace clockwork::testing
 {
@@ -59,8 +51,10 @@ inline void write_schema(const jewels::filesystem::Path& path, const google::pro
 /// Makes a ShmSubscriber for the given uuid and Tap<Tach<BufferLayout>>
 /// @return the subscriber or nullptr if unsuccessful
 template <typename Tag>
-std::shared_ptr<pinion::ShmSubscriber> make_snooper(
-  pinion::ShmChannelFactory& factory, jewels::Uuid<Tag> chan_id, const Tappy<common::PinionBufferLayout>& buffer_desc)
+std::shared_ptr<pinion::AbstractSubscriber> make_snooper(
+  pinion::AbstractChannelFactory& factory,
+  jewels::Uuid<Tag> chan_id,
+  const Tappy<common::PinionBufferLayout>& buffer_desc)
 {
   const pinion::BufferLayout layout{
     .num_slots = buffer_desc.get_num_slots(),
@@ -93,7 +87,7 @@ public:
           {
             constexpr auto sleep_time = std::chrono::milliseconds(10);
             std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
-            body();
+            body(*this);
           }
         })
   {

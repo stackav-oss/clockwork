@@ -1,38 +1,23 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-#include "clockwork/common/abstract_cog.hh"
-#include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
-#include "clockwork/pinion/tests/support/tmp_shm_namespace.hh"
-#include "jewels/container/tap/var_array.hh"
-#include "jewels/container/tap/var_string.hh"
-#include "jewels/filesystem/file.hh"
-#include "jewels/filesystem/mmap_region.hh"
-#include "jewels/memory/memory_resource.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
+#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
-#include "jewels/testing/tmp_directory_guard.hh"
-#include "jewels/uuid/uuid.hh"
+#include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdlib>
-#include <fcntl.h>
-#include <filesystem>
+#include <cstdint>
 #include <memory>
-#include <memory_resource>
-#include <span>
-#include <unistd.h>
+#include <optional>
+#include <vector>
 
 namespace clockwork::testing
 {
@@ -113,6 +98,7 @@ void publish(pinion::PublisherHandle& publisher, const T& message)
 /// Dump the message available on a subscriber handle.
 /// @tparam T The message type.
 /// @param subscriber The handle to dump from.
+///@{
 template <typename T>
 std::vector<T> dump(const pinion::SubscriberHandle& subscriber)
 {
@@ -120,10 +106,20 @@ std::vector<T> dump(const pinion::SubscriberHandle& subscriber)
   REQUIRE(span);
   return std::vector<T>(span->begin(), span->end());
 }
+template <typename T>
+std::vector<T> dump(const std::shared_ptr<pinion::AbstractChannel>& channel)
+{
+  REQUIRE(channel);
+  auto span = pinion::to_message_range<const T>(channel->available());
+  REQUIRE(span);
+  return std::vector<T>(span->begin(), span->end());
+}
+///@}
 
 /// Get the most recent available on a subscriber handle.
 /// @tparam T The message type.
 /// @param subscriber The handle to check.
+///@{
 template <typename T>
 std::optional<T> last(const pinion::SubscriberHandle& subscriber)
 {
@@ -131,5 +127,14 @@ std::optional<T> last(const pinion::SubscriberHandle& subscriber)
   REQUIRE(span);
   return (span->empty() ? std::optional<T>{} : span->back());
 }
+template <typename T>
+std::optional<T> last(const std::shared_ptr<pinion::AbstractChannel>& channel)
+{
+  REQUIRE(channel);
+  auto span = pinion::to_message_range<const T>(channel->available());
+  REQUIRE(span);
+  return (span->empty() ? std::optional<T>{} : span->back());
+}
+///@}
 
 } // namespace clockwork::testing

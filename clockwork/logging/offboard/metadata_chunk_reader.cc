@@ -1,5 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
+
+#include "clockwork/logging/offboard/metadata_chunk_reader.hh"
 
 #include "clockwork/logging/compression_type.hh"
 #include "clockwork/logging/log_error.hh"
@@ -9,6 +11,7 @@
 #include "clockwork/logging/offboard/log_format.hh"
 #include "clockwork/logging/offboard/log_uri.hh"
 #include "clockwork/logging/offboard/reader_types.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/std/expected.hh"
@@ -20,6 +23,7 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -43,23 +47,26 @@ namespace
 
 } // namespace
 
-[[nodiscard]] LogExpected<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>> read_metadata_chunk(
+[[nodiscard]] LogOutcome read_metadata_chunk(
   jewels::memory::MemoryResource memory_resource,
   ChunkLocation metadata_location,
   ChunkReader& chunk_reader,
-  ChunkCompressor& chunk_compressor)
+  ChunkCompressor& chunk_compressor,
+  const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels,
+  jewels::Out<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>> channel_info_map,
+  jewels::Out<std::pmr::unordered_set<uint16_t>> excluded_channel_ids)
 {
   auto read_result = chunk_reader.read_chunk(metadata_location.chunk_offset, metadata_location.chunk_size);
   if (!read_result)
   {
-    return jewels::unexpected(read_result.error());
+    return read_result.error();
   }
   const auto decompress_result =
     chunk_compressor.decompress_chunk(std::move(read_result).value(), CompressionType::zstd);
   if (!decompress_result)
   {
     jewels::log_cerr_error("Failed to decompress metadata chunk for {}", chunk_reader.file_uri().string());
-    return jewels::unexpected(decompress_result.error());
+    return decompress_result.error();
   }
   const auto& metadata_data = decompress_result.value();
   const auto trailer_offset = metadata_data.size() - metadata_chunk_trailer_size;
@@ -67,33 +74,46 @@ namespace
     std::span{&metadata_data.at(trailer_offset), metadata_chunk_trailer_size});
   if (!trailer_result)
   {
-    return jewels::unexpected(LogError::invalid_argument);
+    return LogError::invalid_argument;
   }
   const auto* trailer_ptr = trailer_result.value();
   const auto channel_entries_size =
     (trailer_offset - trailer_ptr->channel_entries_offset) / metadata_chunk_channel_entry_size;
   const auto channel_entries_span = nolint_helper::byte_span_to_value_span<const MetadataChunkChannelEntry>(std::span{
     &metadata_data.at(trailer_ptr->channel_entries_offset), channel_entries_size * metadata_chunk_channel_entry_size});
-  std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo> channel_info_map{memory_resource};
+  *channel_info_map = std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>{memory_resource};
+  *excluded_channel_ids = std::pmr::unordered_set<uint16_t>{memory_resource};
   for (const auto& channel_entry : channel_entries_span)
   {
     const auto channel_id = channel_entry.channel_id;
-    channel_info_map.emplace(
-      channel_id,
-      reader::LoggedChannelInfo{
-        .compression_type = channel_entry.compression_type,
-        .channel_name = read_string(
-          metadata_data, channel_entry.channel_name_offset, channel_entry.channel_name_size, memory_resource),
-        .message_encoding = channel_entry.message_encoding,
-        .channel_type = channel_entry.channel_type,
-        .schema_name =
-          read_string(metadata_data, channel_entry.schema_name_offset, channel_entry.schema_name_size, memory_resource),
-        .schema_encoding = channel_entry.schema_encoding,
-        .schema_definition = read_string(
-          metadata_data, channel_entry.schema_definition_offset, channel_entry.schema_definition_size, memory_resource),
-      });
+    auto channel_name =
+      read_string(metadata_data, channel_entry.channel_name_offset, channel_entry.channel_name_size, memory_resource);
+    if (!maybe_desired_channels || maybe_desired_channels->contains(channel_name))
+    {
+      channel_info_map->emplace(
+        channel_id,
+        reader::LoggedChannelInfo{
+          .compression_type = channel_entry.compression_type,
+          .channel_name = std::move(channel_name),
+          .message_encoding = channel_entry.message_encoding,
+          .channel_type = channel_entry.channel_type,
+          .schema_name = read_string(
+            metadata_data, channel_entry.schema_name_offset, channel_entry.schema_name_size, memory_resource),
+          .schema_encoding = channel_entry.schema_encoding,
+          .schema_definition = read_string(
+            metadata_data,
+            channel_entry.schema_definition_offset,
+            channel_entry.schema_definition_size,
+            memory_resource),
+          .is_amended = channel_entry.flags.is_amended != 0,
+        });
+    }
+    else
+    {
+      excluded_channel_ids->emplace(channel_id);
+    }
   }
-  return {std::move(channel_info_map)};
+  return LogError::success;
 }
 
 } // namespace clockwork_logging::offboard

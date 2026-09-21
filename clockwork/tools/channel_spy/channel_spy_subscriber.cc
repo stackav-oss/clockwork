@@ -1,9 +1,9 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/tools/channel_spy/channel_spy_subscriber.hh"
 
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/shm_channel.hh"
 #include "clockwork/pinion/shm_channel_factory.hh"
 #include "clockwork/pinion/slot.hh"
@@ -55,9 +55,8 @@ namespace clockwork::tools
     jewels::log_cerr_error("{}", msg);
     throw std::runtime_error(msg);
   }
-  auto subscriber_handle = open_result.value()->make_subscriber();
   return std::unique_ptr<ChannelSpySubscriber>{
-    new ChannelSpySubscriber{std::move(open_result).value(), std::move(subscriber_handle), std::move(callback_fn)}};
+    new ChannelSpySubscriber{std::move(open_result).value(), std::move(callback_fn)}};
 }
 
 [[nodiscard]] std::unique_ptr<ChannelSpySubscriber> ChannelSpySubscriber::make_subscriber(
@@ -106,7 +105,7 @@ namespace clockwork::tools
 
 void ChannelSpySubscriber::poll()
 {
-  const auto available = subscriber_handle_.available();
+  const auto available = subscriber_->available();
   if (available.empty())
   {
     return;
@@ -124,12 +123,8 @@ void ChannelSpySubscriber::poll()
 }
 
 ChannelSpySubscriber::ChannelSpySubscriber(
-  std::shared_ptr<pinion::ShmSubscriber> subscriber,
-  pinion::SubscriberHandle subscriber_handle,
-  GenericCallbackFunction callback_fn)
-  : subscriber_(std::move(subscriber)),
-    subscriber_handle_(std::move(subscriber_handle)),
-    callback_fn_(std::move(callback_fn))
+  std::shared_ptr<pinion::AbstractSubscriber> subscriber, GenericCallbackFunction callback_fn)
+  : subscriber_(std::move(subscriber)), callback_fn_(std::move(callback_fn))
 {
 }
 

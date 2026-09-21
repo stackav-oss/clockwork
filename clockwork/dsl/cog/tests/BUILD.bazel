@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -37,6 +37,67 @@ py_test(
 )
 
 cc_test(
+    name = "cog_metrics_event_signals_test",
+    srcs = ["cog_metrics_event_signals_test.cc"],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/cog:ten_nanosecond_type",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc_dial",
+        "//clockwork/dsl/cog/tests/support:mock_input_view",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:in_memory_channel",
+        "//clockwork/pinion:slot",
+        "//jewels/memory:instrumented_pmr_resource",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "cog_metrics_policy_test",
+    srcs = [
+        "cog_metrics_policy_test.py",
+        ":__test__",
+    ],
+    data = ["//std:cog_metrics_policy.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/cog:cog_metrics_policy",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "cog_metrics_telemetry_signals_test",
+    srcs = ["cog_metrics_telemetry_signals_test.cc"],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/cog:ten_nanosecond_type",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc_dial",
+        "//clockwork/dsl/cog/tests/support:mock_input_view",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:in_memory_channel",
+        "//clockwork/pinion:slot",
+        "//jewels/memory:instrumented_pmr_resource",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "copy_cog_test",
     srcs = ["copy_cog_test.cc"],
     deps = [
@@ -55,12 +116,16 @@ py_test(
         "//clockwork/dsl/cog:common_cog_event_metrics.clk",
         "//clockwork/dsl/cog:common_cog_telemetry_metrics.clk",
         "//clockwork/dsl/cog:ten_nanosecond.clk",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner.clk",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_cog.clk",
         "//clockwork/python:python_state.clk",
         "//clockwork/python/tests/support:python_cog.clk",
+        "//clockwork/python/tests/support:python_cog_multi_output.clk",
         "//clockwork/python/tests/support:test_config.clk",
         "//clockwork/python/tests/support:test_input_message.clk",
         "//clockwork/python/tests/support:test_output_message.clk",
         "//clockwork/python/tests/support:test_state.clk",
+        "//std/aligners:state.clk",
     ],
     main = ":__test__.py",
     deps = [
@@ -71,6 +136,9 @@ py_test(
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:py_target",
+        "//clockwork/dsl/ir:python_cog_dial",
     ],
 )
 
@@ -80,37 +148,11 @@ cc_test(
     deps = [
         "//clockwork:tags",
         "//clockwork/cog:include_common",
+        "//clockwork/dsl/tests/support:clk_hellocog_clk_cc",
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk_cc",
         "//clockwork/dsl/tests/support:goodbyecog",
-        "//clockwork/dsl/tests/support:hellocog",
         "//jewels/memory:memory_resource",
         "@catch2//:catch2_main",
-    ],
-)
-
-py_test(
-    name = "cppcog_test",
-    srcs = [
-        "cppcog_test.py",
-        ":__test__",
-    ],
-    data = [
-        "//clockwork/diagnostics:report.clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
-        "//clockwork/dsl/tests/support:goodbyecog.clk",
-        "//clockwork/dsl/tests/support:hellocog.clk",
-        "//clockwork/dsl/tests/support:hellomsg.clk",
-    ],
-    main = ":__test__.py",
-    deps = [
-        ":__test__",
-        "//clockwork/dsl/cog:cppcog",
-        "//clockwork/dsl/cog:pycog",
-        "//clockwork/dsl/cpp:context",
-        "//clockwork/dsl/ir:cog",
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/dsl/ir:module_id",
     ],
 )
 
@@ -118,41 +160,17 @@ cc_test(
     name = "cppdial_cpp_test",
     srcs = ["cppdial_cpp_test.cc"],
     deps = [
+        "//clockwork:repr_iface",
         "//clockwork/diagnostics:reporter",
         "//clockwork/dsl/tests/support:goodbyecog_dial",
         "//clockwork/dsl/tests/support:hello_msg_onboard",
         "//clockwork/dsl/tests/support:hellocog_dial",
+        "//jewels/container:compare",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pointers",
         "//jewels/time:sync_time",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
-    ],
-)
-
-py_test(
-    name = "cppdial_test",
-    srcs = [
-        "cppdial_test.py",
-        ":__test__",
-    ],
-    data = [
-        "//clockwork/diagnostics:report.clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
-        "//clockwork/dsl/tests/support:goodbyecog.clk",
-        "//clockwork/dsl/tests/support:hellocog.clk",
-        "//clockwork/dsl/tests/support:hellomsg.clk",
-    ],
-    main = ":__test__.py",
-    deps = [
-        ":__test__",
-        "//clockwork/dsl/cog:cppdial",
-        "//clockwork/dsl/cpp:context",
-        "//clockwork/dsl/ir:cog",
-        "//clockwork/dsl/ir:compiler",
-        "//clockwork/dsl/ir:importer",
-        "//clockwork/dsl/ir:module_id",
-        "@clockwork_pip//pytest",
     ],
 )
 
@@ -161,20 +179,38 @@ cc_test(
     srcs = ["hellocog_metrics_test.cc"],
     deps = [
         "//clockwork/cog:cog_statistics",
-        "//clockwork/cog:input_view",
+        "//clockwork/cog:include_common",
         "//clockwork/dial:cond_messages_present",
         "//clockwork/dial:cond_time_since_last_exec",
         "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
         "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
         "//clockwork/dsl/cog:ten_nanosecond_type",
         "//clockwork/dsl/tests/support:hellocog",
-        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:abstract_channel",
         "//clockwork/pinion:in_memory_channel",
-        "//clockwork/pinion:publisher_handle",
-        "//clockwork/pinion:subscriber_handle",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_unique_ptr",
         "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "metrics_policy_loader_test",
+    srcs = [
+        "metrics_policy_loader_test.py",
+        ":__test__",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cog:metrics_policy_loader",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "@clockwork_pip//pytest",
     ],
 )
 
@@ -188,16 +224,66 @@ cc_test(
     ],
 )
 
+py_test(
+    name = "report_group_policy_test",
+    srcs = [
+        "report_group_policy_test.py",
+        ":__test__",
+    ],
+    data = ["//std:signals.clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/cog:report_group_policy",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+    ],
+)
+
 cc_test(
     name = "signal_api_test",
     srcs = ["signal_api_test.cc"],
     deps = [
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/ir/tests/support:report_group_defs",
-        "//clockwork/dsl/ir/tests/support:report_group_defs_dial",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/ir/tests/support:report_group_defs_clk_cc",
+        "//clockwork/dsl/ir/tests/support:report_group_defs_clk_cc_dial",
         "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
+        "//jewels/container/tap:bitset",
         "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "simple_cog_cog_metrics_signals_test",
+    srcs = ["simple_cog_cog_metrics_signals_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog:simple_cog",
+        "//clockwork/common:abstract_timer",
+        "//clockwork/common:cog_envelope",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc",
+        "//clockwork/dsl/cog/tests/support:cog_metrics_test_cog_clk_cc_dial",
+        "//clockwork/dsl/tests/support:clk_hellomsg_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:buffer_layout",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:in_memory_channel",
+        "//clockwork/pinion:observer",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:slot_ref",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/std:span",
         "@catch2//:catch2_main",
     ],
 )

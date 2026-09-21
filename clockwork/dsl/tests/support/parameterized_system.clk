@@ -1,0 +1,51 @@
+use clockwork::dsl::tests::support::parameterized_box::{TestBoxImpl, parameterized_box_clk_exe, CxxState};
+use clockwork::dsl::tests::support::parameterized_types::{TestSchema};
+
+cpu_domain TestHost
+{
+  simplelaunch_node: "ParameterizedHost";
+  simplelaunch_src: "//clockwork/dsl/tests/support:clk_host_a_simplelaunch_config.textproto";
+  bridge_cpus: 0;
+  default_cpus: 1 - 3;
+}
+
+ethernet TestLan
+{
+  ipv4_address 1.2.3.4: TestHost
+  {
+    bridge_ports: 16000 - 18000;
+  }
+}
+
+box TestBox
+{
+  new box_impl1: TestBoxImpl<
+    channel_prefix=fmt!("box1"),
+    group_id="fault_injector_b",
+    state_type=CxxState,
+    input_type=UInt8,
+    output_type=UInt8,
+  >;
+  new box_impl2: TestBoxImpl<
+    channel_prefix=fmt!("box2"),
+    group_id="fault_injector_b",
+    state_type=Tappy<TestSchema<Bool>>,
+    input_type=UInt8,
+    output_type=Bool,
+  >;
+
+  new proc: Process(executable=parameterized_box_clk_exe);
+  apply HostProcess(process=proc) in box_impl1;
+  apply HostProcess(process=proc) in box_impl2;
+}
+
+box TestSystemBox
+{
+  new box: TestBox;
+  apply HostCpuDomain(cpu_domain=TestHost) in box;
+}
+
+system_target parameterized_system
+{
+  box: TestSystemBox;
+}

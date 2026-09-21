@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/simplelaunch/simplelaunch_impl.hh"
@@ -9,36 +9,29 @@
 #include "jewels/filesystem/path.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pointers.hh"
 #include "jewels/simplelaunch/config.hh"
-#include "jewels/simplelaunch/service.hh"
+#include "jewels/simplelaunch/simplelaunch_runner.hh"
 #include "jewels/std/expected.hh"
 #include "jewels/utility/fix_clockwork_path.hh"
 
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/ip/address.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/process/args.hpp>
-#include <boost/process/search_path.hpp>
-#include <boost/process/system.hpp>
-#include <boost/system/errc.hpp>
+#include <boost/fusion/algorithm/iteration/for_each.hpp>
+#include <boost/fusion/sequence/intrinsic/at_key.hpp>
+#include <boost/process/v1/system.hpp>
 #include <fmt/format.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
-#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <fcntl.h>
-#include <filesystem>
 #include <functional>
+#include <map>
 #include <memory_resource>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unistd.h>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -95,32 +88,19 @@ get_running_processes(jewels::filesystem::Filesystem& filesystem, jewels::memory
 }
 
 /// Run a pre-launch task.
-int32_t run_pre_launch_task(const AppConfig& app_config)
+int32_t run_pre_launch_task(
+  const AppConfig& app_config,
+  jewels::filesystem::Filesystem& filesystem,
+  jewels::memory::MemoryResource memory_resource)
 {
-  const auto binary = app_config.as_root() ? boost::process::search_path("sudo").native() : app_config.executable();
-  const auto binary_path = fix_clockwork_path(binary);
+  const auto tmp_dir = jewels::filesystem::Path{"/tmp", memory_resource};
   std::vector<std::string> command_args;
-  if (app_config.as_root())
+  if (fails(make_argv(app_config, memory_resource, filesystem, tmp_dir, command_args)))
   {
-    // We have to copy the executable to a path that is readable by root because by default FUSE filesystem mounts are
-    // not.
-    const auto temp_file_path =
-      std::filesystem::temp_directory_path() / std::filesystem::path(app_config.executable()).filename();
-    std::filesystem::remove(temp_file_path);
-    std::filesystem::copy_file(
-      app_config.executable(), temp_file_path, std::filesystem::copy_options::overwrite_existing);
-
-    command_args.emplace_back("--preserve-env");
-    command_args.emplace_back("--non-interactive");
-    command_args.emplace_back(temp_file_path);
+    return -1;
   }
 
-  for (const auto& arg : app_config.args())
-  {
-    command_args.emplace_back(arg);
-  }
-
-  const auto pre_launch_app_result = boost::process::system(binary_path, boost::process::args(command_args));
+  const auto pre_launch_app_result = boost::process::v1::system(command_args);
 
   if (pre_launch_app_result != 0)
   {
@@ -131,6 +111,55 @@ int32_t run_pre_launch_task(const AppConfig& app_config)
 }
 
 } // namespace
+
+BinaryOutcome make_argv(
+  const AppConfig& config,
+  jewels::memory::MemoryResource memory_resource,
+  jewels::filesystem::Filesystem& filesystem,
+  const jewels::filesystem::Path& tmp_dir_path,
+  std::vector<std::string>& command_args)
+{
+  auto binary = std::pmr::string{config.executable(), memory_resource};
+  if (config.as_root())
+  {
+    const auto maybe_sudo = filesystem.search_path("sudo");
+    if (!maybe_sudo)
+    {
+      jewels::log_cerr_fatal("Failed to find sudo: {}", maybe_sudo.error().message());
+      return failure;
+    }
+    binary = maybe_sudo->string_view();
+  }
+  const auto binary_path = fix_clockwork_path(binary);
+  command_args.emplace_back(binary_path);
+  if (config.as_root())
+  {
+    // We have to copy the executable to a path that is readable by root because by default FUSE filesystem mounts are
+    // not.
+    const jewels::filesystem::Path executable_path{config.executable(), memory_resource};
+    const auto temp_file_path = tmp_dir_path / executable_path.filename().string_view();
+    std::ignore = filesystem.remove(temp_file_path.string_view());
+    if (const auto copy_result = filesystem.copy_file(config.executable(), temp_file_path.string_view()); !copy_result)
+    {
+      jewels::log_cerr_fatal(
+        "Failed to copy {} to {}: {}",
+        config.executable(),
+        temp_file_path.string_view(),
+        copy_result.error().message());
+      return failure;
+    }
+
+    command_args.emplace_back("--preserve-env");
+    command_args.emplace_back("--non-interactive");
+    command_args.emplace_back(temp_file_path);
+  }
+
+  for (const auto& arg : config.args())
+  {
+    command_args.emplace_back(arg);
+  }
+  return success;
+}
 
 jewels::expected<RedirectOutputHelper, jewels::filesystem::ErrorCode> RedirectOutputHelper::make(
   const jewels::filesystem::Path& logging_directory, jewels::filesystem::Filesystem& filesystem, bool append)
@@ -246,50 +275,54 @@ bool check_for_running_apps(
 void run_pre_launch_tasks(
   const ::jewels::simplelaunch::v1::Config& config,
   jewels::memory::MemoryResource memory_resource,
-  std::pmr::unordered_map<std::pmr::string, bool>& task_results)
+  jewels::filesystem::Filesystem& filesystem,
+  std::pmr::map<std::pmr::string, bool>& task_results)
 {
   ;
   for (const auto& pre_launch_app : config.pre_launch())
   {
     std::pmr::string task_name{memory_resource};
     task_name = pre_launch_app.name();
-    const bool task_suceeded = run_pre_launch_task(pre_launch_app) == 0;
+    const bool task_suceeded = run_pre_launch_task(pre_launch_app, filesystem, memory_resource) == 0;
     task_results[task_name] = task_suceeded;
   }
 }
 
+// NOLINTNEXTLINE(readability-function-size) Using keyword comments to manage complexity
 int launch(
   jewels::memory::MemoryResource memory_resource,
   const ::jewels::simplelaunch::v1::Config& config,
-  const std::pmr::unordered_map<std::pmr::string, bool>& pre_launch_results,
+  std::shared_ptr<clockwork::Tappy<SimplelaunchRunnerConfig>> runner_config_ptr,
+  const clockwork::PinionArgs& pinion_args,
+  const std::pmr::map<std::pmr::string, bool>& pre_launch_results,
   const jewels::filesystem::Path& logging_directory,
   const std::string& listen_host,
   uint16_t listen_port)
 {
-  // The io_context is required for all I/O
-  boost::asio::io_context io_context{1};
-  const boost::asio::ip::tcp::endpoint endpoint{boost::asio::ip::make_address(listen_host), listen_port};
-
-  TaskManagerImpl task_manager{
-    config, logging_directory, memory_resource, jewels::memory::make_non_null_from_ref(io_context), pre_launch_results};
-
-  // Create the HTTP server
-  if (const auto http_server_expected = task_manager.create_http_server(endpoint); !http_server_expected)
+  const auto channel_factory_result = pinion_args.make_factory({}, {}, {});
+  if (!channel_factory_result)
   {
-    jewels::log_cerr_fatal("Failed to create http server: {}", http_server_expected.error().message());
+    jewels::log_cerr_error("Failed to create the pinion channel factory");
     return -1;
   }
 
-  jewels::log_cerr_info("Server listening on http://{}:{}", listen_host, listen_port);
-  task_manager.register_signal_handlers();
-  auto start_up_succeeded =
-    std::all_of(pre_launch_results.begin(), pre_launch_results.end(), [](auto& entry) -> bool { return entry.second; });
-  if (start_up_succeeded)
+  SimplelaunchRunner runner{SimplelaunchRunner::CtorParams{
+    .memory_resource = memory_resource,
+    .config = config,
+    .runner_config_ptr = std::move(runner_config_ptr),
+    .channel_factory_ptr = *channel_factory_result,
+    .pre_launch_results = pre_launch_results,
+    .logging_directory = logging_directory,
+    .listen_host = listen_host,
+    .listen_port = listen_port,
+  }};
+
+  if (!ok(runner.initialize()))
   {
-    task_manager.spawn_subprocesses();
+    return -1;
   }
 
-  io_context.run();
+  runner.run();
 
   return 0;
 }

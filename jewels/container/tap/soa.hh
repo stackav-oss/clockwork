@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -13,6 +13,7 @@
 #include <iterator>
 #include <limits>
 #include <type_traits>
+#include <utility>
 
 namespace clockwork
 {
@@ -93,49 +94,48 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   /// Access element at the given index (unchecked).
-  [[nodiscard]] inline auto operator[](size_t index) noexcept -> ElementRef;
+  [[nodiscard]] constexpr auto operator[](size_t index) noexcept -> ElementRef;
 
   /// Access element at the given index (unchecked, const).
-  [[nodiscard]] inline auto operator[](size_t index) const noexcept -> ElementConstRef;
+  [[nodiscard]] constexpr auto operator[](size_t index) const noexcept -> ElementConstRef;
 
   /// Access element at the given index (checked via factory output parameter).
   /// @param element_out Factory output parameter that will be set to the element reference if successful
   /// @param index The index of the element to access
   /// @return success if index is valid, failure otherwise
-  [[nodiscard]] inline jewels::BinaryOutcome at(jewels::FactoryOut<ElementRef> element_out, size_t index) noexcept;
+  inline jewels::BinaryOutcome at(jewels::FactoryOut<ElementRef> element_out, size_t index) noexcept;
 
   /// Access element at the given index (checked via factory output parameter, const).
   /// @param element_out Factory output parameter that will be set to the element reference if successful
   /// @param index The index of the element to access
   /// @return success if index is valid, failure otherwise
-  [[nodiscard]] inline jewels::BinaryOutcome
-  at(jewels::FactoryOut<ElementConstRef> element_out, size_t index) const noexcept;
+  inline jewels::BinaryOutcome at(jewels::FactoryOut<ElementConstRef> element_out, size_t index) const noexcept;
 
   /// Access element at the given index (STL-style, throws on error).
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use the BinaryOutcome version.
   /// @param index The index of the element to access
   /// @return Reference to the element
   /// @throws std::out_of_range if index >= size()
   [[nodiscard]] inline ElementRef at(size_t index);
 
   /// Access element at the given index (STL-style, throws on error, const).
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use the BinaryOutcome version.
   /// @param index The index of the element to access
   /// @return Const reference to the element
   /// @throws std::out_of_range if index >= size()
   [[nodiscard]] inline ElementConstRef at(size_t index) const;
 
   /// Return the number of elements in the SoA.
-  [[nodiscard]] inline size_t size() const noexcept;
+  [[nodiscard]] constexpr size_t size() const noexcept;
 
   /// Return the capacity of the SoA.
   [[nodiscard]] constexpr size_t capacity() const noexcept;
 
   /// Check if the SoA is empty.
-  [[nodiscard]] inline bool empty() const noexcept;
+  [[nodiscard]] constexpr bool empty() const noexcept;
 
   /// Resize the SoA to the given size
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use try_resize.
   /// Throws std::length_error if new_size > capacity().
   inline void resize(size_t new_size)
     requires(is_variable);
@@ -143,22 +143,24 @@ public:
   /// Try to resize the SoA to the given size
   /// @param new_size The desired new size
   /// @return success if the resize succeeded, failure if new_size > capacity()
-  [[nodiscard]] inline jewels::BinaryOutcome try_resize(size_t new_size) noexcept
+  inline jewels::BinaryOutcome try_resize(size_t new_size) noexcept(
+    noexcept(std::declval<Derived&>().construct_range(size_t{}, size_t{})) &&
+    noexcept(std::declval<Derived&>().wipe_range(size_t{}, size_t{})))
     requires(is_variable);
 
   /// Clear all elements from the SoA
-  inline void clear()
+  inline void clear() noexcept(noexcept(std::declval<Derived&>().wipe_range(size_t{}, size_t{})))
     requires(is_variable);
 
   /// Add a new default-constructed element to the end of the SoA
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use try_emplace_back.
   /// Throws std::length_error if size() >= capacity().
   /// @return Reference to the newly added element
   inline ElementRef emplace_back()
     requires(is_variable);
 
   /// Add a new element to the end of the SoA from a TapInit.
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use try_emplace_back.
   /// Throws std::length_error if size() >= capacity().
   /// @param element The TapInit to copy from
   /// @return Reference to the newly added element
@@ -166,7 +168,7 @@ public:
     requires(is_variable);
 
   /// Add a new element to the end of the SoA from an element.
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use try_emplace_back.
   /// Throws std::length_error if size() >= capacity().
   /// @param element The element to copy from
   /// @return Reference to the newly added element
@@ -174,7 +176,7 @@ public:
     requires(is_variable);
 
   /// Add a new element to the end of the SoA from an ElementRef.
-  /// This is for STL compatibility; prefer the BinaryOutcome version in Stack code.
+  /// This is for generic STL-compatible code; code that names the SoA should use try_emplace_back.
   /// Throws std::length_error if size() >= capacity().
   /// @param element The ElementRef to copy from
   /// @return Reference to the newly added element
@@ -184,54 +186,62 @@ public:
   /// Try to add a new default-constructed element to the end of the SoA.
   /// @param element_out Optional output parameter that will be set to the new element reference if successful
   /// @return success if the element was added, failure if size() >= capacity()
-  [[nodiscard]] inline jewels::BinaryOutcome
-  try_emplace_back(jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out = std::nullopt) noexcept
+  inline jewels::BinaryOutcome
+  try_emplace_back(jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out = std::nullopt) noexcept(
+    noexcept(std::declval<Derived&>().construct_element(size_t{})))
     requires(is_variable);
 
   /// Try to add a new element to the end of the SoA from a TapInit.
   /// @param element The TapInit to copy from
   /// @param element_out Optional output parameter that will be set to the new element reference if successful
   /// @return success if the element was added, failure if size() >= capacity()
-  [[nodiscard]] inline jewels::BinaryOutcome try_emplace_back(
+  inline jewels::BinaryOutcome try_emplace_back(
     const clockwork::TapInit<ElementType>& element,
-    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out = std::nullopt) noexcept
+    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out =
+      std::nullopt) noexcept(noexcept(std::declval<Derived&>()
+                                        .construct_element(
+                                          size_t{}, std::declval<const clockwork::TapInit<ElementType>&>())))
     requires(is_variable);
 
   /// Try to add a new element to the end of the SoA from an element.
   /// @param element The element to copy from
   /// @param element_out Optional output parameter that will be set to the new element reference if successful
   /// @return success if the element was added, failure if size() >= capacity()
-  [[nodiscard]] inline jewels::BinaryOutcome try_emplace_back(
+  inline jewels::BinaryOutcome try_emplace_back(
     const ElementType& element,
-    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out = std::nullopt) noexcept
+    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out =
+      std::nullopt) noexcept(noexcept(std::declval<Derived&>()
+                                        .construct_element(size_t{}, std::declval<const ElementType&>())))
     requires(is_variable);
 
   /// Try to add a new element to the end of the SoA from an ElementRef.
   /// @param element The ElementRef to copy from
   /// @param element_out Optional output parameter that will be set to the new element reference if successful
   /// @return success if the element was added, failure if size() >= capacity()
-  [[nodiscard]] inline jewels::BinaryOutcome try_emplace_back(
+  inline jewels::BinaryOutcome try_emplace_back(
     const ElementRef& element,
-    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out = std::nullopt) noexcept
+    jewels::OptionalOut<jewels::FactoryResult<ElementRef>> element_out =
+      std::nullopt) noexcept(noexcept(std::declval<Derived&>()
+                                        .construct_element(size_t{}, std::declval<const ElementRef&>())))
     requires(is_variable);
 
   /// Get an iterator to the beginning.
-  [[nodiscard]] inline iterator begin() noexcept;
+  [[nodiscard]] constexpr iterator begin() noexcept;
 
   /// Get an iterator to the end.
-  [[nodiscard]] inline iterator end() noexcept;
+  [[nodiscard]] constexpr iterator end() noexcept;
 
   /// Get a const iterator to the beginning.
-  [[nodiscard]] inline const_iterator begin() const noexcept;
+  [[nodiscard]] constexpr const_iterator begin() const noexcept;
 
   /// Get a const iterator to the end.
-  [[nodiscard]] inline const_iterator end() const noexcept;
+  [[nodiscard]] constexpr const_iterator end() const noexcept;
 
   /// Get a const iterator to the beginning.
-  [[nodiscard]] inline const_iterator cbegin() const noexcept;
+  [[nodiscard]] constexpr const_iterator cbegin() const noexcept;
 
   /// Get a const iterator to the end.
-  [[nodiscard]] inline const_iterator cend() const noexcept;
+  [[nodiscard]] constexpr const_iterator cend() const noexcept;
 
   /// Get a reverse iterator to the beginning.
   [[nodiscard]] inline reverse_iterator rbegin() noexcept;
@@ -252,7 +262,8 @@ public:
   [[nodiscard]] inline const_reverse_iterator crend() const noexcept;
 
   /// Equality comparison
-  [[nodiscard]] friend bool operator==(const Derived& lhs, const Derived& rhs) noexcept
+  [[nodiscard]] friend bool
+  operator==(const Derived& lhs, const Derived& rhs) noexcept(noexcept(lhs.compare_fields(rhs, lhs.size())))
   {
     if constexpr (is_variable)
     {
@@ -265,11 +276,11 @@ public:
   }
 
 private:
-  Derived& derived()
+  constexpr Derived& derived() noexcept
   {
     return static_cast<Derived&>(*this);
   }
-  const Derived& derived() const
+  constexpr const Derived& derived() const noexcept
   {
     return static_cast<const Derived&>(*this);
   }
@@ -290,12 +301,12 @@ class SoaIterator : public boost::iterator_facade<
 
 public:
   /// Default constructor.
-  SoaIterator() = default;
+  constexpr SoaIterator() noexcept = default;
 
   /// Construct from SoA pointer and index.
   /// @param soa Pointer to the SoA container
   /// @param index Index into the container
-  SoaIterator(DerivedPtr soa, size_t index) noexcept
+  constexpr SoaIterator(DerivedPtr soa, size_t index) noexcept
     : soa_{soa}, index_{index}
   {
   }
@@ -304,7 +315,7 @@ public:
   /// Only enabled when ValueType is const (converting to const_iterator).
   /// @param other The mutable iterator to convert from
   template <class OtherValueType = ValueType>
-  explicit SoaIterator(const SoaIterator<Derived, std::remove_const_t<ValueType>>& other) noexcept
+  constexpr explicit SoaIterator(const SoaIterator<Derived, std::remove_const_t<ValueType>>& other) noexcept
     requires(std::is_const_v<OtherValueType>)
     : soa_{other.soa_}, index_{other.index_}
   {
@@ -313,7 +324,7 @@ public:
   /// Subscript operator for random access.
   /// @param n Offset from current position
   /// @return ElementRef or ElementConstRef at offset position
-  [[nodiscard]] detail::ToElementRef<Derived, ValueType> operator[](std::ptrdiff_t n) const
+  [[nodiscard]] constexpr detail::ToElementRef<Derived, ValueType> operator[](std::ptrdiff_t n) const noexcept
   {
     auto copy = *this;
     copy.advance(n);
@@ -327,7 +338,7 @@ private:
 
   /// Dereference the iterator to get an element reference.
   /// @return ElementRef or ElementConstRef by value
-  [[nodiscard]] detail::ToElementRef<Derived, ValueType> dereference() const
+  [[nodiscard]] constexpr detail::ToElementRef<Derived, ValueType> dereference() const noexcept
   {
     return detail::ToElementRef<Derived, ValueType>{soa_, index_};
   }
@@ -335,26 +346,26 @@ private:
   /// Check if two iterators are equal.
   /// @param other The other iterator
   /// @return true if equal
-  [[nodiscard]] bool equal(const SoaIterator& other) const
+  [[nodiscard]] constexpr bool equal(const SoaIterator& other) const noexcept
   {
     return soa_ == other.soa_ && index_ == other.index_;
   }
 
   /// Increment the iterator.
-  void increment()
+  constexpr void increment() noexcept
   {
     ++index_;
   }
 
   /// Decrement the iterator.
-  void decrement()
+  constexpr void decrement() noexcept
   {
     --index_;
   }
 
   /// Advance the iterator by n positions.
   /// @param n Number of positions to advance (can be negative)
-  void advance(std::ptrdiff_t n)
+  constexpr void advance(std::ptrdiff_t n) noexcept
   {
     index_ += static_cast<size_t>(static_cast<std::ptrdiff_t>(index_) + n);
   }
@@ -362,7 +373,7 @@ private:
   /// Calculate distance to another iterator.
   /// @param other The other iterator
   /// @return Distance in elements
-  [[nodiscard]] std::ptrdiff_t distance_to(const SoaIterator& other) const
+  [[nodiscard]] constexpr std::ptrdiff_t distance_to(const SoaIterator& other) const noexcept
   {
     return static_cast<std::ptrdiff_t>(other.index_) - static_cast<std::ptrdiff_t>(index_);
   }

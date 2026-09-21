@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -10,6 +10,7 @@
 #include "jewels/std/expected.hh"
 #include "jewels/time/sync_time.hh"
 
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
@@ -125,9 +126,11 @@ public:
   /// Creates a new file in the filesystem, creating parent directories as needed, or updates the modification time
   //  if the file already exists
   /// @param[in] path Path
+  /// @param[in] perms File permissions
   /// @return expected containing void if the file/dir was successfully created or had its modification time updated;
   /// on failure returns an error code indicating the reason for failure
-  [[nodiscard]] jewels::expected<void, ErrorCode> touch(std::string_view path) const;
+  [[nodiscard]] jewels::expected<void, ErrorCode>
+  touch(std::string_view path, uint32_t perms = default_file_perms) const;
 
   /// Creates a new temporary directory in the filesystem, creating parent directories as needed.
   /// An environment variable is read to determine a temporary directory when parent_path is not specified.
@@ -211,9 +214,10 @@ public:
   /// Copy a file
   /// @param[in] source_path Path to file to copy
   /// @param[in] destination_path Path to where we copy the source file
+  /// @param[in] block_size Block size to use when copying the file
   /// @return System error on failure
   [[nodiscard]] jewels::expected<void, ErrorCode>
-  copy_file(std::string_view source_path, std::string_view destination_path) const;
+  copy_file(std::string_view source_path, std::string_view destination_path, size_t block_size = SSIZE_MAX) const;
 
   /// Unlink a file
   /// @param[in] path File path
@@ -240,6 +244,13 @@ public:
   /// @return Error condition on failure
   [[nodiscard]] jewels::expected<void, ErrorCode>
   create_symlink(std::string_view target_path, std::string_view link_path) const;
+
+  /// Create a hard link named link_path that contains the string target_path
+  /// @param[in] target_path Target path
+  /// @param[in] link_path Link path
+  /// @return Error condition on failure
+  [[nodiscard]] jewels::expected<void, ErrorCode>
+  create_hardlink(std::string_view target_path, std::string_view link_path) const;
 
   /// Read a symbolic link
   /// @param[in] link_path Symbolic link path
@@ -340,6 +351,14 @@ public:
   /// @return expected containing the number of files and directories deleted; on failure returns an error code
   /// indicating the reason for failure.
   [[nodiscard]] jewels::expected<size_t, ErrorCode> remove_all(std::string_view path) const;
+
+  /// Search for an executable in the PATH environment variable
+  /// @param[in] binary_name Name of the binary to search for
+  /// @return Path to the first matching executable found, or ENOENT if not found
+  /// Searches directories listed in the PATH environment variable for an executable file matching binary_name.
+  /// Each file must have the executable bit set and is resolved to its canonical absolute path via realpath().
+  /// Empty PATH entries are skipped silently. Returns ENOENT if binary is not found or PATH is unset.
+  [[nodiscard]] jewels::expected<filesystem::Path, ErrorCode> search_path(std::string_view binary_name) const;
 
 private:
   /// Structure used to keep track of the directories when reading directories recursively

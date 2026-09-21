@@ -1,10 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
 #include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_config_clk_cc.hh"
 #include "clockwork/tools/metrics_channel_metadata/metrics_channel_metadata_init_clk_cc_dial.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/container/tap/var_array.hh"
+#include "jewels/uuid/uuid.hh"
 
 namespace clockwork::tools
 {

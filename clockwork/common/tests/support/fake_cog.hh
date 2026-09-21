@@ -1,27 +1,17 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/abstract_cog.hh"
 #include "clockwork/common/forward.hh"
-#include "clockwork/common/process_description_clk_cc.hh"
-#include "jewels/container/tap/var_array.hh"
-#include "jewels/container/tap/var_string.hh"
-#include "jewels/filesystem/file.hh"
-#include "jewels/memory/memory_resource.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
-#include "jewels/testing/tmp_directory_guard.hh"
-#include "jewels/uuid/uuid.hh"
+#include "jewels/time/sync_time.hh"
 
-#include <cstdlib>
-#include <fcntl.h>
-#include <filesystem>
 #include <memory>
-#include <memory_resource>
-#include <span>
-#include <unistd.h>
+#include <string_view>
 
 namespace clockwork::testing
 {
@@ -46,9 +36,10 @@ public:
     return {};
   }
 
-  jewels::expected<void, CogExecutionError> prepare_for_execution(jewels::time::SyncTime /*current_time*/) override
+  CogPrepareOutcome prepare_for_execution(
+    jewels::Out<jewels::time::SyncTime> /*throttled_until_out*/, jewels::time::SyncTime /*current_time*/) override
   {
-    return jewels::unexpected(CogExecutionError::not_ready);
+    return CogPrepareResult::not_ready;
   }
   jewels::expected<void, CogExecutionError> execute(CogExecuteParams /*params*/) override
   {

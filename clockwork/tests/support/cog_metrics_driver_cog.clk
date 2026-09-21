@@ -1,0 +1,30 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::cog_metrics_test)]
+
+use clockwork::tests::support::cog_metrics_test_messages::{CogMetricsTestTrigger, CogMetricsTestAck};
+
+// Periodic driver cog that sends trigger messages to the test cogs
+cog CogMetricsDriverCog
+{
+  inputs
+  {
+    ack_default: Tappy<CogMetricsTestAck>;
+    ack_custom: Tappy<CogMetricsTestAck>;
+  }
+
+  outputs
+  {
+    trigger_a: Tappy<CogMetricsTestTrigger>;
+    trigger_b: Tappy<CogMetricsTestTrigger>;
+    trigger_c: Tappy<CogMetricsTestTrigger>;
+  }
+
+  execution
+  {
+    condition periodic_10hz: time_since_last_exec(100ms);
+    execute when: periodic_10hz;
+  }
+}

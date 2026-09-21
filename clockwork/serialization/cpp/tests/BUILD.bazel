@@ -1,9 +1,8 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
 load("//tools/rules:cc.bzl", "cc_test")
 load("//tools/rules:python.bzl", "cc_test_with_embedded_py", "py_test")
-
-# Copyright 2025 Stack AV Co.
-# SPDX-License-Identifier: Apache-2.0
 
 package(default_testonly = True)
 
@@ -31,17 +30,45 @@ py_test(
 )
 
 cc_test(
+    name = "tachyon_lite_compressor_test",
+    srcs = ["tachyon_lite_compressor_test.cc"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork/logging:lite_compressor",
+        "//clockwork/logging/onboard:types",
+        "//clockwork/serialization/cpp:tachyon_lite_compressor",
+        "//clockwork/serialization/cpp/tests/support:compression_test_schema_clk_cc",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/container:compare",
+        "//jewels/container/tap:optional",
+        "//jewels/container/tap:soa",
+        "//jewels/container/tap:tensor",
+        "//jewels/container/tap:var_array",
+        "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/std:span",
+        "//jewels/time:sync_time",
+        "//jewels/uuid",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
     name = "tachyon_model_test",
     srcs = ["tachyon_model_test.cc"],
     deps = [
         "//clockwork:repr_iface",
         "//clockwork/serialization/cpp:clk_type",
+        "//clockwork/serialization/cpp:metadata_versions",
         "//clockwork/serialization/cpp:tachyon_model",
         "//clockwork/serialization/cpp/tests/support:test_schema_v2_clk_cc",
         "//clockwork/serialization/cpp/tests/support:validate_upgradability",
         "//clockwork/serialization/metadata:tachyon_model_cc_library",
         "//clockwork/serialization/py/tests/support:broken_schema_v1_clk_cc",
         "//clockwork/serialization/py/tests/support:broken_schema_v2_clk_cc",
+        "//jewels/container/tap:bitset",
+        "//jewels/memory:memory_resource",
         "@catch2//:catch2_main",
     ],
 )
@@ -62,7 +89,9 @@ cc_test_with_embedded_py(
         "//clockwork/serialization/cpp/tests/support:validate_upgradability",
         "//clockwork/serialization/py/tests/support:simple_schema_v1_clk_cc",
         "//clockwork/serialization/py/tests/support:simple_schema_v2_clk_cc",
+        "//jewels/container/tap:tensor",
         "//jewels/container/tap:var_string",
+        "//jewels/std:span",
         "@catch2//:catch2_main",
     ],
 )

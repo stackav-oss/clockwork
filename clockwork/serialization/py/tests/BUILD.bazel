@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -81,13 +81,16 @@ py_test(
     main = ":__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:clkbuiltins",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:tensor_builtins",
         "//clockwork/serialization/metadata:tachyon",
+        "//clockwork/serialization/metadata:tachyon_model",
         "//clockwork/serialization/py:tachyon_dyn",
         "//clockwork/serialization/py:tachyon_dyn_from_metadata",
         "@clockwork_pip//pytest",
@@ -136,6 +139,7 @@ py_test(
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:typesys",
         "//clockwork/dsl/serialization:tachyon_reg",

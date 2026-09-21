@@ -192,15 +192,15 @@ cpp_target nanobindable_messages
     namespace foo;
   }
 
-  constant some_int_constant;
-  constant some_uint_constant;
-  constant some_true_constant;
-  constant some_false_constant;
-  constant some_float32_constant;
-  constant some_float64_constant;
-  constant some_str_constant;
-  constant au_meters32_constant;
-  constant au_meters64_constant;
+  constantsome_int_constant;
+  constantsome_uint_constant;
+  constantsome_true_constant;
+  constantsome_false_constant;
+  constantsome_float32_constant;
+  constantsome_float64_constant;
+  constantsome_str_constant;
+  constantau_meters32_constant;
+  constantau_meters64_constant;
 
   enum FooEnum;
 
@@ -232,26 +232,25 @@ cpp_target nanobindable_messages
   interface Tap<Tachyon<NumericalParam<some_uint_constant>>>;
 }
 
-
 nanobind_target nanobindable_messages_clk_nb
 {
-  constant some_int_constant;
-  constant some_uint_constant;
-  constant some_true_constant;
-  constant some_false_constant;
-  constant some_float32_constant;
-  constant some_float64_constant;
-  constant some_str_constant;
-  constant integral_strong_type_constant;
+  constantsome_int_constant;
+  constantsome_uint_constant;
+  constantsome_true_constant;
+  constantsome_false_constant;
+  constantsome_float32_constant;
+  constantsome_float64_constant;
+  constantsome_str_constant;
+  constantintegral_strong_type_constant;
 
-  constant untyped_int_constant;
-  constant untyped_float_constant;
-  constant untyped_true_constant;
-  constant untyped_false_constant;
-  constant untyped_str_constant;
+  constantuntyped_int_constant;
+  constantuntyped_float_constant;
+  constantuntyped_true_constant;
+  constantuntyped_false_constant;
+  constantuntyped_str_constant;
 
-  constant au_meters32_constant;
-  constant au_meters64_constant;
+  constantau_meters32_constant;
+  constantau_meters64_constant;
 
   binding FooEnum;
   binding Tappy<SubMessage>;

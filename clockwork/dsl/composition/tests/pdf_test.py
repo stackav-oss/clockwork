@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from clockwork.dsl.composition import pdf
@@ -52,3 +52,20 @@ def test_process_description() -> None:
     pd1.serialize_tachyon(memoryview(buffer))
     pd2 = pdf.ProcessDescription.deserialize_tachyon(memoryview(bytes(buffer)))
     assert pd1 == pd2
+
+
+@pytest.mark.parametrize("snapshot_representation_id", [None, uuid4()])
+def test_state_instance_description_roundtrip(snapshot_representation_id: UUID | None) -> None:
+    """Round-trip the optional external-state snapshot representation."""
+    state = pdf.StateInstanceDescription(
+        representation_id=uuid4(),
+        state_instance_id=uuid4(),
+        instance_path_name="state",
+        snapshot_representation_id=snapshot_representation_id,
+        maybe_buffer_layout=None,
+        maybe_memory_resource=uuid4(),
+        init_data_source=pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL,
+    )
+    buffer = bytearray(pdf.StateInstanceDescription.get_tachyon_constraint().size)
+    state.serialize_tachyon(memoryview(buffer))
+    assert pdf.StateInstanceDescription.deserialize_tachyon(memoryview(bytes(buffer))) == state

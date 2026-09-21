@@ -6,8 +6,8 @@
 
 #include <cstddef>
 #include <limits>
-#include <memory>
 #include <sstream>
+#include <string>
 
 namespace jewels::nanobind::detail
 {

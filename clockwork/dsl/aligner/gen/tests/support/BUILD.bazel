@@ -1,0 +1,257 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//jewels/simplelaunch:rules.bzl", "merge_simplelaunch_config")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(
+    default_testonly = True,
+    default_visibility = ["//clockwork/dsl/aligner/gen/tests:__subpackages__"],
+)
+
+clk(
+    name = "aligner_test_msgs_clk",
+    srcs = ["aligner_test_msgs.clk"],
+    outs = [
+        "aligner_test_msgs_clk_cc.cc",
+        "aligner_test_msgs_clk_cc.hh",
+        "aligner_test_msgs_clk_cc.inl",
+        "aligner_test_msgs_clk_cc_types.cc",
+        "aligner_test_msgs_clk_cc_types.hh",
+        "aligner_test_msgs_clk_cc_types.inl",
+    ],
+    generate = ["cpp"],
+)
+
+clk(
+    name = "alignment_consumer_clk",
+    srcs = ["alignment_consumer.clk"],
+    outs = [
+        "alignment_consumer_clk_cc.cc",
+        "alignment_consumer_clk_cc.hh",
+        "alignment_consumer_clk_cc.inl",
+        "alignment_consumer_clk_cc_cog.cc",
+        "alignment_consumer_clk_cc_cog.hh",
+        "alignment_consumer_clk_cc_cog.inl",
+        "alignment_consumer_clk_cc_dial.cc",
+        "alignment_consumer_clk_cc_dial.hh",
+        "alignment_consumer_clk_cc_dial.inl",
+        "alignment_consumer_clk_cc_types.cc",
+        "alignment_consumer_clk_cc_types.hh",
+        "alignment_consumer_clk_cc_types.inl",
+    ],
+    cpp_deps = [":test_aligner_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_cog",
+    ],
+    deps = [":test_aligner_clk"],
+)
+
+cc_library(
+    name = "alignment_consumer_clk_cc_impl",
+    srcs = ["alignment_consumer_clk_cc_impl.cc"],
+    deps = [":alignment_consumer_clk_cc_dial"],
+)
+
+clk(
+    name = "exact_batch_aligner_clk",
+    srcs = ["exact_batch_aligner.clk"],
+    outs = [
+        "exact_batch_aligner_clk_cc.cc",
+        "exact_batch_aligner_clk_cc.hh",
+        "exact_batch_aligner_clk_cc.inl",
+        "exact_batch_aligner_clk_cc_cog.cc",
+        "exact_batch_aligner_clk_cc_cog.hh",
+        "exact_batch_aligner_clk_cc_cog.inl",
+        "exact_batch_aligner_clk_cc_dial.cc",
+        "exact_batch_aligner_clk_cc_dial.hh",
+        "exact_batch_aligner_clk_cc_dial.inl",
+        "exact_batch_aligner_clk_cc_impl.cc",
+        "exact_batch_aligner_clk_cc_impl.hh",
+        "exact_batch_aligner_clk_cc_impl.inl",
+        "exact_batch_aligner_clk_cc_test.cc",
+        "exact_batch_aligner_clk_cc_test.hh",
+        "exact_batch_aligner_clk_cc_test.inl",
+        "exact_batch_aligner_clk_cc_types.cc",
+        "exact_batch_aligner_clk_cc_types.hh",
+        "exact_batch_aligner_clk_cc_types.inl",
+    ],
+    cpp_deps = [":aligner_test_msgs_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_aligner",
+        "cpp_test_cog",
+    ],
+    deps = [":aligner_test_msgs_clk"],
+)
+
+clk(
+    name = "optional_reference_nearest_aligner_clk",
+    srcs = ["optional_reference_nearest_aligner.clk"],
+    outs = [
+        "optional_reference_nearest_aligner_clk_cc.cc",
+        "optional_reference_nearest_aligner_clk_cc.hh",
+        "optional_reference_nearest_aligner_clk_cc.inl",
+        "optional_reference_nearest_aligner_clk_cc_cog.cc",
+        "optional_reference_nearest_aligner_clk_cc_cog.hh",
+        "optional_reference_nearest_aligner_clk_cc_cog.inl",
+        "optional_reference_nearest_aligner_clk_cc_dial.cc",
+        "optional_reference_nearest_aligner_clk_cc_dial.hh",
+        "optional_reference_nearest_aligner_clk_cc_dial.inl",
+        "optional_reference_nearest_aligner_clk_cc_impl.cc",
+        "optional_reference_nearest_aligner_clk_cc_impl.hh",
+        "optional_reference_nearest_aligner_clk_cc_impl.inl",
+        "optional_reference_nearest_aligner_clk_cc_test.cc",
+        "optional_reference_nearest_aligner_clk_cc_test.hh",
+        "optional_reference_nearest_aligner_clk_cc_test.inl",
+        "optional_reference_nearest_aligner_clk_cc_types.cc",
+        "optional_reference_nearest_aligner_clk_cc_types.hh",
+        "optional_reference_nearest_aligner_clk_cc_types.inl",
+    ],
+    cpp_deps = [":aligner_test_msgs_clk_cc"],
+    generate = [
+        "cpp",
+        "cpp_aligner",
+        "cpp_test_cog",
+    ],
+    deps = [":aligner_test_msgs_clk"],
+)
+
+clk(
+    name = "test_aligner_clk",
+    srcs = ["test_aligner.clk"],
+    outs = [
+        "test_aligner_clk_cc.cc",
+        "test_aligner_clk_cc.hh",
+        "test_aligner_clk_cc.inl",
+        "test_aligner_clk_cc_cog.cc",
+        "test_aligner_clk_cc_cog.hh",
+        "test_aligner_clk_cc_cog.inl",
+        "test_aligner_clk_cc_dial.cc",
+        "test_aligner_clk_cc_dial.hh",
+        "test_aligner_clk_cc_dial.inl",
+        "test_aligner_clk_cc_impl.cc",
+        "test_aligner_clk_cc_impl.hh",
+        "test_aligner_clk_cc_impl.inl",
+        "test_aligner_clk_cc_test.cc",
+        "test_aligner_clk_cc_test.hh",
+        "test_aligner_clk_cc_test.inl",
+        "test_aligner_clk_cc_types.cc",
+        "test_aligner_clk_cc_types.hh",
+        "test_aligner_clk_cc_types.inl",
+    ],
+    cpp_deps = [
+        ":aligner_test_msgs_clk_cc",
+        "//clockwork/aligner:timer_control",  # keep
+        "//clockwork/cog:dynamic_timer_handler",  # keep
+        "//std/aligners:state_clk_cc",
+    ],
+    generate = [
+        "cpp",
+        "cpp_aligner",
+        "cpp_test_cog",
+    ],
+    deps = [
+        ":aligner_test_msgs_clk",
+        "//std/aligners:state_clk",
+    ],
+)
+
+clk(
+    name = "test_channel_policies_clk",
+    srcs = ["test_channel_policies.clk"],
+    generate = ["none"],
+    deps = [
+        ":test_system_boxes_clk",
+        "//clockwork/logging:channel_policy_clk",
+    ],
+)
+
+clk(
+    name = "test_system_boxes_clk",
+    srcs = ["test_system_boxes.clk"],
+    outs = [
+        "test_system_boxes_clk_exe.cc",
+        "test_system_boxes_clk_exe.hh",
+        "test_system_boxes_clk_exe.inl",
+    ],
+    cpp_deps = [
+        ":aligner_test_msgs_clk_cc",
+        ":test_aligner_clk_cc",
+        "//std/aligners:state_clk_cc",
+    ],
+    cpp_exe_deps = ["//clockwork/scaffolding:online_main"],
+    generate = ["cpp_exe"],
+    deps = [
+        ":aligner_test_msgs_clk",
+        ":test_aligner_clk",
+        "//std/aligners:state_clk",
+    ],
+)
+
+cc_library(
+    name = "test_system_boxes_clk_exe_lib",
+    srcs = [
+        "test_system_boxes_clk_exe.cc",
+        "test_system_boxes_clk_exe.inl",
+    ],
+    hdrs = ["test_system_boxes_clk_exe.hh"],
+    deps = [
+        ":aligner_test_msgs_clk_cc",
+        ":test_aligner_clk_cc",
+        "//clockwork:repr_iface",
+        "//clockwork/scaffolding:abstract_casing",
+        "//clockwork/scaffolding:casing",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+    ],
+)
+
+clk(
+    name = "test_system_clk",
+    srcs = ["test_system.clk"],
+    outs = [
+        "clockwork.clockwork.dsl.aligner.gen.tests.support.test_system.aligner_test_system.proc.tachyon",
+        "test_system.aligner_test_system.TestCpu_channel_allocations.csv",
+        "test_system.aligner_test_system.TestCpu_channel_publisher_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_channel_spy_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_event_logger_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_journal_topology.tachyon",
+        "test_system.aligner_test_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_signal_metadata_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_simplelaunch_config.textproto",
+        "test_system.aligner_test_system.TestCpu_system_metadata.tachyon",
+        "test_system.aligner_test_system.TestCpu_telemetry_logger_config.tachyon",
+        "test_system.aligner_test_system.diagnostics_database_config.tachyon",
+        "test_system.aligner_test_system.logged_channel_metadata.pbbin",
+    ],
+    deps = [
+        ":test_channel_policies_clk",
+        ":test_system_boxes_clk",
+    ],
+)
+
+merge_simplelaunch_config(
+    name = "testcpu.textproto",
+    srcs = [
+        "test_system.aligner_test_system.TestCpu_simplelaunch_config.textproto",
+        "@clockwork//clockwork/launch:clockwork_prelaunch.textproto",
+    ],
+    data = [
+        "clockwork.clockwork.dsl.aligner.gen.tests.support.test_system.aligner_test_system.proc.tachyon",
+        "test_system.aligner_test_system.TestCpu_channel_allocations.csv",
+        "test_system.aligner_test_system.TestCpu_channel_publisher_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_channel_spy_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_event_logger_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_journal_topology.tachyon",
+        "test_system.aligner_test_system.TestCpu_metrics_channel_metadata_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_signal_metadata_config.tachyon",
+        "test_system.aligner_test_system.TestCpu_system_metadata.tachyon",
+        "test_system.aligner_test_system.TestCpu_telemetry_logger_config.tachyon",
+        "test_system.aligner_test_system.diagnostics_database_config.tachyon",
+        ":test_system_boxes_clk_exe",
+        "@clockwork//clockwork/pinion:tcp_bridge_main",
+    ],
+)

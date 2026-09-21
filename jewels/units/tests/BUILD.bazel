@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_test")
@@ -10,7 +10,6 @@ cc_test(
     srcs = ["degrees_test.cc"],
     deps = [
         "//jewels/units:degrees",
-        "//jewels/units:magnitude",
         "//jewels/units:quantity",
         "@catch2//:catch2_main",
     ],
@@ -47,6 +46,17 @@ cc_test(
         "//jewels/units:meters",
         "//jewels/units:quantity",
         "//jewels/units:seconds",
+        "@au",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "math_test",
+    srcs = ["math_test.cc"],
+    deps = [
+        "//jewels/units:math",
+        "//jewels/units:meters",
         "@au",
         "@catch2//:catch2_main",
     ],

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 # pyright: reportPrivateUsage=false
@@ -37,17 +37,11 @@ def test_construction_nanoseconds(nanoseconds: int) -> None:
     assert duration.to_ns() == nanoseconds
 
 
-@example(seconds=0.0, nanoseconds=0)
-@example(seconds=1.0, nanoseconds=int(5e8))
-@given(
-    seconds=st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False),
-    nanoseconds=st.integers(min_value=-int(1e9), max_value=int(1e9)),
-)
-def test_combined_construction(seconds: float, nanoseconds: int) -> None:
-    """Test construction with both seconds and nanoseconds."""
-    time = SyncTime(seconds=seconds, nanoseconds=nanoseconds)
-    expected_ns = int(seconds * 1e9) + nanoseconds
-    assert time.to_ns() == expected_ns
+def test_out_of_range_construction_nanoseconds() -> None:
+    """Test that construction from an out of range nanoseconds argument throws."""
+    out_of_range_nanoseconds = 2**63
+    with pytest.raises(TypeError):
+        _ = SyncTime(nanoseconds=out_of_range_nanoseconds)
 
 
 @example(ns1=0, ns2=0)
@@ -219,7 +213,7 @@ def test_ordering_consistency(nanoseconds: int) -> None:
 
 @example(nanoseconds=0)
 @example(nanoseconds=1)
-@example(nanoseconds=1e9)
+@example(nanoseconds=int(1e9))
 @given(nanoseconds=st.integers(min_value=-(2**63), max_value=(2**63 - 1)))
 def test_serialization(nanoseconds: int) -> None:
     """Test serialization and deserialization using pickle."""

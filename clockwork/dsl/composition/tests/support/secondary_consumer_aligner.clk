@@ -1,0 +1,20 @@
+#![generate(cpp, cpp_aligner)]
+#![cpp(namespace=clockwork::secondary_consumer_test)]
+
+use std::aligners::state;
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner;
+
+// An aligner with distinct input names for multiple-group consumer tests
+aligner SecondaryAligner
+{
+  inputs
+  {
+    secondary: Tappy<aligned_consumer_aligner::TestMsg>
+    {
+      max_msgs: 10;
+      arbitrary_selection: true;
+    }
+  }
+
+  assume(is_strictly_increasing(secondary.observation_time));
+}

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/main_impl.hh"
@@ -9,6 +9,7 @@
 #include "clockwork/scaffolding/abstract_casing.hh"
 #include "clockwork/scaffolding/end_process_exception.hh"
 #include "clockwork/scaffolding/scaffolding.hh"
+#include "clockwork/scaffolding/validate_casing.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -16,6 +17,7 @@
 
 #include <tclap/ArgException.h>
 #include <tclap/CmdLine.h>
+#include <tclap/SwitchArg.h>
 #include <tclap/UnlabeledValueArg.h>
 
 #include <cstdlib>
@@ -33,6 +35,14 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
   TCLAP::CmdLine cmd("Run a clockwork process", ' ', "1.0", true);
   const TCLAP::UnlabeledValueArg<std::string> arg_desc_file(
     "config", "the process description file path", true, "", "string", cmd);
+  TCLAP::SwitchArg arg_validate_casing(
+    "",
+    "validate-casing",
+    "Validate that all class UUIDs in the process description are linked into "
+    "this executable, then exit.  Performs no initialization, no I/O beyond "
+    "reading the PDF, and no channel/pinion/state/config setup.",
+    cmd,
+    false);
   const PinionArgs pinion_args{memres_channels, cmd};
   const ExecutionArgs execution_args{cmd};
   try
@@ -58,7 +68,12 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
     return EXIT_FAILURE;
   }
 
-  auto channel_factory = pinion_args.make_factory();
+  if (arg_validate_casing.getValue())
+  {
+    return validate_casing(**desc, *casing);
+  }
+
+  auto channel_factory = pinion_args.make_factory(**desc);
   if (!channel_factory)
   {
     jewels::log_cerr_error("failed to create channel factory");
@@ -75,9 +90,9 @@ int main(int argc, const char** argv, jewels::cli::ExitCondition& exit)
   {
     if (execution_params->execution_mode == ExecutionMode::deterministic)
     {
-      return run_deterministic(**desc, *casing, *channel_factory, exit, *execution_params);
+      return run_deterministic(**desc, *casing, **channel_factory, exit, *execution_params);
     }
-    return run(**desc, *casing, *channel_factory, exit, *execution_params);
+    return run(**desc, *casing, **channel_factory, exit, *execution_params);
   }
   catch (const EndProcessException& e)
   {

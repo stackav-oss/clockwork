@@ -8,12 +8,16 @@ schema PcieTransportOptions
     // It would be odd to apply this policy to a channel and set this to false.
     // So, to simplify things for the intended use case this is True by default.
     #0 enabled: Bool = true;
+    // If set to false, the target channel may also be carried across other
+    // bridges. Otherwise the pressence of a cross-node connection that doesn't
+    // have PCIe support will be a system compliation error.
+    #1 strict: Bool = true;
   }
 }
 
 // Policy for indicating that channels can use PCI-Express transport.
 def policy PcieTransport
 {
-    binds_to: Channel;
-    schema: PcieTransportOptions;
+  binds_to: Channel;
+  schema: PcieTransportOptions;
 }

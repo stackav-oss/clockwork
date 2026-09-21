@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/common/abstract_cog_queue.hh"
@@ -8,6 +8,7 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/expected_stringmakers.hh" // IWYU pragma: keep
 #include "jewels/time/sync_time.hh"
 
 #include <catch2/catch_test_macros.hpp>
@@ -29,27 +30,6 @@ struct StringMaker<::clockwork::CogEnvelope>
     oss << "CogEnvelope{.ready_time=" << value.ready_time.time_since_epoch().count() << ", .cog=" << value.cog.get()
         << "}";
     return oss.str();
-  }
-};
-template <>
-struct StringMaker<::jewels::MonoError>
-{
-  static std::string convert(const ::jewels::MonoError& /*value*/)
-  {
-    return "MonoError";
-  }
-};
-
-template <typename Result, typename Error>
-struct StringMaker<::jewels::expected<Result, Error>>
-{
-  static std::string convert(const ::jewels::expected<Result, Error>& value)
-  {
-    if (value.has_value())
-    {
-      return StringMaker<Result>::convert(value.value());
-    }
-    return StringMaker<Error>::convert(value.error());
   }
 };
 } // namespace Catch
@@ -81,33 +61,88 @@ TEST_CASE("execute", "[DeterministicCogQueue]")
   {
     queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
     queue.push({.ready_time = start_time + 20ms, .cog = cog2_ptr});
-    queue.push({.ready_time = start_time + 30ms, .cog = cog2_ptr});
-    CHECK(queue.stats().size == 3);
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 10ms, cog1_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 20ms, cog2_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 30ms, cog2_ptr});
+    CHECK(queue.stats().size == 2);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 10ms, .cog = cog1_ptr});
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 20ms, .cog = cog2_ptr});
   }
 
   SECTION("rev order")
   {
     queue.push({.ready_time = start_time + 30ms, .cog = cog1_ptr});
     queue.push({.ready_time = start_time + 20ms, .cog = cog2_ptr});
-    queue.push({.ready_time = start_time + 10ms, .cog = cog2_ptr});
-    CHECK(queue.stats().size == 3);
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 10ms, cog2_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 20ms, cog2_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 30ms, cog1_ptr});
+    CHECK(queue.stats().size == 2);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 20ms, .cog = cog2_ptr});
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 30ms, .cog = cog1_ptr});
   }
 
   SECTION("stable order")
   {
     queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
     queue.push({.ready_time = start_time + 10ms, .cog = cog2_ptr});
-    queue.push({.ready_time = start_time + 10ms, .cog = cog2_ptr});
-    CHECK(queue.stats().size == 3);
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 10ms, cog2_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 10ms, cog2_ptr});
-    CHECK(queue.pop(0ns) == CogEnvelope{start_time + 10ms, cog1_ptr});
+    CHECK(queue.stats().size == 2);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 10ms, .cog = cog2_ptr});
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 10ms, .cog = cog1_ptr});
+  }
+
+  SECTION("duplicate notifications preserve an earlier existing ready time")
+  {
+    queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
+    queue.push({.ready_time = start_time + 20ms, .cog = cog1_ptr});
+
+    CHECK(queue.stats().size == 1);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 10ms, .cog = cog1_ptr});
+  }
+
+  SECTION("duplicate notifications move a cog to an earlier ready time")
+  {
+    queue.push({.ready_time = start_time + 20ms, .cog = cog1_ptr});
+    queue.push({.ready_time = start_time + 30ms, .cog = cog1_ptr});
+    queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
+
+    CHECK(queue.stats().size == 1);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 10ms, .cog = cog1_ptr});
+  }
+
+  SECTION("throttle deadlines preserve nodes while later Cogs progress")
+  {
+    queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
+    queue.push({.ready_time = start_time + 20ms, .cog = cog2_ptr});
+    queue.set_throttled_until(cog1_ptr, start_time + 30ms);
+
+    const auto next = queue.peek();
+    REQUIRE(next);
+    CHECK(next->cog == cog2_ptr);
+    CHECK(next->ready_time == start_time + 20ms);
+    CHECK(queue.stats().size == 2);
+
+    queue.remove_next();
+    const auto throttled = queue.peek();
+    REQUIRE(throttled);
+    CHECK(throttled->cog == cog1_ptr);
+    CHECK(throttled->ready_time == start_time + 30ms);
+    CHECK(queue.stats().size == 1);
+    queue.remove_next();
+  }
+
+  SECTION("duplicate notifications do not bypass a throttle deadline")
+  {
+    queue.push({.ready_time = start_time + 10ms, .cog = cog1_ptr});
+    queue.set_throttled_until(cog1_ptr, start_time + 30ms);
+    queue.push({.ready_time = start_time + 15ms, .cog = cog1_ptr});
+    queue.push({.ready_time = start_time + 20ms, .cog = cog2_ptr});
+
+    const auto next = queue.peek();
+    REQUIRE(next);
+    CHECK(next->cog == cog2_ptr);
+    CHECK(next->ready_time == start_time + 20ms);
+    CHECK(queue.stats().size == 2);
+    CHECK(queue.pop(0ns) == CogEnvelope{.ready_time = start_time + 20ms, .cog = cog2_ptr});
+
+    const auto throttled = queue.peek();
+    REQUIRE(throttled);
+    CHECK(throttled->cog == cog1_ptr);
+    CHECK(throttled->ready_time == start_time + 30ms);
+    queue.remove_next();
   }
 
   CHECK(queue.pop(0ns) == jewels::unexpected(jewels::MonoError{}));

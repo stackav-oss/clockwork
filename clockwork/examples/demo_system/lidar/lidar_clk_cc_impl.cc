@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/msg_input.hh"
@@ -7,12 +7,15 @@
 #include "clockwork/examples/demo_system/lidar/lidar_state_clk_cc.hh"
 #include "clockwork/examples/demo_system/localization/pose_filter.hh"
 #include "clockwork/examples/demo_system/localization/pose_message_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/math/constants.hh"
+#include "jewels/memory/aligned_storage.hh"
 #include "jewels/memory/memory_resource.hh"
+#include "jewels/uuid/uuid.hh"
 
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <span>

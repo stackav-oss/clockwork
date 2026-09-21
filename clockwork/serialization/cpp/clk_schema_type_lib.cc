@@ -1,13 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/serialization/cpp/clk_schema_type_lib.hh"
 
+#include "clockwork/serialization/cpp/metadata_versions.hh"
+#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <fmt/format.h>
 #include <google/protobuf/repeated_ptr_field.h>
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <ranges>
@@ -15,6 +18,11 @@
 
 namespace clockwork::serialization
 {
+
+using jewels::failure;
+using jewels::InOut;
+using jewels::ok;
+using jewels::success;
 
 ClkFieldUpgrader::ClkFieldUpgrader(
   std::string_view name,
@@ -53,6 +61,18 @@ ClkFieldInitializer::ClkFieldInitializer(
 void ClkFieldInitializer::initialize(std::span<std::byte> dest_span) const
 {
   field_initializer_->initialize(dest_span.subspan(field_offset_, field_size_));
+}
+
+ClkFieldLiteCompressor::ClkFieldLiteCompressor(
+  size_t offset, size_t size, jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> compressor)
+  : offset_(offset), size_(size), compressor_(std::move(compressor))
+{
+}
+
+jewels::BinaryOutcome ClkFieldLiteCompressor::compress(
+  std::span<const std::byte> schema_data, size_t schema_offset, InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const
+{
+  return compressor_->compress(schema_data.subspan(offset_, size_), schema_offset + offset_, InOut{*zero_chunks});
 }
 
 ClkField::ClkField(
@@ -115,16 +135,16 @@ ClkField::ClkField(
 
 void ClkField::check_for_unexpected_schema_changes(ClkField& src_field, bool allow_changes, std::string_view name)
 {
+  const auto field_name = fmt::format("{}.{}", name, name_);
   if (!allow_changes)
   {
-    const auto field_name = fmt::format("{}.{}", name, name_);
     if (src_field.name_ != name_)
     {
       throw ClkTypeUpgradeError(
         fmt::format("Field {} renamed to {} in {} without changing field number", src_field.name_, name_, name));
     }
-    get_field_type().check_for_unexpected_schema_changes(src_field.get_field_type(), allow_changes, field_name);
   }
+  get_field_type().check_for_unexpected_schema_changes(src_field.get_field_type(), allow_changes, field_name);
 }
 
 [[nodiscard]] ClkFieldUpgrader ClkField::make_upgrader(ClkField& src_field)
@@ -136,6 +156,16 @@ void ClkField::check_for_unexpected_schema_changes(ClkField& src_field, bool all
     get_offset(),
     get_field_type().get_size(),
     get_field_type().make_upgrader(src_field.get_field_type())};
+}
+
+[[nodiscard]] ClkFieldLiteCompressor ClkField::make_lite_compressor()
+{
+  return {get_offset(), get_field_type().get_size(), get_field_type().make_lite_compressor()};
+}
+
+[[nodiscard]] bool ClkField::is_compressible()
+{
+  return get_field_type().is_compressible();
 }
 
 ClkInitialValueField::ClkInitialValueField(
@@ -186,7 +216,7 @@ namespace
 // Recursion needed because types are defined recursively.
 // Functional complexity is due to the switch statement that needs to handle all of the field types
 // NOLINTNEXTLINE(misc-no-recursion, readability-function-cognitive-complexity) See above
-std::unique_ptr<ClkField> clk_field_from_proto(
+std::shared_ptr<ClkField> clk_field_from_proto(
   jewels::memory::ObjectPtr<ClkTypeFactory> factory,
   std::string_view schema_fqn,
   const metadata::SchemaField& field_proto)
@@ -207,7 +237,8 @@ std::unique_ptr<ClkField> clk_field_from_proto(
   case ClkTypeId::float32:
   case ClkTypeId::float64:
   case ClkTypeId::clk_enum:
-    return std::make_unique<ClkInitialValueField>(
+    return jewels::memory::make_pmr_shared<ClkInitialValueField>(
+      factory->get_memory_resource(),
       static_cast<size_t>(field_proto.offset()),
       field_proto.num(),
       field_proto.name(),
@@ -228,7 +259,10 @@ std::unique_ptr<ClkField> clk_field_from_proto(
   case ClkTypeId::fixed_soa:
   case ClkTypeId::var_soa:
   case ClkTypeId::schema:
-    return std::make_unique<ClkField>(
+  case ClkTypeId::tensor:
+  case ClkTypeId::bitset:
+    return jewels::memory::make_pmr_shared<ClkField>(
+      factory->get_memory_resource(),
       static_cast<size_t>(field_proto.offset()),
       field_proto.num(),
       field_proto.name(),
@@ -247,7 +281,7 @@ public:
   /// Constructor
   /// @param[in] initializers Schema field initializers
   /// @param[in] upgraders Schema field upgraders
-  ClkSchemaUpgrader(std::vector<ClkFieldInitializer> initializers, std::vector<ClkFieldUpgrader> upgraders);
+  ClkSchemaUpgrader(std::pmr::vector<ClkFieldInitializer> initializers, std::pmr::vector<ClkFieldUpgrader> upgraders);
 
   ~ClkSchemaUpgrader() noexcept override = default;
 
@@ -261,14 +295,14 @@ public:
 
 private:
   /// Field initializers
-  std::vector<ClkFieldInitializer> initializers_;
+  std::pmr::vector<ClkFieldInitializer> initializers_;
 
   /// Field upgraders
-  std::vector<ClkFieldUpgrader> upgraders_;
+  std::pmr::vector<ClkFieldUpgrader> upgraders_;
 };
 
 ClkSchemaUpgrader::ClkSchemaUpgrader(
-  std::vector<ClkFieldInitializer> initializers, std::vector<ClkFieldUpgrader> upgraders)
+  std::pmr::vector<ClkFieldInitializer> initializers, std::pmr::vector<ClkFieldUpgrader> upgraders)
   : initializers_(std::move(initializers)), upgraders_(std::move(upgraders))
 {
 }
@@ -285,39 +319,9 @@ void ClkSchemaUpgrader::upgrade(std::span<const std::byte> src_span, std::span<s
   }
 }
 
-/// Clockwork value enum upgrader
-/// @tparam SrcValueType Source enum value type
-/// @tparam DestValueType Destination enum value type
-template <typename SrcValueType, typename DestValueType>
-class ClkValueEnumUpgrader : public ClkTypeUpgrader
-{
-public:
-  /// Constructor
-  /// @param[in] src_fqn Source enum FQN
-  /// @param[in] value_map Map from source enum value to destination enum value
-  ClkValueEnumUpgrader(std::string_view src_fqn, std::unordered_map<SrcValueType, DestValueType> value_map) noexcept;
-
-  ~ClkValueEnumUpgrader() noexcept override = default;
-
-  ClkValueEnumUpgrader(const ClkValueEnumUpgrader&) = delete;
-  ClkValueEnumUpgrader& operator=(const ClkValueEnumUpgrader&) = delete;
-  ClkValueEnumUpgrader(ClkValueEnumUpgrader&&) = delete;
-  ClkValueEnumUpgrader& operator=(ClkValueEnumUpgrader&&) = delete;
-
-  /// @see ClkTypeUpgrader::upgrade
-  void upgrade(std::span<const std::byte> src_span, std::span<std::byte> dest_span) const override;
-
-private:
-  /// Source type FQN
-  std::string src_fqn_;
-
-  /// Map from source enum value to destination enum value
-  std::unordered_map<SrcValueType, DestValueType> value_map_;
-};
-
 } // namespace
 
-ClkSchemaInitializer::ClkSchemaInitializer(std::vector<ClkFieldInitializer> initializers)
+ClkSchemaInitializer::ClkSchemaInitializer(std::pmr::vector<ClkFieldInitializer> initializers)
   : initializers_(std::move(initializers))
 {
 }
@@ -330,20 +334,92 @@ void ClkSchemaInitializer::initialize(std::span<std::byte> dest_span) const
   }
 }
 
+// NOLINTNEXTLINE(readability-function-size) Parameters are only used for private constructor.
 ClkSchemaType::ClkSchemaType(
+  jewels::memory::MemoryResource memory_resource,
   std::string_view fqn,
   ClkTypeId type_id,
   size_t type_index,
+  int32_t metadata_version,
   size_t size,
   size_t alignment,
   int32_t version,
   const SchemaUuid& uuid)
-  : ClkType(fqn, type_id, type_index), size_(size), alignment_(alignment), version_(version), uuid_(uuid)
+  : ClkType(memory_resource, fqn, type_id, type_index, metadata_version),
+    size_(size),
+    alignment_(alignment),
+    version_(version),
+    uuid_(uuid),
+    arguments_(memory_resource),
+    fields_(memory_resource),
+    removed_(memory_resource),
+    became_(memory_resource),
+    use_memcpy_cache_(memory_resource),
+    unexpected_schema_changes_cache_(memory_resource)
 {
 }
 
+/// Lite compressor for schema types
+class ClkSchemaLiteCompressor : public ClkTypeLiteCompressor
+{
+public:
+  /// Constructor
+  /// @param[in] size Schema size
+  /// @param[in] compressors Schema field compressors
+  ClkSchemaLiteCompressor(size_t size, std::pmr::vector<ClkFieldLiteCompressor> compressors);
+
+  ~ClkSchemaLiteCompressor() noexcept override = default;
+
+  ClkSchemaLiteCompressor(const ClkSchemaLiteCompressor&) = delete;
+  ClkSchemaLiteCompressor& operator=(const ClkSchemaLiteCompressor&) = delete;
+  ClkSchemaLiteCompressor(ClkSchemaLiteCompressor&&) = delete;
+  ClkSchemaLiteCompressor& operator=(ClkSchemaLiteCompressor&&) = delete;
+
+  /// @see ClkTypeLiteCompressor::compress
+  jewels::BinaryOutcome compress(
+    std::span<const std::byte> data_span,
+    size_t offset,
+    InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const override;
+
+private:
+  /// Schema size in bytes
+  size_t size_;
+
+  /// Field compressors
+  std::pmr::vector<ClkFieldLiteCompressor> compressors_;
+};
+
+ClkSchemaLiteCompressor::ClkSchemaLiteCompressor(size_t size, std::pmr::vector<ClkFieldLiteCompressor> compressors)
+  : size_(size), compressors_(std::move(compressors))
+{
+}
+
+jewels::BinaryOutcome ClkSchemaLiteCompressor::compress(
+  std::span<const std::byte> data_span, size_t offset, InOut<std::pmr::vector<ClkZeroChunk>> zero_chunks) const
+{
+  if (data_span.size() != size_)
+  {
+    return failure;
+  }
+  if (compressors_.empty())
+  {
+    ClkTypeLiteCompressor::compress_opaque_data(data_span, offset, InOut{*zero_chunks});
+  }
+  else
+  {
+    for (const auto& compressor : compressors_)
+    {
+      if (!ok(compressor.compress(data_span, offset, InOut{*zero_chunks})))
+      {
+        return failure;
+      }
+    }
+  }
+  return success;
+}
+
 // NOLINTNEXTLINE(misc-no-recursion) Types are defined recursively
-[[nodiscard]] std::unique_ptr<ClkSchemaType> ClkSchemaType::from_proto(
+[[nodiscard]] std::shared_ptr<ClkSchemaType> ClkSchemaType::from_proto(
   jewels::memory::ObjectPtr<ClkTypeFactory> factory,
   const metadata::SchemaType& schema_proto,
   size_t type_index,
@@ -357,10 +433,13 @@ ClkSchemaType::ClkSchemaType(
   }
   SchemaUuid uuid{};
   std::memcpy(uuid.uuid.data(), schema_proto.schema_uuid().data(), sizeof(SchemaUuid));
-  auto schema = std::make_unique<ClkSchemaType>(
+  auto schema = jewels::memory::make_pmr_shared<ClkSchemaType>(
+    factory->get_memory_resource(),
+    factory->get_memory_resource(),
     maybe_strong_type_fqn.value_or(schema_proto.fqn()),
     ClkTypeId::schema,
     type_index,
+    factory->get_metadata_version(),
     static_cast<size_t>(schema_proto.size()),
     static_cast<size_t>(schema_proto.alignment()),
     schema_proto.version(),
@@ -396,7 +475,7 @@ ClkSchemaType::ClkSchemaType(
     }
     else
     {
-      schema->arguments_.emplace_back(argument.value());
+      schema->arguments_.emplace_back(std::pmr::string{argument.value(), factory->get_memory_resource()});
     }
   }
   return schema;
@@ -422,22 +501,23 @@ ClkSchemaType::ClkSchemaType(
   return version_;
 }
 
-[[nodiscard]] const std::vector<ClkSchemaArgumentType>& ClkSchemaType::get_arguments() const noexcept
+[[nodiscard]] const std::pmr::vector<ClkSchemaArgumentType>& ClkSchemaType::get_arguments() const noexcept
 {
   return arguments_;
 }
 
-[[nodiscard]] const std::unordered_map<int32_t, std::unique_ptr<ClkField>>& ClkSchemaType::get_fields() const noexcept
+[[nodiscard]] const std::pmr::unordered_map<int32_t, std::shared_ptr<ClkField>>&
+ClkSchemaType::get_fields() const noexcept
 {
   return fields_;
 }
 
-[[nodiscard]] const std::set<int32_t>& ClkSchemaType::get_removed() const noexcept
+[[nodiscard]] const std::pmr::set<int32_t>& ClkSchemaType::get_removed() const noexcept
 {
   return removed_;
 }
 
-[[nodiscard]] const std::map<int32_t, int32_t>& ClkSchemaType::get_became() const noexcept
+[[nodiscard]] const std::pmr::map<int32_t, int32_t>& ClkSchemaType::get_became() const noexcept
 {
   return became_;
 }
@@ -446,7 +526,7 @@ ClkSchemaType::ClkSchemaType(
 {
   if (!cached_initializer_valid_)
   {
-    std::vector<ClkFieldInitializer> initializers;
+    std::pmr::vector<ClkFieldInitializer> initializers(get_memory_resource());
     initializers.reserve(fields_.size());
     for (const auto& field : std::ranges::views::values(fields_))
     {
@@ -479,7 +559,10 @@ ClkSchemaType::ClkSchemaType(
   if (use_memcpy_for_array_upgrade(src_type))
   {
     return jewels::memory::make_non_null_from_ref(
-      *upgrader_cache.emplace(src_type.get_type_index(), std::make_shared<ClkMemcpyUpgrader>(get_size()))
+      *upgrader_cache
+         .emplace(
+           src_type.get_type_index(),
+           jewels::memory::make_pmr_shared<ClkMemcpyUpgrader>(get_memory_resource(), get_size()))
          .first->second);
   }
   if (src_type.get_type_id() != ClkTypeId::schema)
@@ -509,8 +592,8 @@ ClkSchemaType::ClkSchemaType(
         get_fqn(),
         version_));
   }
-  std::unordered_set<int32_t> upgraded_fields;
-  std::vector<ClkFieldUpgrader> upgraders;
+  std::pmr::unordered_set<int32_t> upgraded_fields(get_memory_resource());
+  std::pmr::vector<ClkFieldUpgrader> upgraders(get_memory_resource());
   upgraders.reserve(fields_.size());
   for (const auto& src_field : std::ranges::views::values(src_schema.get_fields()))
   {
@@ -544,7 +627,7 @@ ClkSchemaType::ClkSchemaType(
     }
     upgraded_fields.emplace(dest_field_num);
   }
-  std::vector<ClkFieldInitializer> initializers;
+  std::pmr::vector<ClkFieldInitializer> initializers(get_memory_resource());
   initializers.reserve(fields_.size() - upgraders.size());
   for (const auto& field : std::ranges::views::values(fields_))
   {
@@ -562,7 +645,8 @@ ClkSchemaType::ClkSchemaType(
     *upgrader_cache
        .emplace(
          src_schema.get_type_index(),
-         jewels::memory::make_shared<ClkSchemaUpgrader>(std::move(initializers), std::move(upgraders)))
+         jewels::memory::make_pmr_shared<ClkSchemaUpgrader>(
+           get_memory_resource(), std::move(initializers), std::move(upgraders)))
        .first->second);
 }
 
@@ -673,8 +757,9 @@ void ClkSchemaType::check_for_unexpected_schema_changes(
         get_fqn(),
         version_));
   }
-  const auto src_fields_view = std::ranges::views::keys(src_schema.get_fields());
-  std::unordered_set<int32_t> added_fields{src_fields_view.begin(), src_fields_view.end()};
+  const auto fields_view = std::ranges::views::keys(fields_);
+  std::pmr::unordered_set<int32_t> added_fields{get_memory_resource()};
+  added_fields.insert(fields_view.begin(), fields_view.end());
   // Allow changes to the field types if the version has changed or the source schema is a different type
   // due to a parameter change
   const auto allow_changes = !is_same_type(src_type) || src_schema.get_version() != version_;
@@ -720,7 +805,9 @@ void ClkSchemaType::check_for_unexpected_schema_changes(
     const auto& dest_field = fields_.at(dest_field_num);
     dest_field->check_for_unexpected_schema_changes(*src_field, allow_changes, get_fqn());
   }
-  if (!added_fields.empty() && src_schema.get_version() == version_)
+  if (
+    !added_fields.empty() && src_schema.get_version() == version_ &&
+    get_metadata_version() >= enforce_version_change_when_adding_fields_and_values_version)
   {
     const auto& dest_field = fields_.at(*added_fields.begin());
     throw ClkTypeUpgradeError(
@@ -731,7 +818,13 @@ void ClkSchemaType::check_for_unexpected_schema_changes(
         get_fqn()));
   }
   check_for_unexpected_history_changes(
-    src_schema.get_became(), src_schema.get_removed(), became_, removed_, allow_changes, get_fqn());
+    get_memory_resource(),
+    src_schema.get_became(),
+    src_schema.get_removed(),
+    became_,
+    removed_,
+    allow_changes,
+    get_fqn());
 }
 
 [[nodiscard]] bool ClkSchemaType::is_same_type(const ClkType& src_type) const
@@ -754,13 +847,13 @@ void ClkSchemaType::check_for_unexpected_schema_changes(
   {
     const auto& argument = arguments_.at(arg_index);
     const auto& src_argument = src_arguments.at(arg_index);
-    if (std::holds_alternative<std::string>(argument))
+    if (std::holds_alternative<std::pmr::string>(argument))
     {
-      if (!std::holds_alternative<std::string>(src_argument))
+      if (!std::holds_alternative<std::pmr::string>(src_argument))
       {
         return false;
       }
-      if (std::get<std::string>(argument) != std::get<std::string>(src_argument))
+      if (std::get<std::pmr::string>(argument) != std::get<std::pmr::string>(src_argument))
       {
         return false;
       }
@@ -779,6 +872,38 @@ void ClkSchemaType::check_for_unexpected_schema_changes(
     }
   }
   return true;
+}
+
+[[nodiscard]] jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor> ClkSchemaType::make_lite_compressor()
+{
+  auto& cached_lite_compressor = get_cached_lite_compressor();
+  if (!cached_lite_compressor)
+  {
+    std::pmr::vector<ClkFieldLiteCompressor> compressors(get_memory_resource());
+    const auto& fields = get_fields();
+    compressors.reserve(fields.size());
+    for (const auto& field : std::ranges::views::values(fields))
+    {
+      if (field->is_compressible())
+      {
+        compressors.emplace_back(field->make_lite_compressor());
+      }
+    }
+    std::sort(compressors.begin(), compressors.end());
+    cached_lite_compressor = jewels::memory::make_pmr_shared<ClkSchemaLiteCompressor>(
+      get_memory_resource(), get_size(), std::move(compressors));
+  }
+  return jewels::memory::NonNullSharedPtr<ClkTypeLiteCompressor>{cached_lite_compressor};
+}
+
+[[nodiscard]] bool ClkSchemaType::is_compressible()
+{
+  auto& cached_is_compressible = get_cached_is_compressible();
+  if (!cached_is_compressible.has_value())
+  {
+    cached_is_compressible = true;
+  }
+  return cached_is_compressible.value();
 }
 
 } // namespace clockwork::serialization

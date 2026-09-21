@@ -29,8 +29,11 @@ channel AlignedMsgChannel
 box TestSystemBox
 {
   new memory: HeapMemory(max_size=10'000'000);
-  new config: SerializedDataFile(representation=Protobuf<ApproxAlignerConfig>, path="clockwork/examples/approx_aligner/tests/resources/approx_aligner_config.textproto");
-  new state: State(representation=Tachyon<ApproxAlignerState>, memory_resource=memory);
+  new config: SerializedDataFile(
+    representation=Protobuf<ApproxAlignerConfig>,
+    path="clockwork/examples/approx_aligner/tests/resources/approx_aligner_config.textproto",
+  );
+  new state: State(representation=Tachyon<ApproxAlignerState>);
 
   new float_producer: FloatMsgProducer;
   new int_producer: IntMsgProducer;

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -67,9 +67,15 @@ clk(
         "test_cogs_clk_cc.cc",
         "test_cogs_clk_cc.hh",
         "test_cogs_clk_cc.inl",
+        "test_cogs_clk_cc_cog.cc",
+        "test_cogs_clk_cc_cog.hh",
+        "test_cogs_clk_cc_cog.inl",
         "test_cogs_clk_cc_dial.cc",
         "test_cogs_clk_cc_dial.hh",
         "test_cogs_clk_cc_dial.inl",
+        "test_cogs_clk_cc_types.cc",
+        "test_cogs_clk_cc_types.hh",
+        "test_cogs_clk_cc_types.inl",
     ],
     cpp_deps = [
         "//clockwork/dial:approx_aligner_config_clk_cc",
@@ -92,8 +98,10 @@ cc_library(
         ":test_cogs_clk_cc_dial",
         "//clockwork/dial:msg_input",
         "//clockwork/examples/approx_aligner:approx_aligner_msgs_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
     ],
 )
@@ -106,9 +114,11 @@ clk(
         "test_system.test_system.TestCpu_channel_allocations.csv",
         "test_system.test_system.TestCpu_channel_spy_config.tachyon",
         "test_system.test_system.TestCpu_event_logger_config.tachyon",
+        "test_system.test_system.TestCpu_journal_topology.tachyon",
         "test_system.test_system.TestCpu_metrics_channel_metadata_config.tachyon",
         "test_system.test_system.TestCpu_signal_metadata_config.tachyon",
         "test_system.test_system.TestCpu_simplelaunch_config.textproto",
+        "test_system.test_system.TestCpu_system_metadata.tachyon",
         "test_system.test_system.TestCpu_telemetry_logger_config.tachyon",
         "test_system.test_system.diagnostics_database_config.tachyon",
         "test_system.test_system.logged_channel_metadata.pbbin",
@@ -127,8 +137,10 @@ merge_simplelaunch_config(
         "test_system.test_system.TestCpu_channel_allocations.csv",
         "test_system.test_system.TestCpu_channel_spy_config.tachyon",
         "test_system.test_system.TestCpu_event_logger_config.tachyon",
+        "test_system.test_system.TestCpu_journal_topology.tachyon",
         "test_system.test_system.TestCpu_metrics_channel_metadata_config.tachyon",
         "test_system.test_system.TestCpu_signal_metadata_config.tachyon",
+        "test_system.test_system.TestCpu_system_metadata.tachyon",
         "test_system.test_system.TestCpu_telemetry_logger_config.tachyon",
         "test_system.test_system.diagnostics_database_config.tachyon",
         ":test_boxes_clk_exe",

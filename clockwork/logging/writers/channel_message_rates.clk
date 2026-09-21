@@ -1,6 +1,7 @@
 #![generate(cpp)]
 #![cpp(namespace=clockwork_logging)]
 
+use[] clockwork::common::constants;
 use clockwork::logging::writers::rate_status::{RateStatus};
 
 // Message rates for a logged channel
@@ -14,7 +15,7 @@ schema ChannelMessageRate
     #1 rate_status: RateStatus;
 
     // Channel name
-    #4 channel_name: VarString<max_size=300>;
+    #4 channel_name: VarString<max_size=constants::MAX_CHANNEL_NAME_SIZE>;
 
     // Message rate in hz
     #3 msg_rate_hz: Float64;
@@ -22,8 +23,8 @@ schema ChannelMessageRate
 
   history
   {
-    version: 4;
-    legacy_became: [2->4];
+    version: 5;
+    legacy_became: [2 -> 4];
   }
 }
 
@@ -49,7 +50,7 @@ schema ChannelMessageRates
   history
   {
     version: 4;
-    legacy_became: [2->4];
+    legacy_became: [2 -> 4];
   }
 }
 

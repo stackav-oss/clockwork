@@ -121,5 +121,5 @@ We also generate unit tests (mostly `static_assert`s) for every layout that chec
 In Python, we use the built-in [struct](https://docs.python.org/3/library/struct.html) library to generate the layout.
 We do not try to take advantage of direct access to serialized data as we do in C++; instead we implement serialize and deserialize functions, using the `struct` library to do the heavy lifting.
 We marshall between the serialized form and Python dataclasses, which then also serve as the user interface to the data.
-The dataclasses themselves are generated, so that they can be type-checked with Pyright, but it's also possible for this to be used in an entirely dynamic workflow where the generated classes are never written to disk but compiled and instantiated entirely in memory at runtime.
+The dataclasses themselves are generated, so that they can be type-checked with Pyrefly, but it's also possible for this to be used in an entirely dynamic workflow where the generated classes are never written to disk but compiled and instantiated entirely in memory at runtime.
 This lets us read the schemas from a log and dynamically create Python dataclasses and marshalling code for that exact schema version.

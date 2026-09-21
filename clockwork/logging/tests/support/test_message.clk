@@ -12,3 +12,39 @@ schema TestMessage
     #1 message_string: VarString<255>;
   }
 }
+
+// TestMessage
+schema TestMessage1
+{
+  uuid: ae55dd05-6c14-4943-ad43-54a05c56cac9;
+
+  fields
+  {
+    // Test data
+    #1 data: FixedArray<Byte, size=512>;
+  }
+}
+
+// TestMessage
+schema TestMessage2
+{
+  uuid: 83fedb8d-839d-4fc1-999e-96cd34e49697;
+
+  fields
+  {
+    // Test data
+    #1 data: FixedArray<Byte, size=1024>;
+  }
+}
+
+// TestMessage
+schema TestMessage3
+{
+  uuid: c2be99f3-f10f-4915-8c25-2af48a3b0ab7;
+
+  fields
+  {
+    // Test data
+    #1 data: FixedArray<Byte, size=2048>;
+  }
+}

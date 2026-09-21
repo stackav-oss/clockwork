@@ -1,9 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/buffer.hh"
 #include "clockwork/pinion/buffer_index.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/buffer_layout.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/tests/support/mock_buffer.hh"
@@ -18,6 +20,7 @@
 #include <cstddef>
 #include <iterator>
 #include <memory_resource>
+#include <ranges>
 #include <span>
 #include <type_traits>
 
@@ -111,10 +114,11 @@ TEST_CASE("SlotRef Iter")
   auto buffer_ptr = jewels::memory::make_non_null_from_ref(buffer);
 
   {
-    PublisherHandle publisher{buffer_ptr, 1, mem_res};
-    auto slots = publisher.reserve(num_slots);
-    REQUIRE(slots);
-    REQUIRE(slots->commit({}));
+    auto hide = buffer_ptr->reserve(num_slots);
+    REQUIRE(hide);
+    PublisherReservation publisher{nullptr, buffer_ptr, *hide, num_slots, true};
+    REQUIRE(publisher.slots().size() == num_slots);
+    REQUIRE(publisher.commit({}));
   }
 
   CHECK(std::distance(buffer_ptr->begin(), buffer_ptr->end()) == 10);

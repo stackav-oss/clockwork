@@ -1,18 +1,18 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/dial/cond_messages_present.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/slot_ref.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "jewels/std/expected.hh"
 
 #include <wise_enum.h>
 
 #include <cstdint>
-#include <optional>
+#include <memory>
 #include <ranges>
 
 namespace clockwork
@@ -49,7 +49,7 @@ public:
 
   /// Construct from a pinion subscriber handle.
   /// @param subscriber The subscriber handle
-  explicit InputCondition(pinion::SubscriberHandle subscriber) noexcept;
+  explicit InputCondition(std::shared_ptr<pinion::AbstractChannel> channel) noexcept;
 
   /// Default constructor for non-connected endpoints
   /// Creates an InputCondition without a subscriber handle
@@ -67,7 +67,8 @@ public:
 
 private:
   /// The underlying subscriber handle.
-  std::optional<pinion::SubscriberHandle> subscriber_;
+  std::shared_ptr<pinion::AbstractChannel> subscriber_;
+
   /// Iterator for the last viewed message.
   pinion::SlotRef last_viewed_;
 

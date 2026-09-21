@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/alignment_type_clk_cc.hh"
@@ -9,15 +9,17 @@
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <initializer_list>
 #include <iterator>
 #include <memory_resource>
 #include <optional>
+#include <ranges>
 #include <sys/types.h>
 #include <tuple>
 #include <vector>
@@ -31,7 +33,6 @@ TEST_CASE("check test variables", "[AlignerPolicy]")
 {
   using Aligner = ApproxAligner<TestAlignerPolicy, Input0, Input1, Input2>;
   REQUIRE_NOTHROW(Aligner{});
-
   using Policy = typename Aligner::Policy;
   using ValuePtrArray = typename Aligner::ValuePtrArray;
 
@@ -53,6 +54,9 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "noop execution", "[ApproxAligner]")
   auto makers = AlignerInputMakers<Aligner, Input0, Input1, Input2>();
   auto inputs = makers.make_inputs();
   auto new_begins = std::apply([](auto&... input) { return InputItTuple(input.get_view().begin()...); }, inputs);
+
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL)};
+  config.set_max_missing_inputs_on_timeout(max_missing_inputs_on_timeout);
 
   auto result = Aligner::find_alignment(resource, config, state, inputs, now);
   REQUIRE(ApproxAlignerStateType::insufficient_data == result.state);
@@ -132,6 +136,8 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "idle", "[ApproxAligner::find_alignme
 
   config.set_minimum_wait_time(std::chrono::seconds{1});
   state.set_last_commit_timestamp(SyncTime{std::chrono::seconds{4}});
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL, 2UL)};
+  config.set_max_missing_inputs_on_timeout(max_missing_inputs_on_timeout);
 
   SECTION("negative duration")
   {
@@ -170,6 +176,9 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "invalid_inputs", "[ApproxAligner::fi
   state.set_last_commit_timestamp(SyncTime{std::chrono::seconds{4}});
   auto now = SyncTime{std::chrono::seconds{5}};
 
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL, 2UL)};
+  config.set_max_missing_inputs_on_timeout(max_missing_inputs_on_timeout);
+
   SECTION("valid")
   {
     Aligner::Policy::test_validate_inputs_return_ = true;
@@ -195,6 +204,9 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "timeout", "[ApproxAligner::find_alig
   config.set_maximum_wait_time(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds{10}).count());
   state.set_last_commit_timestamp(SyncTime{std::chrono::seconds{4}});
   auto now = SyncTime{std::chrono::seconds{15}};
+
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL, 2UL)};
+  config.set_max_missing_inputs_on_timeout(max_missing_inputs_on_timeout);
 
   SECTION("no alignment")
   {
@@ -224,12 +236,13 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "extract", "[ApproxAligner::extract_v
 
 TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[CombinationGenerator]")
 {
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL, 2UL)};
+
   SECTION("all empty")
   {
     const auto values = ValueVectorsArray{};
-    auto generator =
-      detail::CombinationGenerator<ValueType, input_count>(jewels::memory::make_non_null_from_ref(values));
-
+    auto generator = detail::CombinationGenerator<ValueType, input_count>(
+      jewels::memory::make_non_null_from_ref(values), max_missing_inputs_on_timeout);
     REQUIRE(generator.begin() == generator.end());
   }
 
@@ -245,9 +258,27 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[CombinationGenerator]")
     {
       auto values = full_values;
       values.at(i).clear();
-      auto generator =
-        detail::CombinationGenerator<ValueType, input_count>(jewels::memory::make_non_null_from_ref(values));
-      REQUIRE(generator.begin() == generator.end());
+      auto generator = detail::CombinationGenerator<ValueType, input_count>(
+        jewels::memory::make_non_null_from_ref(values), max_missing_inputs_on_timeout);
+
+      if (max_missing_inputs_on_timeout > 0UL)
+      {
+        REQUIRE_FALSE(generator.begin() == generator.end());
+        auto expected_end{generator.begin()};
+        for (const auto& value_vec : values)
+        {
+          for ([[maybe_unused]] const auto value : value_vec)
+          {
+            ++expected_end;
+          }
+        }
+        ++expected_end;
+        REQUIRE(expected_end == generator.end());
+      }
+      else
+      {
+        REQUIRE(generator.begin() == generator.end());
+      }
     }
   }
 
@@ -271,8 +302,78 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[CombinationGenerator]")
       {1, 0, 2},
     });
 
-    auto generator =
-      detail::CombinationGenerator<ValueType, input_count>(jewels::memory::make_non_null_from_ref(values));
+    auto generator = detail::CombinationGenerator<ValueType, input_count>(
+      jewels::memory::make_non_null_from_ref(values), max_missing_inputs_on_timeout);
+
+    size_t index = 0;
+    for (auto it = generator.begin(); it != generator.end(); ++it)
+    {
+      REQUIRE(index < expected_combinations.size());
+      REQUIRE(expected_combinations.at(index) == it.value_ptrs());
+      REQUIRE(expected_indices.at(index) == it.indices());
+      ++index;
+    }
+    REQUIRE(index == expected_combinations.size());
+  }
+
+  SECTION("combinations including input 1")
+  {
+    auto values = full_values;
+    values.at(1).clear();
+    const auto allow_empty{max_missing_inputs_on_timeout > 0UL};
+    const auto expected_combinations = allow_empty
+                                         ? std::vector<ValuePtrArray>{
+                                             {&values.at(0).at(0), nullptr, &values.at(2).at(0)},
+                                             {&values.at(0).at(0), nullptr, &values.at(2).at(1)},
+                                             {&values.at(0).at(0), nullptr, &values.at(2).at(2)},
+                                             {&values.at(0).at(1), nullptr, &values.at(2).at(0)},
+                                             {&values.at(0).at(1), nullptr, &values.at(2).at(1)},
+                                             {&values.at(0).at(1), nullptr, &values.at(2).at(2)},
+                                           }
+                                         : std::vector<ValuePtrArray>{};
+    const auto expected_indices = allow_empty ? std::vector<std::array<ssize_t, input_count>>({
+                                                  {0, 0, 0},
+                                                  {0, 0, 1},
+                                                  {0, 0, 2},
+                                                  {1, 0, 0},
+                                                  {1, 0, 1},
+                                                  {1, 0, 2},
+                                                })
+                                              : std::vector<std::array<ssize_t, input_count>>{};
+
+    auto generator = detail::CombinationGenerator<ValueType, input_count>(
+      jewels::memory::make_non_null_from_ref(values), max_missing_inputs_on_timeout);
+
+    size_t index = 0;
+    for (auto it = generator.begin(); it != generator.end(); ++it)
+    {
+      REQUIRE(index < expected_combinations.size());
+      REQUIRE(expected_combinations.at(index) == it.value_ptrs());
+      REQUIRE(expected_indices.at(index) == it.indices());
+      ++index;
+    }
+    REQUIRE(index == expected_combinations.size());
+  }
+  SECTION("combinations including input 0")
+  {
+    auto values = full_values;
+    values.at(0).clear();
+    const auto allow_empty{max_missing_inputs_on_timeout > 0UL};
+    const auto expected_combinations = allow_empty
+                                         ? std::vector<ValuePtrArray>{
+                                             {nullptr, &values.at(1).at(0), &values.at(2).at(0)},
+                                             {nullptr, &values.at(1).at(0), &values.at(2).at(1)},
+                                             {nullptr, &values.at(1).at(0), &values.at(2).at(2)},
+                                           } : std::vector<ValuePtrArray>{};
+    const auto expected_indices = allow_empty ? std::vector<std::array<ssize_t, input_count>>({
+                                                  {0, 0, 0},
+                                                  {0, 0, 1},
+                                                  {0, 0, 2},
+                                                })
+                                              : std::vector<std::array<ssize_t, input_count>>{};
+
+    auto generator = detail::CombinationGenerator<ValueType, input_count>(
+      jewels::memory::make_non_null_from_ref(values), max_missing_inputs_on_timeout);
 
     size_t index = 0;
     for (auto it = generator.begin(); it != generator.end(); ++it)
@@ -288,6 +389,9 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[CombinationGenerator]")
 
 TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[ApproxAligner::find_full_alignment]")
 {
+  const auto max_missing_inputs_on_timeout{GENERATE(0UL, 1UL)};
+  config.set_max_missing_inputs_on_timeout(max_missing_inputs_on_timeout);
+
   SECTION("all empty")
   {
     auto makers = AlignerInputMakers<Aligner, Input0, Input1, Input2>({}, {}, {});
@@ -310,15 +414,51 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[ApproxAligner::find_full_al
       auto [full_alignment, timeout_alignment] = Aligner::find_full_alignment(config, inputs, values);
       REQUIRE(full_alignment);
       REQUIRE_FALSE(timeout_alignment);
+      REQUIRE(static_cast<double>(full_alignment->score) <= config.get_minimum_score_threshold());
     }
 
     for (size_t i = 0; i < input_count; ++i)
     {
       auto modified_values = values;
       modified_values.at(i).clear();
-      auto [full_alignment, timeout_alignment] = Aligner::find_full_alignment(config, inputs, modified_values);
+
+      auto modified_inputs = inputs;
+      auto expected_result_0{std::get<0UL>(modified_inputs).get_cursor_view().begin()};
+      auto expected_result_1{std::get<1UL>(modified_inputs).get_cursor_view().begin()};
+      auto expected_result_2{std::get<2UL>(modified_inputs).get_cursor_view().begin()};
+      switch (i)
+      {
+      case 0UL:
+        std::get<0UL>(modified_inputs).set_cursor(std::get<0UL>(modified_inputs).get_view().end());
+        expected_result_0 = std::get<0UL>(modified_inputs).get_cursor_view().end();
+        break;
+      case 1UL:
+        std::get<1UL>(modified_inputs).set_cursor(std::get<1UL>(modified_inputs).get_view().end());
+        expected_result_1 = std::get<1UL>(modified_inputs).get_cursor_view().end();
+        break;
+      case 2UL:
+        std::get<2UL>(modified_inputs).set_cursor(std::get<2UL>(modified_inputs).get_view().end());
+        expected_result_2 = std::get<2UL>(modified_inputs).get_cursor_view().end();
+        break;
+      default:
+        // If this fails, test inputs have been added. Add corresponding branches to this switch statement,
+        // and the corresponding REQUIRE checks at the end of this SECTION.
+        REQUIRE(false);
+        break;
+      }
+
+      auto [full_alignment, timeout_alignment] = Aligner::find_full_alignment(config, modified_inputs, modified_values);
       REQUIRE_FALSE(full_alignment);
-      REQUIRE_FALSE(timeout_alignment);
+      if (max_missing_inputs_on_timeout == 0UL)
+      {
+        REQUIRE_FALSE(timeout_alignment);
+        continue;
+      }
+      REQUIRE(timeout_alignment);
+      REQUIRE(static_cast<double>(timeout_alignment->score) > config.get_minimum_score_threshold());
+      REQUIRE(std::get<0UL>(timeout_alignment->inputs) == expected_result_0);
+      REQUIRE(std::get<1UL>(timeout_alignment->inputs) == expected_result_1);
+      REQUIRE(std::get<2UL>(timeout_alignment->inputs) == expected_result_2);
     }
   }
 
@@ -376,9 +516,21 @@ TEST_CASE_METHOD(TestApproxAlignerFixture, "full", "[ApproxAligner::find_full_al
     auto& input2 = std::get<2>(inputs);
 
     auto values = Aligner::extract_values(resource, inputs);
+    REQUIRE(values.at(0UL).size() == 1UL);
+    REQUIRE(values.at(1UL).size() == 1UL);
+    REQUIRE(values.at(2UL).size() == 2UL);
+
+    const auto first_score =
+      Aligner::Policy::objective({&values.at(0UL).at(0), &values.at(1UL).at(0), &values.at(2UL).at(0)});
+    const auto second_score =
+      Aligner::Policy::objective({&values.at(0UL).at(0), &values.at(1UL).at(0), &values.at(2UL).at(1)});
+    REQUIRE(first_score == second_score);
 
     auto [full_alignment, timeout_alignment] = Aligner::find_full_alignment(config, inputs, values);
     REQUIRE(full_alignment);
+    // No timeout alignment since both candidate combinations have the same score per the test policy,
+    // which is under the configured threshold.
+    REQUIRE_FALSE(timeout_alignment);
 
     auto expected = Alignment{
       .score = 4,

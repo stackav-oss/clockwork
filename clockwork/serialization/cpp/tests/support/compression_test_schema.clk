@@ -1,0 +1,191 @@
+#![generate(cpp)]
+#![cpp(namespace=clockwork::tests)]
+
+// Uncompressible schema
+schema UncompressibleTypes
+{
+  uuid: e362ac13-4dfd-4f68-8a42-3772e95c0aef;
+  fields
+  {
+    // Int8 Field
+    #1 int8_field: Int8;
+    // Int16 Field
+    #2 int16_field: Int16;
+    // Int32 Field
+    #3 int32_field: Int32;
+    // Int64 Field
+    #4 int64_field: Int64;
+    // UInt8 Field
+    #5 uint8_field: UInt8;
+    // UInt16 Field
+    #6 uint16_field: UInt16;
+    // UInt32 Field
+    #7 uint32_field: UInt32;
+    // UInt64 Field
+    #8 uint64_field: UInt64;
+    // Float32 Field
+    #9 float32_field: Float32;
+    // Float64 Field
+    #10 float64_field: Float64;
+    // Duration field
+    #11 duration_field: Duration;
+    // SyncTime field
+    #12 synctime_field: SyncTime;
+    // UUID field
+    #13 uuid_field: Uuid<Int8>;
+  }
+}
+
+// Fixed array of variable arrays
+schema FixedArrayOfVarArray
+{
+  uuid: 12adaadf-9891-4eeb-9626-3e0bec12c92c;
+  fields
+  {
+    // FixedArray of VarArray
+    #1 fixed_var_array: FixedArray<VarArray<UInt64, max_size=3>, size=2>;
+  }
+}
+
+// Variable array of variable arrays
+schema VarArrayOfVarArray
+{
+  uuid: bccf42d2-36ff-4dcc-a8d4-d450a0f6b0da;
+  fields
+  {
+    // VarArray of VarArray
+    #1 var_var_array: VarArray<VarArray<UInt64, max_size=3>, max_size=2>;
+  }
+}
+
+// Two variable arrays of variable arrays
+schema TwoVarArrayOfVarArray
+{
+  uuid: d900876b-2f9c-4c0f-b92b-553f66c9e945;
+  fields
+  {
+    // VarArray of VarArray
+    #1 var_var_array1: VarArray<VarArray<UInt64, max_size=3>, max_size=2>;
+    // VarArray of VarArray
+    #2 var_var_array2: VarArray<VarArray<UInt64, max_size=3>, max_size=2>;
+  }
+}
+
+// Fixed array of optionals
+schema FixedArrayOfOptional
+{
+  uuid: d3ac56be-66cf-410f-8f24-e1714b21c056;
+  fields
+  {
+    // FixedArray of Optional
+    #1 fixed_array_optional: FixedArray<Optional<UInt64>, size=2>;
+  }
+}
+
+// Fixed array of optional variable array
+schema FixedArrayOfOptionalVarArray
+{
+  uuid: 007a45d9-7866-4cd3-9dcc-e20bf1d07d2a;
+  fields
+  {
+    // FixedArray of Optional VarArray
+    #1 fixed_array_optional_var_array: FixedArray<Optional<VarArray<Uuid<Int8>, max_size=2>>, size=2>;
+  }
+}
+
+// Tensor array of variable arrays
+schema TensorOfVarArray
+{
+  uuid: 27c73e70-d2f6-48fd-9877-2700fbe598c3;
+  fields
+  {
+    // Tensor of VarArray
+    #1 tensor_var_array: Tensor<VarArray<UInt64, max_size=3>, [2, 2]>;
+  }
+}
+
+// Fixed array of variable strings
+schema FixedArrayOfVarString
+{
+  uuid: c846d620-729b-4ff0-be5b-367c8e3502b0;
+  fields
+  {
+    // FixedArray of VarString
+    #1 fixed_array_of_varstring: FixedArray<VarString<max_size=24>, size=2>;
+  }
+}
+
+// SOA with UUID fields
+schema SoaWithUuidFields
+{
+  uuid: d0b317c2-6152-40bd-9486-0966579045ed;
+  options
+  {
+    soa_enabled: true;
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // UUID field 1
+    #1 uuid_field1: Uuid<Int8>;
+    // UUID field 2
+    #2 uuid_field2: Uuid<Int8>;
+  }
+}
+// SOA with VarArray fields
+schema SoaWithVarArrayFields
+{
+  uuid: 36ce2210-8b3b-49e3-be0a-bfa46fbabaf3;
+  options
+  {
+    soa_enabled: true;
+    constructor: source_code_order;
+  }
+  fields
+  {
+    // VarArray field 1
+    #1 var_array_field1: VarArray<UInt32, max_size=3>;
+    // VarArray field 2
+    #2 var_array_field2: VarArray<UInt32, max_size=3>;
+  }
+}
+// FixedSoa with UUID fields
+schema FixedSoaWithUuidFields
+{
+  uuid: 35430f38-3dd9-4858-8ee7-c05f5551faf6;
+  fields
+  {
+    // SOA field
+    #1 soa_field: FixedSoa<SoaWithUuidFields, size=2>;
+  }
+}
+// FixedSoa with VarAray fields
+schema FixedSoaWithVarArrayFields
+{
+  uuid: c55660a2-b8b6-414d-801e-3619fefd576a;
+  fields
+  {
+    // SOA field
+    #1 soa_field: FixedSoa<SoaWithVarArrayFields, size=2>;
+  }
+}
+// VarSoa with UUID fields
+schema VarSoaWithUuidFields
+{
+  uuid: 1309da66-bc1a-4c32-a354-bcad19e77206;
+  fields
+  {
+    // SOA field
+    #1 soa_field: VarSoa<SoaWithUuidFields, max_size=2>;
+  }
+}
+// VarSoa with VarAray fields
+schema VarSoaWithVarArrayFields
+{
+  uuid: cffb0d1f-1f04-4ebb-aeb1-7147510a937c;
+  fields
+  {
+    // SOA field
+    #1 soa_field: VarSoa<SoaWithVarArrayFields, max_size=2>;
+  }
+}

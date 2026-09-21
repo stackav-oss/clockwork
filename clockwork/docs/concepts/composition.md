@@ -165,6 +165,69 @@ You make the connections when you're at the level of composition where you know 
 Don't fuss too much about this decision; it's easy to change this stuff later.
 The worst consequence of doing it wrong is that you might have to copy/paste your Box definitions to adapt them to a different system configuration, if you've made the connections prematurely.
 
+### Directly Connecting Cog Outputs to Cog Inputs
+
+Cog outputs can also be connected directly to cog inputs without referencing the channel.
+This next example shows three cogs, SayHello, RepeatHello, and HearHello.
+The hello_out instance from the SayHello cog is connected to HelloChan1, and is also connected to the hello_in instance of the RepeatHello cog.
+Likewise, the hello_out instance from RepeatHello cog is connected to HelloChan1, and is also connected to the hello_in instance of the HearHello cog.
+Directly connecting outputs to inputs can reduce cognitive complexity when managing complex boxes.
+
+```clockwork
+cog SayHello
+{
+    outputs
+    {
+        hello_out: Tappy<HelloMsg>;
+    }
+}
+
+cog RepeatHello
+{
+    inputs
+    {
+        hello_in: Tappy<HelloMsg>;
+    }
+    outputs
+    {
+        hello_out: Tappy<HelloMsg>;
+    }
+}
+
+cog HearHello
+{
+    inputs
+    {
+        hello_in: Tappy<HelloMsg>;
+    }
+}
+
+channel HelloChan1
+{
+    message_type: Tachyon<HelloMsg>;
+    max_num_messages: 10;
+}
+
+channel HelloChan2
+{
+    message_type: Tachyon<HelloMsg>;
+    max_num_messages: 10;
+}
+
+box HelloBox
+{
+  new say_hello: SayHello;
+  connect say_hello.hello_out to HelloChan1;
+
+  new repeat_hello: RepeatHello;
+  connect say_hello.hello_out to repeat_hello.hello_in;
+  connect repeat_hello.hello_out to HelloChan2;
+
+  new hear_hello: HearHello;
+  connect repeat_hello.hello_out to hear_hello.hello_in;
+}
+```
+
 ### Optional Cog Inputs and Outputs
 
 By default, all inputs and outputs to a cog are "required".
@@ -306,7 +369,6 @@ box HelloBox
     new memory: HeapMemory(max_size=1'000'000);
     new hello_state: State(
         representation=Tachyon<HelloState>,
-        memory_resource=memory,
         init=init_cog.hello_state  // Designates init_cog as the initializer
     );
 
@@ -423,9 +485,8 @@ box MyBox
 {
     new init_cog: MultiStateInitCog;
 
-    new memory: HeapMemory(max_size=1'000'000);
-    new state_a: State(representation=Tachyon<StateA>, memory_resource=memory, init=init_cog.state_a);
-    new state_b: State(representation=Tachyon<StateB>, memory_resource=memory, init=init_cog.state_b);
+    new state_a: State(representation=Tachyon<StateA>, init=init_cog.state_a);
+    new state_b: State(representation=Tachyon<StateB>, init=init_cog.state_b);
 
     connect state_a to init_cog.state_a;
     connect state_b to init_cog.state_b;
@@ -441,6 +502,61 @@ box MyBox
 | Ordering between init Cogs | Determined by state dependencies via `init=`                                        |
 | State access               | Typically `mutable: true` for states being initialized                              |
 | Dependency expression      | Connect to state (mutable or not) to depend on another init Cog's initialized state |
+
+### Directly connecting cog state and config members
+
+Cog states can also be connected directly to other cog states without referencing the actual state.
+Likewise, cog configs can be connected directly to other cog configs.
+This next example shows an InitCog and a WorkerCog that share the state initialized by the init cog and the same configuration.
+The init cog state and config is connected directly to the WorkerCog state and config
+This makes it clear that the two cogs are sharing the same state and configuration.
+
+```clockwork
+cog InitCog
+{
+    states
+    {
+        state: Tappy<SharedState>
+        {
+            mutable: true;
+        }
+    }
+    configs
+    {
+        config: Tappy<SharedConfig>;
+    }
+    execution
+    {
+        execute when: init;
+    }
+}
+
+cog WorkerCog
+{
+    states
+    {
+        state: Tappy<SharedState>
+        {
+            mutable: true;
+        }
+    }
+    configs
+    {
+        config: Tappy<SharedConfig>;
+    }
+}
+
+box ExampleBox
+{
+    new init_cog: InitCog;
+    new worker_cog: WorkerCog;
+    new example_state: State(representation=Tachyon<SharedState>, init=init_cog.state);
+    new example_config: SerializedDataFile(representation=Tachyon<SharedConfig>, path="path/to/file.tachyon");
+    connect example_config to init_cog.config;
+    connect init_cog.state to worker_cog.state;
+    connect init_cog.config to worker_cog.config;
+}
+```
 
 ## Casings and executables
 

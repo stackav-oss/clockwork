@@ -1,18 +1,34 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
-#include "clockwork/dial/cond_messages_present.hh"
+#include "clockwork/dial/include_common.hh"
 #include "clockwork/dial/msg_input.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/slot.hh"
 #include "clockwork/tests/support/exec_time.hh"
 #include "clockwork/tests/support/snapshot_test_cogs_dial.hh"
 #include "clockwork/tests/support/snapshot_test_messages.hh"
-#include "jewels/container/circular_buffer.hh"
 
 #include <cstdint>
 #include <ranges>
 
 namespace clockwork::testing
 {
+void execute_cog(SerializableStateWriterCogDial& dial)
+{
+  auto& state = dial.get_states().get_state();
+  for (const auto& update : dial.get_inputs().get_update().get_new_msgs_view())
+  {
+    state.value = update.get_value();
+  }
+}
+
+void execute_cog(SerializableStateReaderCogDial& dial)
+{
+  dial.get_outputs().get_observed().message().set_value(dial.get_states().get_state().value);
+  dial.get_outputs().get_observed().mark_for_publish();
+}
+
 void execute_cog(StatefulCogDial& dial)
 {
   auto& state = dial.get_states().get_state();

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_multirun//:defs.bzl", "command")
@@ -17,9 +17,15 @@ clk(
         "example_cogs_clk_cc.cc",
         "example_cogs_clk_cc.hh",
         "example_cogs_clk_cc.inl",
+        "example_cogs_clk_cc_cog.cc",
+        "example_cogs_clk_cc_cog.hh",
+        "example_cogs_clk_cc_cog.inl",
         "example_cogs_clk_cc_dial.cc",
         "example_cogs_clk_cc_dial.hh",
         "example_cogs_clk_cc_dial.inl",
+        "example_cogs_clk_cc_types.cc",
+        "example_cogs_clk_cc_types.hh",
+        "example_cogs_clk_cc_types.inl",
     ],
     cpp_deps = [
         ":test_message_clk_cc",
@@ -41,9 +47,13 @@ cc_library(
     deps = [
         ":example_cogs_clk_cc_dial",
         ":test_message_clk_cc",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
+        "//clockwork/pinion:slot",
         "//jewels/container/tap:var_string",
         "//jewels/log_cerr",
+        "//jewels/memory:aligned_storage",
+        "//jewels/uuid",
     ],
 )
 
@@ -117,9 +127,11 @@ clk(
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_journal_topology.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_signal_metadata_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_simplelaunch_config.textproto",
+        "log_runner_example_system.log_runner_example_system.SimCpu_system_metadata.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
         "log_runner_example_system.log_runner_example_system.diagnostics_database_config.tachyon",
         "log_runner_example_system.log_runner_example_system.logged_channel_metadata.pbbin",
@@ -158,8 +170,10 @@ merge_simplelaunch_config(
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_publisher_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_channel_spy_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_event_logger_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_journal_topology.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_signal_metadata_config.tachyon",
+        "log_runner_example_system.log_runner_example_system.SimCpu_system_metadata.tachyon",
         "log_runner_example_system.log_runner_example_system.SimCpu_telemetry_logger_config.tachyon",
         "log_runner_example_system.log_runner_example_system.diagnostics_database_config.tachyon",
         ":log_runner_example_clk_exe",
@@ -174,6 +188,9 @@ clk(
         "test_message_clk_cc.cc",
         "test_message_clk_cc.hh",
         "test_message_clk_cc.inl",
+        "test_message_clk_cc_types.cc",
+        "test_message_clk_cc_types.hh",
+        "test_message_clk_cc_types.inl",
     ],
     generate = ["cpp"],
     visibility = ["//visibility:public"],

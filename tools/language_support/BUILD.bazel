@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
@@ -7,8 +7,11 @@ load("@rules_multirun//:defs.bzl", "multirun")
 load("//tools/rules:python.bzl", "py_binary")
 
 exports_files([
-    "constraints.txt",
-    "requirements.txt",
+    "constraints_3_10.txt",
+    "constraints_3_12.txt",
+    "constraints_pip310.txt",
+    "requirements_3_10.txt",
+    "requirements_3_12.txt",
     "uv_wrapper.py",
 ])
 
@@ -27,74 +30,102 @@ alias(
 multirun(
     name = "update_repo",
     commands = [
-        ":update_repo_requirements",
-        ":update_repo_constraints",
-    ],
-)
-
-multirun(
-    name = "update_repo_310",
-    commands = [
-        ":update_repo_requirements_310",
-        ":update_repo_constraints_310",
+        ":update_repo_requirements_3_10",
+        ":update_repo_requirements_3_12",
+        ":update_repo_constraints_3_10",
+        ":update_repo_constraints_3_12",
     ],
 )
 
 # This is basically a copy of repo_requirements that we can use with pip and uv's `--constraint` option
 write_python_requirements_source_file(
-    name = "update_repo_constraints",
+    name = "update_repo_constraints_3_10",
     # Don't include index URL options so the resulting file can be used independently
     emit_index_urls = False,
-    # Use existing locked packages in requirements.txt as a starting point because it has extras
-    existing_requirements_out = "requirements.txt",
+    # Use existing locked packages in requirements_3_10.txt as a starting point because it has extras
+    existing_requirements_out = "requirements_3_10.txt",
     # Don't include hashes, because they break pip's `--constraint` option
     generate_hashes = False,
     overrides_in = "requirements_overrides.txt",
+    python_version = "3.10",
     requirements_in = "requirements.in",
-    requirements_out = "constraints.txt",
+    requirements_out = "constraints_3_10.txt",
     # Strip extras so the resulting file can be used as a constraints file
+    strip_extras = True,
+)
+
+# This is basically a copy of repo_requirements_3_12 that we can use with pip and uv's `--constraint` option
+# TODO(DX-29): Drop this once `@clockwork_pip` is no longer dual-parsed.
+write_python_requirements_source_file(
+    name = "update_repo_constraints_3_12",
+    emit_index_urls = False,
+    existing_requirements_out = "requirements_3_12.txt",
+    generate_hashes = False,
+    overrides_in = "requirements_overrides.txt",
+    python_version = "3.12",
+    requirements_in = "requirements.in",
+    requirements_out = "constraints_3_12.txt",
     strip_extras = True,
 )
 
 # This pip hub should stay pinned on Python 3.10, to support dependencies that have no 3.12 support yet.
 write_python_requirements_source_file(
-    name = "update_repo_constraints_310",
+    name = "update_repo_constraints_pip310",
     # Don't include index URL options so the resulting file can be used independently
     emit_index_urls = False,
-    # Use existing locked packages in requirements_310.txt as a starting point because it has extras
-    existing_requirements_out = "requirements_310.txt",
+    # Use existing locked packages in requirements_pip310.txt as a starting point because it has extras
+    existing_requirements_out = "requirements_pip310.txt",
     # Don't include hashes, because they break pip's `--constraint` option
     generate_hashes = False,
     overrides_in = "requirements_overrides_310.txt",
     python_version = "3.10",
-    requirements_in = "requirements_310.in",
-    requirements_out = "constraints_310.txt",
+    requirements_in = "requirements_pip310.in",
+    requirements_out = "constraints_pip310.txt",
     # Strip extras so the resulting file can be used as a constraints file
     strip_extras = True,
 )
 
+multirun(
+    name = "update_repo_pip310",
+    commands = [
+        ":update_repo_requirements_pip310",
+        ":update_repo_constraints_pip310",
+    ],
+)
+
 write_python_requirements_source_file(
-    name = "update_repo_requirements",
+    name = "update_repo_requirements_3_10",
     overrides_in = "requirements_overrides.txt",
+    python_version = "3.10",
     requirements_in = "requirements.in",
-    requirements_out = "requirements.txt",
+    requirements_out = "requirements_3_10.txt",
+)
+
+# Lock for the 3.12 side of the dual-version `@clockwork_pip` hub.
+# TODO(DX-29): retire once `@clockwork_pip` is no longer dual-parsed.
+write_python_requirements_source_file(
+    name = "update_repo_requirements_3_12",
+    overrides_in = "requirements_overrides.txt",
+    python_version = "3.12",
+    requirements_in = "requirements.in",
+    requirements_out = "requirements_3_12.txt",
 )
 
 # This pip hub should stay pinned on Python 3.10, to support dependencies that have no 3.12 support yet.
 # TODO(DX-29): remove this once all dependencies support Python 3.12
 write_python_requirements_source_file(
-    name = "update_repo_requirements_310",
+    name = "update_repo_requirements_pip310",
     overrides_in = "requirements_overrides_310.txt",
     python_version = "3.10",
-    requirements_in = "requirements_310.in",
-    requirements_out = "requirements_310.txt",
+    requirements_in = "requirements_pip310.in",
+    requirements_out = "requirements_pip310.txt",
 )
 
 multirun(
     name = "update_requirements",
     commands = [
         ":update_repo",
-        ":update_repo_310",
+        ":update_repo_pip310",
     ],
     jobs = 0,
 )

@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """DFL (Declarative Functional Language) IR nodes.
@@ -11,13 +11,14 @@ This module defines the core IR (Intermediate Representation) nodes for DFL expr
 
 from __future__ import annotations
 
+import operator
 from abc import abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import Enum
-from typing import TYPE_CHECKING, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import (
     clkbuiltins,
     clkenum,
@@ -35,6 +36,8 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from fltk.fegen.pyrt.span_protocol import SpanProtocol
 
 
 # FQN path prefix for standard library traits
@@ -58,7 +61,7 @@ class Context:
     terminals: TerminalSource
     module_id: ModuleID
 
-    def format_error(self, span: Span, msg: str) -> str:
+    def format_error(self, span: SpanProtocol, msg: str) -> str:
         """Format an error message with source location information.
 
         Args:
@@ -122,15 +125,18 @@ class BuiltinFn(node.NamedEntity):
     variadic: bool
     min_args: int
 
+    # fmt: off
     @abstractmethod
+    # pyrefly: ignore[invalid-abstract-method] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
     def infer_return_type(
         self,
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> typesys.TypeVal | typesys.InferenceVar:
+    # fmt: on
         """Infer the return type from the argument types.
 
         Args:
@@ -149,7 +155,7 @@ class BuiltinFn(node.NamedEntity):
         ...
 
 
-def _format_error(msg: str, span: Span | None, ctx: Context | None) -> str:
+def format_error(msg: str, span: SpanProtocol | None, ctx: Context | None) -> str:
     """Format an error message with source location if available.
 
     Args:
@@ -174,6 +180,14 @@ class UnaryOp(Enum):
     ABS = "abs"  # Absolute value: |x|
 
 
+_UNARY_OP_TABLE: Final[dict[UnaryOp, Callable[[Any], Any]]] = {
+    UnaryOp.NEG: operator.neg,
+    UnaryOp.POS: lambda x: x,
+    UnaryOp.NOT: operator.not_,
+    UnaryOp.ABS: operator.abs,
+}
+
+
 class BinaryOp(Enum):
     """Binary operators in DFL expressions."""
 
@@ -195,6 +209,23 @@ class BinaryOp(Enum):
     # Logical
     AND = "and"
     OR = "or"
+
+
+_BINARY_OP_TABLE: Final[dict[BinaryOp, Callable[[Any, Any], Any]]] = {
+    BinaryOp.ADD: operator.add,
+    BinaryOp.SUB: operator.sub,
+    BinaryOp.MUL: operator.mul,
+    BinaryOp.DIV: operator.truediv,
+    BinaryOp.MOD: operator.mod,
+    BinaryOp.EQ: operator.eq,
+    BinaryOp.NE: operator.ne,
+    BinaryOp.LT: operator.lt,
+    BinaryOp.LE: operator.le,
+    BinaryOp.GT: operator.gt,
+    BinaryOp.GE: operator.ge,
+    BinaryOp.AND: operator.and_,
+    BinaryOp.OR: operator.or_,
+}
 
 
 class NameValidationError(Exception):
@@ -222,7 +253,7 @@ class Ref:
 
     path: tuple[str, ...]
     scope: node.Scope = dataclass_field(repr=False)
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
     @property
@@ -296,7 +327,7 @@ class Member:
 
     base: Expr
     field_name: str
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -313,7 +344,7 @@ class Unary:
 
     op: UnaryOp
     operand: Expr
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -332,7 +363,7 @@ class Binary:
     op: BinaryOp
     left: Expr
     right: Expr
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -351,7 +382,7 @@ class IfElse:
     test: Expr
     then_: Expr
     else_: Expr
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -367,7 +398,7 @@ class CondArm:
 
     guard: Expr | None  # None = else arm
     body: Expr
-    span: Span
+    span: SpanProtocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,7 +414,7 @@ class CondExpr:
     """
 
     arms: tuple[CondArm, ...]
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -398,7 +429,7 @@ class LiteralPattern:
     """
 
     value: primitive.DecimalLiteral | primitive.UnitLiteral | primitive.StringLiteral
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -413,7 +444,7 @@ class EnumPattern:
     """
 
     variant: clkenum.ValueDef
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -430,7 +461,7 @@ class RangePattern:
 
     lo: primitive.DecimalLiteral | primitive.UnitLiteral
     hi: primitive.DecimalLiteral | primitive.UnitLiteral
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -443,7 +474,7 @@ class WildcardPattern:
         ctx: Compilation context.
     """
 
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -465,7 +496,7 @@ class MatchArm:
 
     patterns: tuple[Pattern, ...]
     body: Expr
-    span: Span
+    span: SpanProtocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -484,7 +515,7 @@ class Match:
 
     scrutinee: Expr
     arms: tuple[MatchArm, ...]
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -504,7 +535,7 @@ class CallArg:
     expr: Expr
     name: str | None = None
     is_spread: bool = False
-    span: Span | None = None
+    span: SpanProtocol | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,7 +553,7 @@ class Call:
 
     func: Expr
     args: tuple[CallArg, ...]
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -544,7 +575,7 @@ class ExprTuple:
     """
 
     elements: tuple[Expr, ...]
-    span: Span
+    span: SpanProtocol
     ctx: Context = dataclass_field(repr=False)
 
 
@@ -604,7 +635,7 @@ class FnDef(node.NamedEntity):
     params: tuple[FnParam, ...] = dataclass_field(default_factory=tuple)
     return_type_expr: expr.Expr | None = None
     body_scope: node.Scope | None = dataclass_field(default=None, repr=False)
-    span: Span | None = None
+    span: SpanProtocol | None = None
     ctx: Context | None = dataclass_field(default=None, repr=False)
     resolved: ResolvedFnDef | None = dataclass_field(default=None, repr=False)
 
@@ -755,7 +786,7 @@ class ResolvedFnDef:
     body: Expr
     return_type: typesys.TypeVal | None = None
     body_scope: node.Scope | None = None
-    span: Span | None = None
+    span: SpanProtocol | None = None
     ctx: Context | None = None
 
 
@@ -776,12 +807,117 @@ class Lambda:
 
     params: tuple[str, ...]
     body: Expr
-    span: Span | None = None
+    span: SpanProtocol | None = None
     ctx: Context | None = None
 
 
-Literal = primitive.DecimalLiteral | primitive.UnitLiteral | primitive.StringLiteral
-Expr = Literal | Ref | Member | Unary | Binary | IfElse | CondExpr | Match | Call | ExprTuple | Lambda
+@dataclass(frozen=True, slots=True)
+class Instantiation:
+    """Instantiation expression: GenericType<arg1, name=arg2, ...>.
+
+    Supports positional and named arguments (kwargs).
+
+    Attributes:
+        instantiates: Expression that evaluates to the generic type that will be instantiated (usually a Ref).
+        args: Tuple of instantiation arguments.
+        span: Source location of this expression.
+        ctx: Compilation context.
+    """
+
+    instantiates: Expr
+    args: tuple[CallArg, ...]
+    span: SpanProtocol
+    ctx: Context = dataclass_field(repr=False)
+
+
+C = TypeVar("C")
+
+
+@dataclass(frozen=True, slots=True)
+class CstPassthrough(Generic[C]):
+    """A simple passthrough for CST nodes. Intended for use with statement-like nodes that should be evaluated outside DFL.
+
+    Attributes:
+        cst_node: The raw CST node.
+        span: Source location of this statement.
+        ctx: Compilation context.
+    """
+
+    cst_node: C
+    span: SpanProtocol
+    ctx: Context = dataclass_field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Definition:
+    """A definition.
+
+    Attributes:
+        name: The name being defined.
+        value: The expression being bound to that name. Note that this is an expr.Expr, not a DFL expression.
+        options: An optional block of options associated with the definition.
+        span: Source location of this statement.
+        ctx: Compilation context.
+    """
+
+    name: str
+    value: expr.Expr
+    options: Block | None
+    cst_node: cst.Definition
+    span: SpanProtocol
+    ctx: Context = dataclass_field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Block:
+    """A block of statements.
+
+    Attributes:
+        name: An optional identifier for the block.
+        statements: The statements contained by this block.
+        span: Source location of this block.
+        ctx: Compilation context.
+    """
+
+    name: str | None
+    statements: list[Statement]
+    span: SpanProtocol
+    ctx: Context = dataclass_field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Invalid:
+    """Error information for when evaluation of an expression fails.
+
+    Attributes:
+        expr: The expression that failed.
+        error: The exception raised during evaluation.
+    """
+
+    expr: Expr
+    error: Exception
+
+
+Value = typesys.Value
+Statement = Definition | Block | CstPassthrough[cst.Statement] | CondExpr | Match | IfElse
+Expr = (
+    Value
+    | Ref
+    | Member
+    | Unary
+    | Binary
+    | IfElse
+    | CondExpr
+    | Match
+    | Call
+    | Instantiation
+    | ExprTuple
+    | Lambda
+    | Block
+    | Definition
+    | CstPassthrough[cst.Statement]
+    | Invalid
+)
 
 E = TypeVar("E")
 
@@ -864,7 +1000,7 @@ def _binary_op_from_cst_multiplicative(op_cst: cst.DflMultiplicativeOp) -> Binar
     raise ValueError(msg)
 
 
-def _literal_from_cst(literal_cst: cst.Literal, module: node.Module) -> Literal:
+def _literal_from_cst(literal_cst: cst.Literal, module: node.Module) -> Value:
     """Convert a CST literal to an IR Literal."""
     result = primitive.Literal.from_cst(literal_cst, module)
     # The result is guaranteed to be one of the literal subtypes
@@ -913,7 +1049,7 @@ def _lambda_from_cst(lambda_cst: cst.DflLambda, ctx: Context, module: node.Modul
     )
 
 
-def _primary_from_cst(primary_cst: cst.DflPrimaryExpr, ctx: Context, module: node.Module) -> Expr:  # noqa: PLR0911 # One return per expression type
+def _primary_from_cst(primary_cst: cst.DflPrimaryExpr, ctx: Context, module: node.Module) -> Expr:  # noqa: C901, PLR0911 # One return per expression type
     """Convert a CST primary expression to an IR Expr."""
     if (paren := primary_cst.maybe_dfl_paren_expr()) is not None:
         return expr_from_cst(paren.child_dfl_expr(), ctx, module)
@@ -923,13 +1059,13 @@ def _primary_from_cst(primary_cst: cst.DflPrimaryExpr, ctx: Context, module: nod
         return Unary(UnaryOp.ABS, inner, abs_expr.span, ctx)
 
     if (if_expr := primary_cst.maybe_dfl_if_expr()) is not None:
-        return _if_from_cst(if_expr, ctx, module)
+        return if_from_cst(if_expr, ctx, module)
 
     if (cond_expr := primary_cst.maybe_dfl_cond_expr()) is not None:
-        return _cond_from_cst(cond_expr, ctx, module)
+        return cond_from_cst(cond_expr, ctx, module)
 
     if (match_expr := primary_cst.maybe_dfl_match_expr()) is not None:
-        return _match_from_cst(match_expr, ctx, module)
+        return match_from_cst(match_expr, ctx, module)
 
     if (array_lit := primary_cst.maybe_dfl_array_literal()) is not None:
         return _expr_tuple_from_cst(array_lit, ctx, module)
@@ -943,11 +1079,14 @@ def _primary_from_cst(primary_cst: cst.DflPrimaryExpr, ctx: Context, module: nod
     if (identifier := primary_cst.maybe_identifier()) is not None:
         return Ref.from_identifier(identifier, ctx)
 
+    if (identifier := primary_cst.maybe_namespaced_identifier()) is not None:
+        return Ref.from_namespaced_identifier(identifier, ctx)
+
     msg = f"Unknown primary expression type: {primary_cst}"
     raise ValueError(msg)
 
 
-def _if_from_cst(if_cst: cst.DflIfExpr, ctx: Context, module: node.Module) -> IfElse:
+def if_from_cst(if_cst: cst.DflIfExpr, ctx: Context, module: node.Module) -> IfElse:
     """Convert a CST if-then-else expression to an IR IfElse."""
     test = expr_from_cst(if_cst.child_condition(), ctx, module)
     then_ = expr_from_cst(if_cst.child_if_true(), ctx, module)
@@ -961,7 +1100,7 @@ def _expr_tuple_from_cst(array_cst: cst.DflArrayLiteral, ctx: Context, module: n
     return ExprTuple(elements, array_cst.span, ctx)
 
 
-def _cond_from_cst(cond_cst: cst.DflCondExpr, ctx: Context, module: node.Module) -> CondExpr:
+def cond_from_cst(cond_cst: cst.DflCondExpr, ctx: Context, module: node.Module) -> CondExpr:
     """Convert a CST cond expression to an IR CondExpr."""
     arms: list[CondArm] = []
     cond_arms_cst = cond_cst.child_dfl_cond_arms()
@@ -980,7 +1119,7 @@ def _cond_from_cst(cond_cst: cst.DflCondExpr, ctx: Context, module: node.Module)
     return CondExpr(tuple(arms), cond_cst.span, ctx)
 
 
-def _match_from_cst(match_cst: cst.DflMatchExpr, ctx: Context, module: node.Module) -> Match:
+def match_from_cst(match_cst: cst.DflMatchExpr, ctx: Context, module: node.Module) -> Match:
     """Convert a CST match expression to an IR Match."""
     scrutinee = expr_from_cst(match_cst.child_scrutinee(), ctx, module)
 
@@ -997,7 +1136,7 @@ def _match_from_cst(match_cst: cst.DflMatchExpr, ctx: Context, module: node.Modu
     return Match(scrutinee, tuple(arms), match_cst.span, ctx)
 
 
-def _postfix_from_cst(postfix_cst: cst.DflPostfixExpr, ctx: Context, module: node.Module) -> Expr:
+def _postfix_from_cst(postfix_cst: cst.DflPostfixExpr, ctx: Context, module: node.Module) -> Expr:  # noqa: PLR0912, C901 # Many branches/returns by nature of one per expression type
     """Convert a CST postfix expression to an IR Expr.
 
     Handles member access (obj.field) and function calls (func(args)).
@@ -1014,11 +1153,11 @@ def _postfix_from_cst(postfix_cst: cst.DflPostfixExpr, ctx: Context, module: nod
                 # Already processed above via child_dfl_primary_expr()
                 pass
             case postfix_label.DFL_MEMBER_SUFFIX:
-                assert isinstance(child, cst.DflMemberSuffix)
+                assert child.kind == cst.DflMemberSuffix.kind
                 field_name = get_span(child.child_identifier().child_value(), ctx.terminals)
                 result = Member(result, field_name, child.span, ctx)
             case postfix_label.DFL_CALL_SUFFIX:
-                assert isinstance(child, cst.DflCallSuffix)
+                assert child.kind == cst.DflCallSuffix.kind
                 args: list[CallArg] = []
                 if (arg_list := child.maybe_dfl_arg_list()) is not None:
                     for arg_cst in arg_list.children_dfl_arg():
@@ -1029,8 +1168,24 @@ def _postfix_from_cst(postfix_cst: cst.DflPostfixExpr, ctx: Context, module: nod
                         is_spread = arg_cst.maybe_spread() is not None
                         args.append(CallArg(expr=value_expr, name=arg_name, is_spread=is_spread, span=arg_cst.span))
                 result = Call(result, tuple(args), child.span, ctx)
+            case postfix_label.DFL_INSTANTIATE_SUFFIX:
+                assert child.kind == cst.DflInstantiateSuffix.kind
+                args: list[CallArg] = []
+                if (arg_list := child.maybe_dfl_arg_list()) is not None:
+                    for arg_cst in arg_list.children_dfl_arg():
+                        value_expr = expr_from_cst(arg_cst.child_value(), ctx, module)
+                        arg_name: str | None = None
+                        if (name_cst := arg_cst.maybe_name()) is not None:
+                            arg_name = get_span(name_cst.child_value(), ctx.terminals)
+                        is_spread = arg_cst.maybe_spread() is not None
+                        args.append(CallArg(expr=value_expr, name=arg_name, is_spread=is_spread, span=arg_cst.span))
+
+                result = Instantiation(result, tuple(args), child.span, ctx)
             case None:
                 # Trivia nodes have no label - skip them
+                pass
+            case _:
+                # Any future labels should be ignored here unless they carry semantics.
                 pass
 
     return result
@@ -1137,6 +1292,73 @@ def _or_from_cst(or_cst: cst.DflOrExpr, ctx: Context, module: node.Module) -> Ex
     return result
 
 
+def _definition_from_cst(definition_cst: cst.Definition, ctx: Context, module: node.Module) -> Definition:
+    return Definition(
+        name=get_span(definition_cst.child_name().child_value(), ctx.terminals),
+        value=expr.Expr.from_cst(definition_cst.child_value(), module),
+        options=_block_from_cst(definition_cst.child_block(), ctx, module) if definition_cst.maybe_block() else None,
+        cst_node=definition_cst,
+        span=definition_cst.span,
+        ctx=ctx,
+    )
+
+
+def _block_from_cst(block_cst: cst.Block, ctx: Context, module: node.Module) -> Block:
+    """Convert a CST or expression to an IR Expr."""
+    statements: list[Statement | Definition | Block | CondExpr | Match | IfElse] = []
+    for statement_cst in block_cst.children_statement():
+        if (if_expr := statement_cst.maybe_dfl_if_expr()) is not None:
+            statement_node = if_from_cst(if_expr, ctx, module)
+        elif (cond_expr := statement_cst.maybe_dfl_cond_expr()) is not None:
+            statement_node = cond_from_cst(cond_expr, ctx, module)
+        elif (match_expr := statement_cst.maybe_dfl_match_expr()) is not None:
+            statement_node = match_from_cst(match_expr, ctx, module)
+        elif (definition_cst := statement_cst.maybe_definition()) is not None:
+            statement_node = _definition_from_cst(definition_cst, ctx, module)
+        elif (nested_block_expr := statement_cst.maybe_block()) is not None:
+            statement_node = _block_from_cst(nested_block_expr, ctx, module)
+        else:
+            statement_node = CstPassthrough(cst_node=statement_cst, span=statement_cst.span, ctx=ctx)
+
+        statements.append(statement_node)
+
+    return Block(
+        name=get_span(block_cst.child_name().child_value(), ctx.terminals) if block_cst.maybe_name() else None,
+        statements=statements,
+        span=block_cst.span,
+        ctx=ctx,
+    )
+
+
+def statement_from_cst(statement_cst: cst.Statement, ctx: Context, module: node.Module) -> Statement:
+    """Convert a statement CST node into an IR node.
+
+    Args:
+        statement_cst: The CST statement node to convert.
+        ctx: The DFL compilation context.
+        module: The module containing the expression (for literal conversion).
+
+    Returns:
+        The corresponding IR expression.
+    """
+    if (block_cst := statement_cst.maybe_block()) is not None:
+        return _block_from_cst(block_cst, ctx, module)
+
+    if (definition_cst := statement_cst.maybe_definition()) is not None:
+        return _definition_from_cst(definition_cst, ctx, module)
+
+    if (if_expr := statement_cst.maybe_dfl_if_expr()) is not None:
+        return if_from_cst(if_expr, ctx, module)
+
+    if (cond_expr := statement_cst.maybe_dfl_cond_expr()) is not None:
+        return cond_from_cst(cond_expr, ctx, module)
+
+    if (match_expr := statement_cst.maybe_dfl_match_expr()) is not None:
+        return match_from_cst(match_expr, ctx, module)
+
+    return CstPassthrough(cst_node=statement_cst, span=statement_cst.span, ctx=ctx)
+
+
 def expr_from_cst(cst_node: cst.DflExpr, ctx: Context, module: node.Module) -> Expr:
     """Convert a DFL CST expression node to an IR expression.
 
@@ -1150,6 +1372,9 @@ def expr_from_cst(cst_node: cst.DflExpr, ctx: Context, module: node.Module) -> E
     Returns:
         The corresponding IR expression.
     """
+    if (statement_cst := cst_node.maybe_statement()) is not None:
+        return statement_from_cst(statement_cst, ctx, module)
+
     return _or_from_cst(cst_node.child_dfl_or_expr(), ctx, module)
 
 
@@ -1260,7 +1485,7 @@ def check_pattern_type(
 def _check_literal_pattern_type(
     value: primitive.DecimalLiteral | primitive.UnitLiteral | primitive.StringLiteral,
     scrutinee_type: typesys.TypeVal | typesys.InferenceVar,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> None:
     """Check that a literal pattern is compatible with scrutinee type."""
@@ -1271,7 +1496,7 @@ def _check_literal_pattern_type(
 def _check_enum_pattern_type(
     variant: clkenum.ValueDef,
     scrutinee_type: typesys.TypeVal | typesys.InferenceVar,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> None:
     """Check that an enum pattern variant belongs to the scrutinee's enum type."""
@@ -1283,7 +1508,7 @@ def _check_range_pattern_type(
     lo: primitive.DecimalLiteral | primitive.UnitLiteral,
     hi: primitive.DecimalLiteral | primitive.UnitLiteral,
     scrutinee_type: typesys.TypeVal | typesys.InferenceVar,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> None:
     """Check that a range pattern is compatible with scrutinee type."""
@@ -1408,7 +1633,7 @@ def check_match_exhaustiveness(
         raise TypeCheckError(msg)
 
 
-def get_expr_span(expr: Expr) -> Span:
+def get_expr_span(expr: Expr) -> SpanProtocol:
     """Get the source span for an expression.
 
     Args:
@@ -1426,6 +1651,11 @@ def get_expr_span(expr: Expr) -> Span:
                 return expr.cst_node.span
             msg = "Literal has no CST node"
             raise ValueError(msg)
+        case Value():
+            msg = "Non-literal values do not have CST nodes"
+            raise ValueError(msg)
+        case Invalid(expr=e):
+            return get_expr_span(e)
         case (
             Ref(span=span)
             | Member(span=span)
@@ -1435,8 +1665,12 @@ def get_expr_span(expr: Expr) -> Span:
             | CondExpr(span=span)
             | Match(span=span)
             | Call(span=span)
+            | Instantiation(span=span)
             | ExprTuple(span=span)
             | Lambda(span=span)
+            | Block(span=span)
+            | Definition(span=span)
+            | CstPassthrough(span=span)
         ):
             if span is None:
                 msg = f"Expression has no source span: {expr}"
@@ -1444,7 +1678,7 @@ def get_expr_span(expr: Expr) -> Span:
             return span
 
 
-def map_expr(f: Callable[[Expr], Expr], expr: Expr) -> Expr:  # noqa: PLR0911, C901 # Many branches/returns by nature of one per expression type
+def map_expr(f: Callable[[Expr], Expr], expr: Expr) -> Expr:  # noqa: PLR0912, PLR0911, C901 # Many branches/returns by nature of one per expression type
     """Apply f to all immediate children, return new expr with results.
 
     This is useful for tree transformations like substitution. The function
@@ -1462,7 +1696,7 @@ def map_expr(f: Callable[[Expr], Expr], expr: Expr) -> Expr:  # noqa: PLR0911, C
         A new expression with f applied to all children.
     """
     match expr:
-        case primitive.DecimalLiteral() | primitive.UnitLiteral() | primitive.StringLiteral():
+        case Value():
             return expr
         case Ref():
             return expr
@@ -1487,10 +1721,29 @@ def map_expr(f: Callable[[Expr], Expr], expr: Expr) -> Expr:  # noqa: PLR0911, C
                 CallArg(expr=f(arg.expr), name=arg.name, is_spread=arg.is_spread, span=arg.span) for arg in args
             )
             return Call(f(func), new_args, span, ctx)
+        case Instantiation(instantiates=instantiates, args=args, span=span, ctx=ctx):
+            new_args = tuple(
+                CallArg(expr=f(arg.expr), name=arg.name, is_spread=arg.is_spread, span=arg.span) for arg in args
+            )
+            return Instantiation(f(instantiates), new_args, span, ctx)
         case ExprTuple(elements=elements, span=span, ctx=ctx):
             return ExprTuple(tuple(f(elem) for elem in elements), span, ctx)
         case Lambda(params=params, body=body, span=span, ctx=ctx):
             return Lambda(params, f(body), span, ctx)
+        case Block(name=name, statements=statements, span=span, ctx=ctx):
+            mapped_statements: list[Statement] = [cast("Statement", f(stmt)) for stmt in statements]
+            return Block(
+                name=name,
+                statements=mapped_statements,
+                span=span,
+                ctx=ctx,
+            )
+        case Definition(name=name, value=value, options=options, cst_node=cst_node, span=span, ctx=ctx):
+            mapped_options = f(options) if options else None
+            assert isinstance(mapped_options, Block | None)
+            return Definition(name=name, value=value, options=mapped_options, cst_node=cst_node, span=span, ctx=ctx)
+        case CstPassthrough() | Invalid():
+            return expr
 
 
 T = TypeVar("T")
@@ -1511,7 +1764,7 @@ def fold_expr(f: Callable[[Expr, list[T]], T], expr: Expr) -> T:  # noqa: PLR091
         The result of folding f over the tree.
     """
     match expr:
-        case primitive.DecimalLiteral() | primitive.UnitLiteral() | primitive.StringLiteral():
+        case Value():
             return f(expr, [])
         case Ref():
             return f(expr, [])
@@ -1544,12 +1797,27 @@ def fold_expr(f: Callable[[Expr, list[T]], T], expr: Expr) -> T:  # noqa: PLR091
             for arg in args:
                 child_results.append(fold_expr(f, arg.expr))
             return f(expr, child_results)
+        case Instantiation(instantiates=instantiates, args=args):
+            child_results = [fold_expr(f, instantiates)]
+            for arg in args:
+                child_results.append(fold_expr(f, arg.expr))
+            return f(expr, child_results)
         case ExprTuple(elements=elements):
             child_results = [fold_expr(f, elem) for elem in elements]
             return f(expr, child_results)
         case Lambda(body=body):
             child_results = [fold_expr(f, body)]
             return f(expr, child_results)
+        case Block(statements=statements):
+            child_results = [fold_expr(f, stmt) for stmt in statements]
+            return f(expr, child_results)
+        case Definition(options=options):
+            child_results = []
+            if options is not None:
+                child_results.append(fold_expr(f, options))
+            return f(expr, child_results)
+        case CstPassthrough() | Invalid():
+            return f(expr, [])
 
 
 def expr_size(expr: Expr) -> int:
@@ -1715,7 +1983,7 @@ def expand_map_with_lambda(
     """
     if len(lambda_expr.params) != 1:
         msg = f"map() lambda must have exactly one parameter, got {len(lambda_expr.params)}"
-        raise TypeError(_format_error(msg, lambda_expr.span, ctx))
+        raise TypeError(format_error(msg, lambda_expr.span, ctx))
 
     param_name = lambda_expr.params[0]
     expanded_elements: list[Expr] = []
@@ -1731,7 +1999,9 @@ def expand_map_with_lambda(
     )
 
 
-def _expand_spread_arg(arg_expr: Expr, arg_span: Span | None, call_span: Span, ctx: Context) -> list[Expr]:
+def _expand_spread_arg(
+    arg_expr: Expr, arg_span: SpanProtocol | None, call_span: SpanProtocol, ctx: Context
+) -> list[Expr]:
     """Expand a spread argument into its constituent elements.
 
     Spread arguments (expr...) can only be applied to ExprTuples, which represent
@@ -1764,7 +2034,9 @@ def _expand_spread_arg(arg_expr: Expr, arg_span: Span | None, call_span: Span, c
     raise TypeError(msg)
 
 
-def _flatten_call_args(args: tuple[CallArg, ...], call_span: Span, ctx: Context) -> tuple[dict[str, Expr], list[Expr]]:
+def _flatten_call_args(
+    args: tuple[CallArg, ...], call_span: SpanProtocol, ctx: Context
+) -> tuple[dict[str, Expr], list[Expr]]:
     """Process call arguments, expanding spreads in-place.
 
     Spread arguments (expr...) are expanded inline into the positional argument list.
@@ -1815,7 +2087,7 @@ def _match_args_to_params(  # noqa: PLR0913 # Too many args mitigated by kwonly 
     original_params: tuple[FnParam, ...],
     named_args: dict[str, Expr],
     positional_args: list[Expr],
-    call_span: Span,
+    call_span: SpanProtocol,
     ctx: Context,
 ) -> dict[str, tuple[FnParam, Expr]]:
     """Match arguments to function parameters.
@@ -2035,6 +2307,10 @@ class TypeCheckError(Exception):
     """Raised when type checking fails."""
 
 
+class PatternMatchError(Exception):
+    """Raised when pattern matching fails."""
+
+
 @dataclass
 class FixedTypeBuiltin(BuiltinFn):
     """Builtin that always returns a fixed type regardless of arguments."""
@@ -2047,7 +2323,7 @@ class FixedTypeBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> typesys.TypeVal:
         return self.return_type
@@ -2063,19 +2339,19 @@ class PreservesInputTypeBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> typesys.TypeVal | typesys.InferenceVar:
         if not arg_types:
             msg = f"Built-in '{self.name}' requires at least one argument"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
         return arg_types[0]
 
 
 def verify_ord(
     t: typesys.TypeVal | typesys.InferenceVar,
     registry: dfl_types.TraitRegistry | None,
-    span: Span | None,
+    span: SpanProtocol | None,
     ctx: Context | None,
 ) -> None:
     """Verify a type implements the Ord trait.
@@ -2096,7 +2372,7 @@ def verify_ord(
     impl = registry.find_impl(ord_trait, t, t)
     if impl is None:
         msg = f"Type {t} does not implement Ord"
-        raise TypeCheckError(_format_error(msg, span, ctx))
+        raise TypeCheckError(format_error(msg, span, ctx))
 
 
 @dataclass
@@ -2117,12 +2393,12 @@ class MinMaxBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> typesys.TypeVal | typesys.InferenceVar:
         if not arg_types:
             msg = f"Built-in '{self.name}' requires at least one argument"
-            raise TypeCheckError(_format_error(msg, span, ctx))
+            raise TypeCheckError(format_error(msg, span, ctx))
 
         if len(arg_types) == 1:
             first_arg = arg_types[0]
@@ -2131,7 +2407,7 @@ class MinMaxBuiltin(BuiltinFn):
                 verify_ord(result_type, registry, span, ctx)
                 return result_type
             msg = f"Built-in '{self.name}' with a single argument requires a collection, got {first_arg}"
-            raise TypeCheckError(_format_error(msg, span, ctx))
+            raise TypeCheckError(format_error(msg, span, ctx))
 
         result_type: typesys.TypeVal | typesys.InferenceVar = arg_types[0]
         for arg_t in arg_types[1:]:
@@ -2153,17 +2429,17 @@ class CollectionElementTypeBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> typesys.TypeVal | typesys.InferenceVar:
         if not arg_types:
             msg = f"Built-in '{self.name}' requires a collection argument"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
         first_arg = arg_types[0]
         if isinstance(first_arg, dfl_types.CollectionType):
             return first_arg.element_type
         msg = f"Built-in '{self.name}' expects a collection, got {first_arg}"
-        raise TypeError(_format_error(msg, span, ctx))
+        raise TypeError(format_error(msg, span, ctx))
 
 
 @dataclass
@@ -2179,20 +2455,20 @@ class FlattenBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> dfl_types.CollectionType:
         if not arg_types:
             msg = f"Built-in '{self.name}' requires a collection argument"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
         first_arg = arg_types[0]
         if not isinstance(first_arg, dfl_types.CollectionType):
             msg = f"Built-in '{self.name}' expects a collection, got {first_arg}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
         inner = first_arg.element_type
         if not isinstance(inner, dfl_types.CollectionType):
             msg = f"Built-in '{self.name}' expects a nested collection, got Collection<{inner}>"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
         return dfl_types.CollectionType(inner.element_type)
 
 
@@ -2211,7 +2487,7 @@ class MapBuiltin(BuiltinFn):
         self,
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None,
-        span: Span | None,
+        span: SpanProtocol | None,
         ctx: Context | None,
     ) -> tuple[dfl_types.CollectionType, typesys.TypeVal, Ref | Lambda]:
         """Validate map() arguments and extract collection/element types and function/lambda.
@@ -2231,26 +2507,26 @@ class MapBuiltin(BuiltinFn):
         expected_args: Final = 2
         if len(arg_types) != expected_args:
             msg = f"map() requires {expected_args} arguments, got {len(arg_types)}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         if arg_exprs is None or len(arg_exprs) != expected_args:
             msg = "map() requires function argument expression for type inference"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         func_expr = arg_exprs[0]
         if not isinstance(func_expr, Ref | Lambda):
             msg = "map() first argument must be a function reference or lambda"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         collection_type = arg_types[1]
         if not isinstance(collection_type, dfl_types.CollectionType):
             msg = f"map() second argument must be a collection, got {collection_type}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         element_type = collection_type.element_type
         if isinstance(element_type, typesys.InferenceVar):
             msg = "map() cannot infer element type - collection type is unresolved"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         return collection_type, element_type, func_expr
 
@@ -2259,7 +2535,7 @@ class MapBuiltin(BuiltinFn):
         func: node.NamedEntity,
         element_type: typesys.TypeVal,
         registry: dfl_types.TraitRegistry | None,
-        span: Span | None,
+        span: SpanProtocol | None,
         ctx: Context | None,
     ) -> typesys.TypeVal:
         """Infer the return type of the mapping function.
@@ -2288,15 +2564,15 @@ class MapBuiltin(BuiltinFn):
         elif isinstance(func, FnDef):
             if registry is None or span is None or ctx is None:
                 msg = "map() with user function requires registry, span, and ctx"
-                raise TypeError(_format_error(msg, span, ctx))
+                raise TypeError(format_error(msg, span, ctx))
             result_type = infer_fn_return_type(func, element_type, registry, span, ctx)
         else:
             msg = f"map() second argument must be a function, got {type(func).__name__}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         if isinstance(result_type, typesys.InferenceVar):
             msg = "map() cannot determine return type of mapped function"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         return result_type
 
@@ -2306,7 +2582,7 @@ class MapBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> dfl_types.CollectionType:
         _collection_type, element_type, func_or_lambda = self._validate_args(arg_types, arg_exprs, span, ctx)
@@ -2314,7 +2590,7 @@ class MapBuiltin(BuiltinFn):
         if isinstance(func_or_lambda, Lambda):
             if registry is None or span is None or ctx is None:
                 msg = "map() with lambda requires registry, span, and ctx"
-                raise TypeError(_format_error(msg, span, ctx))
+                raise TypeError(format_error(msg, span, ctx))
             result_type = infer_lambda_return_type(func_or_lambda, element_type, registry, span, ctx)
         else:
             func = func_or_lambda.lookup()
@@ -2338,7 +2614,7 @@ class FilterBuiltin(BuiltinFn):
         self,
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None,
-        span: Span | None,
+        span: SpanProtocol | None,
         ctx: Context | None,
     ) -> tuple[dfl_types.CollectionType, typesys.TypeVal, Ref | Lambda]:
         """Validate filter() arguments and extract collection/element types and function/lambda.
@@ -2358,26 +2634,26 @@ class FilterBuiltin(BuiltinFn):
         expected_args: Final = 2
         if len(arg_types) != expected_args:
             msg = f"filter() requires {expected_args} arguments, got {len(arg_types)}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         if arg_exprs is None or len(arg_exprs) < expected_args:
             msg = "filter() requires predicate argument expression for type inference"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         func_expr = arg_exprs[0]
         if not isinstance(func_expr, Ref | Lambda):
             msg = "filter() first argument must be a function reference or lambda"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         collection_type = arg_types[1]
         if not isinstance(collection_type, dfl_types.CollectionType):
             msg = f"filter() second argument must be a collection, got {collection_type}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         element_type = collection_type.element_type
         if isinstance(element_type, typesys.InferenceVar):
             msg = "filter() cannot infer element type - collection type is unresolved"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         return collection_type, element_type, func_expr
 
@@ -2386,7 +2662,7 @@ class FilterBuiltin(BuiltinFn):
         func: node.NamedEntity,
         element_type: typesys.TypeVal,
         registry: dfl_types.TraitRegistry | None,
-        span: Span | None,
+        span: SpanProtocol | None,
         ctx: Context | None,
     ) -> None:
         """Verify that the predicate function returns Bool.
@@ -2412,22 +2688,22 @@ class FilterBuiltin(BuiltinFn):
         elif isinstance(func, FnDef):
             if registry is None or span is None or ctx is None:
                 msg = "filter() with user predicate requires registry, span, and ctx"
-                raise TypeError(_format_error(msg, span, ctx))
+                raise TypeError(format_error(msg, span, ctx))
             result_type = infer_fn_return_type(func, element_type, registry, span, ctx)
         else:
             msg = f"filter() second argument must be a function, got {type(func).__name__}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
         if result_type != clkbuiltins.BOOL:
             msg = f"filter() predicate must return Bool, got {result_type}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
     def _verify_lambda_predicate_returns_bool(
         self,
         lambda_expr: Lambda,
         element_type: typesys.TypeVal,
         registry: dfl_types.TraitRegistry,
-        span: Span,
+        span: SpanProtocol,
         ctx: Context,
     ) -> None:
         """Verify that the lambda predicate returns Bool.
@@ -2445,7 +2721,7 @@ class FilterBuiltin(BuiltinFn):
         result_type = infer_lambda_return_type(lambda_expr, element_type, registry, span, ctx)
         if result_type != clkbuiltins.BOOL:
             msg = f"filter() lambda must return Bool, got {result_type}"
-            raise TypeError(_format_error(msg, span, ctx))
+            raise TypeError(format_error(msg, span, ctx))
 
     @override
     def infer_return_type(
@@ -2453,7 +2729,7 @@ class FilterBuiltin(BuiltinFn):
         arg_types: list[typesys.TypeVal | typesys.InferenceVar],
         arg_exprs: list[object] | None = None,
         registry: dfl_types.TraitRegistry | None = None,
-        span: Span | None = None,
+        span: SpanProtocol | None = None,
         ctx: Context | None = None,
     ) -> dfl_types.CollectionType:
         collection_type, element_type, func_or_lambda = self._validate_args(arg_types, arg_exprs, span, ctx)
@@ -2461,7 +2737,7 @@ class FilterBuiltin(BuiltinFn):
         if isinstance(func_or_lambda, Lambda):
             if registry is None or span is None or ctx is None:
                 msg = "filter() with lambda requires registry, span, and ctx"
-                raise TypeError(_format_error(msg, span, ctx))
+                raise TypeError(format_error(msg, span, ctx))
             self._verify_lambda_predicate_returns_bool(func_or_lambda, element_type, registry, span, ctx)
         else:
             func = func_or_lambda.lookup()
@@ -2499,7 +2775,7 @@ def infer_fn_return_type(
     fn: FnDef,
     element_type: typesys.TypeVal,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal | typesys.InferenceVar:
     """Infer the return type of a function when applied to an element type.
@@ -2550,7 +2826,7 @@ def infer_lambda_return_type(
     lambda_expr: Lambda,
     element_type: typesys.TypeVal,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal | typesys.InferenceVar:
     """Infer the return type of a lambda when applied to an element type.
@@ -2573,7 +2849,7 @@ def infer_lambda_return_type(
     """
     if len(lambda_expr.params) != 1:
         msg = f"Lambda for map/filter must have exactly one parameter, got {len(lambda_expr.params)}"
-        raise TypeCheckError(_format_error(msg, span, ctx))
+        raise TypeCheckError(format_error(msg, span, ctx))
 
     param_name = lambda_expr.params[0]
 
@@ -2670,10 +2946,13 @@ def _get_ref_type(ref: Ref) -> typesys.TypeVal | typesys.InferenceVar:
         TypeCheckError: If the reference type cannot be determined.
     """
     entity = ref.lookup()
+    if isinstance(entity, node.NamedBinding):
+        entity = entity.bound_value()
     type_info = getattr(entity, "type_info", None)
     if type_info is not None and isinstance(type_info, (typesys.TypeVal, typesys.InferenceVar)):
         return type_info
-    raise TypeCheckError(ref.ctx.format_error(ref.span, f"Cannot determine type of '{ref}'"))
+    msg = ref.ctx.format_error(ref.span, f"Cannot determine type of '{ref.path}' = {entity}")
+    raise TypeCheckError(msg)
 
 
 def _op_to_trait(op: BinaryOp | UnaryOp, registry: dfl_types.TraitRegistry) -> dfl_types.TraitDef:
@@ -2734,7 +3013,7 @@ def _find_trait_impl(  # noqa: PLR0913 # Too many parameters mitigated by keywor
     for_type: typesys.TypeVal | typesys.InferenceVar,
     rhs: typesys.TypeVal | typesys.InferenceVar | None,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> dfl_types.ResolvedTraitImpl:
     """Find a trait implementation for the given operand types.
@@ -2781,7 +3060,7 @@ def _get_trait_output(
     trait: dfl_types.TraitDef,
     impl: dfl_types.ResolvedTraitImpl,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal:
     """Get the Output type from a trait implementation.
@@ -2813,7 +3092,7 @@ def binary_result_type(  # noqa: PLR0913 # Too many parameters mitigated by keyw
     left: typesys.TypeVal | typesys.InferenceVar,
     right: typesys.TypeVal | typesys.InferenceVar,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal:
     """Determine the result type of a binary operation.
@@ -2837,6 +3116,15 @@ def binary_result_type(  # noqa: PLR0913 # Too many parameters mitigated by keyw
     """
     trait = _op_to_trait(op, registry)
     impl = _find_trait_impl(trait=trait, for_type=left, rhs=right, registry=registry, span=span, ctx=ctx)
+
+    # Back-propagate the resolved concrete types to any InferenceVar operands.
+    if isinstance(left, typesys.InferenceVar):
+        left.conform(impl.for_type)
+    if isinstance(right, typesys.InferenceVar):
+        rhs_type = impl.type_args.get("Rhs")
+        if rhs_type is not None:
+            right.conform(rhs_type)
+
     return _get_trait_output(trait, impl, registry, span, ctx)
 
 
@@ -2845,7 +3133,7 @@ def unary_result_type(
     op: UnaryOp,
     operand: typesys.TypeVal | typesys.InferenceVar,
     registry: dfl_types.TraitRegistry,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal:
     """Determine the result type of a unary operation.
@@ -2868,13 +3156,18 @@ def unary_result_type(
     """
     trait = _op_to_trait(op, registry)
     impl = _find_trait_impl(trait=trait, for_type=operand, rhs=None, registry=registry, span=span, ctx=ctx)
+
+    # Back-propagate the resolved concrete type to any InferenceVar operand.
+    if isinstance(operand, typesys.InferenceVar):
+        operand.conform(impl.for_type)
+
     return _get_trait_output(trait, impl, registry, span, ctx)
 
 
 def _check_member_access(
     base_type: typesys.TypeVal | typesys.InferenceVar,
     field_name: str,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
     *,
     base_entity: node.NamedEntity | None = None,
@@ -2904,8 +3197,19 @@ def _check_member_access(
         field_type = _check_member_access(element_type, field_name, span, ctx, base_entity=base_entity)
         return dfl_types.CollectionType(field_type)
 
-    if isinstance(base_entity, typesys.MembershipEntity):
-        field_entity = base_entity.attribute(field_name)
+    # Use base_entity if it's a MembershipEntity; otherwise fall back to base_type.
+    # This handles nested member access (e.g., a.b.c) where base_type is an
+    # InstantiatedSchema returned by check() — already a MembershipEntity — but
+    # base_entity is None because the base expression is a Member, not a Ref.
+    membership: typesys.MembershipEntity | None = (
+        base_entity
+        if isinstance(base_entity, typesys.MembershipEntity)
+        else base_type
+        if isinstance(base_type, typesys.MembershipEntity)
+        else None
+    )
+    if membership is not None:
+        field_entity = membership.attribute(field_name)
         if field_entity is not None:
             field_type_info = getattr(field_entity, "type_info", None)
             if isinstance(field_type_info, typesys.TypeVal):
@@ -2921,7 +3225,7 @@ def _check_if_else(  # noqa: PLR0913 # Too many args mitigated by kwonly args
     test: Expr,
     then_: Expr,
     else_: Expr,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
     check: Callable[[Expr], typesys.TypeVal | typesys.InferenceVar],
 ) -> typesys.TypeVal | typesys.InferenceVar:
@@ -2956,7 +3260,7 @@ def _check_if_else(  # noqa: PLR0913 # Too many args mitigated by kwonly args
 
 def _check_cond_expr(
     arms: tuple[CondArm, ...],
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
     check: Callable[[Expr], typesys.TypeVal | typesys.InferenceVar],
 ) -> typesys.TypeVal | typesys.InferenceVar:
@@ -3005,7 +3309,7 @@ def _check_cond_expr(
 def _unify_types(
     a: typesys.TypeVal | typesys.InferenceVar,
     b: typesys.TypeVal | typesys.InferenceVar,
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
 ) -> typesys.TypeVal | typesys.InferenceVar:
     """Unify two types, returning the common type.
@@ -3037,7 +3341,7 @@ def _unify_types(
 
 def _check_expr_tuple(
     elements: tuple[Expr, ...],
-    span: Span,
+    span: SpanProtocol,
     ctx: Context,
     check: Callable[[Expr], typesys.TypeVal | typesys.InferenceVar],
 ) -> dfl_types.CollectionType:
@@ -3071,6 +3375,41 @@ def _check_expr_tuple(
     return dfl_types.CollectionType(element_type)
 
 
+def _check_instantiation(
+    instantiates: Expr,
+    args: tuple[CallArg, ...],
+    span: SpanProtocol,
+    ctx: Context,
+    check: Callable[[Expr], typesys.TypeVal | typesys.InferenceVar],
+) -> typesys.TypeVal:
+    if not isinstance(instantiates, Ref):
+        msg = f"Cannot instantiate {type(instantiates)} nodes. Must be Ref"
+        raise NotImplementedError(ctx.format_error(span, msg))
+
+    generic_type = instantiates.lookup()
+    if not isinstance(generic_type, typesys.GenericTypeVal):
+        msg = "Operand of instantiation expression has no generic parameters"
+        raise TypeCheckError(ctx.format_error(span, msg))
+
+    parameters = generic_type.generic_parameters()
+    # GenericTypeVal overrides generic_parameters and always returns a list
+    assert parameters is not None
+
+    named_args, positional_args = _flatten_call_args(args, span, ctx)
+
+    for i, arg in enumerate(positional_args):
+        param = parameters[i]
+        arg_type = check(arg)
+        _unify_types(param.type_bound, arg_type, get_expr_span(arg), ctx)
+
+    for param in parameters[len(positional_args) :]:
+        if arg_expr := named_args.get(param.name):
+            arg_type = check(arg_expr)
+            _unify_types(param.type_bound, arg_type, get_expr_span(arg_expr), ctx)
+
+    return clkbuiltins.TYPE_TYPE
+
+
 def type_check_expr(  # noqa: C901 # Many branches for exhaustive Expr type handling
     expr: Expr, registry: dfl_types.TraitRegistry
 ) -> Typed[Expr]:
@@ -3092,8 +3431,8 @@ def type_check_expr(  # noqa: C901 # Many branches for exhaustive Expr type hand
 
     def check(e: Expr) -> typesys.TypeVal | typesys.InferenceVar:  # noqa: PLR0911, PLR0912, C901 # Many branches/returns by nature of one per expression type
         match e:
-            case primitive.DecimalLiteral() | primitive.UnitLiteral() | primitive.StringLiteral():
-                return e.type_info
+            case Value(type_info=type_info):
+                return type_info
             case Ref():
                 return _get_ref_type(e)
             case Member(base=base, field_name=field_name, span=span, ctx=ctx):
@@ -3160,13 +3499,400 @@ def type_check_expr(  # noqa: C901 # Many branches for exhaustive Expr type hand
                 # Type checking operates on the expanded body, not the Call itself.
                 msg = "Cannot type-check Call nodes directly - expand function calls first"
                 raise TypeCheckError(ctx.format_error(span, msg))
+            case Instantiation(instantiates=instantiates, args=args, span=span, ctx=ctx):
+                return _check_instantiation(instantiates, args, span, ctx, check)
             case ExprTuple(elements=elements, span=span, ctx=ctx):
                 return _check_expr_tuple(elements, span, ctx, check)
             case Lambda(span=span, ctx=ctx):
                 # Lambdas are not first-class values - they can only appear as arguments
                 # to map/filter where they are specialcased and not type-checked directly.
                 msg = "Lambda expressions cannot be type-checked directly - they can only be used as arguments to map/filter"
-                raise TypeCheckError(_format_error(msg, span, ctx))
+                raise TypeCheckError(format_error(msg, span, ctx))
+            case Block():
+                return clkbuiltins.VOID_TYPE
+            case Definition():
+                return clkbuiltins.VOID_TYPE
+            case CstPassthrough():
+                return clkbuiltins.VOID_TYPE
+            case Invalid():
+                msg = "Cannot type check evaluation failure nodes."
+                raise TypeCheckError(msg)
 
     result_type = check(expr)
     return Typed(expr, result_type)
+
+
+def _evaluate_ref(ref: Ref) -> Expr:
+    entity = ref.lookup()
+    if isinstance(entity, node.NamedBinding):
+        entity = entity.bound_value()
+
+    match entity:
+        case typesys.Value():
+            return entity
+        case _:
+            return ref
+
+
+def _evaluate_unary_expr(
+    *, op: UnaryOp, operand: Expr, result_type: typesys.TypeVal | typesys.InferenceVar, span: SpanProtocol, ctx: Context
+) -> Expr:
+    if not isinstance(operand, Value):
+        return Unary(op=op, operand=operand, span=span, ctx=ctx)
+
+    match op:
+        # Arithmetic
+        case UnaryOp.NEG | UnaryOp.POS | UnaryOp.ABS:
+            # ensured by the type check done by the caller
+            assert isinstance(operand, primitive.DecimalValue | primitive.UnitValue)
+            result = _UNARY_OP_TABLE[op](operand.value)
+            match operand:
+                case primitive.UnitValue(unit=unit):
+                    return primitive.UnitValue(type_info=result_type, value=result, unit=unit)
+                case primitive.DecimalValue():
+                    return primitive.DecimalValue(type_info=result_type, value=result)
+
+        # Logical
+        case UnaryOp.NOT:
+            # ensured by the type check done by the caller
+            assert isinstance(operand, typesys.Value)
+            return clkbuiltins.FALSE_VALUE if primitive.value_to_bool(operand) else clkbuiltins.TRUE_VALUE
+
+
+def _reconcile_units(
+    left: primitive.UnitValue, right: primitive.UnitValue, span: SpanProtocol, ctx: Context
+) -> tuple[primitive.UnitValue, primitive.UnitValue]:
+    if left.unit.base_unit() != right.unit.base_unit():
+        msg = f"Cannot reconcile units {left.unit.base_unit()} and {right.unit.base_unit()}"
+        raise TypeError(ctx.format_error(span, msg))
+
+    result_unit = left.unit if left.unit.scale < right.unit.scale else right.unit
+    return left.as_unit(result_unit), right.as_unit(result_unit)
+
+
+def _evaluate_binary_expr(  # noqa: PLR0911, PLR0913 # Too many args mitigated by kwonly args. Need to handle many combinations of values and operators.
+    *,
+    op: BinaryOp,
+    left: Expr,
+    right: Expr,
+    result_type: typesys.TypeVal | typesys.InferenceVar,
+    span: SpanProtocol,
+    ctx: Context,
+) -> Expr:
+    if not isinstance(left, Value) or not isinstance(right, Value):
+        return Binary(op=op, left=left, right=right, span=span, ctx=ctx)
+
+    match op:
+        # Arithmetic
+        case BinaryOp.ADD | BinaryOp.SUB | BinaryOp.MUL | BinaryOp.DIV | BinaryOp.MOD:
+            match (left, right):
+                case (primitive.DecimalValue(), primitive.DecimalValue()):
+                    result = _BINARY_OP_TABLE[op](left.value, right.value)
+                    return primitive.DecimalValue(type_info=result_type, value=result)
+                case (primitive.UnitValue(unit=left_unit), primitive.UnitValue(unit=right_unit)):
+                    # ensured by type checker
+                    assert left_unit.base_unit() == right_unit.base_unit()
+                    left_scaled, right_scaled = _reconcile_units(left, right, span, ctx)
+                    result = _BINARY_OP_TABLE[op](left_scaled.value, right_scaled.value)
+                    return primitive.UnitValue(type_info=result_type, value=result, unit=left_scaled.unit)
+                case _:
+                    msg = f"Binary operation {op} does not support operands {type(left)} and {type(right)}"
+                    raise TypeError(ctx.format_error(span, msg))
+
+        # Comparison
+        case BinaryOp.EQ | BinaryOp.NE | BinaryOp.LT | BinaryOp.LE | BinaryOp.GT | BinaryOp.GE:
+            match (left, right):
+                case (primitive.StringValue(), primitive.StringValue()):
+                    return (
+                        clkbuiltins.TRUE_VALUE
+                        if _BINARY_OP_TABLE[op](left.value, right.value)
+                        else clkbuiltins.FALSE_VALUE
+                    )
+                case (primitive.DecimalValue(), primitive.DecimalValue()):
+                    return (
+                        clkbuiltins.TRUE_VALUE
+                        if _BINARY_OP_TABLE[op](left.value, right.value)
+                        else clkbuiltins.FALSE_VALUE
+                    )
+                case (primitive.UnitValue(unit=left_unit), primitive.UnitValue(unit=right_unit)):
+                    # ensured by type checker
+                    assert left_unit.base_unit() == right_unit.base_unit()
+                    left_scaled, right_scaled = _reconcile_units(left, right, span, ctx)
+                    return (
+                        clkbuiltins.TRUE_VALUE
+                        if _BINARY_OP_TABLE[op](left_scaled.value, right_scaled.value)
+                        else clkbuiltins.FALSE_VALUE
+                    )
+                case _:
+                    msg = f"Binary operation {op} does not support operands {type(left)} and {type(right)}"
+                    raise TypeError(ctx.format_error(span, msg))
+
+        # Logical
+        case BinaryOp.AND | BinaryOp.OR:
+            # ensured by the type check done by the caller
+            assert isinstance(left, typesys.Value)
+            assert isinstance(right, typesys.Value)
+            return (
+                clkbuiltins.TRUE_VALUE
+                if _BINARY_OP_TABLE[op](primitive.value_to_bool(left), primitive.value_to_bool(right))
+                else clkbuiltins.FALSE_VALUE
+            )
+
+
+def _evaluate_cond_expr(src_arms: tuple[CondArm, ...], children: list[Expr], span: SpanProtocol, ctx: Context) -> Expr:
+    folded_arms = tuple(
+        CondArm(
+            guard=children.pop(0) if src_arm.guard else None,
+            body=children.pop(0),
+            span=src_arm.span,
+        )
+        for src_arm in src_arms
+    )
+    for arm in folded_arms:
+        if (isinstance(arm.guard, Value) and primitive.value_to_bool(arm.guard)) or arm.guard is None:
+            return arm.body
+
+    return CondExpr(arms=folded_arms, span=span, ctx=ctx)
+
+
+def _value_matches_pattern(scrutinee: Value, pattern: Pattern) -> bool:
+    match pattern:
+        case LiteralPattern(value=value, span=span, ctx=ctx):
+            result = _evaluate_binary_expr(
+                op=BinaryOp.EQ, left=scrutinee, right=value, result_type=clkbuiltins.BOOL, span=span, ctx=ctx
+            )
+            return isinstance(result, Value) and primitive.value_to_bool(result)
+        case EnumPattern(variant=variant):
+            return isinstance(scrutinee, clkenum.ValueRef) and scrutinee.value_def is variant
+        case RangePattern(lo=lo, hi=hi, span=span, ctx=ctx):
+            lo_result = _evaluate_binary_expr(
+                op=BinaryOp.GE, left=scrutinee, right=lo, result_type=clkbuiltins.BOOL, span=span, ctx=ctx
+            )
+            hi_result = _evaluate_binary_expr(
+                op=BinaryOp.LE, left=scrutinee, right=hi, result_type=clkbuiltins.BOOL, span=span, ctx=ctx
+            )
+            return (
+                isinstance(lo_result, Value)
+                and isinstance(hi_result, Value)
+                and primitive.value_to_bool(lo_result)
+                and primitive.value_to_bool(hi_result)
+            )
+        case WildcardPattern():
+            return True
+
+
+def _evaluate_match_expr(
+    scrutinee: Expr, src_arms: tuple[MatchArm, ...], folded_arms: list[Expr], span: SpanProtocol, ctx: Context
+) -> Expr:
+    arms = tuple(
+        MatchArm(
+            patterns=src_arm.patterns,
+            body=body,
+            span=src_arm.span,
+        )
+        for src_arm, body in zip(src_arms, folded_arms, strict=True)
+    )
+
+    if not isinstance(scrutinee, Value) or not all(isinstance(body, Value | Block) for body in folded_arms):
+        return Match(scrutinee=scrutinee, arms=arms, span=span, ctx=ctx)
+
+    for arm in arms:
+        for pattern in arm.patterns:
+            if _value_matches_pattern(scrutinee, pattern):
+                return arm.body
+
+    msg = f"{scrutinee} did not match any patterns"
+    raise PatternMatchError(ctx.format_error(span, msg))
+
+
+def _evaluate_instantiation(
+    *, generic_type: Expr, src_args: tuple[CallArg, ...], folded_args: list[Expr], span: SpanProtocol, ctx: Context
+) -> Expr:
+    if not isinstance(generic_type, Value) or not all(isinstance(arg, Value) for arg in folded_args):
+        return Instantiation(
+            instantiates=generic_type,
+            args=tuple(
+                CallArg(
+                    expr=expr,
+                    name=src_arg.name,
+                    is_spread=src_arg.is_spread,
+                    span=src_arg.span,
+                )
+                for src_arg, expr in zip(src_args, folded_args, strict=True)
+            ),
+            span=span,
+            ctx=ctx,
+        )
+
+    if not isinstance(generic_type, typesys.GenericTypeVal):
+        msg = "Can only instantiate generic type values"
+        raise TypeError(ctx.format_error(span, msg))
+
+    parameters = generic_type.generic_parameters()
+    # GenericTypeVal overrides generic_parameters and always returns a list
+    assert parameters is not None
+
+    # we know all `folded_args` are values from the check at the top of the
+    # function, but the type checker can't see through the `all()`...
+    args = [
+        (src_arg.name, cast("Value", arg)) for i, (src_arg, arg) in enumerate(zip(src_args, folded_args, strict=True))
+    ]
+
+    return typesys.Instantiation(
+        type_info=generic_type.type_info,
+        instantiates=generic_type,
+        arguments=typesys.bind_args(parameters, args),
+    )
+
+
+def const_fold(expr: Expr, registry: dfl_types.TraitRegistry) -> Expr:  # noqa: C901 # Many branches/returns by nature of one per expression type
+    """Perform constant folding on the given expression.
+
+    Expression nodes are evaluated bottom up and when possible expressions are
+    evaluated and replaced by their results.
+
+    For example, we have all of the information required to evaluate the
+    following expression:
+
+    ```
+    expr = BinaryOp(
+        op=BinaryOp.ADD,
+        left=DecimalLiteral(value=1),
+        right=DecimalLiteral(value=2),
+        ...
+    )
+    ```
+
+    So, `const_fold(expr, ...)` returns `DecimalLiteral(value=3)`.
+
+    Args:
+        expr: The expression to perform folding on.
+        ctx: Context for error message formatting.
+        registry: The trait registry.
+
+    Returns:
+        An value that corresponds to the result of the fully evaluated expression.
+
+    Raises:
+        TypeCheckError: If the expression fails to type check.
+    """
+    expanded = expand_all_calls(expr)
+    type_check_expr(expanded, registry)
+
+    def _eval(e: Expr, children: list[Expr]) -> Expr:  # noqa: PLR0911, PLR0912, C901 # Many branches/returns by nature of one per expression type
+        match e:
+            case Value():
+                return e
+            case Ref():
+                return _evaluate_ref(e)
+            case Member(field_name=field_name, span=span, ctx=ctx):
+                assert len(children) == 1
+                return Member(base=children[0], field_name=field_name, span=span, ctx=ctx)
+            case Unary(op=op, span=span, ctx=ctx):
+                assert len(children) == 1
+                # TODO(OI-4058): consider caching the whole tree of types from when we checked the
+                # root expression.
+                return _evaluate_unary_expr(
+                    op=op,
+                    operand=children[0],
+                    result_type=type_check_expr(e, registry).type_info,
+                    span=span,
+                    ctx=ctx,
+                )
+            case Binary(op=op, span=span, ctx=ctx):
+                assert len(children) == 2  # noqa: PLR2004 meaning is obvious from usage
+                # TODO(OI-4058): consider caching the whole tree of types from when we checked the
+                # root expression.
+                return _evaluate_binary_expr(
+                    op=op,
+                    left=children[0],
+                    right=children[1],
+                    result_type=type_check_expr(e, registry).type_info,
+                    span=span,
+                    ctx=ctx,
+                )
+            case IfElse(span=span, ctx=ctx):
+                assert len(children) == 3  # noqa: PLR2004 meaning is obvious from usage
+                (
+                    test,
+                    then_,
+                    else_,
+                ) = children
+                if isinstance(test, Value):
+                    return then_ if primitive.value_to_bool(test) else else_
+
+                return IfElse(test=test, then_=then_, else_=else_, span=span, ctx=ctx)
+            case CondExpr(arms=src_arms, span=span, ctx=ctx):
+                return _evaluate_cond_expr(src_arms, children, span, ctx)
+            case Match(arms=arms, span=span, ctx=ctx):
+                return _evaluate_match_expr(
+                    scrutinee=children[0],
+                    src_arms=arms,
+                    folded_arms=children[1:],
+                    span=span,
+                    ctx=ctx,
+                )
+            case Call(args=args, span=span, ctx=ctx):
+                assert len(children) == len(args) + 1
+                return Call(
+                    func=children[0],
+                    args=tuple(
+                        CallArg(
+                            expr=expr,
+                            name=src_arg.name,
+                            is_spread=src_arg.is_spread,
+                            span=src_arg.span,
+                        )
+                        for src_arg, expr in zip(args, children[1:], strict=True)
+                    ),
+                    span=span,
+                    ctx=ctx,
+                )
+            case Instantiation(args=args, span=span, ctx=ctx):
+                assert len(children) == len(args) + 1
+                return _evaluate_instantiation(
+                    generic_type=children[0], src_args=args, folded_args=children[1:], span=span, ctx=ctx
+                )
+            case ExprTuple(span=span, ctx=ctx):
+                return ExprTuple(
+                    elements=tuple(children),
+                    span=span,
+                    ctx=ctx,
+                )
+            case Lambda(params=params, span=span, ctx=ctx):
+                assert len(children) == 1
+                return (
+                    children[0]
+                    if isinstance(children[0], Value)
+                    else Lambda(params=params, body=children[0], span=span, ctx=ctx)
+                )
+            case Block(name=name, statements=statements, span=span, ctx=ctx):
+                assert len(statements) == len(children)
+                return Block(
+                    name=name,
+                    statements=cast("list[Statement]", children),
+                    span=span,
+                    ctx=ctx,
+                )
+            case Definition(name=name, value=value, options=options, cst_node=cst_node, span=span, ctx=ctx):
+                assert len(children) == 1 or options is None
+                if options is not None:
+                    assert isinstance(children[0], Block)
+                return Definition(
+                    name=name,
+                    value=value,
+                    options=cast("Block", children[0]) if options else None,
+                    cst_node=cst_node,
+                    span=span,
+                    ctx=ctx,
+                )
+            case CstPassthrough() | Invalid():
+                return e
+
+    def evaluate(e: Expr, children: list[Expr]) -> Expr:
+        try:
+            return _eval(e, children)
+        except Exception as err:  # noqa: BLE001 we want to report any errors that occur during evaluation
+            return Invalid(expr=e, error=err)
+
+    return fold_expr(evaluate, expanded)

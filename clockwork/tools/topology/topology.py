@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Data types to represent the topology of the system."""
@@ -21,6 +21,25 @@ class Route:
     endpoint: str | None = None
 
 
+@dataclass(frozen=True)
+class LogLocation:
+    """A CPU where a channel is written to a log."""
+
+    cpu: str
+    """CPU where the log is written."""
+
+    is_redundant: bool = False
+    """Whether this is a redundant logging destination."""
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    """A connection to an entity's endpoint."""
+
+    name: str
+    entity: str
+
+
 @dataclass
 class Channel:
     """A clockwork channel."""
@@ -32,6 +51,33 @@ class Channel:
     message_type: str
     message_size: int
     routes: list[Route] = field(default_factory=list)
+    """Bridge routes used by the channel."""
+
+    event_log_locations: list[LogLocation] = field(default_factory=list)
+    """CPUs where the channel is written to event logs."""
+
+    telemetry_log_locations: list[LogLocation] = field(default_factory=list)
+    """CPUs where the channel is written to telemetry logs."""
+
+    @property
+    def is_event_logged(self) -> bool:
+        """Return whether the channel is written to an event log."""
+        return bool(self.event_log_locations)
+
+    @property
+    def is_telemetry_logged(self) -> bool:
+        """Return whether the channel is written to a telemetry log."""
+        return bool(self.telemetry_log_locations)
+
+    @property
+    def is_redundant_telemetry_logged(self) -> bool:
+        """Return whether telemetry logging is configured redundantly."""
+        return any(location.is_redundant for location in self.telemetry_log_locations)
+
+    @property
+    def is_non_redundant_telemetry_logged(self) -> bool:
+        """Return whether telemetry logging is present without redundancy."""
+        return self.is_telemetry_logged and not self.is_redundant_telemetry_logged
 
 
 @dataclass
@@ -39,9 +85,24 @@ class Entity:
     """An entity with inputs / outputs."""
 
     name: str
+    uuid: str
     process: str
     outputs: list[str]
     inputs: list[str]
+    states: list[Endpoint]
+    memory_resources: list[Endpoint]
+
+
+@dataclass
+class Memory:
+    """A memory resource connected to one or more entities."""
+
+    name: str
+    uuid: str
+    type: str
+    size_bytes: int
+    entities: list[str]
+    states: list[str]
 
 
 @dataclass
@@ -50,6 +111,18 @@ class Process:
 
     name: str
     cpu: str
+    entities: list[str]
+
+
+@dataclass
+class State:
+    """A state connected to one or more entities."""
+
+    name: str
+    uuid: str
+    is_extern: bool
+    type: str
+    memory_resource: str
     entities: list[str]
 
 
@@ -69,6 +142,10 @@ class System:
     entities: dict[str, Entity]
     channels: dict[str, Channel]
     processes: dict[str, Process]
+    memory_resources: dict[str, Memory]
+    states: dict[str, State]
+    unlisted_channels: dict[str, Channel] = field(default_factory=dict)
+    """Channels retained for logging queries but omitted from regular topology listings."""
 
 
 def save_system(system: System, io_handle: typing.BinaryIO) -> None:
@@ -89,7 +166,7 @@ def load_system(io_handle: typing.BinaryIO) -> System:
 
 def _validate_names(system: System) -> None:
     """Validate names."""
-    dict_fields = (system.cpus, system.entities, system.channels)
+    dict_fields = (system.cpus, system.entities, system.channels, system.memory_resources, system.states)
 
     for dict_field in dict_fields:
         for key, value in dict_field.items():
@@ -183,6 +260,72 @@ def _validate_subscribers(system: System) -> None:
         raise ValueError(msg)
 
 
+def _validate_memory_resources_in_entities(system: System) -> None:
+    """Validate memory resources are mapped to the correct entities."""
+    memory_resources = {name: set(memory.entities) for name, memory in system.memory_resources.items()}
+    for entity in system.entities.values():
+        for memory_resource_endpoint in entity.memory_resources:
+            if memory_resource_endpoint.entity not in memory_resources:
+                msg = f"Entity {entity.name} has an unknown memory resource {memory_resource_endpoint.entity}."
+                raise ValueError(msg)
+            if entity.name not in memory_resources[memory_resource_endpoint.entity]:
+                msg = (
+                    f"Memory resource {memory_resource_endpoint.entity} is not expecting {entity.name} to be an entity."
+                )
+                raise ValueError(msg)
+
+            memory_resources[memory_resource_endpoint.entity].remove(entity.name)
+
+    for memory_resource_name, memory_resource_endpoints in memory_resources.items():
+        if not memory_resource_endpoints:
+            continue
+        msg = f"Memory resource {memory_resource_name} is expecting entities: {' '.join(memory_resource_endpoints)}"
+        raise ValueError(msg)
+
+
+def _validate_memory_resources_in_states(system: System) -> None:
+    """Validate memory resources are mapped to the correct states."""
+    memory_resources = {name: set(memory.states) for name, memory in system.memory_resources.items()}
+    for state_name, state in system.states.items():
+        if not state.memory_resource:
+            continue
+        if state.memory_resource not in memory_resources:
+            msg = f"State {state_name} has an unknown memory resource {state.memory_resource}."
+            raise ValueError(msg)
+        if state_name not in memory_resources[state.memory_resource]:
+            msg = f"Memory resource {state.memory_resource} is not expecting {state_name} to be a state."
+            raise ValueError(msg)
+
+        memory_resources[state.memory_resource].remove(state_name)
+
+    for memory_resource_name, memory_resource_states in memory_resources.items():
+        if not memory_resource_states:
+            continue
+        msg = f"Memory resource {memory_resource_name} is expecting states: {' '.join(memory_resource_states)}"
+        raise ValueError(msg)
+
+
+def _validate_states_in_entities(system: System) -> None:
+    """Validate states are mapped to the correct entities."""
+    states = {name: set(state.entities) for name, state in system.states.items()}
+    for entity in system.entities.values():
+        for state_endpoints in entity.states:
+            if state_endpoints.entity not in states:
+                msg = f"Entity {entity.name} has an unknown state {state_endpoints.entity}."
+                raise ValueError(msg)
+            if entity.name not in states[state_endpoints.entity]:
+                msg = f"State {state_endpoints.entity} is not expecting {entity.name} to be an entity."
+                raise ValueError(msg)
+
+            states[state_endpoints.entity].remove(entity.name)
+
+    for state_name, state_endpoints in states.items():
+        if not state_endpoints:
+            continue
+        msg = f"State {state_name} is expecting entities: {' '.join(state_endpoints)}"
+        raise ValueError(msg)
+
+
 def validate_system(system: System) -> System:
     """Validate the structure of the system."""
     _validate_names(system)
@@ -190,6 +333,9 @@ def validate_system(system: System) -> System:
     _validate_procs_in_cpus(system)
     _validate_publishers(system)
     _validate_subscribers(system)
+    _validate_memory_resources_in_entities(system)
+    _validate_memory_resources_in_states(system)
+    _validate_states_in_entities(system)
     return system
 
 

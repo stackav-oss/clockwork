@@ -1,5 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
+
+#![generate()]
 
 // Simple signal
 signal simple_signal: UInt32;
@@ -7,32 +9,32 @@ signal simple_signal: UInt32;
 // Signal with custom name
 signal named_signal: Float64
 {
-    name: "custom_signal_name";
+  name: "custom_signal_name";
 }
 
 // Multi-instance signal
 signal multi_signal: Int64
 {
-    multi_instance: true;
+  multi_instance: true;
 }
 
 // Signal with metadata
 signal metadata_signal: UInt64
 {
-    metadata: String;
+  metadata: String;
 }
 
 // Signal with pre-aggregation
 signal aggregated_signal: Float32
 {
-    pre_aggregation: ["min", "max", "mean"];
+  pre_aggregation: ["min", "max", "mean"];
 }
 
 // Complex signal with multiple options
 signal complex_signal: UInt32
 {
-    name: "complex_name";
-    multi_instance: true;
-    metadata: UInt64;
-    pre_aggregation: ["sum", "count"];
+  name: "complex_name";
+  multi_instance: true;
+  metadata: UInt64;
+  pre_aggregation: ["sum", "count"];
 }

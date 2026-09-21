@@ -2,7 +2,7 @@
 #![cpp(namespace=clockwork::testing)]
 
 use clockwork::dsl::tests::support::clk_hellocog;
-use[cpp,proto,proto_conv] clockwork::dsl::tests::support::clk_hellomsg;
+use[cpp, proto, proto_conv] clockwork::dsl::tests::support::clk_hellomsg;
 use clockwork::io::var_packet;
 use clockwork::diagnostics::report;
 
@@ -18,26 +18,26 @@ channel DiagnosticsChannel
 // Channel for HelloMsg messages
 channel HelloChan
 {
-    message_type: Tachyon<clk_hellomsg::HelloMsg>;
-    max_num_messages: 10;
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 10;
 }
 
 // Another channel for HelloMsg messages
 channel AnotherChan
 {
-    name: "Name that doesn't follow reasonable conventions!";
-    message_type: Tachyon<clk_hellomsg::HelloMsg>;
-    max_num_messages: 101;
-    publishers: single;
+  name: "Name that doesn't follow reasonable conventions!";
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 101;
+  publishers: single;
 }
 
 // A multi-publisher channel for HelloMsg messages
 channel MultiPublisherChannel
 {
-    name: "many_publishers";
-    message_type: Tachyon<clk_hellomsg::HelloMsg>;
-    max_num_messages: 11;
-    publishers: multiple;
+  name: "many_publishers";
+  message_type: Tachyon<clk_hellomsg::HelloMsg>;
+  max_num_messages: 11;
+  publishers: multiple;
 }
 
 // UDP socket.
@@ -67,48 +67,49 @@ channel NetworkData
 
 box MemBox
 {
-    new mem_hello: HeapMemory(max_size=1'000'000);
+  new mem_hello: HeapMemory(max_size=1'000'000);
 }
 
 box HelloBox
 {
-    new mem_box: MemBox;
+  new mem_box: MemBox;
 
-    new hello_cog: clk_hellocog::HelloCogWithMetrics;
-    connect mem_box.mem_hello to hello_cog.mem_hello;
+  new hello_cog: clk_hellocog::HelloCogWithMetrics;
+  connect mem_box.mem_hello to hello_cog.mem_hello;
 
-    new hello_config: SerializedDataFile(representation=Protobuf<clk_hellomsg::HelloMsg>, path="foo/bar.txtpb");
-    connect hello_config to hello_cog.cfg_hello;
+  new hello_config: SerializedDataFile(representation=Protobuf<clk_hellomsg::HelloMsg>, path="foo/bar.txtpb");
+  connect hello_config to hello_cog.cfg_hello;
 
-    // Define rw_hello_init first so that we test topological sort in genpd correctly.
-    new rw_hello_init: clk_hellocog::HelloInit2;
-    new ro_hello_init: clk_hellocog::HelloInit;
+  // Define rw_hello_init first so that we test topological sort in genpd correctly.
+  new rw_hello_init: clk_hellocog::HelloInit2;
+  new ro_hello_init: clk_hellocog::HelloInit;
 
-    new ro_hello: State(representation=Tachyon<clk_hellomsg::HelloMsg>, init=ro_hello_init.result);
-    connect ro_hello to hello_cog.ro_hello;
+  new ro_hello: State(representation=Tachyon<clk_hellomsg::HelloMsg>, init=ro_hello_init.result);
+  connect ro_hello to hello_cog.ro_hello;
 
-    new rw_hello: State(representation=Tachyon<clk_hellomsg::HelloMsg>, init=rw_hello_init.result);
-    // This connection creates a dependency that forces a specific init cog ordering.
-    connect ro_hello to rw_hello_init.input;
-    connect rw_hello to hello_cog.rw_hello;
+  new rw_hello: State(representation=Tachyon<clk_hellomsg::HelloMsg>, init=rw_hello_init.result);
+  // This connection creates a dependency that forces a specific init cog ordering.
+  connect ro_hello to rw_hello_init.input;
+  connect rw_hello to hello_cog.rw_hello;
 
-    new extern_hello: State(representation=clk_hellocog::CxxState, memory_resource=mem_box.mem_hello);
-    connect extern_hello to hello_cog.extern_hello;
+  new extern_hello_memory: HeapMemory(max_size=1'000'000);
+  new extern_hello: State(representation=clk_hellocog::CxxState, memory_resource=extern_hello_memory);
+  connect extern_hello to hello_cog.extern_hello;
 
-    connect HelloChan to hello_cog.latest_hello;
-    connect HelloChan to hello_cog.history_of_hellos;
-    connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
-    connect hello_cog.out_world to HelloChan;
-    connect hello_cog.out_goodbye to AnotherChan;
-    connect hello_cog.out_multi1 to MultiPublisherChannel;
-    connect hello_cog.out_multi2 to MultiPublisherChannel;
-    connect hello_cog.diagnostics to DiagnosticsChannel;
+  connect HelloChan to hello_cog.latest_hello;
+  connect HelloChan to hello_cog.history_of_hellos;
+  connect MultiPublisherChannel to hello_cog.multi_publisher_hello;
+  connect hello_cog.out_world to HelloChan;
+  connect hello_cog.out_goodbye to AnotherChan;
+  connect hello_cog.out_multi1 to MultiPublisherChannel;
+  connect hello_cog.out_multi2 to MultiPublisherChannel;
+  connect hello_cog.diagnostics to DiagnosticsChannel;
 
-    new incoming_udp: IncomingUdpSocket;
-    new outgoing_udp: OutgoingUdpSocket;
+  new incoming_udp: IncomingUdpSocket;
+  new outgoing_udp: OutgoingUdpSocket;
 
-    connect incoming_udp to NetworkData;
-    connect NetworkData to outgoing_udp;
+  connect incoming_udp to NetworkData;
+  connect NetworkData to outgoing_udp;
 }
 
 cpu_domain ClkHostA
@@ -123,41 +124,41 @@ cpu_domain ClkHostB;
 
 ethernet Lan1
 {
-    ipv4_address 1.2.3.4: ClkHostA
-    {
-        bridge_ports: 16000 - 18000;
-    }
-    ipv4_address 1.2.3.5: ClkHostB
-    {
-        bridge_ports: 16000 - 18000;
-    }
+  ipv4_address 1.2.3.4: ClkHostA
+  {
+    bridge_ports: 16000 - 18000;
+  }
+  ipv4_address 1.2.3.5: ClkHostB
+  {
+    bridge_ports: 16000 - 18000;
+  }
 }
 
 box HelloProcs
 {
-    new hello_world1: HelloBox;
-    new hello_world2: HelloBox;
+  new hello_world1: HelloBox;
+  new hello_world2: HelloBox;
 
-    new hello_proc1: Process(executable=clk_hellomod_clk_exe);
-    new hello_proc2: Process(executable=clk_hellomod_clk_exe);
+  new hello_proc1: Process(executable=clk_hellomod_clk_exe);
+  new hello_proc2: Process(executable=clk_hellomod_clk_exe);
 
-    apply HostProcess(process=hello_proc1) in hello_world1;
-    apply HostProcess(process=hello_proc2) in hello_world2;
+  apply HostProcess(process=hello_proc1) in hello_world1;
+  apply HostProcess(process=hello_proc2) in hello_world2;
 }
 
 box HelloSystem
 {
-    new clk_host_a: HelloProcs;
-    apply HostCpuDomain(cpu_domain=ClkHostA) in clk_host_a;
+  new clk_host_a: HelloProcs;
+  apply HostCpuDomain(cpu_domain=ClkHostA) in clk_host_a;
 
-    new clk_host_b: HelloProcs;
-    apply HostCpuDomain(cpu_domain=ClkHostB) in clk_host_b;
+  new clk_host_b: HelloProcs;
+  apply HostCpuDomain(cpu_domain=ClkHostB) in clk_host_b;
 }
 
 box HelloBoxSys
 {
-    new box: HelloBox;
-    new proc: Process(executable=clk_hellomod_clk_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=ClkHostA) to proc;
+  new box: HelloBox;
+  new proc: Process(executable=clk_hellomod_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=ClkHostA) to proc;
 }

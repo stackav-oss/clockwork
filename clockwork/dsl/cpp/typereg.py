@@ -1,22 +1,24 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Provides facilities to convert Clockwork IR types to corresponding C++ types."""
 
 from dataclasses import replace
-from typing import Final
+from typing import Final, cast
 
 from clockwork.dsl.compiler_context import CompilerContext, Context, ContextKey
 from clockwork.dsl.cpp import literal, types
 from clockwork.dsl.cpp.context import FwdDecl, Header, SystemHeader
-from clockwork.dsl.ir import clkbuiltins, primitive, schema, typesys
+from clockwork.dsl.ir import clkbuiltins, clkenum, cog_parameters, primitive, schema, tensor_builtins, typesys
 from clockwork.dsl.ir.module_id import CLK_REPO, JEWELS_REPO
-from clockwork.dsl.ir.statement import ImmutableBinding
+from clockwork.dsl.ir.statement import ImmutableBinding, InstantiateStmt
 from typing_extensions import override
 
 TYPE_TRAITS_HEADER: Final = SystemHeader("type_traits")
 
 TAGS_HEADER: Final = Header(CLK_REPO, "clockwork/tags.hh")
+
+STRING_PARAM_HEADER: Final = Header(CLK_REPO, "jewels/utility/string_param.hh")
 
 META_CONCEPTS_HEADER: Final = Header(JEWELS_REPO, "jewels/meta/concepts.hh")
 
@@ -47,8 +49,21 @@ _CPP_SCHEMA_TAG_TYPE: Final = types.CppType(includes=[TAGS_HEADER], type_name="S
 _CPP_REPRESENTATION_TAG_TYPE: Final = types.CppType(
     includes=[TAGS_HEADER], type_name="RepresentationTag", cpp_namespace="clockwork"
 )
+_CPP_STRING_PARAM_TYPE: Final = types.CppType(
+    includes=[STRING_PARAM_HEADER], type_name="StringParam", cpp_namespace="jewels"
+)
 
 # Module-level instances for C++ template types
+_CPP_TENSOR_TEMPLATE: Final = types.CppTemplate(
+    includes=[Header(JEWELS_REPO, "jewels/container/tap/tensor.hh")],
+    template_name="Tensor",
+    cpp_namespace="jewels::tap",
+)
+_CPP_BITSET_TEMPLATE: Final = types.CppTemplate(
+    includes=[Header(JEWELS_REPO, "jewels/container/tap/bitset.hh")],
+    template_name="Bitset",
+    cpp_namespace="jewels::tap",
+)
 _CPP_VAR_ARRAY_TEMPLATE: Final = types.CppTemplate(
     includes=[Header(JEWELS_REPO, "jewels/container/tap/var_array.hh")],
     template_name="VarArray",
@@ -154,9 +169,12 @@ class CppTypeRegistryKey(ContextKey[CppTypeRegistry]):
         registry.cpp_type_registry[clkbuiltins.SYNC_TIME.value_key()] = _CPP_SYNC_TIME_TYPE
         registry.cpp_type_registry[clkbuiltins.SCHEMA_TAG_TYPE.value_key()] = _CPP_SCHEMA_TAG_TYPE
         registry.cpp_type_registry[clkbuiltins.REPRESENTATION_TAG_TYPE.value_key()] = _CPP_REPRESENTATION_TAG_TYPE
+        registry.cpp_type_registry[clkbuiltins.STRING.value_key()] = _CPP_STRING_PARAM_TYPE
 
         # Register built-in template types
+        registry.cpp_template_registry[clkbuiltins.BITSET.value_key()] = _CPP_BITSET_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.FIXED_ARRAY.value_key()] = types.ARRAY
+        registry.cpp_template_registry[tensor_builtins.TENSOR.value_key()] = _CPP_TENSOR_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.VAR_ARRAY.value_key()] = _CPP_VAR_ARRAY_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.VAR_STRING.value_key()] = _CPP_VAR_STRING_TEMPLATE
         registry.cpp_template_registry[clkbuiltins.POD.value_key()] = _CPP_POD_TEMPLATE
@@ -267,13 +285,16 @@ def get_cpp_type(context: CompilerContext, clk_type: typesys.Value) -> types.Cpp
     Raises:
         TypeError: If the Clockwork type cannot be mapped to a C++ type.
     """
-    if isinstance(clk_type, schema.InstantiateStmt):
+    if isinstance(clk_type, InstantiateStmt):
         assert isinstance(clk_type.typespec, typesys.Instantiation)
+        assert isinstance(clk_type.typespec.instantiates, schema.Schema | schema.ResolvedSchema)
         clk_type = schema.InstantiatedSchema.from_typespec(clk_type.typespec)
     if isinstance(clk_type, schema.InstantiatedSchema):
         clk_type = clk_type.as_instantiation_or_resolved_schema()
     if isinstance(clk_type, typesys.Instantiation):
         return _get_cpp_instantiation(context, clk_type)
+    if isinstance(clk_type, cog_parameters.CogParameterRef):
+        return types.CppType([], clk_type.parameter_def.param_name, None)
 
     if not isinstance(clk_type, typesys.TypeVal):
         msg = f"Cannot construct C++ type corresponding to {clk_type}"
@@ -390,6 +411,60 @@ def _get_soa_cpp_instantiation(context: CompilerContext, clk_type: typesys.Insta
     return base_template_with_header.instantiate(arguments)
 
 
+def _make_size_sequence(values: typesys.Values) -> types.CppTemplateType:
+    # We only support integer sequences for now.
+    if not all(isinstance(element, primitive.DecimalValue) for element in values.elements):
+        msg = f"Value lists must be integer sequences, but got: {values.elements}."
+        raise NotImplementedError(msg)
+    sizes = [literal.decimal_value_to_cpp(cast("primitive.DecimalValue", element)) for element in values.elements]
+    return types.TENSOR_SIZES.instantiate(sizes)
+
+
+def _substitute_cpp_argument(
+    context: CompilerContext, clk_type: typesys.Instantiation, arg: typesys.Value
+) -> types.CppTypeExpr | types.CppValueExpr:
+    """Convert a Clockwork generic argument to a C++ template argument.
+
+    Args:
+        context: Compiler context used to resolve Clockwork type arguments.
+        clk_type: Enclosing generic instantiation, used to derive tensor strides.
+        arg: Generic argument to convert.
+
+    Returns:
+        The corresponding C++ type or value expression.
+
+    Raises:
+        NotImplementedError: If an argument type is not supported.
+    """
+    if isinstance(arg, typesys.TypeVal | cog_parameters.CogParameterRef):
+        return get_cpp_type(context, arg)
+
+    if isinstance(arg, primitive.DecimalValue):
+        return literal.decimal_value_to_cpp(arg)
+
+    if isinstance(arg, ImmutableBinding):
+        value = arg.value
+        if not isinstance(value, primitive.DecimalValue):
+            msg = f"Unable to use argument of type {type(value)} as c++ template argument."
+            raise NotImplementedError(msg)
+        return literal.decimal_value_to_cpp(value)
+
+    if isinstance(arg, typesys.Values):
+        return _make_size_sequence(arg)
+
+    if isinstance(arg, clkenum.ValueRef) and arg.value_def.enum is tensor_builtins.TENSOR_LAYOUT_ENUM:
+        strides = [
+            literal.int_to_cpp(stride, clkbuiltins.UINT64) for stride in tensor_builtins.get_tensor_strides(clk_type)
+        ]
+        return types.TENSOR_SIZES.instantiate(strides)
+
+    if isinstance(arg, primitive.StringLiteral):
+        return literal.string_literal_to_cpp(arg)
+
+    msg = f"Cannot construct C++ template argument for {arg}"
+    raise NotImplementedError(msg)
+
+
 def _get_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantiation) -> types.CppTemplateType:
     """Recursively resolve an instantiation to a CppTemplateType.
 
@@ -425,18 +500,7 @@ def _get_cpp_instantiation(context: CompilerContext, clk_type: typesys.Instantia
         except KeyError:
             msg = f"Attempt to instantiate without fully-bound parameters: {clk_type} missing {param.name}"
             raise TypeError(msg) from None
-        if isinstance(arg, typesys.TypeVal):
-            type_arg = get_cpp_type(context, arg)
-            arguments.append(type_arg)
-        elif isinstance(arg, primitive.DecimalValue):
-            arguments.append(literal.decimal_value_to_cpp(arg))
-        elif isinstance(arg, ImmutableBinding):
-            value = arg.value
-            if not isinstance(value, primitive.DecimalValue):
-                msg = f"Unable to use argument of type {type(value)} as c++ template argument."
-                raise NotImplementedError(msg)
-            arguments.append(literal.decimal_value_to_cpp(value))
-        else:
-            msg = f"Cannot construct C++ template argument for {arg}"
-            raise NotImplementedError(msg)
+
+        arguments.append(_substitute_cpp_argument(context, clk_type, arg))
+
     return base_type.instantiate(arguments)

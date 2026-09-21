@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -18,7 +18,7 @@ from clockwork.dsl.serialization import pytap
 from clockwork.dsl.tests.support import py_bindings_v2_clk_py, py_bindings_v2_ext_clk_py
 from jewels.container.tap import py_var_array, value_serdes
 
-MY_SCHEMA_SIZE: Final = 88
+MY_SCHEMA_SIZE: Final = 96
 NESTED_SCHEMA_SIZE: Final = 1
 EXT_NESTED_SCHEMA_SIZE: Final = 1
 
@@ -43,6 +43,15 @@ def test_primitives() -> None:
     assert not schema.some_bool
     schema.some_bool = True
     assert schema.some_bool
+
+
+def test_bitset() -> None:
+    schema = py_bindings_v2_clk_py.MySchema(bytearray(MY_SCHEMA_SIZE))
+    assert schema.sensor_present == 0
+    schema.sensor_present = 0x281
+    assert schema.sensor_present == 0x281
+    with pytest.raises(ValueError, match="Bitset<10> value"):
+        schema.sensor_present = 1 << 10
 
 
 def test_type_mappings() -> None:

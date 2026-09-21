@@ -1,0 +1,126 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//tools/rules:python.bzl", "py_library")
+
+package(default_visibility = ["//clockwork:__subpackages__"])
+
+py_library(
+    name = "direction_analysis",
+    srcs = ["direction_analysis.py"],
+    deps = [
+        ":extract_specs",
+        ":join_plan",
+        ":objective_analysis",
+        ":stn",
+    ],
+)
+
+py_library(
+    name = "extract_specs",
+    srcs = ["extract_specs.py"],
+    deps = [
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:aligner_builtins",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:dfl_traits",
+        "//clockwork/dsl/ir:dfl_types",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+        "//clockwork/dsl/ir:units",
+    ],
+)
+
+py_library(
+    name = "join_plan",
+    srcs = ["join_plan.py"],
+    deps = [
+        ":extract_specs",
+        ":objective_analysis",
+        ":stn",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:dfl",
+    ],
+)
+
+py_library(
+    name = "objective_analysis",
+    srcs = ["objective_analysis.py"],
+    deps = [
+        ":extract_specs",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:dfl",
+    ],
+)
+
+py_library(
+    name = "partition_plan",
+    srcs = ["partition_plan.py"],
+    deps = [
+        ":extract_specs",
+        ":objective_analysis",
+        ":partition_types",
+        "//clockwork/dsl/aligner/gen:codegen_plan",
+    ],
+)
+
+py_library(
+    name = "partition_types",
+    srcs = ["partition_types.py"],
+)
+
+py_library(
+    name = "pipeline",
+    srcs = ["pipeline.py"],
+    deps = [
+        ":direction_analysis",
+        ":extract_specs",
+        ":join_plan",
+        ":objective_analysis",
+        ":partition_plan",
+        ":presence",
+        ":stn",
+        "//clockwork/dsl/aligner/gen:codegen_plan",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:schema",
+        "//clockwork/dsl/ir:units",
+    ],
+)
+
+py_library(
+    name = "presence",
+    srcs = ["presence.py"],
+    deps = [
+        ":extract_specs",
+        ":join_plan",
+        ":objective_analysis",
+        ":stn",
+    ],
+)
+
+py_library(
+    name = "stn",
+    srcs = ["stn.py"],
+    deps = [
+        ":extract_specs",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:typesys",
+    ],
+)
+
+py_library(
+    name = "type_check",
+    srcs = ["type_check.py"],
+    deps = [
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/ir:aligner",
+        "//clockwork/dsl/ir:aligner_builtins",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:dfl",
+        "//clockwork/dsl/ir:dfl_types",
+    ],
+)

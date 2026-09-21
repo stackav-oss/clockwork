@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,7 @@
 #include "clockwork/logging/readers/types.hh"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
@@ -61,6 +62,10 @@ public:
   /// @returns expected with error set if there was an issue opening the log
   [[nodiscard]] virtual LogExpected<void> open(const std::function<bool(std::string_view)>& topic_filter) = 0;
 
+  /// Configure an optional sequence number filter.
+  /// Return false from the filter to skip a message.
+  void set_sequence_number_filter(const std::function<bool(std::string_view, uint32_t)>& sequence_number_filter);
+
   /// Close the log.
   /// @returns expected with error set if there was an issue closing the log
   [[nodiscard]] virtual LogExpected<void> close() = 0;
@@ -94,12 +99,19 @@ public:
   /// Read the next message out of the log.
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] virtual std::optional<LoggedMessage> next_message() = 0;
+  [[nodiscard]] std::optional<LoggedMessage> next_message();
 
   /// Read the next message out of the log with zero copy.
   /// @note The logged message is only valid until the next call of next_message or close.
   /// @returns next message if there are any left, otherwise nullopt
-  [[nodiscard]] virtual std::optional<ZeroCopyLoggedMessage> zero_copy_next_message();
+  [[nodiscard]] std::optional<ZeroCopyLoggedMessage> zero_copy_next_message();
+
+protected:
+  /// Read the next unfiltered message out of the log.
+  [[nodiscard]] virtual std::optional<LoggedMessage> next_message_impl() = 0;
+
+  /// Read the next unfiltered message out of the log with zero copy.
+  [[nodiscard]] virtual std::optional<ZeroCopyLoggedMessage> zero_copy_next_message_impl();
 
 private:
   /// Log URI
@@ -110,6 +122,9 @@ private:
 
   /// The interval to read from the log relative to the sart of the log
   std::optional<RelativeInterval> maybe_relative_interval_;
+
+  /// Optional channel and sequence number filter.
+  std::function<bool(std::string_view, uint32_t)> sequence_number_filter_;
 
   /// Storage for zero copy data span for default zero_copy_read_next implementation
   std::span<const std::byte> zero_copy_data_span_{};

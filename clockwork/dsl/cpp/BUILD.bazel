@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:python.bzl", "py_library")
@@ -37,10 +37,13 @@ py_library(
         ":types",
         "//clockwork/dsl:compiler_context",
         "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:cog_parameters",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:primitive",
         "//clockwork/dsl/ir:schema",
         "//clockwork/dsl/ir:statement",
+        "//clockwork/dsl/ir:tensor_builtins",
         "//clockwork/dsl/ir:typesys",
         "@clockwork_pip//typing_extensions",
     ],

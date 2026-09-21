@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/readers/mcap_log_reader.hh"
@@ -181,7 +181,7 @@ LogExpected<LogTimestamp> McapLogReader::end_time()
   return LogTimestamp{static_cast<int64_t>(statistics->messageEndTime)};
 }
 
-std::optional<LoggedMessage> McapLogReader::next_message()
+std::optional<LoggedMessage> McapLogReader::next_message_impl()
 {
   if (!is_open_)
   {
@@ -309,6 +309,7 @@ void McapLogReader::load_metadata()
         .schema_definition = (channel->schemaId == 0) ? std::string{}
                                                       : std::string{nolint_helper::byte_span_to_string_view(
                                                           reader_->schema(channel->schemaId)->data)},
+        .is_amended = false,
       });
   }
   std::ranges::sort(topics, [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });

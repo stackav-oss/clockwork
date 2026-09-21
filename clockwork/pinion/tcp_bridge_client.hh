@@ -1,12 +1,11 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/logging/lite_compressor.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/detail/tcp_socket.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/pinion/tcp_bridge_common.hh"
 #include "clockwork/pinion/tcp_bridge_config_clk_cc.hh"
 #include "clockwork/repr_iface.hh"
@@ -57,7 +56,7 @@ public:
     /// Publisher handle
     PublisherHandle publisher;
     /// Subscriber handle
-    SubscriberHandle subscriber;
+    std::shared_ptr<pinion::AbstractChannel> subscriber;
     /// Server address
     jewels::networking::SocketAddress server_address;
     /// Minimum sequence number
@@ -89,14 +88,14 @@ public:
     const jewels::memory::MemoryResource& memres,
     const Tappy<TcpBridgeClientConfig>& config,
     PublisherHandle publisher,
-    SubscriberHandle subscriber,
+    std::shared_ptr<pinion::AbstractChannel> subscriber,
     std::shared_ptr<TcpBridgeDiagnosticsState> diagnostics_state);
 
   /// Tell the worker thread to stop running
   void request_stop();
 
-  /// Gets the TCP socket descriptor.
-  [[nodiscard]] int socket_fd() const;
+  /// @return False if the socket is disconnected, true otherwise
+  [[nodiscard]] bool is_connected() const noexcept;
 
   /// @return Channel name
   [[nodiscard]] std::string_view channel_name() const;
@@ -144,7 +143,7 @@ private:
   PublisherHandle publisher_;
 
   /// Pinion subscriber handle
-  SubscriberHandle subscriber_;
+  std::shared_ptr<pinion::AbstractChannel> subscriber_;
 
   /// Socket used for connection to the server
   std::optional<TcpSocket> socket_;
@@ -153,13 +152,10 @@ private:
   jewels::networking::SocketAddress server_address_;
 
   /// Client state
-  State state_{State::disconnected};
+  std::atomic<State> state_{State::disconnected};
 
   /// Stop requested flag
   std::atomic<bool> stop_requested_{false};
-
-  /// Initial connect flag
-  bool initial_connect_{true};
 
   /// Mutex to serialize access to the counters
   std::mutex mutex_;

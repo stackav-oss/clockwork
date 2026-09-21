@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 package resolver
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -54,7 +55,10 @@ func (rslv *CppResolver) Name() string {
 
 // Imports implements the resolve.Resolver interface.
 func (rslv *CppResolver) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
-	if r.Kind() == "py_cc_binding" {
+	kinds := []string{
+		"py_cc_binding",
+	}
+	if slices.Contains(kinds, r.Kind()) {
 		// Python imports with dots, so add a dotted import path here
 		// e.g. //foo/bar:lib -> foo.bar.lib
 		imp := strings.ReplaceAll(f.Pkg, "/", ".") + "." + r.Name()
@@ -94,6 +98,7 @@ func (rslv *CppResolver) Resolve(_ *config.Config, _ *resolve.RuleIndex, _ *repo
 		os.Exit(1)
 	}
 	var deps []label.Label
+	var thirdPartyDeps []string
 	// Assume that anything in repoIncludes is a target in the repo.
 	// Anything in thirdPartyIncludes should be in our thirdPartyMap.
 	// Anything in systemIncludes we just ignore.
@@ -113,7 +118,7 @@ func (rslv *CppResolver) Resolve(_ *config.Config, _ *resolve.RuleIndex, _ *repo
 			if strings.HasPrefix(d, systemHeaderSentinel) {
 				continue
 			}
-			deps = append(deps, thirdPartyDep(d))
+			thirdPartyDeps = append(thirdPartyDeps, d)
 		} else {
 			log.Printf("\n\nCould not find a Bazel target that provides the header %s (included in %s).\n"+
 				"Most likely this is due to one of the following issues:\n\n"+
@@ -124,7 +129,7 @@ func (rslv *CppResolver) Resolve(_ *config.Config, _ *resolve.RuleIndex, _ *repo
 			os.Exit(1)
 		}
 	}
-	setDeps(r, from, deps)
+	setDeps(r, from, deps, thirdPartyDeps)
 }
 
 // CrossResolve attempts to resolve an import string to a rule for languages
@@ -154,17 +159,8 @@ func (rslv *CppResolver) CrossResolve(c *config.Config, ix *resolve.RuleIndex, i
 	return nil
 }
 
-// thirdPartyDep parses a label string into a proper Label.
-func thirdPartyDep(d string) label.Label {
-	lbl, err := label.Parse(d)
-	if err != nil {
-		log.Fatalf("Invalid third_party dep %s - %s", d, err)
-	}
-	return lbl
-}
-
 // setDeps sets the dependencies of a rule.
-func setDeps(r *rule.Rule, thisLabel label.Label, deps []label.Label) {
+func setDeps(r *rule.Rule, thisLabel label.Label, deps []label.Label, thirdPartyDeps []string) {
 	const depsAttr = "deps"
 	r.DelAttr(depsAttr)
 
@@ -174,10 +170,15 @@ func setDeps(r *rule.Rule, thisLabel label.Label, deps []label.Label) {
 		if thisLabel.Equal(dep) {
 			continue
 		}
+		if dep.Repo == "" {
+			// Gazelle 0.47 names the main repository on consuming labels.
+			dep.Repo = thisLabel.Repo
+		}
 		// Try to use a relative include if possible
 		dep = dep.Rel(thisLabel.Repo, thisLabel.Pkg)
 		depsAsStrings = append(depsAsStrings, dep.String())
 	}
+	depsAsStrings = append(depsAsStrings, thirdPartyDeps...)
 
 	if len(depsAsStrings) > 0 {
 		depsAsStrings = util.SSliceDedup(depsAsStrings)

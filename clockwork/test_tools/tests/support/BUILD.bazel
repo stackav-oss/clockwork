@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -19,19 +19,28 @@ cc_library(
     hdrs = ["addition_cog.hh"],
     data = [":addition_cogs_clk"],
     deps = [
+        ":addition_cog_cog",
         ":addition_cog_dial",
         ":addition_cog_impl",
+        ":addition_cog_types",
+        "//clockwork/cog:include_common",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "addition_cog_cog",
+    srcs = [
+        "addition_cog_cog.cc",
+        "addition_cog_cog.inl",
+    ],
+    hdrs = ["addition_cog_cog.hh"],
+    data = [":addition_cogs_clk"],
+    deps = [
+        ":addition_cog_dial",
         ":addition_message",
         ":sum_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
     ],
     alwayslink = True,
 )
@@ -45,9 +54,11 @@ cc_library(
     hdrs = ["addition_cog_dial.hh"],
     data = [":addition_cogs_clk"],
     deps = [
+        ":addition_cog_types",
         ":addition_message",
         ":sum_message",
         "//clockwork/dial:include_common",
+        "//jewels/container/tap:bitset",
     ],
 )
 
@@ -60,8 +71,27 @@ cc_library(
         ":sum_message",
         "//clockwork/dial:cond_messages_present",
         "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
+    ],
+)
+
+cc_library(
+    name = "addition_cog_types",
+    srcs = [
+        "addition_cog_types.cc",
+        "addition_cog_types.inl",
+    ],
+    hdrs = ["addition_cog_types.hh"],
+    data = [":addition_cogs_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
     ],
 )
 
@@ -72,15 +102,17 @@ clk(
         "addition_cog.cc",
         "addition_cog.hh",
         "addition_cog.inl",
+        "addition_cog_cog.cc",
+        "addition_cog_cog.hh",
+        "addition_cog_cog.inl",
         "addition_cog_dial.cc",
         "addition_cog_dial.hh",
         "addition_cog_dial.inl",
+        "addition_cog_types.cc",
+        "addition_cog_types.hh",
+        "addition_cog_types.inl",
     ],
-    deps = [
-        ":messages_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
-    ],
+    deps = [":messages_clk"],
 )
 
 cc_library(
@@ -90,6 +122,17 @@ cc_library(
         "addition_message.inl",
     ],
     hdrs = ["addition_message.hh"],
+    data = [":messages_clk"],
+    deps = [":addition_message_types"],
+)
+
+cc_library(
+    name = "addition_message_types",
+    srcs = [
+        "addition_message_types.cc",
+        "addition_message_types.inl",
+    ],
+    hdrs = ["addition_message_types.hh"],
     data = [":messages_clk"],
     deps = [
         "//clockwork:repr_iface",
@@ -189,9 +232,11 @@ clk(
         "addition_test_system.addition_system.SimCpu_channel_allocations.csv",
         "addition_test_system.addition_system.SimCpu_channel_spy_config.tachyon",
         "addition_test_system.addition_system.SimCpu_event_logger_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_journal_topology.tachyon",
         "addition_test_system.addition_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "addition_test_system.addition_system.SimCpu_signal_metadata_config.tachyon",
         "addition_test_system.addition_system.SimCpu_simplelaunch_config.textproto",
+        "addition_test_system.addition_system.SimCpu_system_metadata.tachyon",
         "addition_test_system.addition_system.SimCpu_telemetry_logger_config.tachyon",
         "addition_test_system.addition_system.diagnostics_database_config.tachyon",
         "addition_test_system.addition_system.logged_channel_metadata.pbbin",
@@ -215,9 +260,11 @@ clk(
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_publisher_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_spy_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_event_logger_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_journal_topology.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_metrics_channel_metadata_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_signal_metadata_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_simplelaunch_config.textproto",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_system_metadata.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_telemetry_logger_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.diagnostics_database_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.logged_channel_metadata.pbbin",
@@ -240,19 +287,11 @@ cc_library(
     hdrs = ["addition_tester_cog.hh"],
     data = [":addition_tester_cog_clk"],
     deps = [
-        ":addition_message",
+        ":addition_tester_cog_cog",
         ":addition_tester_cog_dial",
         ":addition_tester_cog_impl",
-        ":sum_message",
-        "//clockwork:repr_iface",
-        "//clockwork:tags",
+        ":addition_tester_cog_types",
         "//clockwork/cog:include_common",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk_cc",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk_cc",
-        "//jewels/container/tap:var_array",
-        "//jewels/meta:concepts",
-        "//jewels/utility:enum_flags",
-        "@wise_enum",
     ],
     alwayslink = True,
 )
@@ -264,15 +303,34 @@ clk(
         "addition_tester_cog.cc",
         "addition_tester_cog.hh",
         "addition_tester_cog.inl",
+        "addition_tester_cog_cog.cc",
+        "addition_tester_cog_cog.hh",
+        "addition_tester_cog_cog.inl",
         "addition_tester_cog_dial.cc",
         "addition_tester_cog_dial.hh",
         "addition_tester_cog_dial.inl",
+        "addition_tester_cog_types.cc",
+        "addition_tester_cog_types.hh",
+        "addition_tester_cog_types.inl",
     ],
+    deps = [":messages_clk"],
+)
+
+cc_library(
+    name = "addition_tester_cog_cog",
+    srcs = [
+        "addition_tester_cog_cog.cc",
+        "addition_tester_cog_cog.inl",
+    ],
+    hdrs = ["addition_tester_cog_cog.hh"],
+    data = [":addition_tester_cog_clk"],
     deps = [
-        ":messages_clk",
-        "//clockwork/dsl/cog:common_cog_event_metrics_clk",
-        "//clockwork/dsl/cog:common_cog_telemetry_metrics_clk",
+        ":addition_message",
+        ":addition_tester_cog_dial",
+        ":sum_message",
+        "//clockwork/cog:include_common",
     ],
+    alwayslink = True,
 )
 
 cc_library(
@@ -285,8 +343,10 @@ cc_library(
     data = [":addition_tester_cog_clk"],
     deps = [
         ":addition_message",
+        ":addition_tester_cog_types",
         ":sum_message",
         "//clockwork/dial:include_common",
+        "//jewels/container/tap:bitset",
     ],
 )
 
@@ -300,9 +360,28 @@ cc_library(
         "//clockwork/dial:cond_messages_present",
         "//clockwork/dial:cond_time_since_last_exec",
         "//clockwork/dial:msg_input",
+        "//clockwork/memory:start_lifetime_as",
         "//clockwork/pinion:publishable",
-        "//jewels/container:circular_buffer",
+        "//clockwork/pinion:slot",
+        "//jewels/uuid",
         "@catch2//:catch2_main",
+    ],
+)
+
+cc_library(
+    name = "addition_tester_cog_types",
+    srcs = [
+        "addition_tester_cog_types.cc",
+        "addition_tester_cog_types.inl",
+    ],
+    hdrs = ["addition_tester_cog_types.hh"],
+    data = [":addition_tester_cog_clk"],
+    deps = [
+        "//clockwork:repr_iface",
+        "//clockwork:tags",
+        "//jewels/container/tap:var_array",
+        "//jewels/meta:concepts",
+        "//jewels/uuid",
     ],
 )
 
@@ -313,9 +392,15 @@ clk(
         "addition_message.cc",
         "addition_message.hh",
         "addition_message.inl",
+        "addition_message_types.cc",
+        "addition_message_types.hh",
+        "addition_message_types.inl",
         "sum_message.cc",
         "sum_message.hh",
         "sum_message.inl",
+        "sum_message_types.cc",
+        "sum_message_types.hh",
+        "sum_message_types.inl",
     ],
 )
 
@@ -329,8 +414,10 @@ merge_simplelaunch_config(
         "addition_test_system.addition_system.SimCpu_channel_allocations.csv",
         "addition_test_system.addition_system.SimCpu_channel_spy_config.tachyon",
         "addition_test_system.addition_system.SimCpu_event_logger_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_journal_topology.tachyon",
         "addition_test_system.addition_system.SimCpu_metrics_channel_metadata_config.tachyon",
         "addition_test_system.addition_system.SimCpu_signal_metadata_config.tachyon",
+        "addition_test_system.addition_system.SimCpu_system_metadata.tachyon",
         "addition_test_system.addition_system.SimCpu_telemetry_logger_config.tachyon",
         "addition_test_system.addition_system.diagnostics_database_config.tachyon",
         "clockwork.clockwork.test_tools.tests.support.addition_test_system.addition_system.proc.tachyon",
@@ -346,6 +433,17 @@ cc_library(
         "sum_message.inl",
     ],
     hdrs = ["sum_message.hh"],
+    data = [":messages_clk"],
+    deps = [":sum_message_types"],
+)
+
+cc_library(
+    name = "sum_message_types",
+    srcs = [
+        "sum_message_types.cc",
+        "sum_message_types.inl",
+    ],
+    hdrs = ["sum_message_types.hh"],
     data = [":messages_clk"],
     deps = [
         "//clockwork:repr_iface",
@@ -366,8 +464,10 @@ merge_simplelaunch_config(
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_publisher_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_channel_spy_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_event_logger_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_journal_topology.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_metrics_channel_metadata_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_signal_metadata_config.tachyon",
+        "addition_test_system_synthetic.addition_system_synthetic.TestCpu_system_metadata.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.TestCpu_telemetry_logger_config.tachyon",
         "addition_test_system_synthetic.addition_system_synthetic.diagnostics_database_config.tachyon",
         "clockwork.clockwork.test_tools.tests.support.addition_test_system_synthetic.addition_system_synthetic.proc.tachyon",

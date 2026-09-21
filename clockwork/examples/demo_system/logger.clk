@@ -1,12 +1,15 @@
 #![generate(cpp_exe)]
 
+use clockwork::common::signal_metadata_config::{SignalMetadataConfig};
 use[] clockwork::examples::demo_system::cpu_domain;
+use[] clockwork::examples::demo_system::logger_channels::{SignalMetadata};
 use clockwork::logging::log_writer_config;
 use[cpp, proto, proto_conv] clockwork::logging::writers::channel_message_rates_config;
 use clockwork::logging::writers::logger;
 use[] clockwork::logging::writers::logger_channels;
 use[cpp, proto, proto_conv] clockwork::logging::writers::logger_config;
 use clockwork::logging::writers::logger_status;
+use clockwork::tools::signal_metadata::signal_metadata_init::{SignalMetadataInitCog};
 
 box LoggerBox
 {
@@ -14,10 +17,23 @@ box LoggerBox
   new status_publisher_cog: logger::LoggerStatusPublisherCog;
 
   new memory: HeapMemory(max_size=300'000'000);
-  new telemetry_config: SerializedDataFile(representation=Tachyon<log_writer_config::LogWriterConfig<>>, path="clockwork/examples/demo_system/demo_system.demo_system_sys.LocalHost_telemetry_logger_config.tachyon");
-  new config: SerializedDataFile(representation=Protobuf<logger_config::LoggerConfig>, path="clockwork/examples/demo_system/resources/logger_config.pbtxt");
-  new channel_rates_config: SerializedDataFile(representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>, path="clockwork/examples/demo_system/resources/channel_rates_config.pbtxt");
+  new telemetry_config: SerializedDataFile(
+    representation=Tachyon<log_writer_config::LogWriterConfig<>>,
+    path=fmt!("{system_file_path_base()}.{system_instance_name()}.LocalHost_telemetry_logger_config.tachyon"),
+  );
+  new config: SerializedDataFile(
+    representation=Protobuf<logger_config::LoggerConfig>,
+    path="clockwork/examples/demo_system/resources/logger_config.pbtxt",
+  );
+  new channel_rates_config: SerializedDataFile(
+    representation=Protobuf<channel_message_rates_config::ChannelMessageRatesConfig>,
+    path="clockwork/examples/demo_system/resources/channel_rates_config.pbtxt",
+  );
   new state: State(representation=logger::LoggerCogState, memory_resource=memory, init=init_cog.logger_state);
+  new signal_metadata_config: SerializedDataFile(
+    representation=Tachyon<SignalMetadataConfig<>>,
+    path=fmt!("{system_file_path_base()}.{system_instance_name()}.LocalHost_signal_metadata_config.tachyon"),
+  );
 
   connect telemetry_config to init_cog.log_writer_config;
   connect config to init_cog.logger_config;
@@ -27,6 +43,10 @@ box LoggerBox
   connect state to status_publisher_cog.logger_state;
   connect status_publisher_cog.logger_status to logger_channels::LoggerStatusChannel;
   connect status_publisher_cog.channel_rates to logger_channels::LoggerMessageRatesChannel;
+
+  new signal_metadata_init_cog: SignalMetadataInitCog;
+  connect signal_metadata_config to signal_metadata_init_cog.signal_metadata_config;
+  connect signal_metadata_init_cog.signal_metadata to SignalMetadata;
 }
 
 box LoggerExe

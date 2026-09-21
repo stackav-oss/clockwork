@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to signal metadata configurations.
@@ -33,6 +33,7 @@ class Entities:
     aggregation_type: type[signal_metadata_config_proto.AggregationTypeEnum]
     log_type: type[signal_metadata_config_proto.LogTypeEnum]
     report_group_type: type[signal_metadata_config_proto.ReportGroupTypeEnum]
+    signal_validity_source: type[signal_metadata_config_proto.SignalValiditySourceEnum]
     signal_metadata: type[signal_metadata_config_proto.SignalMetadata]
     report_group_signal_metadata: type[signal_metadata_config_proto.ReportGroupSignalMetadata]
     report_group_metadata: type[signal_metadata_config_proto.ReportGroupMetadata]
@@ -86,13 +87,14 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
     aggregation_type = tachyon_dyn.get_enum(compiler_context, module, "AggregationType")[0]
     log_type = tachyon_dyn.get_enum(compiler_context, module, "LogType")[0]
     report_group_type = tachyon_dyn.get_enum(compiler_context, module, "ReportGroupType")[0]
+    signal_validity_source = tachyon_dyn.get_enum(compiler_context, module, "SignalValiditySource")[0]
 
     # Extract dataclass entities
     signal_metadata = tachyon_dyn.get_instantiation_dataclass(
         compiler_context,
         module,
         "SignalMetadata",
-        max_signal_name_size=300,
+        max_signal_name_size=150,
         max_aggregation_definition_size=80,
         max_pre_aggregation_types=10,
     )[0]
@@ -107,8 +109,8 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         compiler_context,
         module,
         "ReportGroupMetadata",
-        max_report_group_name_size=300,
-        max_num_signals=50,
+        max_report_group_name_size=100,
+        max_num_signals=250,
     )[0]
     cog_report_groups_metadata = tachyon_dyn.get_instantiation_dataclass(
         compiler_context,
@@ -126,7 +128,7 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         module,
         "ReportGroupInstanceMetadata",
         max_channel_name_size=constants.MAX_CHANNEL_NAME_SIZE,
-        max_num_signal_instances=50,
+        max_num_signal_instances=256,
     )[0]
     cog_instance_metadata = tachyon_dyn.get_instantiation_dataclass(
         compiler_context,
@@ -145,8 +147,8 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         module,
         "SignalMetadataConfig",
         max_num_signals=2046,
-        max_num_cogs=2046,
-        max_num_cog_instances=2046,
+        max_num_cogs=551,
+        max_num_cog_instances=1200,
         max_num_report_group_channels=2046,
     )[0]
 
@@ -154,6 +156,7 @@ def _load_all_entities(compiler_context: CompilerContext) -> Entities:
         aggregation_type=aggregation_type,
         log_type=log_type,
         report_group_type=report_group_type,
+        signal_validity_source=signal_validity_source,
         signal_metadata=signal_metadata,
         report_group_signal_metadata=report_group_signal_metadata,
         report_group_metadata=report_group_metadata,
@@ -203,6 +206,13 @@ def get_report_group_type_enum(
 ) -> type[signal_metadata_config_proto.ReportGroupTypeEnum]:
     """Get ReportGroupType enum."""
     return get_entities(compiler_context).report_group_type
+
+
+def get_signal_validity_source_enum(
+    compiler_context: CompilerContext,
+) -> type[signal_metadata_config_proto.SignalValiditySourceEnum]:
+    """Get SignalValiditySource enum."""
+    return get_entities(compiler_context).signal_validity_source
 
 
 def get_signal_metadata(

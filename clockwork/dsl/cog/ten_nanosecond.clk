@@ -2,7 +2,9 @@
 #![cpp(namespace=clockwork)]
 
 // TenNanoseconds strong type
-#[cpp(type_header="clockwork/dsl/cog/ten_nanosecond_type.hh", type_namespace=clockwork, type_factory=ten_nanoseconds_factory)]
+#[cpp(type_header="clockwork/dsl/cog/ten_nanosecond_type.hh",
+type_namespace=clockwork,
+type_factory=ten_nanoseconds_factory)]
 strong_type TenNanoseconds
 {
   underlying_type: UInt32;

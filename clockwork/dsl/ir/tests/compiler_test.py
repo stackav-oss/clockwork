@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -16,6 +16,7 @@ from clockwork.dsl.bazel import clk_targets, targets
 from clockwork.dsl.cpp import context, typereg
 from clockwork.dsl.ir import clkenum, cog, compiler, importer, node, schema, strongtypes, uuid_reg
 from clockwork.dsl.ir.module_id import CLK_REPO, ModuleID
+from clockwork.dsl.ir.path_resolver import BazelPathResolver
 from clockwork.dsl.ir.tests.node_test import MockImporter
 
 
@@ -72,6 +73,62 @@ cog TestCog
     assert len(module.inner_scope.names) == 2
     assert module.inner_scope.parent is not None
     assert len(module.inner_scope.parent.names) == 1
+
+
+def test_compile_timing_accumulates_imported_module_parse_time(tmp_path: Path) -> None:
+    source_dir = tmp_path / "compile_timing"
+    source_dir.mkdir()
+    (source_dir / "dep.clk").write_text(
+        """
+// Test schema
+schema DepSchema
+{
+    fields
+    {
+        // Test field
+        #1 value: Int64;
+    }
+}
+"""
+    )
+    (source_dir / "root.clk").write_text(
+        """
+use compile_timing::dep;
+
+// Test schema
+schema RootSchema
+{
+    fields
+    {
+        // Test field
+        #1 value: Int64;
+    }
+}
+"""
+    )
+
+    timing = compiler.CompileTiming()
+    path_resolver = BazelPathResolver(prefix_paths=[tmp_path])
+
+    def compile_import(module_id: ModuleID, importer_instance: node.Importer) -> node.Module:
+        return compiler.compile_source_file(
+            module_id,
+            importer_instance,
+            path_resolver=path_resolver,
+            timing=timing,
+        )
+
+    fs_importer = importer.FilesystemImporter(compile_fn=compile_import, path_resolver=path_resolver)
+    module = compiler.compile_source_file(
+        ModuleID(CLK_REPO, "compile_timing::root"),
+        importer=fs_importer,
+        path_resolver=path_resolver,
+        timing=timing,
+    )
+
+    assert isinstance(module, node.Module)
+    assert timing.parse_elapsed_ns > 0
+    assert timing.parsed_module_count == 2
 
 
 def test_schema_tag() -> None:
@@ -182,3 +239,48 @@ use d::f;
 
     clk_from_file = compiler.to_clk_target(module_id, search_paths=[tmp_path])
     assert clk_from_file == expected_clk
+
+
+def test_aligner_same_file_reference_gives_hint() -> None:
+    """Referencing an aligner-generated schema from the same file gives a clear hint."""
+    source_text = """\
+#![generate(cpp, cpp_aligner)]
+#![cpp(namespace=clockwork::test)]
+
+// A test message
+schema TestMsg
+{
+    uuid: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa;
+    fields
+    {
+        // Timestamp
+        #0 timestamp: SyncTime;
+    }
+}
+
+// Test aligner
+aligner TestAligner
+{
+    inputs
+    {
+        // Input
+        input1: Tappy<TestMsg>;
+    }
+
+    require(true);
+}
+
+// Schema referencing the aligner-generated schema from the same file
+schema UsesAlignmentMsg
+{
+    uuid: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb;
+    fields
+    {
+        // Nested alignment msg
+        #0 data: TestAlignerAlignmentMsg;
+    }
+}
+"""
+    fs_importer = importer.FilesystemImporter(compile_fn=compiler.compile_source_file)
+    with pytest.raises(ValueError, match="Hint: 'TestAlignerAlignmentMsg'"):
+        compiler.compile_source_text(source_text, ModuleID(CLK_REPO, "test_aligner_same_file"), fs_importer)

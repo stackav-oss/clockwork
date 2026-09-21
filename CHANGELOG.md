@@ -4,6 +4,23 @@ Log of notable changes in each Clockwork OSS release.
 
 Clockwork follows a date-based year.month versioning scheme.
 
+## [2026.9] - 2026-09-16
+
+### Added
+
+- Built-in Bitset type.
+- Message aligners for declaratively selecting coherent groups of input messages using constraints and optimization objectives.
+- Parameterized channels, cogs, and boxes, including support for parameterized policies and generated test-cog wrappers.
+- Direct connections to cog state and configuration members.
+- Multi-connect inputs and bounded multi-message cog outputs, including Python cog support for multi-message outputs.
+- Serializable state snapshot and restore support.
+- Generated Simplelaunch runner configurations, status messages, and diagnostics.
+
+### Changed
+
+- Expanded DFL with richer statements, reusable expression filters, and conditional statements for boxes and cog components.
+- Improved logging and telemetry tooling with explicit non-redundant telemetry configuration, real-time playback bundles, and Python log-reader sequence-number filtering.
+
 ## [2026.3] - 2026-03-20
 
 ### Added

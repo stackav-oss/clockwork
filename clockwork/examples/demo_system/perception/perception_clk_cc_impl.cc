@@ -1,26 +1,28 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/dial/approx_aligner.hh"
 #include "clockwork/dial/approx_aligner_config_clk_cc.hh"
 #include "clockwork/dial/approx_aligner_policies.hh"
+#include "clockwork/dial/msg_input.hh"
 #include "clockwork/examples/demo_system/camera/video_message_clk_cc.hh"
 #include "clockwork/examples/demo_system/lidar/lidar_message_clk_cc.hh"
 #include "clockwork/examples/demo_system/localization/pose_message_clk_cc.hh"
 #include "clockwork/examples/demo_system/perception/perception_clk_cc_dial.hh"
 #include "clockwork/examples/demo_system/perception/perception_message_clk_cc.hh"
+#include "clockwork/memory/start_lifetime_as.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "jewels/container/circular_buffer.hh"
+#include "clockwork/pinion/slot.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pointers.hh"
-
-#include <boost/iterator/iterator_facade.hpp>
+#include "jewels/uuid/uuid.hh"
 
 #include <algorithm>
 #include <chrono>
 #include <optional>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 
 namespace clockwork::demo_system::perception
 {
@@ -38,18 +40,18 @@ struct AlignerPolicy : ApproxAlignerPolicies<InputPolicies...>
 };
 
 // Approx aligner pose input
-using PoseInput = TovNanosecondsApproxAlignerInput<
-  std::decay_t<std::result_of_t<decltype (&PerceptionCogDialInputs::get_pose)(PerceptionCogDialInputs)>>>;
+using PoseInput =
+  TovNanosecondsApproxAlignerInput<std::decay_t<decltype(std::declval<PerceptionCogDialInputs>().get_pose())>>;
 constexpr auto pose_index = 0U;
 
 // Approx aligner lidar input
-using LidarInput = TovNanosecondsApproxAlignerInput<
-  std::decay_t<std::result_of_t<decltype (&PerceptionCogDialInputs::get_lidar)(PerceptionCogDialInputs)>>>;
+using LidarInput =
+  TovNanosecondsApproxAlignerInput<std::decay_t<decltype(std::declval<PerceptionCogDialInputs>().get_lidar())>>;
 constexpr auto lidar_index = 1U;
 
 // Approx aligner video input
-using VideoInput = TovNanosecondsApproxAlignerInput<
-  std::decay_t<std::result_of_t<decltype (&PerceptionCogDialInputs::get_video)(PerceptionCogDialInputs)>>>;
+using VideoInput =
+  TovNanosecondsApproxAlignerInput<std::decay_t<decltype(std::declval<PerceptionCogDialInputs>().get_video())>>;
 constexpr auto video_index = 2U;
 
 // Aprox aligner for pose, lidar and video

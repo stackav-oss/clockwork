@@ -1,21 +1,14 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/abstract_epoll_manager.hh"
 #include "jewels/filesystem/error_code.hh"
-#include "jewels/filesystem/file_descriptor.hh"
-#include "jewels/memory/memory_resource.hh"
-#include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/std/expected.hh"
 
 #include <chrono>
 #include <cstdint>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
-#include <utility>
 
 namespace clockwork::testing
 {

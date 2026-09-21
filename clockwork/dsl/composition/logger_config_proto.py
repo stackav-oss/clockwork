@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python interface to logger configurations."""
@@ -78,12 +78,15 @@ class LogTypeEnum(Protocol):
 
     none: LogType
     event: LogType
-    telemetry: LogType
+    non_redundant_telemetry: LogType
     redundant_telemetry: LogType
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class LoggedChannelConfig(Tachyon["LoggedChannelConfig"]):
+# fmt: on
     """Logged channel configuration."""
 
     uuid: UUID
@@ -97,8 +100,11 @@ class LoggedChannelConfig(Tachyon["LoggedChannelConfig"]):
     channel_type: ChannelType
 
 
+# fmt: off
 @dataclass(kw_only=True)
+# pyrefly: ignore[implicit-abstract-class] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 class LogWriterConfig(Tachyon["LogWriterConfig"]):
+# fmt: on
     """Log writer configuration."""
 
     channels: list[LoggedChannelConfig]

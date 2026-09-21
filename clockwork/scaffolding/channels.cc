@@ -1,16 +1,12 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/scaffolding/channels.hh"
 
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/logging/channel_publisher_config_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/shm_channel.hh"
-#include "clockwork/pinion/shm_channel_factory.hh"
-#include "clockwork/pinion/shm_publisher.hh"
-#include "clockwork/pinion/shm_subscriber.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/filesystem/error_code.hh"
 #include "jewels/log_cerr/log_cerr.hh"
@@ -29,6 +25,7 @@
 #include <memory>
 #include <memory_resource>
 #include <mutex>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -43,9 +40,9 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
   std::span<const Tappy<common::PublishEndpoint<>>> descs,
   jewels::memory::MemoryResource memres,
   const jewels::Uuid<common::ProcessInstanceId>& process_id,
-  pinion::ShmChannelFactory& factory)
+  pinion::AbstractChannelFactory& factory)
 {
-  using Role = pinion::ShmChannel::Role;
+  using Role = pinion::AbstractChannel::Role;
   ChannelMap channels(descs.size(), memres);
 
   std::pmr::list<std::reference_wrapper<const Tappy<common::PublishEndpoint<>>>> pending(memres);
@@ -63,6 +60,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
         .num_slots = config.get_buffer_layout().get_num_slots(),
         .message_size = config.get_buffer_layout().get_message_size(),
         .is_published_once = config.get_buffer_layout().get_is_published_once(),
+        .max_msgs_per_exec = config.get_buffer_layout().get_max_msgs_per_exec(),
       };
       auto role = (config.get_process_id() == process_id ? Role::publisher : Role::subscriber);
       auto uuid_str = config.get_publisher_id().to_string(memres);
@@ -72,7 +70,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
         channels.emplace(config.get_publisher_id(), std::move(channel.value()));
         config_it = pending.erase(config_it);
       }
-      else if (channel.error() == pinion::ShmChannel::Error::missing && role == pinion::ShmChannel::Role::subscriber)
+      else if (channel.error() == pinion::ShmChannel::Error::missing && role == Role::subscriber)
       {
         ++config_it;
       }
@@ -90,6 +88,26 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_channels(
     jewels::log_cerr_info("Waiting for publisher creation ({} channels remaining)", pending.size());
     std::this_thread::sleep_for(channel_connect_sleep_time);
   }
+
+  const auto channels_values = channels | std::views::values;
+  std::list<std::shared_ptr<pinion::AbstractChannel>> init(channels_values.begin(), channels_values.end());
+  while (!init.empty())
+  {
+    for (auto iter = init.begin(); iter != init.end();)
+    {
+      if ((*iter)->handshake())
+      {
+        iter = init.erase(iter);
+      }
+      else
+      {
+        ++iter;
+      }
+    }
+    jewels::log_cerr_info("Waiting for channel handshake to complete ({} channels remaining)", init.size());
+    std::this_thread::sleep_for(channel_connect_sleep_time);
+  }
+
   return std::move(channels);
 }
 
@@ -97,9 +115,9 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
   std::span<const Tappy<common::PublishEndpoint<>>> descs,
   std::span<const Tappy<clockwork_logging::PublishedChannelConfig<>>> published_channels,
   jewels::memory::MemoryResource memres,
-  pinion::ShmChannelFactory& factory)
+  pinion::AbstractChannelFactory& factory)
 {
-  using Role = pinion::ShmChannel::Role;
+  using Role = pinion::AbstractChannel::Role;
   ChannelMap channels(descs.size(), memres);
 
   bool error = false;
@@ -122,6 +140,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_deterministic_channels(
         .num_slots = config->get_buffer_layout().get_num_slots(),
         .message_size = config->get_buffer_layout().get_message_size(),
         .is_published_once = config->get_buffer_layout().get_is_published_once(),
+        .max_msgs_per_exec = config->get_buffer_layout().get_max_msgs_per_exec(),
       };
       auto uuid_str = config->get_publisher_id().to_string(memres);
       auto channel =
@@ -195,7 +214,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
   std::span<const Tappy<common::NotConnectedEndpoint>> endpoints,
   AbstractCasing& casing,
   jewels::memory::MemoryResource memres,
-  pinion::ShmChannelFactory& factory)
+  pinion::AbstractChannelFactory& factory)
 {
   using Role = pinion::ShmChannel::Role;
   ChannelMap channels(memres);
@@ -205,6 +224,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
       .num_slots = endpoint.get_buffer_layout().get_num_slots(),
       .message_size = endpoint.get_buffer_layout().get_message_size(),
       .is_published_once = endpoint.get_buffer_layout().get_is_published_once(),
+      .max_msgs_per_exec = endpoint.get_buffer_layout().get_max_msgs_per_exec(),
     };
     if (endpoint.get_endpoint_type() == common::NotConnectedEndpointType::subscriber)
     {
@@ -236,7 +256,7 @@ jewels::expected<ChannelMap, jewels::MonoError> setup_non_connected_channels(
       return jewels::unexpected(jewels::MonoError());
     }
 
-    auto* publisher_ptr = dynamic_cast<pinion::ShmPublisher*>(channels[endpoint.get_endpoint_id()].get());
+    auto* publisher_ptr = dynamic_cast<pinion::AbstractPublisher*>(channels[endpoint.get_endpoint_id()].get());
     if (publisher_ptr == nullptr)
     {
       jewels::log_cerr_error("supposed publisher id '{}' is actually a subscriber", endpoint.get_endpoint_id());
@@ -276,7 +296,7 @@ jewels::expected<std::pmr::vector<std::shared_ptr<pinion::Observer>>, jewels::Mo
         jewels::log_cerr_error("pubsub graph has unknown publisher id '{}'", connection.get_publisher_id());
         return jewels::unexpected(jewels::MonoError());
       }
-      auto observer = casing.try_connect_subscriber(connection.get_subscriber_id(), channel->second->make_subscriber());
+      auto observer = casing.try_connect_subscriber(connection.get_subscriber_id(), channel->second);
       if (!observer)
       {
         jewels::log_cerr_error(
@@ -315,7 +335,7 @@ jewels::expected<void, jewels::MonoError> connect_publishers(
         jewels::log_cerr_error("pubsub graph has unknown publisher id '{}'", endpoint.get_publisher_id());
         return jewels::unexpected(jewels::MonoError());
       }
-      auto* publisher_ptr = dynamic_cast<pinion::ShmPublisher*>(channel->second.get());
+      auto* publisher_ptr = dynamic_cast<pinion::AbstractPublisher*>(channel->second.get());
       if (publisher_ptr == nullptr)
       {
         jewels::log_cerr_error("supposed publisher id '{}' is actually a subscriber", endpoint.get_publisher_id());
@@ -338,14 +358,14 @@ jewels::expected<void, jewels::MonoError> connect_publishers(
   return {};
 }
 
-void bind_channel_to_epoll(const std::shared_ptr<pinion::ShmChannel>& channel, AbstractEPollManager& epoll)
+void bind_channel_to_epoll(const std::shared_ptr<pinion::AbstractChannel>& channel, AbstractEPollManager& epoll)
 {
   uint32_t events = 0;
-  if (std::dynamic_pointer_cast<pinion::ShmSubscriber>(channel))
+  if (std::dynamic_pointer_cast<pinion::AbstractSubscriber>(channel))
   {
     events = EPOLLIN | EPOLLHUP | EPOLLRDHUP;
   }
-  else if (std::dynamic_pointer_cast<pinion::ShmPublisher>(channel))
+  else if (std::dynamic_pointer_cast<pinion::AbstractPublisher>(channel))
   {
     events = EPOLLIN;
   }

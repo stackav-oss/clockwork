@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Python class that represents a VarArray with the Tachyon layout."""
@@ -106,10 +106,12 @@ class VarArray(Generic[ValueType]):  # noqa: PLW1641 Intentionally leaving out _
             capacity: The maximum size.
             serdes: Handles serializing and deserializing the values.
         """
+        # pyrefly: ignore[bad-argument-count, bad-specialization] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         obj = cls.__new__(cls)
         obj._serdes = serdes  # noqa: SLF001 required to initialize the class without calling __init__
         obj._capacity = capacity  # noqa: SLF001 required to initialize the class without calling __init__
         obj._size_offset = var_array_size_offset(serdes.size_bytes(), capacity)  # noqa: SLF001 required to initialize the class without calling __init__
+        # pyrefly: ignore[bad-assignment] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
         obj._buf = buf  # noqa: SLF001 required to initialize the class without calling __init__
 
         obj._validate_buffer()  # noqa: SLF001 this should only ever be called by class factory functions

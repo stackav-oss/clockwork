@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//clockwork:rules.bzl", "clk")
@@ -7,9 +7,38 @@ load("//tools/rules:cc.bzl", "cc_binary", "cc_library")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "channel_config.clk",
     "tcp_bridge_config.clk",
     "bridge_status.clk",
 ])
+
+cc_library(
+    name = "abstract_channel",
+    srcs = ["abstract_channel.cc"],
+    hdrs = ["abstract_channel.hh"],
+    deps = [
+        ":buffer_layout",
+        ":error",
+        ":observer",
+        ":publisher_slot_ref",
+        ":slot_ref",
+        "//clockwork/common:abstract_epoll_manager",
+        "//jewels/memory:pointers",
+        "//jewels/std:expected",
+        "@wise_enum",
+    ],
+)
+
+cc_library(
+    name = "abstract_channel_factory",
+    srcs = ["abstract_channel_factory.cc"],
+    hdrs = ["abstract_channel_factory.hh"],
+    deps = [
+        ":abstract_channel",
+        ":buffer_layout",
+        "//jewels/std:expected",
+    ],
+)
 
 cc_library(
     name = "aligned_pointer",
@@ -28,11 +57,12 @@ cc_library(
     srcs = ["bidirectional_udp.inl"],
     hdrs = ["bidirectional_udp.hh"],
     deps = [
+        ":abstract_channel",
         ":incoming_udp",
         ":io_connection",
         ":observer",
         ":outgoing_udp",
-        ":publisher_handle",
+        ":publisher_slot_ref",
         ":sock_opt",
         ":subscriber_handle",
         "//clockwork/common:abstract_epoll_manager",
@@ -60,6 +90,9 @@ clk(
         "bridge_status_clk_cc.cc",
         "bridge_status_clk_cc.hh",
         "bridge_status_clk_cc.inl",
+        "bridge_status_clk_cc_types.cc",
+        "bridge_status_clk_cc_types.hh",
+        "bridge_status_clk_cc_types.inl",
         "bridge_status_clk_nb.cc",
         "bridge_status_clk_nb.hh",
         "bridge_status_clk_nb.inl",
@@ -68,18 +101,18 @@ clk(
         "cpp",
         "nanobind",
     ],
+    deps = ["//clockwork/common:constants_clk"],
 )
 
 cc_library(
     name = "buffer",
-    srcs = [
-        "buffer.cc",
-        "buffer.inl",
-    ],
+    srcs = ["buffer.cc"],
     hdrs = ["buffer.hh"],
     deps = [
         ":aligned_pointer",
         ":buffer_index",
+        ":buffer_layout",
+        ":device_ptr",
         ":error",
         ":slot",
         "//clockwork/memory:start_lifetime_as",
@@ -87,7 +120,7 @@ cc_library(
         "//jewels/math:power_of_two",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
-        "@boost//:iterator",
+        "@boost.iterator",
     ],
 )
 
@@ -97,11 +130,44 @@ cc_library(
 )
 
 cc_library(
+    name = "buffer_layout",
+    srcs = ["buffer_layout.inl"],
+    hdrs = ["buffer_layout.hh"],
+    deps = [
+        ":aligned_pointer",
+        ":buffer_index",
+        ":error",
+        ":slot",
+        "//jewels/math:power_of_two",
+        "//jewels/std:expected",
+    ],
+)
+
+clk(
+    name = "channel_config_clk",
+    srcs = ["channel_config.clk"],
+    outs = [
+        "channel_config_clk_cc.cc",
+        "channel_config_clk_cc.hh",
+        "channel_config_clk_cc.inl",
+        "channel_config_clk_cc_types.cc",
+        "channel_config_clk_cc_types.hh",
+        "channel_config_clk_cc_types.inl",
+        "channel_config_clk_py.py",
+    ],
+    generate = [
+        "cpp",
+        "py",
+    ],
+    minimize_builtin_deps = True,
+)
+
+cc_library(
     name = "channel_observer",
     srcs = ["channel_observer.cc"],
     hdrs = ["channel_observer.hh"],
     deps = [
-        ":buffer",
+        ":abstract_channel",
         ":channel_observer_client",
         ":observer",
         ":slot_ref",
@@ -115,10 +181,15 @@ cc_library(
     name = "channel_observer_client",
     hdrs = ["channel_observer_client.hh"],
     deps = [
-        ":buffer",
         ":slot_ref",
         "//jewels/time:sync_time",
     ],
+)
+
+cc_library(
+    name = "device_ptr",
+    srcs = ["device_ptr.inl"],
+    hdrs = ["device_ptr.hh"],
 )
 
 cc_library(
@@ -132,14 +203,19 @@ cc_library(
     srcs = ["in_memory_channel.inl"],
     hdrs = ["in_memory_channel.hh"],
     deps = [
+        ":abstract_channel",
         ":buffer",
-        ":publisher_handle",
+        ":buffer_layout",
+        ":observer",
+        ":publisher_slot_ref",
         ":slot",
+        ":slot_ref",
         ":subscriber_handle",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/memory:pmr_unique_ptr",
         "//jewels/memory:pointers",
+        "//jewels/std:expected",
         "@wise_enum",
     ],
 )
@@ -149,10 +225,11 @@ cc_library(
     srcs = ["incoming_udp.inl"],
     hdrs = ["incoming_udp.hh"],
     deps = [
-        ":buffer",
+        ":abstract_channel",
+        ":buffer_layout",
         ":error",
         ":io_connection",
-        ":publisher_handle",
+        ":publisher_slot_ref",
         ":slot",
         ":sock_opt",
         "//clockwork/common:abstract_epoll_manager",
@@ -181,9 +258,8 @@ cc_library(
     srcs = ["io_connection.cc"],
     hdrs = ["io_connection.hh"],
     deps = [
+        ":abstract_channel",
         ":observer",
-        ":publisher_handle",
-        ":subscriber_handle",
         "//clockwork/common:process_description_clk_cc",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
@@ -193,13 +269,34 @@ cc_library(
 )
 
 cc_library(
+    name = "meta_channel_factory",
+    srcs = ["meta_channel_factory.cc"],
+    hdrs = ["meta_channel_factory.hh"],
+    # keep: select() keys are unsupported (bazelbuild/bazel-gazelle#1051)
+    deps = [
+        ":abstract_channel",
+        ":abstract_channel_factory",
+        ":buffer_layout",
+        ":channel_config_clk_cc",
+        ":shm_channel_factory",
+        "//clockwork:repr_iface",
+        "//clockwork/common:process_description_clk_cc",
+        "//jewels/container:compare",
+        "//jewels/log_cerr",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
+        "//jewels/std:expected",
+        "//jewels/uuid",
+    ] + select({
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
     name = "observer",
     srcs = ["observer.cc"],
     hdrs = ["observer.hh"],
-    deps = [
-        ":buffer_index",
-        "//jewels/time:sync_time",
-    ],
+    deps = ["//jewels/time:sync_time"],
 )
 
 cc_library(
@@ -207,10 +304,13 @@ cc_library(
     srcs = ["outgoing_udp.inl"],
     hdrs = ["outgoing_udp.hh"],
     deps = [
+        ":abstract_channel",
         ":buffer",
+        ":buffer_layout",
         ":error",
         ":io_connection",
         ":observer",
+        ":publisher_slot_ref",
         ":slot",
         ":slot_ref",
         ":sock_opt",
@@ -240,39 +340,47 @@ cc_library(
     srcs = ["publishable.inl"],
     hdrs = ["publishable.hh"],
     deps = [
+        ":abstract_channel",
         ":buffer",
         ":buffer_index",
+        ":device_ptr",
         ":error",
         ":observer",
-        ":publisher_handle",
+        ":publisher_slot_ref",
         ":slot",
-        "//jewels/memory:memory_resource",
+        ":slot_ref",
+        "//jewels/log_cerr",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/time:sync_time",
-        "@wise_enum",
     ],
 )
 
 cc_library(
-    name = "publisher_handle",
+    name = "publisher_slot_ref",
     srcs = [
-        "publisher_handle.cc",
-        "publisher_handle.inl",
+        "publisher_slot_ref.cc",
+        "publisher_slot_ref.inl",
     ],
-    hdrs = ["publisher_handle.hh"],
+    hdrs = ["publisher_slot_ref.hh"],
+    # keep: select() keys are unsupported (bazelbuild/bazel-gazelle#1051)
     deps = [
         ":buffer",
         ":buffer_index",
+        ":buffer_layout",
         ":error",
         ":observer",
         ":slot",
-        "//jewels/memory:memory_resource",
+        ":slot_ref",
+        "//clockwork/memory:start_lifetime_as",
+        "//jewels/math:power_of_two",
         "//jewels/memory:pointers",
         "//jewels/std:expected",
         "//jewels/time:sync_time",
         "@wise_enum",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -280,10 +388,11 @@ cc_library(
     srcs = ["shm_channel.cc"],
     hdrs = ["shm_channel.hh"],
     deps = [
+        ":abstract_channel",
         ":buffer",
-        ":observer",
+        ":buffer_layout",
+        ":slot_ref",
         ":subscriber_handle",
-        "//clockwork/common:abstract_epoll_manager",
         "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:unix_socket",
         "//jewels/container:bounded_string",
@@ -305,7 +414,8 @@ cc_library(
     srcs = ["shm_channel_factory.cc"],
     hdrs = ["shm_channel_factory.hh"],
     deps = [
-        ":buffer",
+        ":abstract_channel_factory",
+        ":buffer_layout",
         ":shm_channel",
         ":shm_publisher",
         ":shm_subscriber",
@@ -324,9 +434,11 @@ cc_library(
     srcs = ["shm_publisher.cc"],
     hdrs = ["shm_publisher.hh"],
     deps = [
+        ":abstract_channel",
         ":buffer",
+        ":buffer_layout",
         ":observer",
-        ":publisher_handle",
+        ":publisher_slot_ref",
         ":shm_channel",
         "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:unix_socket",
@@ -348,7 +460,8 @@ cc_library(
     srcs = ["shm_subscriber.cc"],
     hdrs = ["shm_subscriber.hh"],
     deps = [
-        ":buffer",
+        ":abstract_channel",
+        ":buffer_layout",
         ":observer",
         ":shm_channel",
         "//clockwork/common:abstract_epoll_manager",
@@ -374,6 +487,7 @@ cc_library(
     hdrs = ["slot.hh"],
     deps = [
         ":aligned_pointer",
+        ":device_ptr",
         "//clockwork/memory:start_lifetime_as",
         "//jewels/math:power_of_two",
         "//jewels/memory:pointers",
@@ -390,14 +504,18 @@ cc_library(
         "slot_ref.inl",
     ],
     hdrs = ["slot_ref.hh"],
+    # keep: select() keys are unsupported (bazelbuild/bazel-gazelle#1051)
     deps = [
         ":aligned_pointer",
         ":buffer",
+        ":buffer_index",
         ":slot",
         "//jewels/math:power_of_two",
         "//jewels/memory:pointers",
         "//jewels/meta:concepts",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -426,6 +544,7 @@ cc_library(
     hdrs = ["subscriber_handle.hh"],
     deps = [
         ":buffer",
+        ":buffer_layout",
         ":error",
         ":slot",
         ":slot_ref",
@@ -439,13 +558,12 @@ cc_library(
     srcs = ["tcp_bridge.cc"],
     hdrs = ["tcp_bridge.hh"],
     deps = [
+        ":abstract_channel",
+        ":abstract_channel_factory",
         ":bridge_status_clk_cc",
-        ":buffer",
+        ":buffer_layout",
         ":error",
-        ":publisher_handle",
-        ":shm_channel",
-        ":shm_channel_factory",
-        ":shm_publisher",
+        ":publisher_slot_ref",
         ":shm_subscriber",
         ":slot",
         ":tcp_bridge_client",
@@ -453,6 +571,7 @@ cc_library(
         ":tcp_bridge_config_clk_cc",
         ":tcp_bridge_server",
         "//clockwork:repr_iface",
+        "//clockwork/common:constants_clk_cc",
         "//clockwork/common:platform_diagnostics_config_clk_cc",
         "//clockwork/common:process_description_clk_cc",
         "//clockwork/diagnostics:report_definitions",
@@ -501,12 +620,12 @@ cc_library(
     srcs = ["tcp_bridge_client.cc"],
     hdrs = ["tcp_bridge_client.hh"],
     deps = [
-        ":buffer",
+        ":abstract_channel",
+        ":buffer_layout",
         ":error",
-        ":publisher_handle",
+        ":publisher_slot_ref",
         ":slot",
         ":slot_ref",
-        ":subscriber_handle",
         ":tcp_bridge_common",
         ":tcp_bridge_config_clk_cc",
         "//clockwork:repr_iface",
@@ -549,16 +668,24 @@ clk(
         "tcp_bridge_config_clk_cc.cc",
         "tcp_bridge_config_clk_cc.hh",
         "tcp_bridge_config_clk_cc.inl",
+        "tcp_bridge_config_clk_cc_types.cc",
+        "tcp_bridge_config_clk_cc_types.hh",
+        "tcp_bridge_config_clk_cc_types.inl",
     ],
     cpp_deps = [
+        ":channel_config_clk_cc",
         "//clockwork/common:platform_diagnostics_config_clk_cc",
         "//clockwork/common:process_description_clk_cc",
+        "//clockwork/logging:schema_encoding_clk_cc",
     ],
     generate = ["cpp"],
     minimize_builtin_deps = True,
     deps = [
+        ":channel_config_clk",
+        "//clockwork/common:constants_clk",
         "//clockwork/common:platform_diagnostics_config_clk",
         "//clockwork/common:process_description_clk",
+        "//clockwork/logging:schema_encoding_clk",
     ],
 )
 
@@ -567,16 +694,19 @@ cc_binary(
     srcs = ["tcp_bridge_main.cc"],
     linkopts = ["-pthread"],
     deps = [
-        ":shm_channel_factory",
+        ":channel_config_clk_cc",
         ":tcp_bridge",
         ":tcp_bridge_config_clk_cc",
         "//clockwork:repr_iface",
         "//clockwork/common:exec_tools",
+        "//clockwork/common:process_description_clk_cc",
         "//jewels/callsig:outcome",
         "//jewels/container:compare",
+        "//jewels/container/tap:var_string",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",
+        "//jewels/uuid",
         "@tclap",
     ],
 )
@@ -586,8 +716,11 @@ cc_library(
     srcs = ["tcp_bridge_server.cc"],
     hdrs = ["tcp_bridge_server.hh"],
     deps = [
+        ":abstract_channel",
+        ":abstract_channel_factory",
+        ":buffer_layout",
         ":error",
-        ":observer",
+        ":shm_channel",
         ":slot",
         ":slot_ref",
         ":subscriber_handle",
@@ -595,10 +728,16 @@ cc_library(
         ":tcp_bridge_config_clk_cc",
         "//clockwork:repr_iface",
         "//clockwork/common:abstract_epoll_manager",
+        "//clockwork/common:process_description_clk_cc",
         "//clockwork/logging:lite_compressor",
+        "//clockwork/logging:lite_compressor_interface",
+        "//clockwork/logging:schema_encoding_clk_cc",
         "//clockwork/logging:xxh3_checksum",
         "//clockwork/logging/onboard:types",
+        "//clockwork/pinion/detail:socket_common",
         "//clockwork/pinion/detail:tcp_socket",
+        "//clockwork/serialization/cpp:tachyon_lite_compressor",
+        "//jewels/callsig:outcome",
         "//jewels/callsig:outparam",
         "//jewels/container:compare",
         "//jewels/filesystem:error_code",

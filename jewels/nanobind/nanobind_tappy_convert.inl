@@ -8,7 +8,6 @@
 #include "jewels/nanobind/nanobind_tappy_convert.hh"
 #include "jewels/std/span.hh"
 
-#include <Python.h>
 #include <fmt/format.h>
 #include <nanobind/eval.h>
 #include <nanobind/nanobind.h>

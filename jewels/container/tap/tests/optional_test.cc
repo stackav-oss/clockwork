@@ -1,18 +1,25 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/container/tap/constants.hh"
 #include "jewels/container/tap/optional.hh"
+#include "jewels/memory/aligned_storage.hh"
 #include "jewels/std/span.hh"
 
-#include <__stddef_offsetof.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <type_traits>
+#include <utility>
 
 namespace jewels::tap
 {
@@ -229,6 +236,39 @@ TEST_CASE("Access")
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const Optional<uint32_t>&>().value()), const uint32_t&>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<Optional<uint32_t>>().value()), uint32_t&&>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const Optional<uint32_t>>().value()), const uint32_t&&>);
+  }
+
+  SECTION("value callsig")
+  {
+    Opt opt{WrappedUInt32{123U}};
+    WrappedUInt32* value{nullptr};
+    REQUIRE(jewels::ok(opt.value(jewels::Out{value})));
+    REQUIRE(value == &(*opt));
+
+    const Opt& const_opt = opt;
+    const WrappedUInt32* const_value{nullptr};
+    REQUIRE(jewels::ok(const_opt.value(jewels::Out{const_value})));
+    REQUIRE(const_value == &(*const_opt));
+
+    jewels::FactoryResult<WrappedUInt32> moved_value;
+    REQUIRE(jewels::ok(std::move(opt).value(jewels::Out{moved_value})));
+    REQUIRE(*moved_value == WrappedUInt32{123U});
+
+    const Opt rvalue_const_opt{WrappedUInt32{456U}};
+    jewels::FactoryResult<WrappedUInt32> copied_value;
+    REQUIRE(jewels::ok(std::move(rvalue_const_opt).value(jewels::Out{copied_value})));
+    REQUIRE(*copied_value == WrappedUInt32{456U});
+
+    Opt empty{};
+    WrappedUInt32 sentinel{789U};
+    value = &sentinel;
+    REQUIRE(jewels::fails(empty.value(jewels::Out{value})));
+    REQUIRE(value == &sentinel);
+
+    jewels::FactoryResult<WrappedUInt32> empty_value;
+    empty_value.emplace(WrappedUInt32{789U});
+    REQUIRE(jewels::fails(std::move(empty).value(jewels::Out{empty_value})));
+    REQUIRE(*empty_value == WrappedUInt32{789U});
   }
 
   SECTION("value_or")

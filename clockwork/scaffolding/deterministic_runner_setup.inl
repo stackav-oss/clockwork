@@ -39,6 +39,7 @@ jewels::expected<DeterministicRunnerConfig, jewels::MonoError> build_determinist
   jewels::memory::MemoryResource memres_runner,
   std::pmr::vector<CogConfig> cogs,
   const scaffolding::TimerMap& timers,
+  const scaffolding::PublisherThrottleTimerVector& publisher_throttle_timers,
   const scaffolding::ChannelMap& scaffolding_channel_map,
   std::shared_ptr<AbstractCogQueue> queue,
   const DeterministicLoggingConfig& logging_config,
@@ -50,6 +51,7 @@ jewels::expected<DeterministicRunnerConfig, jewels::MonoError> build_determinist
   {
     timer_vec.emplace_back(timer);
   }
+  timer_vec.insert(timer_vec.end(), publisher_throttle_timers.begin(), publisher_throttle_timers.end());
 
   auto runner_channels = convert_channel_map(memres_runner, scaffolding_channel_map);
   if (!runner_channels)

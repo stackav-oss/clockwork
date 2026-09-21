@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/cog_conditions.hh"
@@ -22,9 +22,7 @@
 #include "clockwork/common/abstract_cog_queue.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/cog_envelope.hh"
-#include "clockwork/common/cog_execution_error_clk_cc.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/diagnostics/report_clk_cc.hh"
 #include "clockwork/diagnostics/report_definitions.hh"
 #include "clockwork/diagnostics/reporter.hh"
 #include "clockwork/dial/cond_messages_present.hh"
@@ -32,28 +30,30 @@
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/dsl/cog/common_cog_event_metrics_clk_cc.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/buffer_index.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/error.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/observer.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/slot_ref.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
 #include "clockwork/repr_iface.hh"
 #include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_shared_ptr.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
 #include "jewels/std/expected.hh"
+#include "jewels/testing/expected_stringmakers.hh" // IWYU pragma: keep
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
 
@@ -95,6 +95,13 @@ void terminate_handler()
 {
   // NOLINTNEXTLINE(cert-err52-cpp, cppcoreguidelines-pro-bounds-array-to-pointer-decay)  For testing purposes only
   longjmp(terminate_handler_jmp, 1);
+}
+
+template <typename CogType>
+CogPrepareOutcome prepare_cog(CogType& cog, const jewels::time::SyncTime current_time)
+{
+  auto throttled_until = jewels::time::SyncTime::min();
+  return cog.prepare_for_execution(jewels::Out{throttled_until}, current_time);
 }
 
 /// Fixed timestamp for publish timestamp.
@@ -310,7 +317,6 @@ struct TestCogPolicy
     static constexpr int64_t threshold_ns = 1'000'000; // 1 ms
     static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("dc4299c6-37eb-4448-82b4-6b196cf0c519").value();
-    static constexpr std::string_view name = "TimeSinceLastExecPolicy";
   };
 
   using TimersType = CogTimers<TimeSinceLastExecPolicy>;
@@ -330,6 +336,8 @@ struct TestCogPolicy
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
     // Testing only
     static constexpr auto channel_size = 3U;
   };
@@ -347,6 +355,8 @@ struct TestCogPolicy
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
     // Testing only
     static constexpr auto channel_size = 3U;
   };
@@ -384,6 +394,7 @@ struct TestCogPolicy
     // Testing only
     static constexpr auto channel_size = 3U;
     static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
 
   struct CogTelemetryMetricsPolicy
@@ -394,6 +405,7 @@ struct TestCogPolicy
     static constexpr ::std::string_view name = "TestCogTelemetryMetricsPolicy";
     static constexpr auto channel_size = 3U;
     static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
   struct CogEventMetricsPolicy
   {
@@ -403,6 +415,7 @@ struct TestCogPolicy
     static constexpr ::std::string_view name = "TestCogEventMetricsPolicy";
     static constexpr auto channel_size = 3U;
     static constexpr std::optional<::clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
   using PublishersType = CogPublishers<TestOutputPolicy, CogTelemetryMetricsPolicy, CogEventMetricsPolicy>;
   static void populate_output_event_metrics(
@@ -578,17 +591,27 @@ struct SimpleCogFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
       instance_id(jewels::Uuid<common::CogInstanceId>::random_uuid()),
       cog(resource, instance_id, jewels::memory::make_non_null_from_ref(queue)),
       timer(std::make_shared<TestTimer>()),
-      input_channel(resource),
-      publisher(input_channel.make_publisher(1)),
-      no_cond_input_channel(resource),
-      no_cond_publisher(no_cond_input_channel.make_publisher(1)),
-      output_channel(resource),
-      telemetry_channel(resource),
-      event_channel(resource),
-      subscriber(output_channel.make_subscriber()),
-      telemetry_subscriber(telemetry_channel.make_subscriber()),
-      event_subscriber(event_channel.make_subscriber()),
-      diagnostics_channel(resource)
+      input_channel(
+        std::make_shared<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>>(resource)),
+      publisher(input_channel->make_publisher(1)),
+      no_cond_input_channel(
+        std::make_shared<InMemoryChannel<typename NoCondInputPolicy::MsgType, NoCondInputPolicy::channel_size, false>>(
+          resource)),
+      no_cond_publisher(no_cond_input_channel->make_publisher(1)),
+      output_channel(
+        std::make_shared<InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false>>(resource)),
+      telemetry_channel(
+        std::make_shared<InMemoryChannel<
+          typename TestCogPolicy::CogTelemetryMetricsPolicy::MsgType,
+          TestCogPolicy::CogTelemetryMetricsPolicy::channel_size,
+          false>>(resource)),
+      event_channel(
+        std::make_shared<InMemoryChannel<
+          typename TestCogPolicy::CogEventMetricsPolicy::MsgType,
+          TestCogPolicy::CogEventMetricsPolicy::channel_size,
+          false>>(resource)),
+      diagnostics_channel(
+        std::make_shared<InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false>>(resource))
   {
   }
 
@@ -607,28 +630,26 @@ struct SimpleCogFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
 
   std::shared_ptr<TestTimer> timer;
 
-  InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false> input_channel;
+  std::shared_ptr<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>> input_channel;
   pinion::PublisherHandle publisher;
 
-  InMemoryChannel<typename NoCondInputPolicy::MsgType, NoCondInputPolicy::channel_size, false> no_cond_input_channel;
+  std::shared_ptr<InMemoryChannel<typename NoCondInputPolicy::MsgType, NoCondInputPolicy::channel_size, false>>
+    no_cond_input_channel;
   pinion::PublisherHandle no_cond_publisher;
 
-  InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false> output_channel;
-  InMemoryChannel<
+  std::shared_ptr<InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false>> output_channel;
+  std::shared_ptr<InMemoryChannel<
     typename TestCogPolicy::CogTelemetryMetricsPolicy::MsgType,
     TestCogPolicy::CogTelemetryMetricsPolicy::channel_size,
-    false>
+    false>>
     telemetry_channel;
-  InMemoryChannel<
+  std::shared_ptr<InMemoryChannel<
     typename TestCogPolicy::CogEventMetricsPolicy::MsgType,
     TestCogPolicy::CogEventMetricsPolicy::channel_size,
-    false>
+    false>>
     event_channel;
-  pinion::SubscriberHandle subscriber;
-  pinion::SubscriberHandle telemetry_subscriber;
-  pinion::SubscriberHandle event_subscriber;
 
-  InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false> diagnostics_channel;
+  std::shared_ptr<InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false>> diagnostics_channel;
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)  For testing purposes only
@@ -652,21 +673,20 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
   REQUIRE(maybe_timer_observer);
   REQUIRE_FALSE(cog.validate());
 
-  auto maybe_input_observer = cog.set_handle(InputPolicy::endpoint_id, input_channel.make_subscriber());
+  auto maybe_input_observer = cog.set_handle(InputPolicy::endpoint_id, input_channel);
   REQUIRE(maybe_input_observer);
   REQUIRE_FALSE(cog.validate());
 
-  auto maybe_no_cond_input_observer =
-    cog.set_handle(NoCondInputPolicy::endpoint_id, no_cond_input_channel.make_subscriber());
+  auto maybe_no_cond_input_observer = cog.set_handle(NoCondInputPolicy::endpoint_id, no_cond_input_channel);
   REQUIRE(maybe_no_cond_input_observer);
   REQUIRE_FALSE(cog.validate());
 
-  REQUIRE(cog.set_handle(OutputPolicy::endpoint_id, output_channel.make_publisher(1), true));
+  REQUIRE(cog.set_handle(OutputPolicy::endpoint_id, output_channel->make_publisher(1), true));
   REQUIRE_FALSE(cog.validate());
   REQUIRE(
-    cog.set_handle(TestCogPolicy::CogTelemetryMetricsPolicy::endpoint_id, telemetry_channel.make_publisher(1), true));
+    cog.set_handle(TestCogPolicy::CogTelemetryMetricsPolicy::endpoint_id, telemetry_channel->make_publisher(1), true));
   REQUIRE_FALSE(cog.validate());
-  REQUIRE(cog.set_handle(TestCogPolicy::CogEventMetricsPolicy::endpoint_id, event_channel.make_publisher(1), true));
+  REQUIRE(cog.set_handle(TestCogPolicy::CogEventMetricsPolicy::endpoint_id, event_channel->make_publisher(1), true));
   REQUIRE(cog.validate());
 
   auto& timer_observer = *maybe_timer_observer;
@@ -699,7 +719,7 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
 
     // Execute the cog
 
-    REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     auto exec_params = CogExecuteParams{
       .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
@@ -709,7 +729,7 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
 
     // Verify the user function is called
 
-    auto available = subscriber.available();
+    auto available = output_channel->available();
     REQUIRE(1 == available.size());
 
     auto range = pinion::to_message_range<const TestOutput>(available);
@@ -735,7 +755,7 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
 
       // Execute the cog
 
-      REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{execution_time}));
+      REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{execution_time})));
 
       auto exec_params = CogExecuteParams{
         .start_time = jewels::time::SyncTime{execution_time},
@@ -746,18 +766,18 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
       // Verify telemetry metrics are published
       if (execution_time == 2000ms)
       {
-        REQUIRE(telemetry_subscriber.available().size() == 1);
-        REQUIRE(event_subscriber.available().size() == 1);
+        REQUIRE(telemetry_channel->available().size() == 1);
+        REQUIRE(event_channel->available().size() == 1);
       }
       if (execution_time == 2500ms)
       {
-        REQUIRE(telemetry_subscriber.available().size() == 1);
-        REQUIRE(event_subscriber.available().size() == 1);
+        REQUIRE(telemetry_channel->available().size() == 1);
+        REQUIRE(event_channel->available().size() == 1);
       }
       if (execution_time == 3600ms)
       {
-        REQUIRE(telemetry_subscriber.available().size() == 2);
-        REQUIRE(event_subscriber.available().size() == 2);
+        REQUIRE(telemetry_channel->available().size() == 2);
+        REQUIRE(event_channel->available().size() == 2);
       }
     }
   }
@@ -773,20 +793,20 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
 
       // Execute the cog
 
-      REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+      REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
       auto exec_params = CogExecuteParams{
         .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
       };
 
-      REQUIRE(telemetry_subscriber.available().empty());
-      REQUIRE(event_subscriber.available().empty());
+      REQUIRE(telemetry_channel->available().empty());
+      REQUIRE(event_channel->available().empty());
       REQUIRE_NOTHROW(cog.execute(exec_params));
     }
 
     // Verify telemetry metrics are not published and event metrics were only published once.
-    REQUIRE(telemetry_subscriber.available().empty());
-    REQUIRE(event_subscriber.available().size() == 1);
+    REQUIRE(telemetry_channel->available().empty());
+    REQUIRE(event_channel->available().size() == 1);
   }
 
   SECTION("Requeue count is incremented if cog cannot get state lock")
@@ -802,25 +822,25 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
       // Prepare for execution but hold the state lock to simulate contention. This should increment the requeue count.
       // For the execution.
       state->mutex.lock();
-      REQUIRE_FALSE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+      REQUIRE(jewels::fails(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
       // Release the lock allowing prepare_for_execution to succeed.
       state->mutex.unlock();
-      REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+      REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
       auto exec_params = CogExecuteParams{
         .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
       };
 
-      REQUIRE(telemetry_subscriber.available().empty());
-      REQUIRE(event_subscriber.available().empty());
+      REQUIRE(telemetry_channel->available().empty());
+      REQUIRE(event_channel->available().empty());
       REQUIRE_NOTHROW(cog.execute(exec_params));
       timer_observer->notify({});
     }
 
     // Verify event metrics were only published once.
-    REQUIRE(event_subscriber.available().size() == 1);
+    REQUIRE(event_channel->available().size() == 1);
     typename TestCogPolicy::CogEventMetricsPolicy::MsgType event_metrics_message;
-    const auto& event_metrics_bytes = event_subscriber.available().begin()->message();
+    const auto& event_metrics_bytes = event_channel->available().begin()->message();
     std::memcpy(
       &event_metrics_message,
       event_metrics_bytes.data(),
@@ -836,7 +856,7 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
   {
 
     // Call prepare_for_execution without the cog being ready. This should not increment the requeue count.
-    REQUIRE_FALSE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::fails(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     for (auto i = 0; i < 10; ++i)
     {
@@ -847,22 +867,22 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
 
       // Execute the cog
 
-      REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+      REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
       auto exec_params = CogExecuteParams{
         .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
       };
 
-      REQUIRE(telemetry_subscriber.available().empty());
-      REQUIRE(event_subscriber.available().empty());
+      REQUIRE(telemetry_channel->available().empty());
+      REQUIRE(event_channel->available().empty());
       REQUIRE_NOTHROW(cog.execute(exec_params));
       timer_observer->notify({});
     }
 
     // Verify event metrics were only published once.
-    REQUIRE(event_subscriber.available().size() == 1);
+    REQUIRE(event_channel->available().size() == 1);
     typename TestCogPolicy::CogEventMetricsPolicy::MsgType event_metrics_message;
-    auto event_metrics_bytes = event_subscriber.available().begin()->message();
+    auto event_metrics_bytes = event_channel->available().begin()->message();
     std::memcpy(
       &event_metrics_message,
       event_metrics_bytes.data(),
@@ -882,12 +902,12 @@ TEST_CASE_METHOD(SimpleCogFixture, "execution", "[simple_cog]")
     input_observer->notify({.current_time = jewels::time::SyncTime{std::chrono::seconds{1}}});
     REQUIRE(1 == queue.queue.size());
 
-    REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     REQUIRE_THROWS(cog.execute(CogExecuteParams{.start_time = jewels::time::SyncTime{std::chrono::seconds{1}}}));
 
     // All slots should be discarded for exceptions.
-    REQUIRE(subscriber.available().empty());
+    REQUIRE(output_channel->available().empty());
   }
 }
 
@@ -985,7 +1005,6 @@ struct RateLimitedCogPolicy : testing::FakeCogPolicy<0, 2>
     static constexpr int64_t threshold_ns = 1'000'000; // 1 ms
     static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("52e3bdf6-ef23-4053-bce3-1789b938ce6a").value();
-    static constexpr std::string_view name = "TimeSinceLastExecPolicy";
   };
 
   using TimersType = CogTimers<TimeSinceLastExecPolicy>;
@@ -1001,6 +1020,7 @@ struct RateLimitedCogPolicy : testing::FakeCogPolicy<0, 2>
     static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
     // Testing only
     static constexpr auto channel_size = 3U;
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
 
   struct Output2Policy
@@ -1013,6 +1033,7 @@ struct RateLimitedCogPolicy : testing::FakeCogPolicy<0, 2>
       {.limit = 1U, .period = std::chrono::seconds{1}}};
     // Testing only
     static constexpr auto channel_size = 3U;
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
 
   using PublishersType = CogPublishers<Output1Policy, Output2Policy>;
@@ -1024,7 +1045,7 @@ struct RateLimitedCogPolicy : testing::FakeCogPolicy<0, 2>
   [[nodiscard]] static bool is_ready(
     CogStatistics& /*statistics*/,
     typename TimersType::ConditionsTuple& timers,
-    typename ConditionsType::ConditionsTuple& /*conditions*/)
+    [[maybe_unused]] typename ConditionsType::ConditionsTuple& conditions)
   {
     return static_cast<bool>(std::get<0>(timers));
   }
@@ -1109,10 +1130,12 @@ struct RateLimitedCogFixture // NOLINT(clang-analyzer-optin.performance.Padding)
       instance_id(jewels::Uuid<common::CogInstanceId>::random_uuid()),
       cog(resource, instance_id, jewels::memory::make_non_null_from_ref(queue)),
       timer(std::make_shared<TestTimer>()),
-      output1_channel(resource),
-      output2_channel(resource),
-      subscriber1(output1_channel.make_subscriber()),
-      subscriber2(output2_channel.make_subscriber())
+      output1_channel(
+        std::make_shared<InMemoryChannel<typename Output1Policy::MsgType, Output1Policy::channel_size, false>>(
+          resource)),
+      output2_channel(
+        std::make_shared<InMemoryChannel<typename Output2Policy::MsgType, Output2Policy::channel_size, false>>(
+          resource))
   {
   }
 
@@ -1123,10 +1146,8 @@ struct RateLimitedCogFixture // NOLINT(clang-analyzer-optin.performance.Padding)
 
   std::shared_ptr<TestTimer> timer;
 
-  InMemoryChannel<typename Output1Policy::MsgType, Output1Policy::channel_size, false> output1_channel;
-  InMemoryChannel<typename Output2Policy::MsgType, Output2Policy::channel_size, false> output2_channel;
-  pinion::SubscriberHandle subscriber1;
-  pinion::SubscriberHandle subscriber2;
+  std::shared_ptr<InMemoryChannel<typename Output1Policy::MsgType, Output1Policy::channel_size, false>> output1_channel;
+  std::shared_ptr<InMemoryChannel<typename Output2Policy::MsgType, Output2Policy::channel_size, false>> output2_channel;
 };
 
 
@@ -1146,8 +1167,8 @@ TEST_CASE_METHOD(RateLimitedCogFixture, "rate limtied execution", "[rate limited
   REQUIRE(maybe_timer_observer);
   REQUIRE_FALSE(cog.validate());
 
-  REQUIRE(cog.set_handle(Output1Policy::endpoint_id, output1_channel.make_publisher(1), true));
-  REQUIRE(cog.set_handle(Output2Policy::endpoint_id, output2_channel.make_publisher(1), true));
+  REQUIRE(cog.set_handle(Output1Policy::endpoint_id, output1_channel->make_publisher(1), true));
+  REQUIRE(cog.set_handle(Output2Policy::endpoint_id, output2_channel->make_publisher(1), true));
   REQUIRE(cog.validate());
 
   auto& timer_observer = *maybe_timer_observer;
@@ -1158,7 +1179,8 @@ TEST_CASE_METHOD(RateLimitedCogFixture, "rate limtied execution", "[rate limited
 
   // Step 1: Execute the cog
   jewels::time::SyncTime now{std::chrono::seconds{1}};
-  REQUIRE(cog.prepare_for_execution(now));
+  auto throttled_until = jewels::time::SyncTime::min();
+  REQUIRE(jewels::ok(cog.prepare_for_execution(jewels::Out{throttled_until}, now)));
   auto exec_params = CogExecuteParams{.start_time = now};
   REQUIRE_NOTHROW(cog.execute(exec_params));
 
@@ -1166,59 +1188,59 @@ TEST_CASE_METHOD(RateLimitedCogFixture, "rate limtied execution", "[rate limited
   // output on the second channel, it should be throttled. If it publishes on
   // the first, it should be able to execute again right away.
   // Step 2: Confirm that the cog published to the unlimited output.
-  auto available1 = subscriber1.available();
-  auto available2 = subscriber2.available();
+  auto available1 = output1_channel->available();
+  auto available2 = output2_channel->available();
   REQUIRE(1 == available1.size());
   REQUIRE(available2.empty());
   timer_observer->notify({});
   now += std::chrono::milliseconds(1);
-  REQUIRE(cog.prepare_for_execution(now));
+  REQUIRE(jewels::ok(cog.prepare_for_execution(jewels::Out{throttled_until}, now)));
   exec_params = CogExecuteParams{.start_time = now};
   // Step 3: Confirm that the cog can execute again right away and that it publishes to the limited output.
   REQUIRE_NOTHROW(cog.execute(exec_params));
-  REQUIRE(subscriber1.available().begin() == available1.begin());
-  REQUIRE(subscriber1.available().end() == available1.end());
-  available2 = subscriber2.available();
+  REQUIRE(output1_channel->available().begin() == available1.begin());
+  REQUIRE(output2_channel->available().end() == available1.end());
+  available2 = output2_channel->available();
   REQUIRE(1 == available2.size());
 
   // Step 4: Try to execute the cog again. Confirm that it fails because it's been throttled.
   timer_observer->notify({});
   now += std::chrono::milliseconds(1);
-  auto prepare_result = cog.prepare_for_execution(now);
-  REQUIRE_FALSE(prepare_result);
-  REQUIRE(prepare_result.error() == CogExecutionError::not_ready);
+  auto prepare_result = cog.prepare_for_execution(jewels::Out{throttled_until}, now);
+  REQUIRE(prepare_result.get() == CogPrepareResult::publisher_throttled);
+  REQUIRE(throttled_until == jewels::time::SyncTime{std::chrono::seconds{2}});
   timer_observer->notify({});
 
   // Step 5: Advance the clock by 1 millisecond and confirm that the cog is still throttled.
   timer_observer->notify({});
   now += std::chrono::milliseconds(1);
-  prepare_result = cog.prepare_for_execution(now);
-  REQUIRE_FALSE(prepare_result);
-  REQUIRE(prepare_result.error() == CogExecutionError::not_ready);
+  prepare_result = cog.prepare_for_execution(jewels::Out{throttled_until}, now);
+  REQUIRE(prepare_result.get() == CogPrepareResult::publisher_throttled);
+  REQUIRE(throttled_until == jewels::time::SyncTime{std::chrono::seconds{2}});
 
   // Step 6: Advance the clock enough to clear the rate limit (998 ms) and confirm that the cog successfully executes.
   timer_observer->notify({});
   now += std::chrono::milliseconds(998);
-  REQUIRE(cog.prepare_for_execution(now));
+  REQUIRE(jewels::ok(cog.prepare_for_execution(jewels::Out{throttled_until}, now)));
   exec_params = CogExecuteParams{.start_time = now};
   REQUIRE_NOTHROW(cog.execute(exec_params));
 
   // Step 7: Repeat steps 3, 4, and 6.
   timer_observer->notify({});
   now += std::chrono::milliseconds(1);
-  REQUIRE(cog.prepare_for_execution(now));
+  REQUIRE(jewels::ok(cog.prepare_for_execution(jewels::Out{throttled_until}, now)));
   exec_params = CogExecuteParams{.start_time = now};
   REQUIRE_NOTHROW(cog.execute(exec_params));
 
   timer_observer->notify({});
   now += std::chrono::milliseconds(1);
-  prepare_result = cog.prepare_for_execution(now);
-  REQUIRE_FALSE(prepare_result);
-  REQUIRE(prepare_result.error() == CogExecutionError::not_ready);
+  prepare_result = cog.prepare_for_execution(jewels::Out{throttled_until}, now);
+  REQUIRE(prepare_result.get() == CogPrepareResult::publisher_throttled);
+  REQUIRE(throttled_until == jewels::time::SyncTime{std::chrono::milliseconds{3001}});
 
   timer_observer->notify({});
   now += std::chrono::milliseconds(998);
-  REQUIRE(cog.prepare_for_execution(now));
+  REQUIRE(jewels::ok(cog.prepare_for_execution(jewels::Out{throttled_until}, now)));
   exec_params = CogExecuteParams{.start_time = now};
   REQUIRE_NOTHROW(cog.execute(exec_params));
 }
@@ -1314,6 +1336,8 @@ struct SlowCogPolicy : testing::FakeCogPolicy<1, 0>
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
     // Testing only
     static constexpr auto channel_size = 3U;
   };
@@ -1327,7 +1351,6 @@ struct SlowCogPolicy : testing::FakeCogPolicy<1, 0>
     static constexpr int64_t threshold_ns = 1'000'000; // 1 ms
     static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("4887531c-de8b-4aa8-a64b-61ee17ed92c3").value();
-    static constexpr std::string_view name = "TimeSinceLastExecPolicy";
   };
 
   using TimersType = CogTimers<TimeSinceLastExecPolicy>;
@@ -1339,7 +1362,7 @@ struct SlowCogPolicy : testing::FakeCogPolicy<1, 0>
   [[nodiscard]] static bool is_ready(
     CogStatistics& /*statistics*/,
     typename TimersType::ConditionsTuple& timers,
-    typename ConditionsType::ConditionsTuple& /*conditions*/)
+    [[maybe_unused]] typename ConditionsType::ConditionsTuple& conditions)
   {
     return static_cast<bool>(std::get<0>(timers));
   }
@@ -1406,8 +1429,9 @@ struct SlowCogFixture
       instance_id(jewels::Uuid<common::CogInstanceId>::random_uuid()),
       cog(resource, instance_id, jewels::memory::make_non_null_from_ref(queue)),
       timer(std::make_shared<TestTimer>()),
-      input_channel(resource),
-      publisher(input_channel.make_publisher(1))
+      input_channel(
+        std::make_shared<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>>(resource)),
+      publisher(input_channel->make_publisher(1))
   {
   }
 
@@ -1426,7 +1450,7 @@ struct SlowCogFixture
 
   std::shared_ptr<TestTimer> timer;
 
-  InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false> input_channel;
+  std::shared_ptr<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>> input_channel;
   pinion::PublisherHandle publisher;
 };
 
@@ -1440,7 +1464,7 @@ TEST_CASE_METHOD(SlowCogFixture, "Overrun Aborts")
   REQUIRE(maybe_timer_observer);
   REQUIRE_FALSE(cog.validate());
 
-  auto maybe_input_observer = cog.set_handle(SlowCogPolicy::InputPolicy::endpoint_id, input_channel.make_subscriber());
+  auto maybe_input_observer = cog.set_handle(SlowCogPolicy::InputPolicy::endpoint_id, input_channel);
   REQUIRE(maybe_input_observer);
   REQUIRE(cog.validate());
 
@@ -1472,7 +1496,7 @@ TEST_CASE_METHOD(SlowCogFixture, "Overrun Aborts")
       [this, exec_time]()
       {
         // Step 2 [from bg thread]: Execute the cog.
-        REQUIRE(cog.prepare_for_execution(exec_time));
+        REQUIRE(jewels::ok(prepare_cog(cog, exec_time)));
         auto exec_params = CogExecuteParams{.start_time = exec_time};
         REQUIRE_NOTHROW(cog.execute(exec_params));
       });
@@ -1553,7 +1577,7 @@ TEST_CASE_METHOD(SlowCogFixture, "Overrun Aborts")
         else
         {
           // Step 3 [from bg thread]: Execute the cog.
-          REQUIRE(cog.prepare_for_execution(exec_time));
+          REQUIRE(jewels::ok(prepare_cog(cog, exec_time)));
           auto exec_params = CogExecuteParams{.start_time = exec_time};
           REQUIRE_NOTHROW(cog.execute(exec_params));
           REQUIRE(false); // should never get here
@@ -1692,7 +1716,6 @@ struct PublishedOnceCogPolicy
     static constexpr int64_t threshold_ns = 1'000'000; // 1 ms
     static constexpr auto endpoint_id =
       jewels::Uuid<common::EndpointClassId>::from_string("dc4299c6-37eb-4448-82b4-6b196cf0c519").value();
-    static constexpr std::string_view name = "TimeSinceLastExecPolicy";
   };
 
   using TimersType = CogTimers<TimeSinceLastExecPolicy>;
@@ -1712,6 +1735,8 @@ struct PublishedOnceCogPolicy
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
     // Testing only
     static constexpr auto channel_size = 3U;
   };
@@ -1729,6 +1754,8 @@ struct PublishedOnceCogPolicy
     static constexpr std::optional<size_t> skip_threshold{};
     static constexpr auto copy_inputs = false;
     static constexpr auto manual_cursor = false;
+    static constexpr auto expose_seqno = false;
+    static constexpr auto use_device_ptr = false;
     // Testing only
     static constexpr auto channel_size = 1U;
   };
@@ -1766,6 +1793,7 @@ struct PublishedOnceCogPolicy
     // Testing only
     static constexpr auto channel_size = 3U;
     static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
 
   struct PublishedOnceOutputPolicy
@@ -1777,6 +1805,7 @@ struct PublishedOnceCogPolicy
     // Testing only
     static constexpr auto channel_size = 1U;
     static constexpr std::optional<clockwork::RateLimitParameters> rate_limit_params{};
+    static constexpr size_t max_msgs_per_exec = 1U;
   };
 
   using PublishersType = CogPublishers<TestOutputPolicy, PublishedOnceOutputPolicy>;
@@ -1902,15 +1931,22 @@ struct PublishedOnceCogFixture // NOLINT(clang-analyzer-optin.performance.Paddin
       instance_id(jewels::Uuid<common::CogInstanceId>::random_uuid()),
       cog(resource, instance_id, jewels::memory::make_non_null_from_ref(queue)),
       timer(std::make_shared<TestTimer>()),
-      input_channel(resource),
-      publisher(input_channel.make_publisher(1)),
-      published_once_input_channel(resource),
-      published_once_publisher(published_once_input_channel.make_publisher(1)),
-      output_channel(resource),
-      published_once_output_channel(resource),
-      subscriber(output_channel.make_subscriber()),
-      published_once_subscriber(output_channel.make_subscriber()),
-      diagnostics_channel(resource)
+      input_channel(
+        std::make_shared<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>>(resource)),
+      publisher(input_channel->make_publisher(1)),
+      published_once_input_channel(
+        std::make_shared<
+          InMemoryChannel<typename PublishedOnceInputPolicy::MsgType, PublishedOnceInputPolicy::channel_size, true>>(
+          resource)),
+      published_once_publisher(published_once_input_channel->make_publisher(1)),
+      output_channel(
+        std::make_shared<InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false>>(resource)),
+      published_once_output_channel(
+        std::make_shared<
+          InMemoryChannel<typename PublishedOnceOutputPolicy::MsgType, PublishedOnceOutputPolicy::channel_size, true>>(
+          resource)),
+      diagnostics_channel(
+        std::make_shared<InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false>>(resource))
   {
   }
 
@@ -1929,20 +1965,20 @@ struct PublishedOnceCogFixture // NOLINT(clang-analyzer-optin.performance.Paddin
 
   std::shared_ptr<TestTimer> timer;
 
-  InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false> input_channel;
+  std::shared_ptr<InMemoryChannel<typename InputPolicy::MsgType, InputPolicy::channel_size, false>> input_channel;
   pinion::PublisherHandle publisher;
 
-  InMemoryChannel<typename PublishedOnceInputPolicy::MsgType, PublishedOnceInputPolicy::channel_size, true>
+  std::shared_ptr<
+    InMemoryChannel<typename PublishedOnceInputPolicy::MsgType, PublishedOnceInputPolicy::channel_size, true>>
     published_once_input_channel;
   pinion::PublisherHandle published_once_publisher;
 
-  InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false> output_channel;
-  InMemoryChannel<typename PublishedOnceOutputPolicy::MsgType, PublishedOnceOutputPolicy::channel_size, true>
+  std::shared_ptr<InMemoryChannel<typename OutputPolicy::MsgType, OutputPolicy::channel_size, false>> output_channel;
+  std::shared_ptr<
+    InMemoryChannel<typename PublishedOnceOutputPolicy::MsgType, PublishedOnceOutputPolicy::channel_size, true>>
     published_once_output_channel;
-  pinion::SubscriberHandle subscriber;
-  pinion::SubscriberHandle published_once_subscriber;
 
-  InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false> diagnostics_channel;
+  std::shared_ptr<InMemoryChannel<Tappy<diagnostics::Report>, OutputPolicy::channel_size, false>> diagnostics_channel;
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)  For testing purposes only
@@ -1966,19 +2002,19 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
   REQUIRE(maybe_timer_observer);
   REQUIRE_FALSE(cog.validate());
 
-  auto maybe_input_observer = cog.set_handle(InputPolicy::endpoint_id, input_channel.make_subscriber());
+  auto maybe_input_observer = cog.set_handle(InputPolicy::endpoint_id, input_channel);
   REQUIRE(maybe_input_observer);
   REQUIRE_FALSE(cog.validate());
 
   auto maybe_published_once_input_observer =
-    cog.set_handle(PublishedOnceInputPolicy::endpoint_id, published_once_input_channel.make_subscriber());
+    cog.set_handle(PublishedOnceInputPolicy::endpoint_id, published_once_input_channel);
   REQUIRE(maybe_published_once_input_observer);
   REQUIRE_FALSE(cog.validate());
 
-  REQUIRE(cog.set_handle(OutputPolicy::endpoint_id, output_channel.make_publisher(1), true));
+  REQUIRE(cog.set_handle(OutputPolicy::endpoint_id, output_channel->make_publisher(1), true));
   REQUIRE_FALSE(cog.validate());
   REQUIRE(
-    cog.set_handle(PublishedOnceOutputPolicy::endpoint_id, published_once_output_channel.make_publisher(1), true));
+    cog.set_handle(PublishedOnceOutputPolicy::endpoint_id, published_once_output_channel->make_publisher(1), true));
   REQUIRE(cog.validate());
 
   auto& timer_observer = *maybe_timer_observer;
@@ -2009,19 +2045,21 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
     input_observer->notify({.current_time = jewels::time::SyncTime{std::chrono::seconds{1}}});
     REQUIRE(1 == queue.queue.size());
 
-    REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     auto exec_params = CogExecuteParams{
       .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
     };
 
-    REQUIRE(published_once_input_channel.buffer().increment_head(pinion::BufferIndex{0U}, 1U));
-    REQUIRE(published_once_input_channel.buffer().get_publish_count() == 1U);
+    auto published_once_input_publisher = published_once_input_channel->make_publisher(1);
+    auto published_once_input_slot = published_once_input_publisher.reserve(1UL);
+    REQUIRE(published_once_input_slot);
+    REQUIRE(published_once_input_slot->commit({}));
     REQUIRE_NOTHROW(cog.execute(exec_params));
 
     // Verify the user function is called
 
-    auto available = subscriber.available();
+    auto available = input_channel->available();
     REQUIRE(1 == available.size());
 
     auto range = pinion::to_message_range<const TestOutput>(available);
@@ -2034,6 +2072,13 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
 
   SECTION("Published once output already published aborts")
   {
+    {
+      auto publisher = published_once_output_channel->make_publisher(1);
+      auto reservation = publisher.reserve(1UL);
+      REQUIRE(reservation);
+      REQUIRE(reservation->commit({}));
+    }
+
     timer_observer->notify({});
 
     auto test_input = TestInput{.value = 1};
@@ -2041,7 +2086,7 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
     input_observer->notify({.current_time = jewels::time::SyncTime{std::chrono::seconds{1}}});
     REQUIRE(1 == queue.queue.size());
 
-    REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     auto exec_params = CogExecuteParams{
       .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
@@ -2059,7 +2104,6 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
     }
     else
     {
-      REQUIRE(published_once_output_channel.buffer().increment_head(pinion::BufferIndex{0U}, 1U));
       REQUIRE_NOTHROW(cog.execute(exec_params));
     }
 
@@ -2069,6 +2113,24 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
 
   SECTION("Published once input published more than once aborts")
   {
+    // Buffers enforce the published once condition so will prevent testing the consumer side tests.  However, they
+    // are fundamentally shared data so this can be overcome by making a second Buffer pointing to the same memory
+    // without the flag to test
+    {
+      auto layout = published_once_input_channel->buffer().layout();
+      layout.is_published_once = false;
+      auto buffer = pinion::Buffer::try_make(published_once_input_channel->buffer().bytes(), layout);
+      REQUIRE(buffer);
+      // With a buffer size of 1, this can't just reserve 2 slots
+      auto reservation1 = buffer->reserve(1UL);
+      REQUIRE(reservation1);
+      REQUIRE(buffer->commit(*reservation1));
+      auto reservation2 = buffer->reserve(1UL);
+      REQUIRE(reservation2);
+      REQUIRE(buffer->commit(*reservation2));
+      REQUIRE(buffer->get_publish_count() == 2U);
+    }
+
     timer_observer->notify({});
 
     auto test_input = TestInput{.value = 1};
@@ -2076,7 +2138,7 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
     input_observer->notify({.current_time = jewels::time::SyncTime{std::chrono::seconds{1}}});
     REQUIRE(1 == queue.queue.size());
 
-    REQUIRE(cog.prepare_for_execution(jewels::time::SyncTime{std::chrono::seconds{1}}));
+    REQUIRE(jewels::ok(prepare_cog(cog, jewels::time::SyncTime{std::chrono::seconds{1}})));
 
     auto exec_params = CogExecuteParams{
       .start_time = jewels::time::SyncTime{std::chrono::seconds{1}},
@@ -2094,18 +2156,6 @@ TEST_CASE_METHOD(PublishedOnceCogFixture, "execution", "[simple_cog]")
     }
     else
     {
-      // Buffers enforce the published once condition so will prevent testing the consumer side tests.  However, they
-      // are fundamentally shared data so this can be overcome by making a second Buffer pointing to the same memory
-      // without the flag to test
-      auto layout = published_once_input_channel.buffer().layout();
-      layout.is_published_once = false;
-      auto clone = pinion::Buffer::try_make(published_once_input_channel.buffer().bytes(), layout);
-      REQUIRE(clone);
-      // This is a size=1 channel, so it's head++ (first pub), tail++ (reserve the only slot), head++ (publish the slot)
-      REQUIRE(clone->increment_head(pinion::BufferIndex{0U}, 1U));
-      REQUIRE(clone->increment_tail(pinion::BufferIndex{0U}, 1U));
-      REQUIRE(clone->increment_head(pinion::BufferIndex{1U}, 1U));
-      REQUIRE(clone->get_publish_count() == 2U);
       REQUIRE_NOTHROW(cog.execute(exec_params));
     }
 

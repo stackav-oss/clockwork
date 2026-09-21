@@ -1,6 +1,7 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "jewels/callsig/outcome.hh"
 #include "jewels/container/tap/var_array.hh"
 #include "jewels/container/tap/var_string.hh"
 #include "jewels/memory/aligned_storage.hh"
@@ -23,6 +24,15 @@
 
 namespace jewels::tap::testing
 {
+
+TEST_CASE("VarString callsig try_set")
+{
+  VarString<4UL> value{};
+  REQUIRE(jewels::ok(value.try_set("abc", callsig)));
+  REQUIRE(value.string_view() == "abc");
+  REQUIRE(jewels::fails(value.try_set("abcd", callsig)));
+  REQUIRE(value.string_view() == "abc");
+}
 
 TEST_CASE("Test var array")
 {

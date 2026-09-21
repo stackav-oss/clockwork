@@ -7,6 +7,7 @@
 #include "clockwork/tools/channel_spy/channel_spy_config_clk_cc.hh"
 #include "clockwork/tools/channel_spy/channel_spy_subscriber.hh"
 #include "clockwork/tools/channel_spy/types.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/uuid/uuid.hh"
 
 #include <memory>

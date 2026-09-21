@@ -5,67 +5,67 @@ use std::signals::{ReportGroupPolicy, ReportingStrategy, ReportGroupPolicyConfig
 // A signal defined at module level with pre-aggregation
 signal module_signal: UInt32
 {
-    pre_aggregation: ["min", "max"];
-    multi_instance: true;
+  pre_aggregation: ["min", "max"];
+  multi_instance: true;
 }
 
 // A multi-instance signal
 signal multi_instance_signal: Float64
 {
-    multi_instance: true;
+  multi_instance: true;
 }
 
 // A test cog with signals defined in a report group
 cog SignalTestCog
 {
-    signals test_report_group
+  signalstest_report_group
+  {
+    // Reference to module-level signal with post-aggregation
+    module_signal
     {
-        // Reference to module-level signal with post-aggregation
-        module_signal
-        {
-            post_aggregation: ["min", "max"];
-        }
-
-        // A cog-scope signal with post-aggregation
-        cog_signal: signal Int32
-        {
-            post_aggregation: ["sum", "count"];
-            multi_instance: true;
-        }
-
-        // A cog-private signal with post-aggregation
-        cog_private_signal: signal Float32
-        {
-            post_aggregation: ["min", "max"];
-            multi_instance: true;
-        }
+      post_aggregation: ["min", "max"];
     }
 
-    execution
+    // A cog-scope signal with post-aggregation
+    cog_signal: signal Int32
     {
-        execute when: init;
+      post_aggregation: ["sum", "count"];
+      multi_instance: true;
     }
+
+    // A cog-private signal with post-aggregation
+    cog_private_signal: signal Float32
+    {
+      post_aggregation: ["min", "max"];
+      multi_instance: true;
+    }
+  }
+
+  execution
+  {
+    execute when: init;
+  }
 }
 
 policy ReportGroupPolicy for SignalTestCog.test_report_group
 {
-    reporting_strategy = ReportingStrategy::post_aggregated;
-    log_type = ReportGroupLogType::event;
-    max_observations = 25;
+  reporting_strategy = ReportingStrategy::post_aggregated;
+  log_type = ReportGroupLogType::event;
+  max_observations = 25;
 }
 
 box SignalTestBox
 {
-    new test_cog1: SignalTestCog;
-    new test_cog2: SignalTestCog;
+  new test_cog1: SignalTestCog;
+  new test_cog2: SignalTestCog;
 }
 
 cpu_domain TestCpu;
 
 box SignalTestSystemBox
 {
-    new box: SignalTestBox;
-    new proc: Process(executable=signals_test_system_clk_exe);
-    apply HostProcess(process=proc) in box;
-    apply HostCpuDomain(cpu_domain=TestCpu) to proc;
+  new box: SignalTestBox;
+  new proc: Process(executable=signals_test_system_clk_exe);
+  apply HostProcess(process=proc) in box;
+  apply HostCpuDomain(cpu_domain=TestCpu) to proc;
 }

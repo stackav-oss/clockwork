@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -19,21 +19,28 @@ cc_library(
     deps = [
         "//clockwork:repr_iface",
         "//clockwork/common:process_description_clk_cc",
+        "//clockwork/common:signal_metadata_config_clk_cc",
         "//clockwork/logging:channel_publisher_config_clk_cc",
         "//clockwork/logging:channel_type_clk_cc",
         "//clockwork/logging:log_uuid",
         "//clockwork/logging:log_writer_config_clk_cc",
         "//clockwork/logging:message_encoding_clk_cc",
+        "//clockwork/logging:nolint_helper",
         "//clockwork/logging:schema_encoding_clk_cc",
+        "//clockwork/logging/tests/support:test_message_clk_cc",
         "//clockwork/logging/writers:channel_message_rates_config_clk_cc",
         "//clockwork/logging/writers:logger_config_clk_cc",
+        "//clockwork/logging/writers:persistent_log_entry",
         "//clockwork/serialization/py/tests/support:simple_schema_v1_clk_cc",
         "//clockwork/serialization/py/tests/support:simple_schema_v2_clk_cc",
         "//clockwork/tools/metrics_channel_metadata:metrics_channel_metadata_config_clk_cc",
         "//jewels/container:compare",
         "//jewels/container/tap:var_array",
         "//jewels/container/tap:var_string",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_shared_ptr",
         "//jewels/std:expected",
+        "//jewels/std:span",
         "//jewels/uuid",
         "@gsl//:util",
     ],
@@ -45,12 +52,14 @@ cc_library(
     hdrs = ["test_publisher.hh"],
     deps = [
         "//clockwork/logging:log_timestamp",
-        "//clockwork/pinion:buffer",
+        "//clockwork/pinion:abstract_channel",
+        "//clockwork/pinion:buffer_layout",
         "//clockwork/pinion:error",
-        "//clockwork/pinion:publisher_handle",
+        "//clockwork/pinion:publisher_slot_ref",
         "//clockwork/pinion:shm_channel",
         "//clockwork/pinion:shm_channel_factory",
         "//clockwork/pinion:shm_publisher",
+        "//clockwork/pinion:slot",
         "//jewels/log_cerr",
         "//jewels/memory:memory_resource",
         "//jewels/std:expected",

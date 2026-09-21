@@ -7,48 +7,48 @@ use clockwork::examples::approx_aligner::approx_aligner_msgs::{AlignedDataMsg, A
 // Example Cog with ApproxAligner
 cog ApproxAlignerCog
 {
-    resources
+  resources
+  {
+    aligner_resource: persistent;
+  }
+
+  configs
+  {
+    aligner_config: Tappy<ApproxAlignerConfig>;
+  }
+
+  states
+  {
+    aligner_state: Tappy<ApproxAlignerState>
     {
-        aligner_resource: persistent;
+      mutable: true;
+    }
+  }
+
+  inputs
+  {
+    in_int: Tappy<AlignerIntMsg>
+    {
+      max_msgs: 10;
+      manual_cursor: true;
     }
 
-    configs
+    in_float: Tappy<AlignerFloatMsg>
     {
-        aligner_config: Tappy<ApproxAlignerConfig>;
+      max_msgs: 10;
+      manual_cursor: true;
     }
+  }
 
-    states
-    {
-        aligner_state: Tappy<ApproxAlignerState>
-        {
-            mutable: true;
-        }
-    }
+  outputs
+  {
+    out_aligned: Tappy<AlignedDataMsg>;
+  }
 
-    inputs
-    {
-        in_int: Tappy<AlignerIntMsg>
-        {
-          max_msgs: 10;
-          manual_cursor: true;
-        }
-
-        in_float: Tappy<AlignerFloatMsg>
-        {
-          max_msgs: 10;
-          manual_cursor: true;
-        }
-    }
-
-    outputs
-    {
-        out_aligned: Tappy<AlignedDataMsg>;
-    }
-
-    execution
-    {
-        condition new_int: new_message(input=in_int);
-        condition new_float: new_message(input=in_float);
-        execute when: (new_int or new_float);
-    }
+  execution
+  {
+    condition new_int: new_message(input=in_int);
+    condition new_float: new_message(input=in_float);
+    execute when: (new_int or new_float);
+  }
 }

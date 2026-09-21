@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/offboard/s3_otel_utils.hh"
@@ -379,9 +379,22 @@ S3OtelUtils::put_object(const LogUri& s3_uri, std::pmr::vector<std::pmr::vector<
 [[nodiscard]] LogExpected<std::pmr::vector<std::byte>>
 S3OtelUtils::get_object(const LogUri& s3_uri, size_t offset, size_t length) const
 {
+  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource_);
+  const auto get_result = get_object(s3_uri, offset, buffer);
+  if (!get_result)
+  {
+    return jewels::unexpected(get_result.error());
+  }
+  return {std::move(buffer)};
+}
+
+[[nodiscard]] LogExpected<std::span<std::byte>>
+S3OtelUtils::get_object(const LogUri& s3_uri, size_t offset, std::span<std::byte> buffer_span) const
+{
   auto tracer = jewels::otel::get_tracer(tracer_name);
   auto span = tracer->StartSpan(
-    "GetObject", {{uri_attribute, s3_uri.string()}, {offset_attribute, offset}, {content_length_attribute, length}});
+    "GetObject",
+    {{uri_attribute, s3_uri.string()}, {offset_attribute, offset}, {content_length_attribute, buffer_span.size()}});
   auto scope = opentelemetry::trace::Scope(span);
 
   if (s3_uri.scheme() != LogUriScheme::s3)
@@ -391,10 +404,9 @@ S3OtelUtils::get_object(const LogUri& s3_uri, size_t offset, size_t length) cons
     return jewels::unexpected(LogError::invalid_log_uri);
   }
 
-  std::pmr::vector<std::byte> buffer(length, std::byte{0U}, memory_resource_);
-  S3ReadStreambuf sbuf(buffer);
+  S3ReadStreambuf sbuf(buffer_span);
 
-  const auto range_str = fmt::format("bytes={}-{}", offset, offset + length - 1U);
+  const auto range_str = fmt::format("bytes={}-{}", offset, offset + buffer_span.size() - 1U);
 
   Aws::S3::Model::GetObjectRequest request;
   request.SetBucket(std::string{s3_uri.host()});
@@ -412,14 +424,18 @@ S3OtelUtils::get_object(const LogUri& s3_uri, size_t offset, size_t length) cons
   if (!outcome.IsSuccess())
   {
     jewels::log_cerr_info(
-      "Failed to read ({}:{}) from {}: {}", offset, length, s3_uri.string(), outcome.GetError().GetMessage());
+      "Failed to read ({}:{}) from {}: {}",
+      offset,
+      buffer_span.size(),
+      s3_uri.string(),
+      outcome.GetError().GetMessage());
     span->SetStatus(opentelemetry::trace::StatusCode::kError, outcome.GetError().GetMessage());
     return jewels::unexpected(to_log_error(outcome.GetError().GetErrorType()));
   }
 
   span->SetStatus(opentelemetry::trace::StatusCode::kOk);
 
-  return {std::move(buffer)};
+  return buffer_span;
 }
 
 void S3OtelUtils::retry_callback(

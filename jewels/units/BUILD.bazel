@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("//tools/rules:cc.bzl", "cc_library")
@@ -8,7 +8,6 @@ cc_library(
     hdrs = ["degrees.hh"],
     visibility = ["//visibility:public"],
     deps = [
-        ":magnitude",
         ":quantity",
         "@au",
     ],
@@ -91,7 +90,6 @@ cc_library(
     hdrs = ["kilograms.hh"],
     visibility = ["//visibility:public"],
     deps = [
-        ":magnitude",
         ":quantity",
         "@au",
     ],

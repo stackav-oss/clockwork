@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -49,7 +49,8 @@ private:
   void handler();
 
   SignalExitCondition* previous_;
-  SigAction old_handler_{};
+  SigAction old_sigint_handler_{};
+  SigAction old_sigterm_handler_{};
   std::atomic<int32_t> ttl_{3};
   sem_t sem_{};
 };

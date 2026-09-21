@@ -22,6 +22,17 @@ schema SnapshotTestConfig
   }
 }
 
+// Serialized representation for the external state restoration test
+schema SerializableStateSnapshot
+{
+  uuid: c1a64c6e-1a2f-4a61-8e0b-2d4f56c7a8b9;
+  fields
+  {
+    // Serialized state value
+    #0 value: Int32;
+  }
+}
+
 cpp_target snapshot_test_messages
 {
   options
@@ -36,6 +47,10 @@ cpp_target snapshot_test_messages
   schema SnapshotTestConfig;
   representation Tachyon<SnapshotTestConfig>;
   interface Tappy<SnapshotTestConfig>;
+
+  schema SerializableStateSnapshot;
+  representation Tachyon<SerializableStateSnapshot>;
+  interface Tappy<SerializableStateSnapshot>;
 }
 
 proto_target snapshot_test_config_proto

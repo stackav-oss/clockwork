@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -48,6 +48,19 @@ MOCK_GENERIC_TYPE_CPP: Final = types.CppTemplate(
     includes=[SystemHeader("mockgeneric")],
     cpp_namespace="MockNamespace",
     template_name="MockGenericType",
+)
+
+MOCK_GENERIC_WITH_STRING: Final = typesys.GenericTypeDef(
+    name="StringTmpl",
+    scope=MagicMock(),
+    type_info=clkbuiltins.TYPE_TYPE,
+    parameters=[typesys.Parameter(name="name", type_bound=clkbuiltins.STRING, default=None)],
+)
+
+MOCK_GENERIC_WITH_STRING_CPP: Final = types.CppTemplate(
+    includes=[SystemHeader("string_tmpl")],
+    cpp_namespace="test",
+    template_name="StringTmpl",
 )
 
 
@@ -309,3 +322,28 @@ def test_get_cpp_type_unhandled_template_argument_error(
 
     with pytest.raises(NotImplementedError, match=r"Cannot construct C\+\+ template argument for"):
         get_cpp_type(context, mock_instantiated_type)
+
+
+def test_get_cpp_type_string_literal_template_arg(context: CompilerContext) -> None:
+    """Regression test: StringLiteral template arguments produce valid C++ type expressions.
+
+    Previously, _get_cpp_instantiation raised NotImplementedError for StringLiteral args.
+    """
+    register_cpp_template(context, MOCK_GENERIC_WITH_STRING, MOCK_GENERIC_WITH_STRING_CPP)
+    string_arg = primitive.StringLiteral(
+        module=MagicMock(),
+        cst_node=None,
+        value="test_value",
+        type_info=clkbuiltins.STRING,
+    )
+    instantiation = typesys.Instantiation(
+        instantiates=MOCK_GENERIC_WITH_STRING,
+        arguments={"name": string_arg},
+        type_info=clkbuiltins.TYPE_TYPE,
+    )
+    result = get_cpp_type(context, instantiation)
+    assert isinstance(result, types.CppTemplateType)
+    assert result.template_name == "StringTmpl"
+    assert result.arguments is not None
+    assert len(result.arguments) == 1
+    assert result.arguments[0].render("") == '"test_value"'

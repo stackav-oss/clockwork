@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -16,6 +16,7 @@ from clockwork.dsl.cpp.literal import (
     decimal_value_to_cpp,
     get_factory_fn,
     register_factory_fn,
+    string_literal_to_cpp,
 )
 from clockwork.dsl.ir import clkbuiltins, primitive, typesys
 
@@ -187,3 +188,48 @@ def test_factory_fn_registry() -> None:
     assert factory is not None
     assert factory.input_type == input_type
     assert factory.fn == fn
+
+
+@dataclass
+class StringTestCase:
+    """A test case for string literal to C++ conversion."""
+
+    value: str
+    expect: str
+
+
+def string_literal_plain() -> StringTestCase:
+    return StringTestCase(value="hello", expect='"hello"')
+
+
+def string_literal_empty() -> StringTestCase:
+    return StringTestCase(value="", expect='""')
+
+
+def string_literal_backslash() -> StringTestCase:
+    return StringTestCase(value="path\\to", expect='"path\\\\to"')
+
+
+def string_literal_double_quote() -> StringTestCase:
+    return StringTestCase(value='say "hi"', expect='"say \\"hi\\""')
+
+
+@pytest.mark.parametrize(
+    "test_val",
+    [
+        string_literal_plain(),
+        string_literal_empty(),
+        string_literal_backslash(),
+        string_literal_double_quote(),
+    ],
+)
+def test_string_literal_to_cpp(test_val: StringTestCase) -> None:
+    """Regression test: string literals are correctly escaped in C++ output."""
+    lit = primitive.StringLiteral(
+        module=MagicMock(),
+        cst_node=None,
+        value=test_val.value,
+        type_info=clkbuiltins.STRING,
+    )
+    got = string_literal_to_cpp(lit)
+    assert got.render("") == test_val.expect, f"Expected {test_val.expect!r}, got {got.render('')!r}"

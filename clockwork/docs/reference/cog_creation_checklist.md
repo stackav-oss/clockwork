@@ -99,7 +99,7 @@ The cog_name_clk_cc_impl library must contain the execute_cog functions for all 
 
 ```cpp
 #include "clockwork/dial/msg_input.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 // Update the following includes to the paths in the repo containing the required elements.
 #include "path/to/cog/cog_name_clk_cc_dial.hh"
 #include "path/to/schema/schema_name_clk_cc.hh"
@@ -157,14 +157,24 @@ use clockwork::logging::channel_policy::{ChannelLoggingPolicy, LogType};
 use clockwork::logging::channel_type::ChannelType;
 use path::to::example_channels;
 
-// Defining this policy's log type as "telemetry" adds the channel to both the telemetry
-// log writer configuration and the event log writer configuration. Setting the log type
-// to "event" would only add the channel to the event log writer configuration.
+// Defining this policy's log type as "non_redundant_telemetry" adds the channel to both the telemetry
+// log writer configuration and the event log writer configuration. The channel is only logged on the CPU
+// domain where it is published.
 policy ChannelLoggingPolicy for example_channels::ExampleInputChannel
 {
-  log_type = LogType::telemetry;
+  log_type = LogType::non_redundant_telemetry;
 }
 
+// Defining this policy's log type as "redundant_telemetry" adds the channel to both the telemetry
+// log writer configuration and the event log writer configuration. The channel is logged on the CPU
+// domain where the channel is published. If the CPU domain where the channel is published also has a
+// "logging_backup" then the channel will also be logged on the "logging_backup" CPU domain.
+policy ChannelLoggingPolicy for example_channels::ExampleInputChannel
+{
+  log_type = LogType::redundant_telemetry;
+}
+
+// Setting this policy's log type to "event" only add the channel to the event log writer configuration.
 policy ChannelLoggingPolicy for example_channels::ExampleOutputChannel
 {
     log_type = LogType::event;

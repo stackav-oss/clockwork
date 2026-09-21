@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
@@ -34,7 +34,7 @@ public:
   ClkEnumTypeFactoryPlugin& operator=(ClkEnumTypeFactoryPlugin&&) = delete;
 
   /// @see ClkTypeFactoryPlugin::make_clk_type
-  [[nodiscard]] std::unique_ptr<ClkType> make_clk_type(
+  [[nodiscard]] std::shared_ptr<ClkType> make_clk_type(
     jewels::memory::ObjectPtr<ClkTypeFactory> factory,
     const metadata::TypeDesc& type_proto,
     size_t type_index,

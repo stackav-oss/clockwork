@@ -1,17 +1,16 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "clockwork/common/abstract_cog.hh"
+#include "clockwork/common/abstract_epoll_manager.hh"
 #include "clockwork/common/abstract_timer.hh"
 #include "clockwork/common/forward.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
-#include "clockwork/pinion/buffer.hh"
-#include "clockwork/pinion/io_connection.hh"
+#include "clockwork/pinion/abstract_channel.hh"
 #include "clockwork/pinion/observer.hh"
-#include "clockwork/pinion/publisher_handle.hh"
-#include "clockwork/pinion/subscriber_handle.hh"
+#include "clockwork/repr_iface.hh"
 #include "clockwork/tags.hh"
 #include "jewels/callsig/outcome.hh"
 #include "jewels/memory/memory_resource.hh"
@@ -24,6 +23,7 @@
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <optional>
 #include <span>
 
 namespace clockwork::scaffolding
@@ -109,6 +109,15 @@ public:
     pinion::PublisherHandle,
     jewels::memory::MemoryResource) = 0;
 
+  // Instantiate an external C++ state from a serialized snapshot.
+  // Allocates an instance of the given ClassId and assigns it the given InstanceId after deserialization succeeds.
+  virtual Outcome try_instantiate_state_from_snapshot(
+    jewels::Uuid<common::StateInstanceId>,
+    jewels::Uuid<RepresentationTag>,
+    jewels::Uuid<RepresentationTag>,
+    jewels::memory::MemoryResource,
+    std::span<const std::byte>) = 0;
+
   // Instantiate Config.
   // Allocates an instance of the given ClassId and assigns it the given InstanceId
   virtual jewels::expected<void, Error> try_instantiate_config(
@@ -134,8 +143,8 @@ public:
   // Instantiate a local subscriber.
   // @return A shared pointer to the Observer for that subscriber, which should
   //   be registered with epoll or a local publisher, or an error.
-  virtual jewels::expected<std::shared_ptr<pinion::Observer>, Error>
-    try_connect_subscriber(jewels::Uuid<common::EndpointInstanceId>, pinion::SubscriberHandle) = 0;
+  virtual jewels::expected<std::shared_ptr<pinion::Observer>, Error> try_connect_subscriber(
+    jewels::Uuid<common::EndpointInstanceId>, std::shared_ptr<pinion::AbstractChannel> channel) = 0;
 
   /// Set a publisher handle for a specific endpoint
   ///
@@ -194,6 +203,20 @@ public:
     jewels::Uuid<common::IoConnectionInstanceId> instance_id,
     std::span<const Tappy<common::EndpointInstanceDescription>> endpoints,
     std::optional<jewels::Uuid<common::EndpointInstanceId>> diags_endpoint_id) = 0;
+
+  /// Side-effect-free membership query: is the given representation UUID known
+  /// to the casing's compile-time `Schemas...` tuple?  Used by
+  /// `--validate-casing` to check config and (cxx/hybrid) state representations
+  /// without instantiating anything.
+  [[nodiscard]] virtual bool
+  has_schema_representation(const jewels::Uuid<RepresentationTag>& repr_id) const noexcept = 0;
+
+  /// Side-effect-free membership query: is the given IO connection class UUID
+  /// known to the casing's compile-time `IoConnections...` tuple?  Used by
+  /// `--validate-casing` to check IO connection classes without instantiating
+  /// anything.
+  [[nodiscard]] virtual bool
+  has_io_connection_class(const jewels::Uuid<common::IoConnectionClassId>& io_id) const noexcept = 0;
 
   // This is called after all connections are made and before execution begins (including execute_init_cog).  The casing
   // will validate that all required connections were made and perform any last initialization steps that might be

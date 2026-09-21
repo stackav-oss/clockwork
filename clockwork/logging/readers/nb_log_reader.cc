@@ -1,15 +1,18 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
 #include "clockwork/logging/log_interval.hh"
 #include "clockwork/logging/log_timestamp.hh"
+#include "clockwork/logging/offboard/chunk_reader_writer_factory.hh"
 #include "clockwork/logging/readers/log_reader.hh"
 #include "clockwork/logging/readers/types.hh"
 #include "jewels/log_cerr/log_cerr.hh" // IWYU pragma: keep
+#include "jewels/memory/memory_resource.hh"
+#include "jewels/std/span.hh"
 
-#include <Python.h>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <nanobind/make_iterator.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>    // IWYU pragma: keep
@@ -18,14 +21,15 @@
 #include <nanobind/stl/string_view.h> // IWYU pragma: keep
 #include <nanobind/stl/vector.h>      // IWYU pragma: keep
 
+#include <cstdint>
 #include <functional>
+#include <memory_resource>
 #include <new>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 NB_MODULE(nb_log_reader, mod)
 {
@@ -34,6 +38,39 @@ NB_MODULE(nb_log_reader, mod)
   nanobind::set_leak_warnings(false);
 
   mod.doc() = "Log reader python wrapper";
+
+  mod.def(
+    "log_file_exists",
+    [](std::string_view uri)
+    {
+      const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+      clockwork_logging::offboard::ChunkReaderWriterFactory factory{memory_resource};
+      const auto result = factory.exists(uri);
+      if (!result)
+      {
+        throw std::runtime_error(fmt::format("Failed to check {}: {}", uri, fmt::streamed(result.error())));
+      }
+      return result.value();
+    },
+    nanobind::arg("uri"),
+    "Return whether a local or S3 log file exists.");
+
+  mod.def(
+    "read_log_file",
+    [](std::string_view uri)
+    {
+      const jewels::memory::MemoryResource memory_resource{std::pmr::new_delete_resource()};
+      clockwork_logging::offboard::ChunkReaderWriterFactory factory{memory_resource};
+      auto result = factory.read_log_file(uri);
+      if (!result)
+      {
+        throw std::runtime_error(fmt::format("Failed to read {}: {}", uri, fmt::streamed(result.error())));
+      }
+      const auto chars = jewels::as_chars(std::span{result.value()});
+      return nanobind::bytes{chars.data(), chars.size()};
+    },
+    nanobind::arg("uri"),
+    "Read an opaque file from a local or S3 log URI.");
 
   // LogReader bindings
   nanobind::class_<clockwork_logging::LogReader>(mod, "LogReader")
@@ -51,9 +88,14 @@ NB_MODULE(nb_log_reader, mod)
       "Constructor.")
     .def(
       "raw_messages",
-      [](clockwork_logging::LogReader& obj, const std::optional<std::function<bool(std::string_view)>>& topic_filter)
+      [](
+        clockwork_logging::LogReader& obj,
+        const std::optional<std::function<bool(std::string_view)>>& topic_filter,
+        const std::optional<std::function<bool(std::string_view, uint32_t)>>& sequence_number_filter)
       {
-        if (const auto open_result = obj.open(topic_filter.value_or([](std::string_view) { return true; }));
+        if (const auto open_result = obj.open(
+              topic_filter.value_or([](std::string_view) { return true; }),
+              sequence_number_filter.value_or(std::function<bool(std::string_view, uint32_t)>{}));
             !open_result)
         {
           throw std::runtime_error(fmt::format("Failed to open log: ", open_result.error()));
@@ -62,6 +104,7 @@ NB_MODULE(nb_log_reader, mod)
           nanobind::type<clockwork_logging::LogReader>(), "message_iterator", obj.begin(), obj.end());
       },
       nanobind::arg("topic_filter").none() = nanobind::none(),
+      nanobind::arg("sequence_number_filter").none() = nanobind::none(),
       nanobind::keep_alive<0, 1>(),
       "Logged message iterator.")
     .def(

@@ -1,8 +1,10 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/container/tap/constants.hh"
 #include "jewels/memory/aligned_storage.hh"
 #include "jewels/meta/concepts.hh"
@@ -82,41 +84,44 @@ public:
   explicit constexpr Optional(std::nullopt_t /*nullopt*/) noexcept;
 
   /// Copy constructor.
-  constexpr Optional(const Optional<Value>&) = default;
+  constexpr Optional(const Optional<Value>&) noexcept = default;
 
   /// Move constructor.
-  constexpr Optional(Optional<Value>&&) = default;
+  constexpr Optional(Optional<Value>&&) noexcept = default;
 
   /// Copy from another optional.
   /// @param other The other optional.
   template <class Other>
     requires(std::is_constructible_v<Value, const Other&> && !std::is_same_v<Value, Other>)
-  explicit constexpr Optional(const Optional<Other>& other);
+  explicit constexpr Optional(const Optional<Other>& other) noexcept(
+    std::is_nothrow_constructible_v<Value, const Other&>);
 
   /// In place constructor from arguments.
   /// @param args Argument pack to forward to the constructor of Value.
   template <class... Args>
-  explicit constexpr Optional(std::in_place_t /*in_place*/, Args&&... args);
+  explicit constexpr Optional(std::in_place_t /*in_place*/, Args&&... args) noexcept(
+    std::is_nothrow_constructible_v<Value, Args...>);
 
   /// Construct from a type that is not an Optional and not Value.
   /// @param other The type to construct from.
   template <class Other>
     requires(!detail::is_optional_v<Other> && std::is_constructible_v<Value, Other &&>)
-  constexpr explicit Optional(Other&& other);
+  constexpr explicit Optional(Other&& other) noexcept(std::is_nothrow_constructible_v<Value, Other&&>);
 
   /// Destructor
   ~Optional() noexcept = default;
 
   /// Copy assignment.
-  constexpr Optional<Value>& operator=(const Optional<Value>&) = default;
+  constexpr Optional<Value>& operator=(const Optional<Value>&) noexcept = default;
   /// Move assignment.
-  constexpr Optional<Value>& operator=(Optional<Value>&&) = default;
+  constexpr Optional<Value>& operator=(Optional<Value>&&) noexcept = default;
 
   /// Assign from another optional type.
   /// @param other The other type.
   template <class Other>
     requires(std::is_constructible_v<Value, const Other&> && !std::is_same_v<Other, Value>)
-  constexpr Optional<Value>& operator=(const Optional<Other>& other);
+  constexpr Optional<Value>&
+  operator=(const Optional<Other>& other) noexcept(std::is_nothrow_constructible_v<Value, const Other&>);
 
   /// Assign from another non-optional type.
   /// @param other The other type.
@@ -124,7 +129,8 @@ public:
     requires(
       (std::is_constructible_v<Value, const Other&> && std::is_assignable_v<Value&, const Other&>) &&
       !detail::is_optional_v<Other>)
-  constexpr Optional<Value>& operator=(const Other& other);
+  constexpr Optional<Value>& operator=(const Other& other) noexcept(
+    std::is_nothrow_constructible_v<Value, const Other&> && std::is_nothrow_assignable_v<Value&, const Other&>);
 
   /// Access the address of the value.
   /// @{
@@ -147,7 +153,8 @@ public:
   [[nodiscard]] constexpr bool has_value() const noexcept;
   /// @}
 
-  /// Access the value.
+  /// Access the value for generic std::optional-compatible code.
+  /// Code that names tap::Optional should use the outcome overload.
   /// @throws std::bad_optional_access if a value does not exist.
   /// @{
   [[nodiscard]] constexpr Value& value() &;
@@ -156,10 +163,22 @@ public:
   [[nodiscard]] constexpr const Value&& value() const&&;
   /// @}
 
+  /// Access the value without throwing.
+  /// @return failure when this optional is empty; the output is unchanged on failure.
+  /// @{
+  constexpr jewels::BinaryOutcome value(jewels::Out<Value*> value_out) & noexcept;
+  constexpr jewels::BinaryOutcome value(jewels::Out<const Value*> value_out) const& noexcept;
+  constexpr jewels::BinaryOutcome
+  value(jewels::FactoryOut<Value> value_out) && noexcept(std::is_nothrow_move_constructible_v<Value>);
+  constexpr jewels::BinaryOutcome
+  value(jewels::FactoryOut<Value> value_out) const&& noexcept(std::is_nothrow_copy_constructible_v<Value>);
+  /// @}
+
   /// If a value exists, reutrn it, otherwise return default_value.
   /// @param default_value The value returned if one doesn't exist.
   template <class Other>
-  [[nodiscard]] constexpr Value value_or(Other&& default_value) const;
+  [[nodiscard]] constexpr Value value_or(Other&& default_value) const
+    noexcept(std::is_nothrow_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Value, Other&&>);
 
   /// Swap with another optional.
   constexpr void swap(Optional<Value>& other) noexcept;
@@ -172,13 +191,15 @@ public:
   /// @param args A pack of args to construct the object.
   /// @return A reference to the constructed object.
   template <class... Args>
-  constexpr Value& emplace(Args&&... args);
+  constexpr Value& emplace(Args&&... args) noexcept(std::is_nothrow_constructible_v<Value, Args...>);
 
   /// Equality operator with an optional of the same type.
-  [[nodiscard]] constexpr bool operator==(const Optional<Value>& other) const;
+  [[nodiscard]] constexpr bool operator==(const Optional<Value>& other) const
+    noexcept(noexcept(std::declval<const Value&>() == std::declval<const Value&>()));
 
   /// Equality operator with a value of same type.
-  [[nodiscard]] constexpr bool operator==(const Value& other) const;
+  [[nodiscard]] constexpr bool operator==(const Value& other) const
+    noexcept(noexcept(std::declval<const Value&>() == std::declval<const Value&>()));
 
   /// Equality operator with std::nullopt.
   [[nodiscard]] constexpr bool operator==(std::nullopt_t /*nullopt*/) const;

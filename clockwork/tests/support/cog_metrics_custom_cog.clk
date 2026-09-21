@@ -1,0 +1,42 @@
+// Copyright 2026 Stack AV Co.
+// SPDX-License-Identifier: Apache-2.0
+
+#![generate(cpp, cpp_cog)]
+#![cpp(namespace=clockwork::cog_metrics_test)]
+
+use clockwork::tests::support::cog_metrics_test_messages::{CogMetricsTestTrigger, CogMetricsTestAck};
+use std::cog_metrics_policy::{CogEventMetricsPolicy, CogTelemetryMetricsPolicy};
+
+// Test cog with one input, one output, and one condition.
+// Explicit policies override default cog metrics report group configuration.
+cog CogMetricsCustomCog
+{
+  inputs
+  {
+    trigger: Tappy<CogMetricsTestTrigger>;
+  }
+
+  outputs
+  {
+    ack: Tappy<CogMetricsTestAck>;
+  }
+
+  execution
+  {
+    condition new_trigger: new_message(trigger);
+    execute when: new_trigger;
+  }
+}
+
+policy CogEventMetricsPolicy for CogMetricsCustomCog
+{
+  enabled = true;
+  batch_size = 5;
+  max_duration = 2s;
+}
+
+policy CogTelemetryMetricsPolicy for CogMetricsCustomCog
+{
+  enabled = true;
+  max_duration = 2s;
+}

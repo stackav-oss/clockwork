@@ -1,0 +1,91 @@
+diff --git MODULE.bazel MODULE.bazel
+index 1234567..abcdefg 100644
+--- MODULE.bazel
++++ MODULE.bazel
+@@ -5,7 +5,7 @@ module(
+     compatibility_level = 1,
+ )
+ 
+-bazel_dep(name = "boringssl", version = "0.20251110.0")
++bazel_dep(name = "openssl", version = "3.5.5.bcr.4")
+ bazel_dep(name = "rules_cc", version = "0.2.16")
+ bazel_dep(name = "rules_license", version = "1.0.0")
+ bazel_dep(name = "curl", version = "8.11.0.bcr.5")
+diff --git bundled.BUILD bundled.BUILD
+index 1234567..abcdefg 100644
+--- bundled.BUILD
++++ bundled.BUILD
+@@ -75,6 +75,9 @@
+     srcs = glob(
+         include = ["src/aws-cpp-sdk-core/source/**/*.cpp"],
+         exclude = [
++            # Avoid double registration of opentelemetry function-local statics
++            # by skipping the opentelemetry adapter; we provide our own otel layer.
++            "src/aws-cpp-sdk-core/source/smithy/tracing/impl/opentelemetry/**/*.cpp",
+             "src/aws-cpp-sdk-core/source/utils/crypto/*/*.cpp",
+             "src/aws-cpp-sdk-core/source/platform/**/*.cpp",
+             "src/aws-cpp-sdk-core/source/platform/windows/**/*.cpp",
+@@ -93,6 +96,7 @@
+     hdrs = glob(
+         include = ["src/aws-cpp-sdk-core/include/**/*.h"],
+         exclude = [
++            "src/aws-cpp-sdk-core/include/smithy/tracing/impl/opentelemetry/**/*.h",
+             "src/aws-cpp-sdk-core/include/aws/core/utils/crypto/*/*.h",
+             "src/aws-cpp-sdk-core/include/aws/core/http/windows/**/*.h",
+         ],
+@@ -115,12 +119,8 @@
+         ":aws-c-common",
+         ":aws-c-http",
+         ":crt",
+-        "@boringssl//:crypto",
++        "@openssl//:crypto",
+         "@curl",
+-        "@opentelemetry-cpp//api",
+-        "@opentelemetry-cpp//exporters/ostream:ostream_metric_exporter",
+-        "@opentelemetry-cpp//exporters/ostream:ostream_span_exporter",
+-        "@opentelemetry-cpp//sdk:headers",
+     ],
+ )
+ 
+@@ -191,12 +191,12 @@
+         "@platforms//cpu:aarch64": glob(
+             [
+-                "crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/asm/*.c",
++                "crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/auxv/*.c",
+             ],
+             allow_empty = True,
+         ),
+         "@platforms//cpu:armv7": glob(
+             [
+-                "crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/asm/*.c",
++                "crt/aws-crt-cpp/crt/aws-c-common/source/arch/arm/auxv/*.c",
+             ],
+             allow_empty = True,
+         ),
+@@ -313,6 +313,8 @@
+         "crt/aws-crt-cpp/crt/aws-c-cal/source/unix/*.c",
+     ]) + [
+         "crt/aws-crt-cpp/crt/aws-c-cal/source/shared/lccrypto_common.c",
++        "crt/aws-crt-cpp/crt/aws-c-cal/source/shared/ed25519.c",
++        "crt/aws-crt-cpp/crt/aws-c-cal/source/shared/ref_hkdf.c",
+     ],
+     hdrs = glob(["crt/aws-crt-cpp/crt/aws-c-cal/include/**/*.h"]),
+     copts = common_copts + [
+@@ -325,7 +327,7 @@
+     target_compatible_with = ["@platforms//os:linux"],
+     deps = [
+         ":aws-c-common",
+-        "@boringssl//:crypto",
++        "@openssl//:crypto",
+     ],
+     visibility = ["//visibility:public"],
+ )
+@@ -481,7 +483,7 @@
+     ],
+     target_compatible_with = ["@platforms//os:linux"],
+     deps = [
+-        "@boringssl//:crypto",
++        "@openssl//:crypto",
+     ],
+     visibility = ["//visibility:public"],
+ )

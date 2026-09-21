@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 load("@aspect_rules_py//py:defs.bzl", "py_pytest_main")
@@ -12,13 +12,135 @@ py_pytest_main(
     deps = ["@clockwork_pip//pytest"],
 )
 
+cc_test(
+    name = "aligned_consumer_combo_test",
+    srcs = ["aligned_consumer_combo_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc_test",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "aligned_consumer_csr_test",
+    srcs = ["aligned_consumer_csr_test.cc"],
+    data = [
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_channel_publisher_config.tachyon",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_system.aligned_consumer_system.AlignedConsumerTestCpu_telemetry_logger_config.tachyon",
+        "//clockwork/dsl/composition/tests/support:clockwork.clockwork.dsl.composition.tests.support.aligned_consumer_system.aligned_consumer_system.proc.tachyon",
+    ],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_boxes_clk_exe_lib",  # keep
+        "//clockwork/scaffolding:offline_scaffolding",  # keep
+        "//clockwork/test_tools:clockwork_system_runner",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:memory_resource",
+        "//jewels/memory:pmr_unique_ptr",
+        "//jewels/utility:fix_clockwork_path",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "aligned_consumer_unit_test",
+    srcs = ["aligned_consumer_unit_test.cc"],
+    deps = [
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/dial:msg_input",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "aligned_noinput_consumer_combo_test",
+    srcs = ["aligned_noinput_consumer_combo_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc_test",
+        "//clockwork/dsl/composition/tests/support:aligned_noinput_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "@catch2//:catch2_main",
+    ],
+)
+
+py_test(
+    name = "cog_metrics_signal_metadata_test",
+    srcs = [
+        "cog_metrics_signal_metadata_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:cog_metrics_signals_test_system_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:gen_signal_metadata_configs",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:cog_metrics_report_groups",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "combined_aligned_consumer_unit_test",
+    srcs = ["combined_aligned_consumer_unit_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/common:cog_execution_error_clk_cc",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/composition/tests/support:combined_aligned_consumer_cog_clk_cc",
+        "//clockwork/dsl/composition/tests/support:combined_aligned_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "@catch2//:catch2_main",
+    ],
+)
+
 py_test(
     name = "data_source_test",
     srcs = [
         "data_source_test.py",
         ":__test__",
     ],
-    data = ["//clockwork/dsl/composition/tests/support:simplesys_clk"],
+    data = [
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:clk_hellocog_clk",
+    ],
     main = ":__test__.py",
     deps = [
         ":__test__",
@@ -33,6 +155,27 @@ py_test(
         "//clockwork/dsl/ir:system_target",
         "//clockwork/dsl/serialization:tachyon_reg",
         "@clockwork_pip//pytest",
+    ],
+)
+
+cc_test(
+    name = "empty_aligned_consumer_unit_test",
+    srcs = ["empty_aligned_consumer_unit_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/common:cog_execution_error_clk_cc",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:empty_aligned_consumer_cog_clk_cc",
+        "//clockwork/dsl/composition/tests/support:empty_aligned_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "@catch2//:catch2_main",
     ],
 )
 
@@ -167,6 +310,30 @@ py_test(
 )
 
 py_test(
+    name = "gen_simplelaunch_config_test",
+    srcs = [
+        "gen_simplelaunch_config_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/common:platform_diagnostics_config_clk",
+        "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:test_logging_policy_clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:launchgen",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:box",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
     name = "genpd_test",
     srcs = [
         "genpd_test.py",
@@ -175,13 +342,16 @@ py_test(
     data = [
         "//clockwork/common:platform_diagnostics_config_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
+        "//clockwork/dsl/tests/support:clk_hellomod_clk",
         "//clockwork/dsl/tests/support:hellomod_clk",
     ],
     main = ":__test__.py",
     deps = [
         ":__test__",
+        "//clockwork/dsl/composition:channel_config",
         "//clockwork/dsl/composition:genpd",
         "//clockwork/dsl/composition:pdf",
+        "//clockwork/dsl/composition:pdfproto",
         "//clockwork/dsl/composition:system",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:cpp_target",
@@ -255,6 +425,27 @@ py_test(
     ],
 )
 
+cc_test(
+    name = "multiple_aligned_consumer_unit_test",
+    srcs = ["multiple_aligned_consumer_unit_test.cc"],
+    deps = [
+        "//clockwork/cog:detail",
+        "//clockwork/cog:include_common",
+        "//clockwork/cog/wrappers:unit_test_cog",
+        "//clockwork/dial:include_common",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk_cc",
+        "//clockwork/dsl/composition/tests/support:multiple_aligned_consumer_cog_clk_cc",
+        "//clockwork/dsl/composition/tests/support:multiple_aligned_consumer_cog_clk_cc_test",
+        "//clockwork/memory:start_lifetime_as",
+        "//clockwork/pinion:error",
+        "//clockwork/pinion:publisher_slot_ref",
+        "//clockwork/pinion:slot",
+        "//clockwork/pinion:subscriber_handle",
+        "//jewels/time:sync_time",
+        "@catch2//:catch2_main",
+    ],
+)
+
 py_test(
     name = "pdf_test",
     srcs = [
@@ -267,6 +458,60 @@ py_test(
         "//clockwork/dsl/composition:pdf",
         "//clockwork/dsl/ir:compiler",
         "//clockwork/dsl/ir:importer",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "realtime_playback_config_test",
+    srcs = [
+        "realtime_playback_config_test.py",
+        ":__test__",
+    ],
+    data = [
+        "//clockwork/dsl/tests/support:hellomsg.clk",
+        "//clockwork/dsl/tests/support:testpolicy.clk",
+    ],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl:compiler_context",
+        "//clockwork/dsl/composition:realtime_playback_config",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:clkbuiltins",
+        "//clockwork/dsl/ir:clkenum",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:hardware",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:importer_registry",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:node",
+        "//clockwork/dsl/ir:policy",
+        "//clockwork/dsl/ir:primitive",
+        "//clockwork/dsl/ir:pubsub",
+        "//clockwork/dsl/ir:uuid_reg",
+        "@clockwork_pip//pytest",
+    ],
+)
+
+py_test(
+    name = "realtime_playback_generation_test",
+    srcs = [
+        "realtime_playback_generation_test.py",
+        ":__test__",
+    ],
+    data = ["//clockwork/dsl/composition/tests/support:realtime_playback_system_target_clk"],
+    main = ":__test__.py",
+    deps = [
+        ":__test__",
+        "//clockwork/dsl/composition:genpd",
+        "//clockwork/dsl/composition:pdfproto",
+        "//clockwork/dsl/composition:realtime_playback_generation",
+        "//clockwork/dsl/composition:system",
+        "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:importer",
+        "//clockwork/dsl/ir:module_id",
+        "//clockwork/dsl/ir:system_target",
         "@clockwork_pip//pytest",
     ],
 )
@@ -293,6 +538,9 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_aligner_clk",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_boxes_clk",
+        "//clockwork/dsl/composition/tests/support:aligned_consumer_system_clk",
         "//clockwork/dsl/composition/tests/support:signals_test_system_clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
         "//clockwork/dsl/tests/support:hellomod_clk",
@@ -305,6 +553,7 @@ py_test(
         "//clockwork/dsl/ir:box",
         "//clockwork/dsl/ir:cog",
         "//clockwork/dsl/ir:compiler",
+        "//clockwork/dsl/ir:hardware",
         "//clockwork/dsl/ir:importer",
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:node",
@@ -322,6 +571,7 @@ py_test(
         ":__test__",
     ],
     data = [
+        "//clockwork/dsl/composition/tests/support:memory_resource_test_system_clk",
         "//clockwork/dsl/composition/tests/support:signals_test_system.clk",
         "//clockwork/dsl/composition/tests/support:signals_test_system_target.clk",
         "//clockwork/dsl/composition/tests/support:simplesys_clk",
@@ -331,6 +581,8 @@ py_test(
         ":__test__",
         "//clockwork/dsl/bazel:simple_launch_targets",
         "//clockwork/dsl/bazel:targets",
+        "//clockwork/dsl/composition:journal_topology",
+        "//clockwork/dsl/composition:journal_topology_file_config",
         "//clockwork/dsl/composition:system",
         "//clockwork/dsl/composition:systemgen",
         "//clockwork/dsl/ir:compiler",
@@ -338,6 +590,9 @@ py_test(
         "//clockwork/dsl/ir:module_id",
         "//clockwork/dsl/ir:path_resolver",
         "//clockwork/dsl/ir:system_target",
+        "//clockwork/journal:journal_topology_py_library",
+        "//clockwork/serialization/py:protocol",
+        "@clockwork_pip//protobuf",
         "@clockwork_pip//pytest",
     ],
 )

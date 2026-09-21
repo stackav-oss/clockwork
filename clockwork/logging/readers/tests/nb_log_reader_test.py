@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 # pyright: reportPrivateUsage=false
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from clockwork.logging.offboard.py_log_writer import LogWriter
-from clockwork.logging.readers.nb_log_reader import LogReader
+from clockwork.logging.readers.nb_log_reader import LogReader, log_file_exists, read_log_file
 from clockwork.logging.readers.nb_types import (
     LogInterval,
     LogTimestamp,
@@ -17,6 +17,17 @@ from clockwork.logging.readers.nb_types import (
 )
 from clockwork.logging.tests.support import test_message_clk_py
 from clockwork.serialization.metadata import tachyon as tachyon_meta
+
+
+def test_read_log_file(tmp_path: Path) -> None:
+    """Opaque files can be read through the log URI storage abstraction."""
+    file_path = tmp_path / "sidecar.bin"
+    contents = b"sidecar\x00contents"
+    file_path.write_bytes(contents)
+
+    assert log_file_exists(str(file_path))
+    assert not log_file_exists(str(tmp_path / "missing.bin"))
+    assert read_log_file(str(file_path)) == contents
 
 
 class TestLogReaderClass:

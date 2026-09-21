@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate ProcessDescriptions from Process IR."""
@@ -23,12 +23,19 @@ from clockwork.dsl.ir import (
     typesys,
     udp,
 )
-from clockwork.dsl.ir.cog_components import InputDef, MetricsOutputDef, OutputDef
+from clockwork.dsl.ir.cog_components import (
+    CogAlignedInputDef,
+    DynamicTimer,
+    InputDef,
+    InputDefElement,
+    MetricsOutputDef,
+    OutputDef,
+)
 from clockwork.dsl.ir.uuid_reg import lookup_uuid
 from clockwork.dsl.serialization import tachyon_layout_reg
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Iterable, Iterator, Mapping
 
     from clockwork.dsl.composition import pdfproto
 
@@ -93,6 +100,7 @@ class _ProcessGraph:
         else:  # FirstMessageInstance
             data_source_type = pdf.DataSourceType.log_first_message
             assert isinstance(data_source.channel.channel_name, primitive.StringValue)
+            # pyrefly: ignore[unnecessary-type-conversion] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
             source_path_or_name = str(data_source.channel.channel_name.value)
             assert data_source.channel.message_repr is not None
             repr_id = lookup_uuid(data_source.module.context, data_source.channel.message_repr.typespec)
@@ -264,13 +272,17 @@ def _gen_memres_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
             if endpoint.process != process_uuid:
                 msg = f"Memory resource {memres_desc} connected to endpoint in different process: {endpoint.entity}"
                 raise ValueError(msg)
-            process_desc.memory_resource_graph.connections.append(
-                pdf.MemoryResourceConnection(memory_resource_id=uuid, endpoint_id=ep_uuid)
-            )
+            # States and memory resources don't need to be connected at runtime, states are associated with their resources using a different mechanism.
+            if isinstance(endpoint.entity, cog.CogInstanceMember):
+                process_desc.memory_resource_graph.connections.append(
+                    pdf.MemoryResourceConnection(memory_resource_id=uuid, endpoint_id=ep_uuid)
+                )
 
 
 def _add_non_connected_endpoint(
     entity: cog.CogInstanceMember[InputDef]
+    | cog.CogInstanceMemberElement[InputDefElement]
+    | cog.CogInstanceMember[CogAlignedInputDef]
     | cog.CogInstanceMember[OutputDef]
     | cog.CogInstanceMember[MetricsOutputDef],
     message_size: int,
@@ -278,7 +290,7 @@ def _add_non_connected_endpoint(
 ) -> None:
     """Add a non-connected endpoint to the process description along with whether the endpoint is a publisher or subscriber and the message size."""
     uuid = lookup_uuid(entity.cog_instance.module.context, entity)
-    if isinstance(entity.member, InputDef):
+    if isinstance(entity.member, (InputDef, InputDefElement, CogAlignedInputDef)):
         endpoint_type = pdf.NotConnectedEndpointType.subscriber
     else:
         endpoint_type = pdf.NotConnectedEndpointType.publisher
@@ -303,7 +315,7 @@ def _gen_non_connected_endpoints(sys: system.PhysicalSystem, processes: dict[UUI
         for observer_uuid, message_size in sys.system.ignored_observer_endpoints.items():
             if sys.system.observer_endpoints[observer_uuid].process == process_uuid:
                 observer_entity = sys.system.observer_endpoints[observer_uuid].entity
-                if not isinstance(observer_entity, cog.CogInstanceMember):
+                if not isinstance(observer_entity, (cog.CogInstanceMember, cog.CogInstanceMemberElement)):
                     msg = node.enrich_error_if_possible(observer_entity, "Non-cog observer endpoint  cannot be ignored")
                     raise ValueError(msg)
                 _add_non_connected_endpoint(observer_entity, message_size, process_desc)
@@ -370,6 +382,7 @@ def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
                 num_subscribers=buffer.num_subscribers,
                 channel_name=buffer.channel.channel.channel_name,
                 is_bulk_data=buffer.channel.is_bulk_data(),
+                channel_type=buffer.channel.channel_type(),
             )
             # We include this buffer's publish endpoint only if this process publishes it or subscribes to it.
             # If we subscribe but don't publish, that's handled below.
@@ -379,29 +392,35 @@ def _gen_pubsub_sys(sys: system.PhysicalSystem, processes: dict[UUID, _ProcessGr
             else:
                 inserted_pub = False
             for observer_uuid, observer in buffer.observers.items():
-                if isinstance(observer, cog.CogInstanceMember | udp.UdpSocketEndpointInstance):
-                    # Only include subscriptions for single producer channels,
-                    # multi-producer channels are handled separately.
-                    if (
-                        buffer.channel.is_single_producer()
-                        and sys.system.entity_to_process[observer_uuid] == process_uuid
-                    ):
-                        process_desc.pubsub_graph.connections.append(
-                            pdf.PubSubConnection(
-                                subscriber_process_id=process_uuid,
-                                subscriber_id=observer_uuid,
-                                publisher_id=buffer_uuid,
-                            )
-                        )
-                        if not inserted_pub:
-                            process_desc.pubsub_graph.publish_endpoints.append(pub_ep)
-                            inserted_pub = True
+                # fmt: off
+                if isinstance(
+                    # pyrefly: ignore[implicit-any-type-argument] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
+                    observer, cog.CogInstanceMember | cog.CogInstanceMemberElement | udp.UdpSocketEndpointInstance
+                ):
+                # fmt: on
+                    subscriber_process_uuid = sys.system.entity_to_process[observer_uuid]
                 elif isinstance(observer, system.BridgeObserver | system.LogObserver):  # pyright: ignore[reportUnnecessaryIsInstance] # TODO(DX-2313): Address pyright errors ignored to migrate from mypy # fmt: skip
-                    # Not part of the process description file
-                    pass
+                    # Potentially needed to ensure the publisher process is aware of all links
+                    subscriber_process_uuid = UUID(int=0)
                 else:
                     msg = f"Unrecognized observer type {type(observer)}"
                     raise NotImplementedError(msg)
+                # Only include subscriptions for single producer channels,
+                # multi-producer channels are handled separately.
+                if buffer.channel.is_single_producer() and process_uuid in (subscriber_process_uuid, pub_ep.process_id):
+                    publisher_key, subscriber_key = cpu_domain.channel_link_keys[observer_uuid]
+                    process_desc.pubsub_graph.connections.append(
+                        pdf.PubSubConnection(
+                            subscriber_process_id=subscriber_process_uuid,
+                            subscriber_id=observer_uuid,
+                            publisher_id=buffer_uuid,
+                            subscriber_key=subscriber_key,
+                            publisher_key=publisher_key,
+                        )
+                    )
+                    if not inserted_pub:
+                        process_desc.pubsub_graph.publish_endpoints.append(pub_ep)
+                        inserted_pub = True
 
         process_desc.init_cogs = gen_init_list(
             init_cog_deps=process_graph.init_cog_deps, cog_names=process_graph.cog_names
@@ -413,19 +432,20 @@ def gen_cog(cog_ir: cog.CogInstance) -> tuple[pdfproto.CogInstanceDescription, l
     cog_desc = pdf.CogInstanceDescription(
         cog_class_id=lookup_uuid(cog_ir.module.context, cog_ir.cog_class),
         cog_instance_id=lookup_uuid(cog_ir.module.context, cog_ir),
-        endpoints=[gen_cog_endpoint(x) for x in cog_ir.members],
+        endpoints=list(itertools.chain.from_iterable(gen_cog_endpoints(x) for x in cog_ir.members)),
         instance_path_name=cog_ir.value_key(),
     )
     timers = list(gen_cog_timers(cog_ir))
     return cog_desc, timers
 
 
-def gen_cog_endpoint(
+def gen_cog_endpoints(
     member_instance: cog.CogInstanceMember[
         cog.ResourceDef
         | cog.ConfigDef
         | cog.StateDef
         | cog.InputDef
+        | cog.CogAlignedInputDef
         | cog.OutputDef
         | cog.MetricsOutputDef
         | cog.ReportGroupDef
@@ -433,19 +453,26 @@ def gen_cog_endpoint(
         | diagnostics.DiagnosticsDef
         | diagnostics.InfraDiagnosticsDef
     ],
-) -> pdfproto.EndpointInstanceDescription:
-    """Generate an EndpointInstanceDescription for a CogInstanceMember."""
-    return pdf.EndpointInstanceDescription(
-        endpoint_class_id=lookup_uuid(member_instance.cog_instance.module.context, member_instance.member),
-        endpoint_instance_id=lookup_uuid(member_instance.cog_instance.module.context, member_instance),
-    )
+) -> Iterator[pdfproto.EndpointInstanceDescription]:
+    """Generate EndpointInstanceDescriptions for a CogInstanceMember."""
+    if isinstance(member_instance.member, cog.InputDef) and member_instance.elements:
+        for element in member_instance.elements:
+            yield pdf.EndpointInstanceDescription(
+                endpoint_class_id=lookup_uuid(element.cog_instance.module.context, element.member),
+                endpoint_instance_id=lookup_uuid(element.cog_instance.module.context, element),
+            )
+    else:
+        yield pdf.EndpointInstanceDescription(
+            endpoint_class_id=lookup_uuid(member_instance.cog_instance.module.context, member_instance.member),
+            endpoint_instance_id=lookup_uuid(member_instance.cog_instance.module.context, member_instance),
+        )
 
 
 def gen_cog_timers(cog_ir: cog.CogInstance) -> Iterable[pdfproto.TimerInstanceDescription]:
     """Generate a list of timer instances for a Cog instance."""
     for member in cog_ir.members:
         if isinstance(member.member, cog.ConditionDef):
-            if not isinstance(member.member.condition, cog.TimeSinceLastExec):
+            if not isinstance(member.member.condition, cog.TimeSinceLastExec | DynamicTimer):
                 msg = cog_ir.append_error_line(f"Unsupported condition member type: {member}")
                 raise NotImplementedError(msg)
             yield pdf.TimerInstanceDescription(
@@ -496,6 +523,7 @@ def _gen_state_instance_schema(
         representation_id=lookup_uuid(state_instance.module.context, repr_typespec),
         state_instance_id=lookup_uuid(state_instance.module.context, state_instance),
         instance_path_name=state_instance.value_key(),
+        snapshot_representation_id=None,
         maybe_buffer_layout=pdf.PinionBufferLayout(num_slots=1, message_size=layout.size, is_published_once=False),
         maybe_memory_resource=None,
         init_data_source=pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL,
@@ -506,10 +534,16 @@ def _gen_state_instance_extern(
     state_instance: box.StateInstance, repr_typespec: extern_type.ExternType
 ) -> pdfproto.StateInstanceDescription:
     assert state_instance.memory_resource is not None
+    serialized_form = repr_typespec.serialized_form
+    if serialized_form is not None:
+        assert isinstance(serialized_form, typesys.Instantiation)
     return pdf.StateInstanceDescription(
         representation_id=lookup_uuid(state_instance.module.context, repr_typespec),
         state_instance_id=lookup_uuid(state_instance.module.context, state_instance),
         instance_path_name=state_instance.value_key(),
+        snapshot_representation_id=lookup_uuid(state_instance.module.context, serialized_form)
+        if serialized_form is not None
+        else None,
         maybe_buffer_layout=None,
         maybe_memory_resource=lookup_uuid(state_instance.module.context, state_instance.memory_resource),
         init_data_source=pdf.DEFAULT_CONSTRUCT_DATA_SOURCE_SENTINEL,

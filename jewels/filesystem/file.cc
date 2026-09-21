@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "jewels/filesystem/file.hh"
@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
 #include <fcntl.h>
 #include <memory_resource>
 #include <optional>
@@ -184,8 +185,12 @@ jewels::expected<filesystem::Directory, ErrorCode> Directory::create_open(int di
   // POSIX doesn't offer an atomic "open, create if needed" for directories so this sort of racy pattern is required.
   // One could attempt to open the directory first, which might save a bit of time in the average case but that has its
   // own idiosyncrasies and this API is more targeted at creation.
-  // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage) TODO(DX-1794): Fix this
-  const int result = ::mkdirat(dirfd, name.data(), default_directory_mode);
+  const auto null_terminated_name = FileNameString::try_make(name);
+  if (!null_terminated_name)
+  {
+    return jewels::unexpected(report_io_err(ENAMETOOLONG, "Failed to create", name));
+  }
+  const int result = ::mkdirat(dirfd, null_terminated_name->data(), default_directory_mode);
   if (result == -1 && errno != EEXIST)
   {
     return jewels::unexpected(report_io_err(errno, "Failed to create", name));

@@ -1,0 +1,24 @@
+#![generate(cpp, cpp_cog, cpp_test_cog, cpp_combo_test)]
+#![cpp(namespace=clockwork::testing::aligned_consumer)]
+
+use clockwork::dsl::composition::tests::support::aligned_consumer_aligner::{SimpleAligner, ConsumerEchoMsg};
+
+// A consumer cog with only aligned inputs and no regular inputs
+cog NoInputConsumerCog
+{
+  aligned_inputs
+  {
+    // Aligned data from the aligner
+    aligned: SimpleAligner;
+  }
+  outputs
+  {
+    // Echo of resolved alignment data
+    echo: Tappy<ConsumerEchoMsg>;
+  }
+  execution
+  {
+    condition new_alignment: new_message(aligned);
+    execute when: new_alignment;
+  }
+}

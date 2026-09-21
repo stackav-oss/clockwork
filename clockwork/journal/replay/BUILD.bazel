@@ -1,0 +1,75 @@
+# Copyright 2025-2026 Stack AV Co.
+# SPDX-License-Identifier: Apache-2.0
+
+load("//clockwork:rules.bzl", "clk")
+load("//tools/rules:cc.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "execution_queue",
+    srcs = ["execution_queue.inl"],
+    hdrs = ["execution_queue.hh"],
+    deps = [
+        ":execution_stats_clk_cc",
+        ":message_buffer",
+        ":replay_metadata",
+        "//clockwork:repr_iface",
+        "//clockwork/journal:journal_cc_library",
+        "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/meta:call",
+        "//jewels/meta:type_traits",
+        "//jewels/meta:types",
+    ],
+)
+
+clk(
+    name = "execution_stats_clk",
+    srcs = ["execution_stats.clk"],
+    outs = [
+        "execution_stats_clk_cc.cc",
+        "execution_stats_clk_cc.hh",
+        "execution_stats_clk_cc.inl",
+        "execution_stats_clk_cc_types.cc",
+        "execution_stats_clk_cc_types.hh",
+        "execution_stats_clk_cc_types.inl",
+        "execution_stats_clk_nb.cc",
+        "execution_stats_clk_nb.hh",
+        "execution_stats_clk_nb.inl",
+    ],
+    generate = [
+        "cpp",
+        "nanobind",
+    ],
+)
+
+cc_library(
+    name = "message_buffer",
+    srcs = ["message_buffer.inl"],
+    hdrs = ["message_buffer.hh"],
+    deps = [
+        ":replay_metadata",
+        "//clockwork:repr_iface",
+        "//clockwork/logging:log_timestamp",
+        "//clockwork/logging/readers:types",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "@boost.container_hash",
+    ],
+)
+
+cc_library(
+    name = "replay_metadata",
+    srcs = ["replay_metadata.cc"],
+    hdrs = ["replay_metadata.hh"],
+    deps = [
+        "//clockwork/journal:journal_cc_library",
+        "//jewels/callsig:outcome",
+        "//jewels/callsig:outparam",
+        "//jewels/memory:pointers",
+        "@boost.container_hash",
+        "@protobuf",
+    ],
+)

@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -34,10 +34,12 @@ public:
   /// @param[in] memory_resource Memory resource
   /// @param[in] chunk_reader_ptr Chunk reader pointer
   /// @param[in] chunk_compressor_ptr Chunk compressor pointer
+  /// @param[in] maybe_desired_channels Optional set of channels to read from the log file
   LogFileReader(
     jewels::memory::MemoryResource memory_resource,
     jewels::memory::NonNullSharedPtr<ChunkReader> chunk_reader_ptr,
-    jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr);
+    jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr,
+    const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels);
 
   ~LogFileReader() = default;
 
@@ -47,12 +49,11 @@ public:
   LogFileReader& operator=(LogFileReader&&) = default;
 
   /// Get the message handles needed to read the desired messages from this log file
-  /// @param[in] maybe_desired_channels Optional set of desired channels
+  /// @param[in] desired_channels Set of desired channels
   /// @param[in] maybe_log_interval Optional log interval
   /// @return List of message chunk handles sorted by earliest transmit time or LogError on failure
   [[nodiscard]] LogExpected<std::pmr::list<reader::MessageChunkHandle>> get_message_chunk_list(
-    const std::optional<std::pmr::unordered_set<std::pmr::string>>& maybe_desired_channels = {},
-    std::optional<LogInterval> maybe_log_interval = {});
+    const std::pmr::unordered_set<std::pmr::string>& desired_channels, std::optional<LogInterval> maybe_log_interval);
 
   /// Get the channel metadata
   /// @return Log file metadata or LogError on failure
@@ -88,11 +89,17 @@ private:
   /// Chunk compressor pointer
   jewels::memory::NonNullSharedPtr<ChunkCompressor> chunk_compressor_ptr_;
 
+  /// Optional set of channels to read from the log file
+  std::optional<std::pmr::unordered_set<std::pmr::string>> maybe_desired_channels_;
+
   /// Optional log file trailer information, valid once the log file trailer has been read
   std::shared_ptr<reader::LogFileTrailerInfo> log_file_trailer_info_ptr_;
 
   /// Channel metadata map, valid once the metadata has been read
   std::shared_ptr<std::pmr::unordered_map<uint16_t, reader::LoggedChannelInfo>> metadata_map_ptr_;
+
+  /// Set of channel IDs to exclude from metrics, valid once the metadata has been read
+  std::shared_ptr<std::pmr::unordered_set<uint16_t>> excluded_channel_ids_ptr_;
 
   /// Map from channel name to channel metadata, valid once the metadata has been read
   std::pmr::unordered_map<std::string_view, jewels::memory::ObjectPtr<const reader::LoggedChannelInfo>>

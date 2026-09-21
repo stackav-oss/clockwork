@@ -4,12 +4,14 @@
 #pragma once
 
 #include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_index.hh" // IWYU pragma: keep
 #include "clockwork/pinion/slot.hh"
+#include "jewels/math/power_of_two.hh" // IWYU pragma: keep
 #include "jewels/memory/pointers.hh"
 #include "jewels/meta/concepts.hh"
 
+#include <cstddef>
 #include <cstdint>
-#include <iosfwd>
 #include <iterator>
 #include <type_traits>
 #include <variant>
@@ -63,26 +65,33 @@ public:
 ///
 /// An implementation of SlotRefReader to use with Buffer backed channels
 ///
-class BufferSlotRefReader
+template <typename BufferType>
+class BufferSlotRef
 {
 public:
-  explicit inline BufferSlotRefReader(
-    jewels::memory::ObjectPtr<const Buffer> buffer_ptr, const BufferIterator& buffer_iterator);
+  using SlotT = std::conditional_t<std::is_const_v<BufferType>, ConstSlot, Slot>;
+
+  explicit inline BufferSlotRef(
+    jewels::memory::ObjectPtr<BufferType> buffer_ptr, const BufferIterator& buffer_iterator);
   [[nodiscard]] inline bool is_sentinel() const noexcept;
   [[nodiscard]] inline bool is_valid() const noexcept;
-  [[nodiscard]] inline ConstSlot slot() const noexcept;
-  [[nodiscard]] inline ConstSlot slot(std::ptrdiff_t offset) const noexcept;
+  [[nodiscard]] inline SlotT slot() const noexcept;
+  [[nodiscard]] inline SlotT slot(std::ptrdiff_t offset) const noexcept;
   [[nodiscard]] inline uint64_t index() const noexcept;
   inline void increment() noexcept;
   inline void decrement() noexcept;
   inline void advance(std::ptrdiff_t offset) noexcept;
-  [[nodiscard]] inline std::ptrdiff_t distance(const BufferSlotRefReader& other) const noexcept;
+  [[nodiscard]] inline std::ptrdiff_t distance(const BufferSlotRef& other) const noexcept;
 
 private:
-  jewels::memory::ObjectPtr<const Buffer> buffer_ptr_;
+  jewels::memory::ObjectPtr<BufferType> buffer_ptr_;
   BufferIterator buffer_iterator_;
 };
+using BufferSlotRefReader = BufferSlotRef<const Buffer>;
 
+///
+/// Generic common code for slot iterators
+///
 template <typename This, typename SlotT, typename... Impls>
 class SlotRefBase
 {
@@ -163,8 +172,12 @@ inline This operator+(std::ptrdiff_t offset, const SlotRefBase<This, SlotT, Impl
 ///
 /// An abstract reference to track a const message slot
 ///
-class SlotRef
-  : public detail::SlotRefBase<SlotRef, ConstSlot, detail::MonostateSlotRefReader, detail::BufferSlotRefReader>
+class SlotRef : public detail::SlotRefBase<
+                  SlotRef,
+                  ConstSlot,
+                  detail::MonostateSlotRefReader,
+                  detail::BufferSlotRefReader
+                  >
 {
 public:
   inline SlotRef();

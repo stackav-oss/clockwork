@@ -1,4 +1,4 @@
-# Copyright 2025 Stack AV Co.
+# Copyright 2025-2026 Stack AV Co.
 # SPDX-License-Identifier: Apache-2.0
 
 """IR Nodes dealing with primitive data types and values."""
@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, cast
 
-from clockwork.dsl import clockwork_cst as cst
+from clockwork.dsl import clockwork_cst_protocol as cst
 from clockwork.dsl.ir import clkbuiltins, typesys
 from clockwork.dsl.ir.cst_util import get_span
 from typing_extensions import override
@@ -48,7 +48,7 @@ class Unit(ABC):
             msg = "Cannot construct IR nodes from CST without a TerminalSource"
             raise ValueError(msg)
         try:
-            return CST_MAP[cst_node.child()[0]]  # pyright: ignore[reportArgumentType] Assuming child node label exists
+            return CST_MAP[cst_node.child()[0]]
         except KeyError:
             pass
         msg = f"Unit {get_span(cst_node.span, module.terminals)} not implemented."
@@ -69,6 +69,7 @@ class TimeUnit(Unit):
         return "second"
 
 
+# pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 SECONDS: Final = TimeUnit(scale=0, canonical_unit=cast("TimeUnit", None))
 SECONDS.canonical_unit = SECONDS
 MILLISECONDS: Final = TimeUnit(scale=-3, canonical_unit=SECONDS)
@@ -90,6 +91,7 @@ class BytesUnit(Unit):
         return "byte"
 
 
+# pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 BYTE: Final = BytesUnit(scale=0, canonical_unit=cast("BytesUnit", None))
 BYTE.canonical_unit = BYTE
 
@@ -111,6 +113,7 @@ class BitsUnit(Unit):
         return "bit"
 
 
+# pyrefly: ignore[invalid-cast] # TODO(DX-3792): Address pyrefly errors ignored to migrate from pyright
 BIT: Final = BitsUnit(scale=0, canonical_unit=cast("BitsUnit", None))
 BIT.canonical_unit = BIT
 

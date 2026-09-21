@@ -226,21 +226,21 @@ cog FusionProcessor
         // First instance for camera processing
         camera_latency: ProcessingLatency
         {
-            signal_name: "camera_processing";
+            instance_name: "camera_processing";
             post_aggregation: ["min", "max"];
         }
 
         // Second instance for lidar processing
         lidar_latency: ProcessingLatency
         {
-            signal_name: "lidar_processing";
+            instance_name: "lidar_processing";
             post_aggregation: ["min", "max"];
         }
 
         // Third instance for radar processing
         radar_latency: ProcessingLatency
         {
-            signal_name: "radar_processing";
+            instance_name: "radar_processing";
             post_aggregation: ["min", "max"];
         }
     }
@@ -282,7 +282,7 @@ Each signal instance will have its own set of methods:
 - `set_lidar_latency()` / `get_lidar_latency_value_min()` / `get_lidar_latency_value_max()`
 - `set_radar_latency()` / `get_radar_latency_value_min()` / `get_radar_latency_value_max()`
 
-The `signal_name` option controls the runtime instance name used in logs and dashboards, while the identifier (`camera_latency`, `lidar_latency`, `radar_latency`) is used for the C++ API method names and schema field names.
+The `instance_name` option controls the runtime instance name used in logs and dashboards, while the identifier (`camera_latency`, `lidar_latency`, `radar_latency`) is used for the C++ API method names and schema field names.
 
 ## Report Group Policies
 
@@ -302,7 +302,7 @@ policy ReportGroupPolicy for MyProcessorCog.my_metrics
 policy ReportGroupPolicy for MyProcessorCog.detailed_stats
 {
     reporting_strategy = ReportingStrategy::batched;
-    log_type = ReportGroupLogType::telemetry;
+    log_type = ReportGroupLogType::non_redundant_telemetry;
     max_observations = 25;
     min_duration = 100ms;
     max_duration = 1s;
@@ -312,7 +312,7 @@ policy ReportGroupPolicy for MyProcessorCog.detailed_stats
 ### Policy Fields
 
 - **`reporting_strategy`**: Either `ReportingStrategy::batched` or `ReportingStrategy::post_aggregated`.
-- **`log_type`**: Either `ReportGroupLogType::event`, `ReportGroupLogType::telemetry`, or `ReportGroupLogType::none`.
+- **`log_type`**: Either `ReportGroupLogType::event`, `ReportGroupLogType::non_redundant_telemetry`, or `ReportGroupLogType::none`.
 - **`min_observations`**: Minimum number of cog executions before the report can be published.
 - **`max_observations`**: Maximum number of executions in a reporting window.
   For batched groups, this determines the batch size.
@@ -497,7 +497,9 @@ signals.set_tracked_value(42);
 signals.set_my_signal(3.14f, current_time);
 ```
 
-> [!WARNING] > `set_` should be called at most once per cog execution for a given signal.
+> [!WARNING]
+>
+> `set_` should be called at most once per cog execution for a given signal.
 > Calling it more than once is considered incorrect usage (though it will not error at runtime; the last value wins).
 
 ### Accumulating Signal Values

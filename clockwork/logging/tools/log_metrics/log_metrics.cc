@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/logging/log_error.hh"
@@ -6,6 +6,8 @@
 #include "clockwork/logging/readers/abstract_log_reader.hh"
 #include "clockwork/logging/readers/log_reader_factory.hh"
 #include "clockwork/logging/readers/types.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
 #include "jewels/log_cerr/log_cerr.hh"
 #include "jewels/math/constants.hh"
 #include "jewels/std/expected.hh"
@@ -27,25 +29,48 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
+
+using jewels::ok;
+using jewels::Out;
 
 namespace clockwork_logging
 {
 
-/// Get the metrics from the log
+/// Get the metrics and metadata from the log
 /// @param[in] log_uri Log URI
-/// @return Reader pointer or LogError on failure
-[[nodiscard]] LogExpected<LogMetrics> load_metrics(std::string_view log_uri)
+/// @param[out] log_metrics Log metrics
+/// @param[out] log_metadata Log metadata
+/// @return Success or LogError on failure
+LogOutcome load_metrics_and_metadata(
+  std::string_view log_uri,
+  Out<LogMetrics> log_metrics,
+  Out<std::unordered_map<std::string, TopicMetadata>> log_metadata)
 {
   try
   {
     auto reader_ptr = make_reader(log_uri, {}, {});
-    return reader_ptr->get_metrics();
+    auto metrics_result = reader_ptr->get_metrics();
+    if (!metrics_result)
+    {
+      return metrics_result.error();
+    }
+    *log_metrics = std::move(metrics_result).value();
+    auto metadata_vec = reader_ptr->get_metadata();
+    log_metadata->clear();
+    for (auto& metadata : metadata_vec)
+    {
+      auto name = metadata.name;
+      log_metadata->emplace(std::move(name), std::move(metadata));
+    }
+    return LogError::success;
   }
   catch (const std::invalid_argument& exc)
   {
     jewels::log_cerr_error("{}", exc.what());
-    return jewels::unexpected(LogError::failed_to_load_metrics);
+    return LogError::failed_to_load_metrics;
   }
 }
 
@@ -85,7 +110,7 @@ std::string human_readable_value(uint64_t value, std::string_view units_suffix)
 
 /// Print the log metrics
 /// @param[in] log_metrics Log metrics
-void print_metrics(const LogMetrics& log_metrics)
+void print_metrics(const LogMetrics& log_metrics, const std::unordered_map<std::string, TopicMetadata>& log_metadata)
 {
   fmt::print("\n");
   const auto start_time = log_metrics.transmit_time_interval.get_start_time();
@@ -144,16 +169,21 @@ void print_metrics(const LogMetrics& log_metrics)
     }
     fmt::print("\n");
   }
-  fmt::print("\nChannels:\n");
-  size_t max_topic_size = 0U;
+  fmt::print("\n");
+  size_t max_topic_width = 0UL;
+  size_t max_count_width = 0UL;
   for (const auto& metrics : log_metrics.topic_metrics)
   {
-    max_topic_size = std::max(max_topic_size, metrics.topic.size());
+    const bool is_amended = log_metadata.contains(metrics.topic) && log_metadata.at(metrics.topic).is_amended;
+    const auto topic_label = fmt::format("{}{}", metrics.topic, is_amended ? " (AMENDED)" : "");
+    max_topic_width = std::max(max_topic_width, topic_label.size());
+    max_count_width = std::max(max_count_width, fmt::formatted_size("{}", metrics.message_count));
   }
   for (const auto& metrics : log_metrics.topic_metrics)
   {
-    const std::string topic_pad(max_topic_size - metrics.topic.size(), ' ');
-    fmt::print("  {}{} : {} msgs", metrics.topic, topic_pad, metrics.message_count);
+    const bool is_amended = log_metadata.contains(metrics.topic) && log_metadata.at(metrics.topic).is_amended;
+    const auto topic_label = fmt::format("{}{}", metrics.topic, is_amended ? " (AMENDED)" : "");
+    fmt::print("{:<{}}    {:>{}} msgs", topic_label, max_topic_width, metrics.message_count, max_count_width);
     if (log_duration_s != 0.0)
     {
       fmt::print(" ({})", human_readable_value(static_cast<double>(metrics.message_count) / log_duration_s, "hz"));
@@ -183,13 +213,16 @@ int main(int32_t argc, char* argv[])
 
     const auto& log_uri = log_uri_arg.getValue();
 
-    const auto metrics_result = clockwork_logging::load_metrics(log_uri);
-    if (!metrics_result)
+    clockwork_logging::LogMetrics log_metrics;
+    std::unordered_map<std::string, clockwork_logging::TopicMetadata> log_metadata;
+    if (const auto load_outcome =
+          clockwork_logging::load_metrics_and_metadata(log_uri, Out{log_metrics}, Out{log_metadata});
+        !ok(load_outcome))
     {
-      jewels::log_cerr_error("Failed to get log_metrics: {}", metrics_result.error());
+      jewels::log_cerr_error("Failed to get log metrics: {}", load_outcome.get());
       return 1;
     }
-    clockwork_logging::print_metrics(metrics_result.value());
+    clockwork_logging::print_metrics(log_metrics, log_metadata);
     return 0;
   }
   catch (const std::exception& exc)

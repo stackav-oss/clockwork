@@ -3,7 +3,7 @@
 # a more canonical hash.
 common --ui_event_filters=-DEBUG
 
-common --lockfile_mode=update
+common --lockfile_mode=off
 
 # Compile curl with openssl
 build --@curl//:ssl_lib="openssl"
@@ -56,6 +56,10 @@ common --host_action_env=PYTHONNOUSERSITE=1 --test_env=PYTHONNOUSERSITE=1
 
 # Make sure rules_proto keep working with Bazel 8
 common --noincompatible_disallow_ctx_resolve_tools
+
+# Clockwork parser backend selection.
+common:clk-python-parser --//clockwork/dsl:use_rust_parser=false
+common:clk-python-parser --test_env=CLOCKWORK_PARSER_BACKEND=python
 
 # Don't load native rules
 common --incompatible_disable_autoloads_in_main_repo

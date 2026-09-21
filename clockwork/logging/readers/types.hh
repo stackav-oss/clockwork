@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -9,6 +9,7 @@
 #include "clockwork/logging/message_encoding_clk_cc.hh"
 #include "clockwork/logging/schema_encoding_clk_cc.hh"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -49,6 +50,8 @@ struct LogReaderConfig
   // Optional topic filter, return false if the topic should be ignored.
   // if not set then all topics will be read.
   std::function<bool(std::string_view)> topic_filter{};
+  // Optional channel and sequence number filter. Return false to skip a message.
+  std::function<bool(std::string_view, uint32_t)> sequence_number_filter{};
 };
 
 /// Topic metadata
@@ -66,9 +69,11 @@ struct TopicMetadata
   SchemaEncoding schema_encoding;
   /// Schema definition
   std::string schema_definition;
+  /// Set to true when channel is amended
+  bool is_amended;
 
-  /// Equals operator
-  bool operator==(const TopicMetadata&) const = default;
+  /// Comparison operator
+  bool operator<=>(const TopicMetadata&) const = default;
 };
 
 /// Logged message data

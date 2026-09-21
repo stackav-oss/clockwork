@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/pinion/detail/unix_socket.hh"
@@ -12,9 +12,11 @@
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/un.h>
 #include <system_error>
-#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace clockwork::pinion

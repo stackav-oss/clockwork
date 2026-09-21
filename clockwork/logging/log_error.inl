@@ -132,6 +132,16 @@ namespace clockwork_logging
     return LogError::s3_request_timeout;
   case Aws::S3::S3Errors::INVALID_OBJECT_STATE:
     return LogError::s3_invalid_object_state;
+  case Aws::S3::S3Errors::ENCRYPTION_TYPE_MISMATCH:
+    return LogError::s3_encryption_type_mismatch;
+  case Aws::S3::S3Errors::IDEMPOTENCY_PARAMETER_MISMATCH:
+    return LogError::s3_idempotency_parameter_mismatch;
+  case Aws::S3::S3Errors::INVALID_REQUEST:
+    return LogError::s3_invalid_request;
+  case Aws::S3::S3Errors::INVALID_WRITE_OFFSET:
+    return LogError::s3_invalid_write_offset;
+  case Aws::S3::S3Errors::TOO_MANY_PARTS:
+    return LogError::s3_too_many_parts;
   }
   return LogError::s3_unknown_error;
 }

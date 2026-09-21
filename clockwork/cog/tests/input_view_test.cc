@@ -1,17 +1,19 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "clockwork/cog/input_view.hh"
 #include "clockwork/common/process_description_clk_cc.hh"
 #include "clockwork/dial/msg_input.hh"
 #include "clockwork/memory/start_lifetime_as.hh"
-#include "clockwork/pinion/buffer.hh"
+#include "clockwork/pinion/buffer_layout.hh"
 #include "clockwork/pinion/in_memory_channel.hh"
 #include "clockwork/pinion/publishable.hh"
-#include "clockwork/pinion/publisher_handle.hh"
+#include "clockwork/pinion/publisher_slot_ref.hh"
 #include "clockwork/pinion/slot.hh"
 #include "clockwork/pinion/subscriber_handle.hh"
-#include "jewels/container/circular_buffer.hh"
+#include "jewels/callsig/outcome.hh"
+#include "jewels/callsig/outparam.hh"
+#include "jewels/container/compare.hh"
 #include "jewels/memory/memory_resource.hh"
 #include "jewels/memory/pmr_unique_ptr.hh"
 #include "jewels/memory/pointers.hh"
@@ -19,7 +21,6 @@
 #include "jewels/time/sync_time.hh"
 #include "jewels/uuid/uuid.hh"
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gsl/util>
@@ -58,17 +59,15 @@ struct InputViewFixture // NOLINT(clang-analyzer-optin.performance.Padding) Test
 
   InputViewFixture()
     : resource(std::pmr::new_delete_resource()),
-      channel(resource),
-      publisher_handle(channel.make_publisher(1)),
-      subscriber_handle(channel.make_subscriber()),
-      subscriber(subscriber_handle, 10, resource, offline)
+      channel(std::make_shared<InMemoryChannel<MsgType, Policy::channel_size, false>>(resource)),
+      publisher_handle(channel->make_publisher(1)),
+      subscriber(channel, 10, resource, offline)
   {
   }
 
   jewels::memory::MemoryResource resource;
-  InMemoryChannel<MsgType, Policy::channel_size, false> channel;
+  std::shared_ptr<InMemoryChannel<MsgType, Policy::channel_size, false>> channel;
   pinion::PublisherHandle publisher_handle;
-  pinion::SubscriberHandle subscriber_handle;
   InputView<Policy> subscriber;
 
   /// Publish the message and return a pointer to the published message.
@@ -105,6 +104,8 @@ struct NoCopyPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 3U;
 };
@@ -125,7 +126,7 @@ TEST_CASE_METHOD(NoCopyFixture, "no messages", "[max_view_size=3, channel_size=3
 
   auto last_consumed = subscriber.commit(*input);
   REQUIRE(NoCopyFixture::Policy::endpoint_id == std::get<0>(last_consumed));
-  REQUIRE(subscriber_handle.available().begin() == std::get<1>(last_consumed));
+  REQUIRE(channel->available().begin() == std::get<1>(last_consumed));
 
   // The view should be empty since no messages are published.
 
@@ -380,6 +381,8 @@ struct CopyPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = true;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 3U;
 };
@@ -510,6 +513,8 @@ struct ManualCursorPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = true;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 3U;
 };
@@ -530,7 +535,7 @@ TEST_CASE_METHOD(ManualCursorFixture, "no messages", "[max_view_size=3, channel_
 
   auto last_consumed = subscriber.commit(*input);
   REQUIRE(ManualCursorFixture::Policy::endpoint_id == std::get<0>(last_consumed));
-  REQUIRE(subscriber_handle.available().begin() == std::get<1>(last_consumed));
+  REQUIRE(channel->available().begin() == std::get<1>(last_consumed));
 
   // The view should be empty since no messages are published.
 
@@ -611,6 +616,40 @@ TEST_CASE_METHOD(
   REQUIRE(input->get_view().begin() == input->get_first_new());
 }
 
+TEST_CASE_METHOD(
+  ManualCursorFixture,
+  "metrics metadata tracks first new position when manual cursor lags",
+  "[max_view_size=3, channel_size=3, copy=false, manual=true]")
+{
+  REQUIRE(subscriber.validate());
+
+  publish(TestMsg{.value = 0});
+  publish(TestMsg{.value = 1});
+  publish(TestMsg{.value = 2});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+  REQUIRE(input->get_cursor() == input->get_view().begin());
+  REQUIRE(input->get_first_new() == input->get_view().begin());
+
+  std::ignore = subscriber.commit(*input);
+
+  publish(TestMsg{.value = 3});
+
+  input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+  REQUIRE(input->get_view().size() == 3U);
+  REQUIRE(input->get_cursor() == input->get_view().begin());
+  REQUIRE(std::distance(input->get_view().begin(), input->get_first_new()) == 2);
+
+  auto seqnos = subscriber.get_metrics_sequence_numbers();
+  REQUIRE(seqnos.size() == 3U);
+  CHECK(seqnos[0] == 1U);
+  CHECK(seqnos[1] == 2U);
+  CHECK(seqnos[2] == 3U);
+  CHECK(subscriber.get_metrics_cursor_position() == 2U);
+}
+
 struct View1Channel3Policy
 {
   using MsgType = TestMsg;
@@ -624,6 +663,8 @@ struct View1Channel3Policy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 1U;
 };
@@ -694,6 +735,8 @@ struct InvalidChannelSizePolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 1U;
 };
@@ -722,6 +765,8 @@ struct SafetyMarginPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 7U;
 };
@@ -995,6 +1040,8 @@ struct SkipThresholdPolicy
   static constexpr std::optional<size_t> skip_threshold{10U};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 20U;
 };
@@ -1120,6 +1167,8 @@ struct OverrunWarningPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   static constexpr auto channel_size = 10U;
 };
 
@@ -1186,6 +1235,8 @@ struct LargeOverrunWarningPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   static constexpr auto channel_size = 50U;
 };
 
@@ -1256,6 +1307,8 @@ struct MetricsTestingPolicy
   static constexpr std::optional<size_t> skip_threshold{};
   static constexpr auto copy_inputs = false;
   static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
   /// Testing only
   static constexpr auto channel_size = 3U;
 };
@@ -1345,6 +1398,219 @@ TEST_CASE("Not connected input view")
   auto input = subscriber.make_dial_input(1, jewels::time::SyncTime{});
   REQUIRE(input);
   REQUIRE_FALSE(input->connected());
+}
+
+struct AlignedPolicy
+{
+  using MsgType = TestMsg;
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("a1b2c3d4-e5f6-7890-abcd-ef1234567890").value();
+  static constexpr auto max_view_size = 8U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
+  static constexpr std::optional<::ssize_t> safety_margin{};
+  static constexpr std::optional<size_t> skip_threshold{};
+  static constexpr auto copy_inputs = false;
+  static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = true;
+  static constexpr auto use_device_ptr = false;
+  static constexpr auto channel_size = 8U;
+};
+
+using AlignedFixture = InputViewFixture<AlignedPolicy>;
+
+TEST_CASE_METHOD(AlignedFixture, "prepare_aligned_view with seqno 0", "[aligned]")
+{
+  publish(TestMsg{.value = 42});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  auto dial = subscriber.prepare_empty_aligned_view();
+  auto result = subscriber.prepare_aligned_view(jewels::Out{dial}, 0);
+  REQUIRE(jewels::ok(result));
+
+  CHECK(dial.get_view().size() == 1);
+  CHECK(dial.get_view()[0].value == 42);
+  CHECK(dial.get_new_msgs_view().size() == 1);
+}
+
+TEST_CASE_METHOD(AlignedFixture, "prepare_aligned_view marks first message as new before advance", "[aligned]")
+{
+  publish(TestMsg{.value = 10});
+  publish(TestMsg{.value = 20});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  auto dial = subscriber.prepare_empty_aligned_view();
+
+  auto result = subscriber.prepare_aligned_view(jewels::Out{dial}, 0);
+  REQUIRE(jewels::ok(result));
+  CHECK(dial.get_new_msgs_view().size() == 1);
+
+  result = subscriber.prepare_aligned_view(jewels::Out{dial}, 1);
+  REQUIRE(jewels::ok(result));
+  CHECK(dial.get_new_msgs_view().size() == 1);
+}
+
+TEST_CASE_METHOD(AlignedFixture, "advance_aligned_cursor makes seen messages old", "[aligned]")
+{
+  publish(TestMsg{.value = 10});
+  publish(TestMsg{.value = 20});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  subscriber.advance_aligned_cursor(0);
+
+  auto dial = subscriber.prepare_empty_aligned_view();
+
+  auto result = subscriber.prepare_aligned_view(jewels::Out{dial}, 0);
+  REQUIRE(jewels::ok(result));
+  CHECK(dial.get_new_msgs_view().empty());
+
+  result = subscriber.prepare_aligned_view(jewels::Out{dial}, 1);
+  REQUIRE(jewels::ok(result));
+  CHECK(dial.get_new_msgs_view().size() == 1);
+}
+
+TEST_CASE_METHOD(AlignedFixture, "prepare_aligned_range with seqno 0", "[aligned]")
+{
+  publish(TestMsg{.value = 1});
+  publish(TestMsg{.value = 2});
+  publish(TestMsg{.value = 3});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  auto dial = subscriber.prepare_empty_aligned_view();
+  auto result = subscriber.prepare_aligned_range(jewels::Out{dial}, 0, 2);
+  REQUIRE(jewels::ok(result));
+
+  CHECK(dial.get_view().size() == 3);
+  CHECK(dial.get_new_msgs_view().size() == 3);
+
+  subscriber.advance_aligned_cursor(1);
+
+  result = subscriber.prepare_aligned_range(jewels::Out{dial}, 0, 2);
+  REQUIRE(jewels::ok(result));
+  CHECK(dial.get_view().size() == 3);
+  CHECK(dial.get_new_msgs_view().size() == 1);
+}
+
+struct UseDevicePtrPolicy
+{
+  using MsgType = TestMsg;
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("400b77ea-cb10-42b1-a762-2fc96d242f30").value();
+  static constexpr auto max_view_size = 8U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
+  static constexpr std::optional<::ssize_t> safety_margin{};
+  static constexpr std::optional<size_t> skip_threshold{};
+  static constexpr auto copy_inputs = false;
+  static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = true;
+  static constexpr auto channel_size = 8U;
+};
+
+using UseDevicePtrFixture = InputViewFixture<UseDevicePtrPolicy>;
+
+TEST_CASE_METHOD(UseDevicePtrFixture, "api access")
+{
+  publish(TestMsg{.value = 42});
+
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  CHECK(input->get_view().size() == 1);
+  CHECK(input->get_view()[0].value == 42);
+  CHECK(input->get_new_msgs_view().size() == 1);
+  // Because there's no device for this test, the pointer will be false but the important think is that it's callable
+  CHECK_FALSE(input->device_ptr(input->get_view().begin()));
+}
+
+// Test that almost_overrun() scales its minimum margin with max_msgs_per_exec.
+// With max_msgs_per_exec = 4 on a channel_size = 20 buffer, the min_margin is 4 * 2 = 8.
+// The subscriber should NOT flag almost_overrun until the producer is within 8 slots.
+
+struct MultiMsgOverrunPolicy
+{
+  using MsgType = TestMsg;
+  static constexpr auto name = "MultiMsgOverrunPolicy";
+  static constexpr auto endpoint_id =
+    jewels::Uuid<common::EndpointClassId>::from_string("7a3b2c1d-e4f5-4a6b-8c9d-0e1f2a3b4c5d").value();
+  static constexpr auto max_view_size = 1U;
+  static constexpr auto min_msgs = 0U;
+  static constexpr auto min_new_msgs = 0U;
+  static constexpr std::optional<::ssize_t> safety_margin{};
+  static constexpr std::optional<size_t> skip_threshold{};
+  static constexpr auto copy_inputs = false;
+  static constexpr auto manual_cursor = false;
+  static constexpr auto expose_seqno = false;
+  static constexpr auto use_device_ptr = false;
+  /// Testing only
+  static constexpr auto channel_size = 20U;
+  static constexpr size_t max_msgs_per_exec = 4U;
+};
+
+/// Fixture that uses InMemoryChannel with max_msgs_per_exec=4
+struct MultiMsgOverrunFixture
+{
+  using Policy = MultiMsgOverrunPolicy;
+  using MsgType = typename Policy::MsgType;
+  using PinionDifferenceType = typename InputView<Policy>::PinionDifferenceType;
+  static constexpr auto new_msgs_max_limit = std::numeric_limits<PinionDifferenceType>::max();
+
+  MultiMsgOverrunFixture()
+    : resource(std::pmr::new_delete_resource()),
+      channel(
+        std::make_shared<InMemoryChannel<MsgType, Policy::channel_size, false>>(resource, Policy::max_msgs_per_exec)),
+      publisher_handle(channel->make_publisher(1)),
+      subscriber(channel, 10, resource, false)
+  {
+  }
+
+  jewels::memory::MemoryResource resource;
+  std::shared_ptr<InMemoryChannel<MsgType, Policy::channel_size, false>> channel;
+  pinion::PublisherHandle publisher_handle;
+  InputView<Policy> subscriber;
+
+  void publish(const TestMsg& msg)
+  {
+    auto slot = publisher_handle.reserve().value();
+    auto publishable = pinion::Publishable<MsgType>::try_make(jewels::memory::make_non_null_from_ref(slot)).value();
+    publishable.message() = msg;
+    REQUIRE(slot.commit(jewels::time::SyncTime{std::chrono::nanoseconds{12345}}));
+  }
+};
+
+TEST_CASE_METHOD(
+  MultiMsgOverrunFixture,
+  "almost_overrun min_margin scales with max_msgs_per_exec",
+  "[max_msgs_per_exec=4, channel_size=20, copy=false, manual=false]")
+{
+  REQUIRE(subscriber.validate());
+
+  auto spam = TestMsg{.value = 0};
+  publish(spam);
+  auto input = subscriber.make_dial_input(new_msgs_max_limit, jewels::time::SyncTime());
+  REQUIRE(input);
+
+  for (auto i = 0; i < 11; ++i)
+  {
+    publish(spam);
+  }
+  REQUIRE_FALSE(subscriber.almost_overrun());
+
+  publish(spam);
+  REQUIRE(subscriber.almost_overrun());
+
+  // Further publishes keep triggering.
+  publish(spam);
+  REQUIRE(subscriber.almost_overrun());
 }
 
 } // namespace

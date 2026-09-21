@@ -1,0 +1,381 @@
+namespace {
+
+using PrimaryIt = decltype(
+    std::declval<MixedConstraintsDialInputs&>()
+        .get_primary().get_view().begin());
+using SecondaryIt = decltype(
+    std::declval<MixedConstraintsDialInputs&>()
+        .get_secondary().get_view().begin());
+using TertiaryIt = decltype(
+    std::declval<MixedConstraintsDialInputs&>()
+        .get_tertiary().get_view().begin());
+
+struct InputViews {
+  decltype(std::declval<MixedConstraintsDialInputs&>().get_primary().get_cursor_view())
+      primary_view;
+  decltype(std::declval<MixedConstraintsDialInputs&>().get_secondary().get_cursor_view())
+      secondary_view;
+  decltype(std::declval<MixedConstraintsDialInputs&>().get_tertiary().get_cursor_view())
+      tertiary_view;
+};
+
+static InputViews make_input_views(MixedConstraintsDialInputs& inputs)
+{
+  return InputViews{
+      .primary_view = inputs.get_primary().get_cursor_view(),
+      .secondary_view = inputs.get_secondary().get_cursor_view(),
+      .tertiary_view = inputs.get_tertiary().get_cursor_view(),
+  };
+}
+
+struct CandidateSuffix2 {
+  TertiaryIt tertiary_it;
+};
+
+struct CandidateSuffix1 {
+  SecondaryIt secondary_it;
+  CandidateSuffix2 suffix2;
+};
+
+struct CandidateSuffix0 {
+  PrimaryIt primary_it;
+  CandidateSuffix1 suffix1;
+};
+
+struct PresenceState {
+};
+
+struct CandidateAlignment {
+  CandidateSuffix0 suffix0;
+  [[no_unique_address]] PresenceState presence;
+};
+
+static auto& candidate_primary_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.primary_it);
+}
+
+static const auto& candidate_primary_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.primary_it);
+}
+
+static auto& candidate_secondary_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.secondary_it);
+}
+
+static const auto& candidate_secondary_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.secondary_it);
+}
+
+static auto& candidate_tertiary_it(CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.tertiary_it);
+}
+
+static const auto& candidate_tertiary_it(const CandidateAlignment& candidate)
+{
+  return (candidate.suffix0.suffix1.suffix2.tertiary_it);
+}
+
+static bool objective_0_is_active(const PresenceState&)
+{
+  return true;
+}
+
+static auto objective_0_value(const CandidateAlignment& candidate)
+{
+  return (*candidate_primary_it(candidate)).get_observation_time();
+}
+
+static bool objective_1_is_active(const PresenceState&)
+{
+  return true;
+}
+
+static auto objective_1_value(const CandidateAlignment& candidate)
+{
+  return std::abs(((*candidate_primary_it(candidate)).get_observation_time() - (*candidate_secondary_it(candidate)).get_observation_time()).count());
+}
+
+struct BestSuffix0 {
+  CandidateSuffix0 suffix;
+  [[no_unique_address]] PresenceState presence;
+};
+
+static void store_best_suffix_0(
+    const CandidateAlignment& candidate,
+    BestSuffix0& best)
+{
+  best.suffix = candidate.suffix0;
+  best.presence = candidate.presence;
+}
+
+static void restore_best_suffix_0(
+    const BestSuffix0& best,
+    CandidateAlignment& candidate)
+{
+  candidate.suffix0 = best.suffix;
+  candidate.presence = best.presence;
+}
+
+static bool is_better_than_best_suffix_0(
+    const CandidateAlignment& candidate,
+    const BestSuffix0& best)
+{
+  if (objective_0_is_active(candidate.presence)
+      && objective_0_is_active(best.presence)) {
+    const auto my_obj_0 = objective_0_value(candidate);
+    const auto other_obj_0 = (*best.suffix.primary_it).get_observation_time();
+    if (my_obj_0 != other_obj_0) { return my_obj_0 > other_obj_0; }
+  }
+  if (objective_1_is_active(candidate.presence)
+      && objective_1_is_active(best.presence)) {
+    const auto my_obj_1 = objective_1_value(candidate);
+    const auto other_obj_1 = std::abs(((*best.suffix.primary_it).get_observation_time() - (*best.suffix.suffix1.secondary_it).get_observation_time()).count());
+    if (my_obj_1 != other_obj_1) { return my_obj_1 < other_obj_1; }
+  }
+  return false;
+}
+
+
+static bool check_constraints_2(
+    const CandidateAlignment& candidate,
+    TertiaryIt candidate_it)
+{
+  if ((*candidate_secondary_it(candidate)).get_seq_num() != (*candidate_it).get_seq_num()) {
+    return false;
+  }
+  return true;
+}
+
+// Level 2: tertiary (any_match)
+static jewels::BinaryOutcome search_level_2(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  const auto& view = views.tertiary_view;
+
+  // Window: observation_time
+  auto win_lo_observation_time = jewels::time::SyncTime::min();
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_primary_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{50'000'000});
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_secondary_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{100'000'000});
+
+  auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+      [](const auto& msg, const auto& t) {
+        return msg.get_observation_time() < t;
+      });
+  auto it_end = view.end();
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  for (auto it = it_start; it < it_end; ++it) {
+    if (!check_constraints_2(*candidate, it)) {
+      continue;
+    }
+    candidate_tertiary_it(*candidate) = it;
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+// Level 1: secondary (nearest: distance-ordered from primary.observation_time)
+static jewels::BinaryOutcome search_level_1(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  const auto& view = views.secondary_view;
+
+  // Window: observation_time
+  auto win_lo_observation_time = jewels::time::SyncTime::min();
+  auto win_hi_observation_time = jewels::time::SyncTime::max();
+  win_lo_observation_time = std::max(win_lo_observation_time, (*candidate_primary_it(*candidate)).get_observation_time() - ::std::chrono::nanoseconds{50'000'000});
+  win_hi_observation_time = std::min(win_hi_observation_time, (*candidate_primary_it(*candidate)).get_observation_time() + ::std::chrono::nanoseconds{50'000'000});
+  // Window: seq_num
+  static_assert(std::numeric_limits<std::decay_t<decltype((*view.begin()).get_seq_num())>>::is_specialized, "Aligner range-search field types must specialize std::numeric_limits");
+  auto win_lo_seq_num = std::numeric_limits<std::decay_t<decltype((*view.begin()).get_seq_num())>>::lowest();
+  auto win_hi_seq_num = (std::numeric_limits<std::decay_t<decltype((*view.begin()).get_seq_num())>>::max)();
+  win_lo_seq_num = std::max(win_lo_seq_num, (*candidate_primary_it(*candidate)).get_seq_num() - 5);
+  win_hi_seq_num = std::min(win_hi_seq_num, (*candidate_primary_it(*candidate)).get_seq_num() + 5);
+
+  auto it_start = std::lower_bound(view.begin(), view.end(), win_lo_observation_time,
+      [](const auto& msg, const auto& t) {
+        return msg.get_observation_time() < t;
+      });
+  it_start = std::max(it_start,
+      std::lower_bound(view.begin(), view.end(), win_lo_seq_num,
+      [](const auto& msg, const auto& t) {
+        return msg.get_seq_num() < t;
+      }));
+  auto it_end = std::upper_bound(it_start, view.end(), win_hi_observation_time,
+      [](const auto& t, const auto& msg) {
+        return t < msg.get_observation_time();
+      });
+  it_end = std::min(it_end,
+      std::upper_bound(it_start, view.end(), win_hi_seq_num,
+      [](const auto& t, const auto& msg) {
+        return t < msg.get_seq_num();
+      }));
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  const auto ref = (*candidate_primary_it(*candidate)).get_observation_time();
+
+  // Binary search to reference point within windowed range.
+  auto mid = std::lower_bound(it_start, it_end, ref,
+      [](const auto& msg, const auto& r) {
+        return msg.get_observation_time() < r;
+      });
+
+  auto right = mid;
+  auto left = (mid != it_start)
+      ? std::prev(mid)
+      : it_end;  // sentinel: left side exhausted
+
+  const auto& cutoff_view_tertiary = views.tertiary_view;
+
+  while (right != it_end || left != it_end) {
+    bool pick_right = false;
+    if (right != it_end && left != it_end) {
+      // Pick whichever pointer is closer to the reference.
+      // Equal distance: right (later value) wins.
+      pick_right = ((*right).get_observation_time() - ref
+                    <= ref - (*left).get_observation_time());
+    } else {
+      pick_right = (right != it_end);
+    }
+
+    if (pick_right) {
+      // Cutoff: no later tertiary element can satisfy constraint
+      if (cutoff_view_tertiary.begin() != cutoff_view_tertiary.end()
+          && (*right).get_observation_time() - (*std::prev(cutoff_view_tertiary.end())).get_observation_time() > ::std::chrono::nanoseconds{-100'000'000})
+      {
+        right = it_end; continue;
+      }
+    }
+    const auto candidate_it = pick_right ? right : left;
+
+    candidate_secondary_it(*candidate) = candidate_it;
+    if (jewels::ok(search_level_2(jewels::InOut{*candidate}, views))) {
+      return jewels::success;
+    }
+
+    if (pick_right) {
+      ++right;
+    } else {
+      left = (left != it_start)
+          ? std::prev(left)
+          : it_end;
+    }
+  }
+  return jewels::failure;
+}
+
+// Level 0: primary (last_in_range)
+static jewels::BinaryOutcome search_level_0(
+    jewels::InOut<CandidateAlignment> candidate,
+    const InputViews& views)
+{
+  std::optional<BestSuffix0> best;
+
+  const auto& view = views.primary_view;
+
+  auto it_start = view.begin();
+  auto it_end = view.end();
+
+  if (it_start >= it_end) {
+    return jewels::failure;
+  }
+
+  const auto& cutoff_view_secondary = views.secondary_view;
+
+  auto it = std::prev(it_end);
+  while (true) {
+    // Cutoff: no later secondary element can satisfy constraint
+    if (cutoff_view_secondary.begin() != cutoff_view_secondary.end()
+        && (*cutoff_view_secondary.begin()).get_observation_time() - (*it).get_observation_time() > ::std::chrono::nanoseconds{50'000'000})
+    {
+      break;
+    }
+    // Cutoff: no later secondary element can satisfy constraint
+    if (cutoff_view_secondary.begin() != cutoff_view_secondary.end()
+        && (*cutoff_view_secondary.begin()).get_seq_num() - (*it).get_seq_num() > 5)
+    {
+      break;
+    }
+    candidate_primary_it(*candidate) = it;
+    if (best.has_value()
+        && objective_0_is_active((*candidate).presence)
+        && objective_0_is_active(best->presence)) {
+      const auto my_prune_obj = objective_0_value(*candidate);
+      const auto best_prune_obj = (*best->suffix.primary_it).get_observation_time();
+      if (my_prune_obj != best_prune_obj) {
+        break;
+      }
+    }
+    if (jewels::ok(search_level_1(jewels::InOut{*candidate}, views))) {
+      if (!best.has_value()) {
+        best.emplace();
+        store_best_suffix_0(*candidate, *best);
+      } else if (is_better_than_best_suffix_0(*candidate, *best)) {
+        store_best_suffix_0(*candidate, *best);
+      }
+    }
+    if (it == it_start) {
+      break;
+    }
+    --it;
+  }
+  if (best.has_value()) {
+    restore_best_suffix_0(*best, *candidate);
+    return jewels::success;
+  }
+  return jewels::failure;
+}
+
+static void publish_alignment(
+    MixedConstraintsDial& dial,
+    const CandidateAlignment& candidate)
+{
+  auto& pub = dial.get_outputs().get_alignment();
+  auto& inputs = dial.get_inputs();
+  pub.message().set_primary_seq(
+      inputs.get_primary().get_sequence_number(candidate_primary_it(candidate)));
+  pub.message().set_secondary_seq(
+      inputs.get_secondary().get_sequence_number(candidate_secondary_it(candidate)));
+  pub.message().set_tertiary_seq(
+      inputs.get_tertiary().get_sequence_number(candidate_tertiary_it(candidate)));
+  pub.mark_for_publish();
+}
+
+static void advance_cursors(
+    MixedConstraintsDialInputs& inputs,
+    const CandidateAlignment& candidate)
+{
+  inputs.get_primary().set_cursor(std::next(candidate_primary_it(candidate)));
+  inputs.get_secondary().set_cursor(std::next(candidate_secondary_it(candidate)));
+  inputs.get_tertiary().set_cursor(std::next(candidate_tertiary_it(candidate)));
+}
+
+}  // anonymous namespace
+
+void execute_cog(MixedConstraintsDial& dial)
+{
+  auto& inputs = dial.get_inputs();
+  const auto views = make_input_views(inputs);
+
+  CandidateAlignment candidate;
+  candidate.presence = PresenceState{};
+  if (jewels::fails(search_level_0(
+          jewels::InOut{candidate}, views))) {
+    return;
+  }
+  publish_alignment(dial, candidate);
+  advance_cursors(inputs, candidate);
+}

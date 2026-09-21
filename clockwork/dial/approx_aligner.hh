@@ -1,4 +1,4 @@
-// Copyright 2025 Stack AV Co.
+// Copyright 2025-2026 Stack AV Co.
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -22,7 +22,7 @@ namespace clockwork
 /// The alignment policy struct provides the static functions used by the aligner to determine the
 /// alignment of a given set of inputs. While these are fully customizable there are pre-built configurations
 /// provided in `clockwork/dial/approx_aligner_policies.hh` to cover the most common use
-/// cases. It is recommended to use one of the provided implemenations unless they do not cover your specific
+/// cases. It is recommended to use one of the provided implementations unless they do not cover your specific
 /// use case.
 ///
 /// @tparam InputPolicy The policy struct used to describe an input.
@@ -50,7 +50,7 @@ namespace clockwork
 ///     using ValueType = ...;
 ///     using ValuePtrArray = std::array<const ValueType *, input_count>;
 ///     template <typename InputPolicy>
-///     using InputType = MessageInputDialWithCursorControl<typename InputPolicy::MsgType, InputPolicy::max_msgs>;
+///     using InputType = MessageInputDial<typename InputPolicy::MsgType, InputPolicy::max_msgs, 0, 0, true>;
 ///     using InputTuple = std::tuple<InputType<InputPolicies>&...>;
 ///     using IteratorTuple = std::tuple<typename InputType<InputPolicies>::IteratorType...>
 ///
@@ -107,6 +107,8 @@ struct ApproxAligner
     ValueType score = {};
 
     /// The aligned input iterators.
+    /// @note in the event of AlignmentType::incomplete, the iterator for the empty input will be set to the end
+    /// iterator.
     InputItTuple inputs = {};
 
     /// Equality operator.
@@ -177,8 +179,7 @@ struct ApproxAligner
   /// @param[in] inputs The tuple of dial inputs.
   /// @param[in] values_array The array of extracted values from the inputs.
   /// @return Tuple of optional alignments, first is full alignment that satisfies all the requirements, the second is
-  /// the
-  ///  best alignment that does not satisfy the requirements, if any.
+  /// the best alignment that does not satisfy the requirements, if any.
   static constexpr std::tuple<std::optional<Alignment>, std::optional<Alignment>>
   find_full_alignment(const Config& config, const InputTuple& inputs, const ValueVectorsArray& values_array);
 };
@@ -218,7 +219,8 @@ public:
 
   /// Constructor.
   /// @param[in] Pointer to the inputs values array.
-  explicit CombinationGenerator(jewels::memory::ObjectPtr<const ValueVectorsArray> inputs);
+  /// @param[in] max_missing_inputs The maximum number of missing inputs allowed in a combination.
+  explicit CombinationGenerator(jewels::memory::ObjectPtr<const ValueVectorsArray> inputs, size_t max_missing_inputs);
 
   /// Get the begin iterator.
   /// @return The begin iterator.
@@ -233,6 +235,8 @@ private:
   jewels::memory::ObjectPtr<const ValueVectorsArray> inputs_;
   /// Flag indicating all combinations have been generated.
   bool done_ = {};
+  /// Maximum number of missing inputs allowed in a combination.
+  size_t max_missing_inputs_{0UL};
 };
 } // namespace detail
 
